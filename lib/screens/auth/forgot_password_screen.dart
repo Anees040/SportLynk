@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
-import '../../services/auth_service.dart';
-import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
+import '../../constants/api_constants.dart';
 import '../../widgets/sport_text_field.dart';
 import '../../widgets/password_strength_bar.dart';
 import '../../widgets/custom_button.dart';
@@ -20,7 +19,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _passCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  final AuthService _authService = AuthService();
   bool _loading = false;
   bool _obscure1 = true, _obscure2 = true;
   String? _firebaseUid;
@@ -42,21 +40,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
     setState(() => _loading = true);
     try {
-      final auth = context.read<AuthProvider>();
-      final ok = await auth.sendForgotPasswordOtp(phone);
+      final res = await ApiService().post('${ApiConstants.baseUrl}/auth/forgot-password/send-otp', {'phone': phone});
       if (!mounted) return;
-      if (ok) {
+      if (res['success'] == true) {
         final uid = await Navigator.pushNamed(context, '/otp', arguments: phone);
         if (uid != null && uid is String) {
-          await _authService.verifyPhone(
-            phone: phone,
-            firebaseUid: uid,
-            purpose: 'password_reset',
-          );
           setState(() { _firebaseUid = uid; _step = 1; });
         }
       } else {
-        _snack(auth.errorMessage ?? 'Failed');
+        _snack(res['message'] ?? 'Failed');
       }
     } catch (e) {
       _snack('Connection error');
@@ -68,21 +60,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      final auth = context.read<AuthProvider>();
-      final ok = await auth.resetPassword(
-        phone: _phoneCtrl.text.trim(),
-        newPassword: _passCtrl.text,
-        firebaseUid: _firebaseUid ?? '',
-      );
+      final res = await ApiService().post('${ApiConstants.baseUrl}/auth/forgot-password/reset', {
+        'phone': _phoneCtrl.text.trim(),
+        'newPassword': _passCtrl.text,
+        'firebaseUid': _firebaseUid,
+      });
       if (!mounted) return;
-      if (ok) {
+      if (res['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Password changed!', style: GoogleFonts.poppins()),
           backgroundColor: AppColors.success, behavior: SnackBarBehavior.floating,
         ));
         Navigator.pop(context);
       } else {
-        _snack(auth.errorMessage ?? 'Failed');
+        _snack(res['message'] ?? 'Failed');
       }
     } catch (e) {
       _snack('Connection error');

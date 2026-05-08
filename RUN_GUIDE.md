@@ -1,84 +1,116 @@
-# 🏃 How to Run SportLynk
+# SportLynk — Run & Firebase Setup Guide
 
-To run the project, you need to start **two separate servers**: the Backend (Node.js) and the Frontend (Flutter). If you close the terminal or the browser, the app will stop working.
+## Quick Run
 
-## Step 1: Start the Backend (API)
-The backend must be running for login and data to work.
-1.  Open a new terminal (Command Prompt or PowerShell).
-2.  Navigate to the backend folder:
-    ```powershell
-    cd D:\SportLynk\backend
-    ```
-3.  Run the start command:
-    ```powershell
-    npm start
-    ```
-4.  **Important:** Keep this terminal open. You should see `🚀 SportLynk API running on port 3000`.
-
-## Step 1.5: Run the Auth Migration (once)
-Run the migration script to update auth tables and enums:
-```powershell
-psql "<YOUR_DATABASE_URL>" -f .\src\scripts\migration_v2.sql
+### Backend
+```bash
+cd D:\SportLynk\backend
+npm start
 ```
-If you use pgAdmin, open and run the file in the Query Tool:
-```text
-backend\src\scripts\migration_v2.sql
+Backend runs on `http://localhost:3000`
+
+### Flutter (Chrome/Web)
+```bash
+cd D:\SportLynk
+flutter run -d chrome
 ```
 
-## Step 2: Start the Frontend (Flutter)
-1.  Open a **second** terminal.
-2.  Navigate to the main project folder:
-    ```powershell
-    cd D:\SportLynk
-    ```
-3.  Run the app on Chrome:
-    ```powershell
-    flutter run -d chrome
-    ```
-4.  Wait for a Chrome window to open automatically.
-
-## Step 2.5: Firebase Phone Auth Setup (required for real OTP)
-OTP is mocked for demo by default. To enable real SMS OTP:
-1. Install the Firebase and FlutterFire CLIs (one-time):
-    ```powershell
-    npm install -g firebase-tools
-    dart pub global activate flutterfire_cli
-    ```
-2. Login to Firebase:
-    ```powershell
-    firebase login
-    ```
-3. Create a Firebase project named "SportLynk" in the console.
-4. Add an Android app in Firebase:
-    - Android package name: `com.example.sportlynk`
-    - (Optional) Add SHA-1 if you plan to test on a physical device
-5. Download `google-services.json` and place it in `android/app/`.
-6. From the project root, run FlutterFire config:
-    ```powershell
-    flutterfire configure
-    ```
-    This generates `lib/firebase_options.dart` and updates Firebase config.
-7. Enable **Phone** sign-in: Firebase Console → Authentication → Sign-in method → Phone → Enable.
-8. Update OTP service mock flag to use real Firebase:
-    - File: `lib/services/firebase_otp_service.dart`
-    - Set `_useMock = false`
-9. Rebuild the app:
-    ```powershell
-    flutter clean
-    flutter pub get
-    flutter run
-    ```
-
-## Step 3: Accessing the App
-*   Once the Chrome window opens, you can use the app.
-*   **Seeded Credentials (for testing):**
-    *   **Player (email):** `bilal@test.pk` / `password123`
-    *   **Owner (email):** `ahmed@sportlynk.pk` / `password123`
-*   **Phone login:** Use a registered phone (03XXXXXXXXX). OTP is mocked unless Firebase is configured.
+### Flutter (Android Emulator)
+```bash
+cd D:\SportLynk
+flutter run -d emulator-5554
+```
 
 ---
 
-## 💡 Troubleshooting
-*   **"Localhost link not working":** If you manually enter `localhost:PORT` in a new tab after closing the original browser, it might not work because Flutter stops the dev server when the window is closed. Always use `flutter run` to start a new session.
-*   **Database Errors:** Ensure your PostgreSQL server is running on port 5432.
-*   **API Connection Error:** If the app says "Connection refused", double-check that Terminal 1 (Backend) is still running and showing the "API running" message.
+## Firebase Phone Authentication Setup (Step-by-Step)
+
+### 1. Create Firebase Project
+1. Go to [Firebase Console](https://console.firebase.google.com)
+2. Click **"Add project"** → Name it **"SportLynk"**
+3. Disable Google Analytics (not needed) → **Create Project**
+
+### 2. Add Android App
+1. In Firebase Console → Click the **Android icon**
+2. Package name: `com.example.sportlynk`
+   - Find this in `android/app/build.gradle.kts` → `applicationId`
+3. App nickname: `SportLynk Android`
+4. SHA-1 (REQUIRED for phone auth):
+   ```bash
+   cd D:\SportLynk\android
+   .\gradlew signingReport
+   ```
+   Copy the SHA-1 hash from the output → paste in Firebase
+5. Click **Register App**
+6. Download `google-services.json`
+7. Place it in: `D:\SportLynk\android\app\google-services.json`
+
+### 3. Enable Phone Authentication
+1. Firebase Console → **Authentication** (left sidebar)
+2. Click **"Get started"** if not already enabled
+3. Go to **Sign-in method** tab
+4. Click **Phone** → Toggle **Enable** → **Save**
+
+### 4. Add Test Phone Numbers (for development)
+1. Firebase Console → Authentication → Sign-in method → Phone
+2. Scroll down to **"Phone numbers for testing"**
+3. Add test numbers:
+   - `+923001234567` → Code: `123456`
+   - `+923009876543` → Code: `123456`
+4. These bypass actual SMS sending (free, no quota)
+
+### 5. Configure Flutter
+Run FlutterFire CLI:
+```bash
+dart pub global activate flutterfire_cli
+flutterfire configure --project=your-firebase-project-id
+```
+This generates `lib/firebase_options.dart`
+
+### 6. Update main.dart
+After firebase_options.dart is generated, update `main.dart`:
+```dart
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const SportLynkApp());
+}
+```
+
+### 7. Switch from Mock to Real Firebase
+In `lib/services/firebase_otp_service.dart`:
+1. Change `static const bool _useMock = true;` → `false`
+2. Uncomment the real Firebase implementation blocks
+3. Add `import 'package:firebase_auth/firebase_auth.dart';` at top
+
+### 8. Android Permissions
+In `android/app/src/main/AndroidManifest.xml`, add if not present:
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.RECEIVE_SMS" />
+<uses-permission android:name="android.permission.READ_SMS" />
+```
+
+---
+
+## Current Mock OTP Behavior
+- Any 6-digit code is accepted (e.g., `123456`)
+- Returns a mock Firebase UID like `mock_uid_123456`
+- 2-second simulated delay for realistic UX
+- All registration/login flows work end-to-end without Firebase
+
+## Seeded Test Accounts
+| Name | Email | Phone | Password | Role |
+|------|-------|-------|----------|------|
+| Ahmed Khan | ahmed@sportlynk.pk | 03001234567 | password123 | owner |
+| Sara Malik | sara@sportlynk.pk | 03009876543 | password123 | owner |
+| Bilal Raza | bilal@test.pk | 03331122334 | password123 | player |
+| Hina Farooq | hina@test.pk | 03211234567 | password123 | player |
+| Usman Ali | usman@test.pk | 03451234567 | password123 | player |
+
+> **Note**: Seeded owners were created before the verification system. They can login
+> directly since they don't have owner_profiles with verification_status. New owners
+> registered through the app will be marked `pending` and blocked from login.

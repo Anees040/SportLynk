@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
 
@@ -13,6 +15,7 @@ class AuthProvider extends ChangeNotifier {
   String? _ownerRejectionReason;
 
   User? get currentUser => _currentUser;
+  User? get user => _currentUser;
   String? get token => _token;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -25,34 +28,27 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     _isPendingOwner = false;
-    _ownerRejectionReason = null;
     notifyListeners();
 
     try {
-      final response = await _authService.login(
-        identifier: identifier,
-        password: password,
-      );
+      final response = await _authService.login(identifier: identifier, password: password);
 
       if (response['success'] == true) {
         final data = response['data'] as Map<String, dynamic>;
         _token = data['token'] as String;
         _currentUser = User.fromJson(data['user'] as Map<String, dynamic>);
         await _authService.saveToken(_token!);
-        _isPendingOwner = false;
-        _ownerRejectionReason = null;
         _isLoading = false;
         notifyListeners();
         return true;
       } else {
-        final status = response['status'] as String?;
-        if (status == 'pending') {
+        _errorMessage = response['message'] as String? ?? 'Login failed';
+        if (response['status'] == 'pending') {
           _isPendingOwner = true;
         }
-        if (status == 'rejected') {
-          _ownerRejectionReason = response['message'] as String?;
+        if (response['status'] == 'rejected') {
+          _ownerRejectionReason = _errorMessage;
         }
-        _errorMessage = response['message'] as String? ?? 'Login failed';
         _isLoading = false;
         notifyListeners();
         return false;
@@ -75,18 +71,12 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     _isLoading = true;
     _errorMessage = null;
-    _isPendingOwner = false;
-    _ownerRejectionReason = null;
     notifyListeners();
 
     try {
       final response = await _authService.registerPlayer(
-        name: name,
-        phone: phone,
-        password: password,
-        email: email,
-        firebaseUid: firebaseUid,
-        avatarUrl: avatarUrl,
+        name: name, phone: phone, password: password,
+        email: email, firebaseUid: firebaseUid, avatarUrl: avatarUrl,
       );
 
       if (response['success'] == true) {
@@ -94,8 +84,6 @@ class AuthProvider extends ChangeNotifier {
         _token = data['token'] as String;
         _currentUser = User.fromJson(data['user'] as Map<String, dynamic>);
         await _authService.saveToken(_token!);
-        _isPendingOwner = false;
-        _ownerRejectionReason = null;
         _isLoading = false;
         notifyListeners();
         return true;
@@ -116,28 +104,32 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> registerOwner(Map<String, dynamic> data) async {
     _isLoading = true;
     _errorMessage = null;
-    _isPendingOwner = false;
-    _ownerRejectionReason = null;
     notifyListeners();
 
     try {
       final response = await _authService.registerOwner(data);
+
       if (response['success'] == true) {
-        final data = response['data'] as Map<String, dynamic>;
-        _token = data['token'] as String;
-        _currentUser = User.fromJson(data['user'] as Map<String, dynamic>);
-        await _authService.saveToken(_token!);
-        _isPendingOwner = (data['status'] as String?) == 'pending';
-        _ownerRejectionReason = null;
+        _isPendingOwner = true;
+        if (response['data'] != null) {
+          final d = response['data'] as Map<String, dynamic>;
+          if (d['token'] != null) {
+            _token = d['token'] as String;
+            await _authService.saveToken(_token!);
+          }
+          if (d['user'] != null) {
+            _currentUser = User.fromJson(d['user'] as Map<String, dynamic>);
+          }
+        }
         _isLoading = false;
         notifyListeners();
         return true;
+      } else {
+        _errorMessage = response['message'] as String? ?? 'Registration failed';
+        _isLoading = false;
+        notifyListeners();
+        return false;
       }
-
-      _errorMessage = response['message'] as String? ?? 'Registration failed';
-      _isLoading = false;
-      notifyListeners();
-      return false;
     } catch (e) {
       _errorMessage = e.toString();
       _isLoading = false;
@@ -146,54 +138,18 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> sendForgotPasswordOtp(String phone) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      final response = await _authService.forgotPasswordSendOtp(phone);
-      if (response['success'] == true) {
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
-      _errorMessage = response['message'] as String? ?? 'Failed to send OTP';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    } catch (e) {
-      _errorMessage = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> resetPassword({
-    required String phone,
-    required String newPassword,
-    required String firebaseUid,
-  }) async {
+  Future<bool> resetPassword(String phone, String newPassword, String firebaseUid) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
       final response = await _authService.forgotPasswordReset(
-        phone: phone,
-        newPassword: newPassword,
-        firebaseUid: firebaseUid,
+        phone: phone, newPassword: newPassword, firebaseUid: firebaseUid,
       );
-      if (response['success'] == true) {
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
-      _errorMessage = response['message'] as String? ?? 'Failed to reset password';
       _isLoading = false;
       notifyListeners();
-      return false;
+      return response['success'] == true;
     } catch (e) {
       _errorMessage = e.toString();
       _isLoading = false;
@@ -204,9 +160,6 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> loadUser() async {
     _isLoading = true;
-    _errorMessage = null;
-    _isPendingOwner = false;
-    _ownerRejectionReason = null;
     notifyListeners();
 
     try {
@@ -225,6 +178,27 @@ class AuthProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> tryAutoLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedToken = prefs.getString('jwt_token');
+    if (savedToken == null || savedToken.isEmpty) return;
+
+    try {
+      final parts = savedToken.split('.');
+      if (parts.length == 3) {
+        final payload = json.decode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+        _token = savedToken;
+        _currentUser = User(
+          id: payload['id'].toString(),
+          name: '',
+          role: payload['role'] ?? '',
+          phone: payload['phone'],
+        );
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   void logout() {

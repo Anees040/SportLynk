@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 class ApiConstants {
   ApiConstants._();
 
-  // Use localhost for Web, 10.0.2.2 for Android Emulator
   static const String baseUrl = kIsWeb ? 'http://localhost:3000/api' : 'http://10.0.2.2:3000/api';
 
   // Auth

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_core/firebase_core.dart';
+
 import 'constants/colors.dart';
 import 'providers/auth_provider.dart';
 import 'providers/venue_provider.dart';
 import 'providers/booking_provider.dart';
-import 'firebase_options.dart';
 import 'screens/auth_wrapper.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/auth/login_screen.dart';
@@ -18,11 +17,8 @@ import 'screens/auth/owner_pending_screen.dart';
 import 'screens/player/player_home_screen.dart';
 import 'screens/owner/owner_home_screen.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
   runApp(const SportLynkApp());
 }
 

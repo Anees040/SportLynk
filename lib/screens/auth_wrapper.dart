@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../constants/colors.dart';
 import '../providers/auth_provider.dart';
 import 'auth/welcome_screen.dart';
-import 'auth/owner_pending_screen.dart';
 import 'player/player_home_screen.dart';
 import 'owner/owner_home_screen.dart';
 
@@ -83,9 +82,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         if (auth.isAuthenticated) {
-          if (auth.userRole == 'owner' && auth.isPendingOwner) {
-            return const OwnerPendingScreen();
-          }
           if (auth.userRole == 'owner') {
             return const OwnerHomeScreen();
           }

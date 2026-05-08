@@ -64,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     if (success) {
-      final role = authProvider.currentUser?.role ?? 'player';
+      final role = authProvider.user?.role ?? 'player';
       if (role == 'owner') {
         Navigator.pushNamedAndRemoveUntil(context, '/owner-home', (r) => false);
       } else {

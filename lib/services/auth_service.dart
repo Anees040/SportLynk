@@ -16,19 +16,15 @@ class AuthService {
     required String firebaseUid,
     String? avatarUrl,
   }) async {
-    final payload = <String, dynamic>{
+    final body = <String, dynamic>{
       'name': name,
       'phone': phone,
       'password': password,
       'firebaseUid': firebaseUid,
     };
-    if (email?.isNotEmpty ?? false) {
-      payload['email'] = email;
-    }
-    if (avatarUrl != null) {
-      payload['avatarUrl'] = avatarUrl;
-    }
-    return _api.post(ApiConstants.registerPlayer, payload);
+    if (email != null && email.isNotEmpty) body['email'] = email;
+    if (avatarUrl != null) body['avatarUrl'] = avatarUrl;
+    return _api.post(ApiConstants.registerPlayer, body);
   }
 
   Future<Map<String, dynamic>> registerOwner(Map<String, dynamic> data) async {
@@ -58,18 +54,6 @@ class AuthService {
       'phone': phone,
       'newPassword': newPassword,
       'firebaseUid': firebaseUid,
-    });
-  }
-
-  Future<Map<String, dynamic>> verifyPhone({
-    required String phone,
-    required String firebaseUid,
-    String purpose = 'registration',
-  }) async {
-    return _api.post(ApiConstants.verifyPhone, {
-      'phone': phone,
-      'firebaseUid': firebaseUid,
-      'purpose': purpose,
     });
   }
 

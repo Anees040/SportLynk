@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../constants/colors.dart';
-import '../services/auth_service.dart';
 import 'sport_text_field.dart';
 
 class PhoneField extends StatefulWidget {
@@ -23,7 +22,6 @@ class PhoneField extends StatefulWidget {
 
 class _PhoneFieldState extends State<PhoneField> {
   bool _verified = false;
-  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -77,31 +75,9 @@ class _PhoneFieldState extends State<PhoneField> {
       arguments: widget.controller.text.trim(),
     );
 
-    if (!mounted) return;
-
     if (result != null && result is String && result.isNotEmpty) {
-      final response = await _authService.verifyPhone(
-        phone: widget.controller.text.trim(),
-        firebaseUid: result,
-        purpose: 'registration',
-      );
-      if (!mounted) return;
-      if (response['success'] == true) {
-        setState(() => _verified = true);
-        widget.onVerified(result);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              response['message'] as String? ?? 'Unable to verify phone with server',
-              style: GoogleFonts.poppins(),
-            ),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
+      setState(() => _verified = true);
+      widget.onVerified(result);
     }
   }
 

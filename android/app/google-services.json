@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "699268307173",
+    "project_id": "sportlynk-b85ce",
+    "storage_bucket": "sportlynk-b85ce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:699268307173:android:d790b9c9f31224676ddc0c",
+        "android_client_info": {
+          "package_name": "com.example.sportlynk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDOWScpcSPhnbKeJmFvs6UPU2wrwWZ20KI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
