@@ -91,7 +91,8 @@ class _PhoneFieldState extends State<PhoneField> {
           children: [
             Expanded(
               child: SportTextField(
-                hint: 'Phone Number *',
+                label: 'Phone Number *',
+                hint: '03XXXXXXXXX',
                 prefixIcon: Icons.phone_android,
                 controller: widget.controller,
                 keyboardType: TextInputType.phone,
@@ -132,20 +133,21 @@ class _PhoneFieldState extends State<PhoneField> {
                 height: 56,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: AppColors.accent,
+                  color: AppColors.accentLight,
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.accent),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.check_circle, color: AppColors.white, size: 18),
+                    const Icon(Icons.check_circle, color: AppColors.accent, size: 18),
                     const SizedBox(width: 4),
                     Text(
                       'Verified',
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.white,
+                        color: AppColors.accent,
                       ),
                     ),
                   ],

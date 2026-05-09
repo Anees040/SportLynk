@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../constants/colors.dart';
 
 class CustomButton extends StatelessWidget {
@@ -28,7 +29,7 @@ class CustomButton extends StatelessWidget {
           style: OutlinedButton.styleFrom(
             side: const BorderSide(color: AppColors.accent, width: 2),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(28),
             ),
             foregroundColor: AppColors.accent,
           ),
@@ -50,7 +51,7 @@ class CustomButton extends StatelessWidget {
                     ],
                     Text(
                       text,
-                      style: const TextStyle(
+                      style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -72,7 +73,7 @@ class CustomButton extends StatelessWidget {
           disabledBackgroundColor: AppColors.accent.withValues(alpha: 0.6),
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(28),
           ),
         ),
         child: isLoading
@@ -93,7 +94,7 @@ class CustomButton extends StatelessWidget {
                   ],
                   Text(
                     text,
-                    style: const TextStyle(
+                    style: GoogleFonts.poppins(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),

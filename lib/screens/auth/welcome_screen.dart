@@ -1,100 +1,106 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../constants/colors.dart';
+import '../../widgets/custom_button.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Stack(
+      backgroundColor: AppColors.primary,
+      body: Column(
         children: [
-          // Full-screen dark green gradient background
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF0A1F13), Color(0xFF1A3A25)],
+          // ─── Top 55 % dark section ───
+          Expanded(
+            flex: 55,
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0A1F13), Color(0xFF1A3A25)],
+                ),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(height: 64 + topPadding),
+                    // Logo — uses actual logo.png
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.accent.withValues(alpha: 0.25),
+                            blurRadius: 28,
+                            spreadRadius: 6,
+                          ),
+                        ],
+                      ),
+                      child: CircleAvatar(
+                        radius: 52,
+                        backgroundColor: AppColors.white,
+                        backgroundImage:
+                            const AssetImage('assets/images/logo.png'),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Brand name
+                    RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'Sport',
+                            style: GoogleFonts.poppins(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.white,
+                            ),
+                          ),
+                          TextSpan(
+                            text: 'Lynk',
+                            style: GoogleFonts.poppins(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.accent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Book. Play. Compete.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        color: AppColors.white.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          // Main content
-          Column(
-            children: [
-              // Top section — logo and branding
-              Expanded(
-                flex: 5,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Logo
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.white, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.accent.withValues(alpha: 0.3),
-                              blurRadius: 24,
-                              spreadRadius: 4,
-                            ),
-                          ],
-                        ),
-                        child: CircleAvatar(
-                          radius: 52,
-                          backgroundColor: AppColors.primary,
-                          backgroundImage: const AssetImage('assets/images/logo.png'),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'Sport',
-                              style: GoogleFonts.poppins(
-                                fontSize: 36,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.white,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'Lynk',
-                              style: GoogleFonts.poppins(
-                                fontSize: 36,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.accent,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        'Book. Play. Compete.',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: AppColors.white.withValues(alpha: 0.7),
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
+
+          // ─── Bottom 45 % white sheet ───
+          Expanded(
+            flex: 45,
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(32),
                 ),
               ),
-              // Bottom white sheet
-              Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(32),
-                    topRight: Radius.circular(32),
-                  ),
-                ),
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,98 +113,62 @@ class WelcomeScreen extends StatelessWidget {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
-                      "Join Pakistan's sports community",
+                      "Join Pakistan's #1 sports venue community",
                       style: GoogleFonts.poppins(
-                        fontSize: 14,
+                        fontSize: 13,
                         color: AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 32),
+
                     // Player button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/register/player');
-                        },
-                        icon: const Icon(Icons.sports_soccer, size: 22),
-                        label: Text(
-                          'I am a Player',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          foregroundColor: AppColors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28),
-                          ),
-                        ),
-                      ),
+                    CustomButton(
+                      text: '🏃  I am a Player',
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/register/player'),
                     ),
-                    const SizedBox(height: 12),
-                    // Owner button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/register/owner');
-                        },
-                        icon: const Icon(Icons.store, size: 22),
-                        label: Text(
-                          'I am a Venue Owner',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.accent,
-                          side: const BorderSide(color: AppColors.accent, width: 2),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28),
-                          ),
-                        ),
-                      ),
+                    const SizedBox(height: 14),
+
+                    // Owner button (outlined)
+                    CustomButton(
+                      text: '🏟️  I own a Venue',
+                      variant: 'outlined',
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/register/owner'),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 28),
+
                     // Login link
                     Center(
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/login');
-                        },
-                        child: RichText(
-                          text: TextSpan(
-                            style: GoogleFonts.poppins(fontSize: 14),
-                            children: [
-                              TextSpan(
-                                text: 'Already have an account? ',
-                                style: TextStyle(color: AppColors.textSecondary),
+                      child: RichText(
+                        text: TextSpan(
+                          style: GoogleFonts.poppins(fontSize: 13),
+                          children: [
+                            TextSpan(
+                              text: 'Already have an account? ',
+                              style:
+                                  TextStyle(color: AppColors.textSecondary),
+                            ),
+                            TextSpan(
+                              text: 'Log In',
+                              style: TextStyle(
+                                color: AppColors.accent,
+                                fontWeight: FontWeight.w700,
                               ),
-                              TextSpan(
-                                text: 'Log In',
-                                style: TextStyle(
-                                  color: AppColors.accent,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () =>
+                                    Navigator.pushNamed(context, '/login'),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
+            ),
           ),
         ],
       ),

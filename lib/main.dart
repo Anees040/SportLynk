@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 import 'constants/colors.dart';
 import 'providers/auth_provider.dart';
@@ -17,8 +19,20 @@ import 'screens/auth/owner_pending_screen.dart';
 import 'screens/player/player_home_screen.dart';
 import 'screens/owner/owner_home_screen.dart';
 
-void main() {
+/// Removes scrollbar overlay on all platforms (fixes white line on web).
+class _NoScrollbarBehavior extends MaterialScrollBehavior {
+  @override
+  Widget buildScrollbar(
+      BuildContext context, Widget child, ScrollableDetails details) {
+    return child;
+  }
+}
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const SportLynkApp());
 }
 
@@ -36,6 +50,7 @@ class SportLynkApp extends StatelessWidget {
       child: MaterialApp(
         title: 'SportLynk',
         debugShowCheckedModeBanner: false,
+        scrollBehavior: _NoScrollbarBehavior(),
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(
@@ -53,15 +68,15 @@ class SportLynkApp extends StatelessWidget {
         ),
         home: const AuthWrapper(),
         routes: {
-          '/welcome': (context) => const WelcomeScreen(),
-          '/login': (context) => const LoginScreen(),
-          '/register/player': (context) => const PlayerRegisterScreen(),
-          '/register/owner': (context) => const OwnerRegisterScreen(),
-          '/otp': (context) => const OtpScreen(),
-          '/forgot-password': (context) => const ForgotPasswordScreen(),
-          '/owner-pending': (context) => const OwnerPendingScreen(),
-          '/player-home': (context) => const PlayerHomeScreen(),
-          '/owner-home': (context) => const OwnerHomeScreen(),
+          '/welcome': (_) => const WelcomeScreen(),
+          '/login': (_) => const LoginScreen(),
+          '/register/player': (_) => const PlayerRegisterScreen(),
+          '/register/owner': (_) => const OwnerRegisterScreen(),
+          '/otp': (_) => const OtpScreen(),
+          '/forgot-password': (_) => const ForgotPasswordScreen(),
+          '/owner-pending': (_) => const OwnerPendingScreen(),
+          '/player-home': (_) => const PlayerHomeScreen(),
+          '/owner-home': (_) => const OwnerHomeScreen(),
         },
       ),
     );

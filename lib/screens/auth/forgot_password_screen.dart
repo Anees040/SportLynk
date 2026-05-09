@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
-import '../../services/api_service.dart';
-import '../../constants/api_constants.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/auth_service.dart';
 import '../../widgets/sport_text_field.dart';
 import '../../widgets/password_strength_bar.dart';
 import '../../widgets/custom_button.dart';
@@ -14,131 +15,173 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  int _step = 0; // 0=phone, 1=new password
-  final _phoneCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  final _confirmCtrl = TextEditingController();
+  int _step = 0;
   final _formKey = GlobalKey<FormState>();
-  bool _loading = false;
-  bool _obscure1 = true, _obscure2 = true;
+  final _phone = TextEditingController();
+  final _newPass = TextEditingController();
+  final _confirmPass = TextEditingController();
+  bool _obscureNew = true, _obscureConfirm = true;
   String? _firebaseUid;
+  bool _loading = false;
   String _pwText = '';
 
   @override
   void initState() {
     super.initState();
-    _passCtrl.addListener(() => setState(() => _pwText = _passCtrl.text));
+    _newPass.addListener(() => setState(() => _pwText = _newPass.text));
   }
 
   @override
-  void dispose() { _phoneCtrl.dispose(); _passCtrl.dispose(); _confirmCtrl.dispose(); super.dispose(); }
-
-  Future<void> _sendOtp() async {
-    final phone = _phoneCtrl.text.trim();
-    if (phone.isEmpty || !RegExp(r'^03\d{9}$').hasMatch(phone)) {
-      _snack('Enter valid phone (03XXXXXXXXX)'); return;
-    }
-    setState(() => _loading = true);
-    try {
-      final res = await ApiService().post('${ApiConstants.baseUrl}/auth/forgot-password/send-otp', {'phone': phone});
-      if (!mounted) return;
-      if (res['success'] == true) {
-        final uid = await Navigator.pushNamed(context, '/otp', arguments: phone);
-        if (uid != null && uid is String) {
-          setState(() { _firebaseUid = uid; _step = 1; });
-        }
-      } else {
-        _snack(res['message'] ?? 'Failed');
-      }
-    } catch (e) {
-      _snack('Connection error');
-    }
-    if (mounted) setState(() => _loading = false);
+  void dispose() {
+    _phone.dispose();
+    _newPass.dispose();
+    _confirmPass.dispose();
+    super.dispose();
   }
 
-  Future<void> _resetPassword() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _loading = true);
-    try {
-      final res = await ApiService().post('${ApiConstants.baseUrl}/auth/forgot-password/reset', {
-        'phone': _phoneCtrl.text.trim(),
-        'newPassword': _passCtrl.text,
-        'firebaseUid': _firebaseUid,
-      });
-      if (!mounted) return;
-      if (res['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Password changed!', style: GoogleFonts.poppins()),
-          backgroundColor: AppColors.success, behavior: SnackBarBehavior.floating,
-        ));
-        Navigator.pop(context);
-      } else {
-        _snack(res['message'] ?? 'Failed');
-      }
-    } catch (e) {
-      _snack('Connection error');
-    }
-    if (mounted) setState(() => _loading = false);
-  }
-
-  void _snack(String msg) {
+  void _snack(String msg, {Color bg = AppColors.error}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: GoogleFonts.poppins()), backgroundColor: AppColors.error,
-      behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      content: Text(msg, style: GoogleFonts.poppins()),
+      backgroundColor: bg,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
+  }
+
+  // Step 0: Send OTP
+  Widget _buildStep0() {
+    return Column(children: [
+      Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(color: AppColors.accentLight, shape: BoxShape.circle),
+        child: const Icon(Icons.lock_reset, size: 72, color: AppColors.accent),
+      ),
+      const SizedBox(height: 20),
+      Text('Reset Password', style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textPrimary), textAlign: TextAlign.center),
+      const SizedBox(height: 8),
+      Text('Enter your registered phone number', style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary), textAlign: TextAlign.center),
+      const SizedBox(height: 32),
+      SportTextField(
+        label: 'Phone Number',
+        hint: '03XXXXXXXXX',
+        prefixIcon: Icons.phone_android,
+        controller: _phone,
+        keyboardType: TextInputType.phone,
+        validator: (v) => v == null || !RegExp(r'^03[0-9]{9}$').hasMatch(v.trim()) ? 'Enter valid phone (03XXXXXXXXX)' : null,
+      ),
+      const SizedBox(height: 24),
+      CustomButton(
+        text: 'Send OTP',
+        isLoading: _loading,
+        onPressed: () async {
+          if (!_formKey.currentState!.validate()) return;
+          setState(() => _loading = true);
+          try {
+            final authService = AuthService();
+            final resp = await authService.forgotPasswordSendOtp(_phone.text.trim());
+            if (!mounted) return;
+            setState(() => _loading = false);
+            if (resp['success'] != true) {
+              _snack(resp['message'] ?? 'Phone not found');
+              return;
+            }
+            final uid = await Navigator.pushNamed(context, '/otp', arguments: _phone.text.trim());
+            if (uid != null && uid is String) {
+              _firebaseUid = uid;
+              setState(() => _step = 1);
+            }
+          } catch (e) {
+            if (mounted) { setState(() => _loading = false); _snack('Network error'); }
+          }
+        },
+      ),
+    ]);
+  }
+
+  // Step 1: New password
+  Widget _buildStep1() {
+    return Column(children: [
+      Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(color: AppColors.accentLight, shape: BoxShape.circle),
+        child: const Icon(Icons.lock_open, size: 72, color: AppColors.accent),
+      ),
+      const SizedBox(height: 20),
+      Text('Create New Password', style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textPrimary), textAlign: TextAlign.center),
+      const SizedBox(height: 32),
+      SportTextField(
+        label: 'New Password *',
+        hint: 'Min 8 characters',
+        prefixIcon: Icons.lock_outline,
+        controller: _newPass,
+        obscure: _obscureNew,
+        suffix: IconButton(
+          icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility, size: 20, color: const Color(0xFF64748B)),
+          onPressed: () => setState(() => _obscureNew = !_obscureNew),
+        ),
+        validator: (v) {
+          if (v == null || v.length < 8) return 'Min 8 characters';
+          if (!v.contains(RegExp(r'[A-Z]'))) return 'Add uppercase letter';
+          if (!v.contains(RegExp(r'[0-9]'))) return 'Add a number';
+          return null;
+        },
+      ),
+      const SizedBox(height: 8),
+      PasswordStrengthBar(password: _pwText),
+      const SizedBox(height: 16),
+      SportTextField(
+        label: 'Confirm Password *',
+        hint: 'Re-enter password',
+        prefixIcon: Icons.lock_outline,
+        controller: _confirmPass,
+        obscure: _obscureConfirm,
+        suffix: IconButton(
+          icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility, size: 20, color: const Color(0xFF64748B)),
+          onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+        ),
+        validator: (v) => v != _newPass.text ? 'Passwords do not match' : null,
+      ),
+      const SizedBox(height: 32),
+      Consumer<AuthProvider>(builder: (context, auth, _) {
+        return CustomButton(
+          text: 'Reset Password',
+          isLoading: auth.isLoading,
+          onPressed: () async {
+            if (!_formKey.currentState!.validate()) return;
+            final ok = await auth.resetPassword(_phone.text.trim(), _newPass.text, _firebaseUid!);
+            if (!context.mounted) return;
+            if (ok) {
+              _snack('Password changed successfully!', bg: AppColors.accent);
+              Navigator.pushNamedAndRemoveUntil(context, '/login', (r) => false);
+            } else {
+              _snack(auth.errorMessage ?? 'Reset failed');
+            }
+          },
+        );
+      }),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text('Forgot Password', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)), backgroundColor: AppColors.primary, foregroundColor: AppColors.white, elevation: 0),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: _step == 0 ? _buildPhoneStep() : _buildResetStep(),
-        ),
+      appBar: AppBar(
+        title: Text('Forgot Password', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.white,
+        elevation: 0,
       ),
-    );
-  }
-
-  Widget _buildPhoneStep() {
-    return Column(
-      children: [
-        Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: AppColors.accentLight, shape: BoxShape.circle), child: const Icon(Icons.lock_reset, size: 52, color: AppColors.accent)),
-        const SizedBox(height: 24),
-        Text('Reset Password', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-        const SizedBox(height: 8),
-        Text('Enter your registered phone number', style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textSecondary)),
-        const SizedBox(height: 32),
-        SportTextField(hint: 'Phone Number', prefixIcon: Icons.phone_android, controller: _phoneCtrl, keyboardType: TextInputType.phone),
-        const SizedBox(height: 24),
-        CustomButton(text: 'Send OTP', isLoading: _loading, onPressed: _sendOtp),
-      ],
-    );
-  }
-
-  Widget _buildResetStep() {
-    return Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          const Icon(Icons.check_circle, size: 52, color: AppColors.accent),
-          const SizedBox(height: 16),
-          Text('Phone Verified', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-          Text('Enter your new password', style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textSecondary)),
-          const SizedBox(height: 32),
-          SportTextField(hint: 'New Password', prefixIcon: Icons.lock_outline, controller: _passCtrl, obscure: _obscure1,
-            validator: (v) { if (v == null || v.length < 8) return 'Min 8 characters'; return null; },
-            suffix: IconButton(icon: Icon(_obscure1 ? Icons.visibility_off : Icons.visibility, size: 20, color: AppColors.textSecondary), onPressed: () => setState(() => _obscure1 = !_obscure1))),
-          PasswordStrengthBar(password: _pwText),
-          const SizedBox(height: 16),
-          SportTextField(hint: 'Confirm Password', prefixIcon: Icons.lock_outline, controller: _confirmCtrl, obscure: _obscure2,
-            validator: (v) { if (v != _passCtrl.text) return 'Passwords do not match'; return null; },
-            suffix: IconButton(icon: Icon(_obscure2 ? Icons.visibility_off : Icons.visibility, size: 20, color: AppColors.textSecondary), onPressed: () => setState(() => _obscure2 = !_obscure2))),
-          const SizedBox(height: 32),
-          CustomButton(text: 'Reset Password', isLoading: _loading, onPressed: _resetPassword),
-        ],
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(children: [
+            const SizedBox(height: 40),
+            _step == 0 ? _buildStep0() : _buildStep1(),
+            const SizedBox(height: 40),
+          ]),
+        ),
       ),
     );
   }
