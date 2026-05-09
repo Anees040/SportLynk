@@ -51,5 +51,12 @@ lib/firebase_options.dart
 android/local.properties
 
 # Secrets
+lib/constants/app_config.dart
 **/*.env
 **/secrets.json
+
+# Cloudinary and other secrets
+**/google-services.json
+**/secrets.json
+**/config/*.env
+**/config/*.json
