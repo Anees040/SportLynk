@@ -36,13 +36,8 @@ class CloudinaryService {
   }
 
   Future<List<String>> uploadMultipleImages(List<String> filePaths, {String folder = 'venues'}) async {
-    List<String> urls = [];
-    for (var path in filePaths) {
-      final url = await uploadImage(path, folder: folder);
-      if (url != null) {
-        urls.add(url);
-      }
-    }
-    return urls;
+    final futures = filePaths.map((path) => uploadImage(path, folder: folder));
+    final results = await Future.wait(futures);
+    return results.whereType<String>().toList();
   }
 }

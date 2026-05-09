@@ -345,24 +345,22 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
     try {
       final cloudinary = CloudinaryService();
       
-      // Upload images
-      final cnicFrontUrl = await cloudinary.uploadImage(_cnicFront!.path, folder: 'cnics');
-      final cnicBackUrl = await cloudinary.uploadImage(_cnicBack!.path, folder: 'cnics');
-      final selfieUrl = await cloudinary.uploadImage(_selfie!.path, folder: 'selfies');
-      final groundUrls = await cloudinary.uploadMultipleImages(
-        _groundPhotos.map((e) => e.path).toList(),
-        folder: 'venues',
-      );
-      
-      String? utilityUrl;
-      if (_utilityBill != null) {
-        utilityUrl = await cloudinary.uploadImage(_utilityBill!.path, folder: 'documents');
-      }
-      
-      String? proofUrl;
-      if (_ownershipProof != null) {
-        proofUrl = await cloudinary.uploadImage(_ownershipProof!.path, folder: 'documents');
-      }
+      // Upload all images concurrently
+      final futures = await Future.wait([
+        cloudinary.uploadImage(_cnicFront!.path, folder: 'cnics'),
+        cloudinary.uploadImage(_cnicBack!.path, folder: 'cnics'),
+        cloudinary.uploadImage(_selfie!.path, folder: 'selfies'),
+        cloudinary.uploadMultipleImages(_groundPhotos.map((e) => e.path).toList(), folder: 'venues'),
+        _utilityBill != null ? cloudinary.uploadImage(_utilityBill!.path, folder: 'documents') : Future.value(null),
+        _ownershipProof != null ? cloudinary.uploadImage(_ownershipProof!.path, folder: 'documents') : Future.value(null),
+      ]);
+
+      final cnicFrontUrl = futures[0] as String?;
+      final cnicBackUrl = futures[1] as String?;
+      final selfieUrl = futures[2] as String?;
+      final groundUrls = futures[3] as List<String>;
+      final utilityUrl = futures[4] as String?;
+      final proofUrl = futures[5] as String?;
 
       final data = {
         'name': _nameCtrl.text.trim(),
