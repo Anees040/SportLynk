@@ -16,11 +16,15 @@ const authRoutes = require('./routes/auth');
 const venueRoutes = require('./routes/venues');
 const bookingRoutes = require('./routes/bookings');
 const ownerRoutes = require('./routes/owner');
+const walletRoutes = require('./routes/wallet');
+const playerRoutes = require('./routes/player');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/venues', venueRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/owner', ownerRoutes);
+app.use('/api/wallet', walletRoutes);
+app.use('/api/player', playerRoutes);
 
 // ─── Health check ────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
