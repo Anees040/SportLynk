@@ -226,7 +226,7 @@ const login = async (req, res) => {
     }
 
     if (userResult.rows.length === 0) {
-      return res.status(401).json({ success: false, message: 'No account found with this phone/email' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials provided' });
     }
 
     const user = userResult.rows[0];
@@ -261,7 +261,7 @@ const login = async (req, res) => {
 
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
-      return res.status(401).json({ success: false, message: 'Incorrect password' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials provided' });
     }
 
     const token = jwt.sign(

@@ -34,7 +34,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
   bool _phoneVerified = false;
   String? _firebaseUid;
   bool _obscurePass = true;
-  final bool _obscureConfirm = true;
+  bool _obscureConfirm = true;
   XFile? _avatar;
   String _pwText = '';
 
@@ -132,19 +132,29 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
       PasswordStrengthBar(password: _pwText),
       const SizedBox(height: 16),
       SportTextField(label: 'Confirm Password *', hint: 'Re-enter password', prefixIcon: Icons.lock_outline, controller: _confirmCtrl, obscure: _obscureConfirm,
-        suffix: _confirmCtrl.text.isNotEmpty && _confirmCtrl.text == _passCtrl.text
-            ? const Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 20)
-            : _confirmCtrl.text.isNotEmpty 
-                ? const Icon(Icons.cancel, color: Color(0xFFDC2626), size: 20)
-                : null,
+        suffix: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_confirmCtrl.text.isNotEmpty)
+              Icon(
+                _confirmCtrl.text == _passCtrl.text ? Icons.check_circle : Icons.cancel,
+                color: _confirmCtrl.text == _passCtrl.text ? const Color(0xFF22C55E) : const Color(0xFFDC2626),
+                size: 20,
+              ),
+            IconButton(
+              icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility, size: 20, color: AppColors.textSecondary),
+              onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+            ),
+          ],
+        ),
         validator: (v) => v != _passCtrl.text ? 'Passwords do not match' : null),
       const SizedBox(height: 16),
-      SportTextField(label: 'CNIC Number *', hint: '35201-1234567-8  OR  3520112345678', prefixIcon: Icons.credit_card, controller: _cnicCtrl, keyboardType: TextInputType.number, helperText: 'Enter 13 digits with or without dashes',
-        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d-]')), LengthLimitingTextInputFormatter(15)],
+      SportTextField(label: 'CNIC Number *', hint: '3520112345678', prefixIcon: Icons.credit_card, controller: _cnicCtrl, keyboardType: TextInputType.number, helperText: 'Enter 13 digits without dashes',
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(13)],
         validator: (v) {
           if (v == null || v.trim().isEmpty) return 'CNIC is required';
-          final digits = v.replaceAll(RegExp(r'[-\s]'), '');
-          if (!RegExp(r'^\d{13}$').hasMatch(digits)) return 'CNIC must be 13 digits (e.g. 3520X-XXXXXXX-X)';
+          final digits = v.trim();
+          if (!RegExp(r'^\d{13}$').hasMatch(digits)) return 'CNIC must be exactly 13 digits';
           final first = int.parse(digits[0]);
           if (first < 1 || first > 4) return 'Invalid CNIC: first digit must be 1–4';
           return null;
@@ -170,12 +180,16 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
       const SizedBox(height: 16),
       Text('Ground Type *', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
       const SizedBox(height: 8),
-      Row(children: ['Indoor Football','Indoor Cricket'].map((t) => Expanded(child: Padding(
-        padding: EdgeInsets.only(right: t == 'Indoor Football' ? 6 : 0, left: t == 'Indoor Cricket' ? 6 : 0),
-        child: GestureDetector(onTap: () => setState(() => _groundType = t.toLowerCase().replaceAll(' ', '_')),
-          child: Container(height: 52, decoration: BoxDecoration(color: _groundType == t.toLowerCase().replaceAll(' ', '_') ? AppColors.accent : AppColors.inputFill, borderRadius: BorderRadius.circular(12), border: Border.all(color: _groundType == t.toLowerCase().replaceAll(' ', '_') ? AppColors.accent : AppColors.border)),
-            child: Center(child: Text(t, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: _groundType == t.toLowerCase().replaceAll(' ', '_') ? AppColors.white : AppColors.textSecondary))))),
-      ))).toList()),
+      Wrap(spacing: 8, runSpacing: 8, children: ['Turf', 'Futsal', 'Concrete', 'Grass', 'Indoor'].map((t) {
+        final val = t.toLowerCase();
+        final sel = _groundType == val;
+        return FilterChip(
+          label: Text(t, style: GoogleFonts.poppins(fontSize: 13, color: sel ? AppColors.accent : AppColors.textSecondary)),
+          selected: sel,
+          onSelected: (v) => setState(() => _groundType = val),
+          selectedColor: AppColors.accentLight, checkmarkColor: AppColors.accent, backgroundColor: AppColors.inputFill, side: BorderSide(color: sel ? AppColors.accent : AppColors.border),
+        );
+      }).toList()),
       const SizedBox(height: 16),
       Text('Sports Offered *', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
       const SizedBox(height: 8),
@@ -434,19 +448,47 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text('Owner Registration', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-        backgroundColor: AppColors.primary, foregroundColor: AppColors.white, elevation: 0,
-        bottom: PreferredSize(preferredSize: const Size.fromHeight(4),
-          child: LinearProgressIndicator(value: (_step + 1) / 3, valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent), backgroundColor: AppColors.accentLight)),
-      ),
-      body: ScrollConfiguration(
-        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-        child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-        child: _step == 0 ? _buildStep0() : _step == 1 ? _buildStep1() : _buildStep2(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldPop = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Discard Application?', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+            content: Text('Any information you entered will be lost. Are you sure you want to go back?', style: GoogleFonts.poppins()),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text('Keep Editing', style: GoogleFonts.poppins(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white, elevation: 0),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text('Discard', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        );
+        if (shouldPop == true && context.mounted) {
+          Navigator.pop(context, result);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: Text('Owner Registration', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+          backgroundColor: AppColors.primary, foregroundColor: AppColors.white, elevation: 0,
+          bottom: PreferredSize(preferredSize: const Size.fromHeight(4),
+            child: LinearProgressIndicator(value: (_step + 1) / 3, valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent), backgroundColor: AppColors.accentLight)),
+        ),
+        body: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            child: _step == 0 ? _buildStep0() : _step == 1 ? _buildStep1() : _buildStep2(),
+          ),
         ),
       ),
     );
