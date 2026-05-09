@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +19,8 @@ import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/owner_pending_screen.dart';
 import 'screens/player/player_home_screen.dart';
 import 'screens/owner/owner_home_screen.dart';
+import 'screens/player/trust_score_screen.dart';
+import 'screens/player/find_venues_screen.dart';
 
 /// Removes scrollbar overlay on all platforms (fixes white line on web).
 class _NoScrollbarBehavior extends MaterialScrollBehavior {
@@ -37,24 +38,59 @@ class _NoScrollbarBehavior extends MaterialScrollBehavior {
   };
 }
 
+/// Protects routes: redirects to /welcome if not authenticated.
+/// Optionally checks role to prevent cross-role access.
 class AuthGuard extends StatelessWidget {
   final Widget child;
-  const AuthGuard({required this.child, super.key});
+  final String? requiredRole;
+  const AuthGuard({required this.child, this.requiredRole, super.key});
 
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, auth, _) {
-        if (auth.currentUser == null) {
-          // Not logged in — redirect to welcome
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            Navigator.pushNamedAndRemoveUntil(
-              context, '/welcome', (r) => false);
-          });
+        // Still loading auth state — show spinner, don't redirect
+        if (auth.isLoading) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            backgroundColor: Color(0xFF0A1F13),
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF22C55E)),
+            ),
           );
         }
+
+        // Not authenticated — redirect to welcome
+        if (!auth.isAuthenticated) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) {
+              Navigator.pushNamedAndRemoveUntil(
+                context, '/welcome', (r) => false);
+            }
+          });
+          return const Scaffold(
+            backgroundColor: Color(0xFF0A1F13),
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF22C55E)),
+            ),
+          );
+        }
+
+        // Role mismatch — redirect to correct home
+        if (requiredRole != null && auth.userRole != requiredRole) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) {
+              final route = auth.userRole == 'owner' ? '/owner-home' : '/player-home';
+              Navigator.pushNamedAndRemoveUntil(context, route, (r) => false);
+            }
+          });
+          return const Scaffold(
+            backgroundColor: Color(0xFF0A1F13),
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF22C55E)),
+            ),
+          );
+        }
+
         return child;
       },
     );
@@ -63,12 +99,12 @@ class AuthGuard extends StatelessWidget {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  // Hide Firebase reCAPTCHA badge injected by Firebase Auth web
-  if (kIsWeb) {
-    // reCAPTCHA badge auto-hides, no action needed on mobile
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e');
   }
   runApp(const SportLynkApp());
 }
@@ -114,8 +150,10 @@ class SportLynkApp extends StatelessWidget {
           '/otp': (_) => const OtpScreen(),
           '/forgot-password': (_) => const ForgotPasswordScreen(),
           '/owner-pending': (_) => const AuthGuard(child: OwnerPendingScreen()),
-          '/player-home': (_) => const AuthGuard(child: PlayerHomeScreen()),
-          '/owner-home': (_) => const AuthGuard(child: OwnerHomeScreen()),
+          '/player-home': (_) => const AuthGuard(requiredRole: 'player', child: PlayerHomeScreen()),
+          '/owner-home': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerHomeScreen()),
+          '/trust-score': (_) => const AuthGuard(requiredRole: 'player', child: TrustScoreScreen(profile: {})),
+          '/find-venues': (_) => const AuthGuard(requiredRole: 'player', child: FindVenuesScreen()),
         },
         ),
       ),

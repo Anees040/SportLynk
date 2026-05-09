@@ -179,6 +179,7 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       _token = null;
       _currentUser = null;
+      await _authService.clearToken();
     }
 
     _isLoading = false;
@@ -186,24 +187,49 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> tryAutoLogin() async {
+    _isLoading = true;
+    notifyListeners();
+
     final prefs = await SharedPreferences.getInstance();
     final savedToken = prefs.getString('jwt_token');
-    if (savedToken == null || savedToken.isEmpty) return;
+    if (savedToken == null || savedToken.isEmpty) {
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
 
     try {
-      final parts = savedToken.split('.');
-      if (parts.length == 3) {
-        final payload = json.decode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
-        _token = savedToken;
-        _currentUser = User(
-          id: payload['id'].toString(),
-          name: '',
-          role: payload['role'] ?? '',
-          phone: payload['phone'],
-        );
-        notifyListeners();
+      // Try to get full user data from API first
+      _token = savedToken;
+      _currentUser = await _authService.getMe(savedToken);
+      if (_currentUser == null) {
+        _token = null;
+        await _authService.clearToken();
       }
-    } catch (_) {}
+    } catch (_) {
+      // Fallback: decode JWT for minimal user info
+      try {
+        final parts = savedToken.split('.');
+        if (parts.length == 3) {
+          final payload = json.decode(
+            utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+          _token = savedToken;
+          _currentUser = User(
+            id: payload['id'].toString(),
+            name: payload['name'] ?? 'Player',
+            role: payload['role'] ?? '',
+            phone: payload['phone'],
+          );
+        }
+      } catch (_) {
+        _token = null;
+        _currentUser = null;
+        await _authService.clearToken();
+      }
+    }
+
+    _isLoading = false;
+    notifyListeners();
   }
 
   void logout() {
@@ -213,6 +239,14 @@ class AuthProvider extends ChangeNotifier {
     _isPendingOwner = false;
     _ownerRejectionReason = null;
     _authService.clearToken();
+    notifyListeners();
+  }
+  void updateLocalUser(Map<String, dynamic> data) {
+    if (_currentUser == null) return;
+    _currentUser = _currentUser!.copyWith(
+      name: data['name'],
+      email: data['email'],
+    );
     notifyListeners();
   }
 }

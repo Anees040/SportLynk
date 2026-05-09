@@ -36,4 +36,22 @@ class User {
       'avatar_url': avatarUrl,
     };
   }
+
+  User copyWith({
+    String? id,
+    String? email,
+    String? role,
+    String? name,
+    String? phone,
+    String? avatarUrl,
+  }) {
+    return User(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      role: role ?? this.role,
+      name: name ?? this.name,
+      phone: phone ?? this.phone,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+    );
+  }
 }
