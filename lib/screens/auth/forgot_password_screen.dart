@@ -172,7 +172,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         foregroundColor: AppColors.white,
         elevation: 0,
       ),
-      body: SingleChildScrollView(
+      body: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
@@ -181,6 +183,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             _step == 0 ? _buildStep0() : _buildStep1(),
             const SizedBox(height: 40),
           ]),
+        ),
         ),
       ),
     );

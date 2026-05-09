@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import '../../services/cloudinary_service.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/sport_text_field.dart';
@@ -32,7 +33,8 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
   final _cnicCtrl = TextEditingController();
   bool _phoneVerified = false;
   String? _firebaseUid;
-  bool _obscurePass = true, _obscureConfirm = true;
+  bool _obscurePass = true;
+  final bool _obscureConfirm = true;
   XFile? _avatar;
   String _pwText = '';
 
@@ -48,7 +50,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
   final List<String> _sports = [];
   String? _city;
   final _cities = ['Islamabad','Rawalpindi','Lahore','Karachi','Peshawar','Quetta','Multan','Faisalabad'];
-  final _sportOpts = ['Football','Cricket','Futsal','Badminton','Basketball'];
+  final _sportOpts = ['Football','Cricket'];
 
   // Step 2
   XFile? _cnicFront, _cnicBack, _selfie, _utilityBill, _ownershipProof;
@@ -58,6 +60,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
   void initState() {
     super.initState();
     _passCtrl.addListener(() => setState(() => _pwText = _passCtrl.text));
+    _confirmCtrl.addListener(() => setState(() {}));
   }
 
   @override
@@ -115,7 +118,9 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
       SportTextField(label: 'Full Name *', hint: 'Enter your full name', prefixIcon: Icons.person_outline, controller: _nameCtrl,
         validator: (v) { if (v == null || v.trim().isEmpty) return 'Required'; if (v.trim().length < 3) return 'Min 3 characters'; if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(v.trim())) return 'Letters and spaces only'; return null; }),
       const SizedBox(height: 16),
-      PhoneField(controller: _phoneCtrl, isVerified: _phoneVerified, onVerified: (uid) => setState(() { _phoneVerified = true; _firebaseUid = uid; })),
+      PhoneField(controller: _phoneCtrl, isVerified: _phoneVerified, 
+        onVerified: (uid) => setState(() { _phoneVerified = true; _firebaseUid = uid; }),
+        onEdit: () => setState(() { _phoneVerified = false; _firebaseUid = null; _phoneCtrl.clear(); })),
       const SizedBox(height: 16),
       SportTextField(label: 'Email (optional)', hint: 'email@example.com', prefixIcon: Icons.mail_outline, controller: _emailCtrl, keyboardType: TextInputType.emailAddress,
         validator: (v) { if (v == null || v.trim().isEmpty) return null; if (!RegExp(r'^[\w.]+@[\w]+\.\w+$').hasMatch(v.trim())) return 'Invalid email'; return null; }),
@@ -127,12 +132,23 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
       PasswordStrengthBar(password: _pwText),
       const SizedBox(height: 16),
       SportTextField(label: 'Confirm Password *', hint: 'Re-enter password', prefixIcon: Icons.lock_outline, controller: _confirmCtrl, obscure: _obscureConfirm,
-        suffix: IconButton(icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility, size: 20, color: AppColors.textSecondary), onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm)),
-        validator: (v) { if (v != _passCtrl.text) return 'Passwords do not match'; return null; }),
+        suffix: _confirmCtrl.text.isNotEmpty && _confirmCtrl.text == _passCtrl.text
+            ? const Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 20)
+            : _confirmCtrl.text.isNotEmpty 
+                ? const Icon(Icons.cancel, color: Color(0xFFDC2626), size: 20)
+                : null,
+        validator: (v) => v != _passCtrl.text ? 'Passwords do not match' : null),
       const SizedBox(height: 16),
-      SportTextField(label: 'CNIC Number *', hint: '3XXXXX-XXXXXXX-X', prefixIcon: Icons.credit_card, controller: _cnicCtrl, keyboardType: TextInputType.number, helperText: 'Used for identity verification only',
+      SportTextField(label: 'CNIC Number *', hint: '35201-1234567-8  OR  3520112345678', prefixIcon: Icons.credit_card, controller: _cnicCtrl, keyboardType: TextInputType.number, helperText: 'Enter 13 digits with or without dashes',
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d-]')), LengthLimitingTextInputFormatter(15)],
-        validator: (v) { if (v == null || v.isEmpty) return 'CNIC required'; final d = v.replaceAll('-',''); if (d.length != 13 || !RegExp(r'^\d{13}$').hasMatch(d)) return 'Must be 13 digits'; return null; }),
+        validator: (v) {
+          if (v == null || v.trim().isEmpty) return 'CNIC is required';
+          final digits = v.replaceAll(RegExp(r'[-\s]'), '');
+          if (!RegExp(r'^\d{13}$').hasMatch(digits)) return 'CNIC must be 13 digits (e.g. 3520X-XXXXXXX-X)';
+          final first = int.parse(digits[0]);
+          if (first < 1 || first > 4) return 'Invalid CNIC: first digit must be 1–4';
+          return null;
+        }),
       const SizedBox(height: 32),
       CustomButton(text: 'Continue →', onPressed: () {
         if (!_formKey0.currentState!.validate()) return;
@@ -154,11 +170,11 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
       const SizedBox(height: 16),
       Text('Ground Type *', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
       const SizedBox(height: 8),
-      Row(children: ['Turf','Futsal'].map((t) => Expanded(child: Padding(
-        padding: EdgeInsets.only(right: t == 'Turf' ? 6 : 0, left: t == 'Futsal' ? 6 : 0),
-        child: GestureDetector(onTap: () => setState(() => _groundType = t.toLowerCase()),
-          child: Container(height: 52, decoration: BoxDecoration(color: _groundType == t.toLowerCase() ? AppColors.accent : AppColors.inputFill, borderRadius: BorderRadius.circular(12), border: Border.all(color: _groundType == t.toLowerCase() ? AppColors.accent : AppColors.border)),
-            child: Center(child: Text(t, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: _groundType == t.toLowerCase() ? AppColors.white : AppColors.textSecondary))))),
+      Row(children: ['Indoor Football','Indoor Cricket'].map((t) => Expanded(child: Padding(
+        padding: EdgeInsets.only(right: t == 'Indoor Football' ? 6 : 0, left: t == 'Indoor Cricket' ? 6 : 0),
+        child: GestureDetector(onTap: () => setState(() => _groundType = t.toLowerCase().replaceAll(' ', '_')),
+          child: Container(height: 52, decoration: BoxDecoration(color: _groundType == t.toLowerCase().replaceAll(' ', '_') ? AppColors.accent : AppColors.inputFill, borderRadius: BorderRadius.circular(12), border: Border.all(color: _groundType == t.toLowerCase().replaceAll(' ', '_') ? AppColors.accent : AppColors.border)),
+            child: Center(child: Text(t, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: _groundType == t.toLowerCase().replaceAll(' ', '_') ? AppColors.white : AppColors.textSecondary))))),
       ))).toList()),
       const SizedBox(height: 16),
       Text('Sports Offered *', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
@@ -185,7 +201,13 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
         validator: (v) => v != null && v.trim().length >= 10 ? null : 'Min 10 characters'),
       const SizedBox(height: 16),
       SportTextField(label: 'Google Maps Link (optional)', hint: 'Paste Google Maps URL', prefixIcon: Icons.map_outlined, controller: _mapsCtrl, helperText: 'Open Google Maps → Share → Copy link',
-        validator: (v) { if (v == null || v.trim().isEmpty) return null; if (!v.startsWith('https://maps.google') && !v.startsWith('https://goo.gl')) return 'Must be a Google Maps URL'; return null; }),
+        validator: (v) {
+          if (v == null || v.trim().isEmpty) return null;
+          final url = v.trim().toLowerCase();
+          final isValid = url.startsWith('https://maps.google') || url.startsWith('https://goo.gl') || url.startsWith('https://maps.app.goo.gl') || url.startsWith('http://maps.google') || url.startsWith('https://www.google.com/maps');
+          if (!isValid) return 'Must be a Google Maps link (maps.google.com or maps.app.goo.gl)';
+          return null;
+        }),
       const SizedBox(height: 16),
       Row(children: [
         Expanded(child: SportTextField(label: 'Opens at *', hint: '06:00', prefixIcon: Icons.access_time, controller: _openCtrl, readOnly: true,
@@ -295,26 +317,119 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
   }
 
   Future<void> _submit(AuthProvider auth) async {
-    if (_cnicFront == null || _cnicBack == null || _selfie == null) { _snack('CNIC photos and selfie are required'); return; }
-    if (_groundPhotos.length < 3) { _snack('Add at least 3 ground photos'); return; }
-    final data = {
-      'name': _nameCtrl.text.trim(), 'phone': _phoneCtrl.text.trim(), 'password': _passCtrl.text,
-      'email': _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
-      'firebaseUid': _firebaseUid, 'cnicNumber': _cnicCtrl.text.trim(),
-      'businessName': _bizCtrl.text.trim(), 'groundName': _bizCtrl.text.trim(), 'groundType': _groundType,
-      'sportTypes': _sports, 'city': _city, 'fullAddress': _addrCtrl.text.trim(),
-      'googleMapsLink': _mapsCtrl.text.trim().isEmpty ? null : _mapsCtrl.text.trim(),
-      'operatingHoursFrom': _openCtrl.text, 'operatingHoursTo': _closeCtrl.text,
-      'pricePerHour': _priceCtrl.text.trim(),
-      'alternateContactPhone': _altPhoneCtrl.text.trim().isEmpty ? null : _altPhoneCtrl.text.trim(),
-      'cnicFrontUrl': _cnicFront!.path, 'cnicBackUrl': _cnicBack!.path, 'selfieWithCnicUrl': _selfie!.path,
-      'groundPhotos': _groundPhotos.map((x) => x.path).toList(),
-      'utilityBillUrl': _utilityBill?.path, 'ownershipProofUrl': _ownershipProof?.path,
-    };
-    final ok = await auth.registerOwner(data);
-    if (!mounted) return;
-    if (ok) { Navigator.pushNamedAndRemoveUntil(context, '/owner-pending', (r) => false); }
-    else { _snack(auth.errorMessage ?? 'Submission failed'); }
+    if (_cnicFront == null || _cnicBack == null || _selfie == null) {
+      _snack('CNIC photos and selfie are required');
+      return;
+    }
+    if (_groundPhotos.length < 3) {
+      _snack('Add at least 3 ground photos');
+      return;
+    }
+
+    setState(() => auth.setLoading(true)); // Ensure loading shows
+
+    try {
+      final cloudinary = CloudinaryService();
+      
+      // Upload images
+      final cnicFrontUrl = await cloudinary.uploadImage(_cnicFront!.path, folder: 'cnics');
+      final cnicBackUrl = await cloudinary.uploadImage(_cnicBack!.path, folder: 'cnics');
+      final selfieUrl = await cloudinary.uploadImage(_selfie!.path, folder: 'selfies');
+      final groundUrls = await cloudinary.uploadMultipleImages(
+        _groundPhotos.map((e) => e.path).toList(),
+        folder: 'venues',
+      );
+      
+      String? utilityUrl;
+      if (_utilityBill != null) {
+        utilityUrl = await cloudinary.uploadImage(_utilityBill!.path, folder: 'documents');
+      }
+      
+      String? proofUrl;
+      if (_ownershipProof != null) {
+        proofUrl = await cloudinary.uploadImage(_ownershipProof!.path, folder: 'documents');
+      }
+
+      final data = {
+        'name': _nameCtrl.text.trim(),
+        'phone': _phoneCtrl.text.trim(),
+        'password': _passCtrl.text,
+        'email': _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
+        'firebaseUid': _firebaseUid,
+        'cnicNumber': _cnicCtrl.text.trim(),
+        'businessName': _bizCtrl.text.trim(),
+        'groundName': _bizCtrl.text.trim(),
+        'groundType': _groundType,
+        'sportTypes': _sports,
+        'city': _city,
+        'fullAddress': _addrCtrl.text.trim(),
+        'googleMapsLink': _mapsCtrl.text.trim().isEmpty ? null : _mapsCtrl.text.trim(),
+        'operatingHoursFrom': _openCtrl.text,
+        'operatingHoursTo': _closeCtrl.text,
+        'pricePerHour': _priceCtrl.text.trim(),
+        'alternateContactPhone': _altPhoneCtrl.text.trim().isEmpty ? null : _altPhoneCtrl.text.trim(),
+        'cnicFrontUrl': cnicFrontUrl ?? _cnicFront!.path,
+        'cnicBackUrl': cnicBackUrl ?? _cnicBack!.path,
+        'selfieWithCnicUrl': selfieUrl ?? _selfie!.path,
+        'groundPhotos': groundUrls.isNotEmpty ? groundUrls : _groundPhotos.map((x) => x.path).toList(),
+        'utilityBillUrl': utilityUrl ?? _utilityBill?.path,
+        'ownershipProofUrl': proofUrl ?? _ownershipProof?.path,
+      };
+
+      final ok = await auth.registerOwner(data);
+      if (!mounted) return;
+      if (ok) {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(height: 8),
+            const CircleAvatar(
+              radius: 36,
+              backgroundColor: AppColors.accentLight,
+              child: Icon(Icons.check_circle, color: AppColors.accent, size: 40),
+            ),
+            const SizedBox(height: 16),
+            Text('Application Submitted!',
+              style: GoogleFonts.poppins(
+                fontSize: 20, fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary)),
+            const SizedBox(height: 8),
+            Text('Your venue application has been received and is under review.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 24),
+            SizedBox(width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  Navigator.pushNamedAndRemoveUntil(
+                    context, '/owner-pending', (r) => false);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28)),
+                  padding: const EdgeInsets.symmetric(vertical: 14)),
+                child: Text('View Status',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white, fontWeight: FontWeight.w600)),
+              )),
+          ]),
+        ),
+      );
+    } else {
+      _snack(auth.errorMessage ?? 'Submission failed');
+    }
+    } catch (e) {
+      if (mounted) {
+        auth.setLoading(false);
+        _snack('An error occurred: $e');
+      }
+    }
   }
 
   @override
@@ -325,11 +440,14 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
         title: Text('Owner Registration', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
         backgroundColor: AppColors.primary, foregroundColor: AppColors.white, elevation: 0,
         bottom: PreferredSize(preferredSize: const Size.fromHeight(4),
-          child: LinearProgressIndicator(value: (_step + 1) / 3, color: AppColors.accent, backgroundColor: AppColors.accentLight)),
+          child: LinearProgressIndicator(value: (_step + 1) / 3, valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent), backgroundColor: AppColors.accentLight)),
       ),
-      body: SingleChildScrollView(
+      body: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
         child: _step == 0 ? _buildStep0() : _step == 1 ? _buildStep1() : _buildStep2(),
+        ),
       ),
     );
   }

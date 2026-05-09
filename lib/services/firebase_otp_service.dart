@@ -1,6 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+// NOTE: Firebase Phone Auth ONLY works on Android/iOS.
+// Run with: flutter run (on emulator or real device)
+// Do NOT use: flutter run -d chrome (web does not support phone OTP)
+// For testing without real SMS: add test numbers in Firebase Console:
+// Authentication → Phone → "Phone numbers for testing"
+// Add: +923001234567 with code: 123456
+
 /// Firebase OTP Service — uses real Firebase Phone Auth.
 /// Works on both Web (signInWithPhoneNumber) and Mobile (verifyPhoneNumber).
 class FirebaseOtpService {

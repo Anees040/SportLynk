@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
+import '../../constants/app_config.dart';
+import '../../services/cloudinary_service.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/sport_text_field.dart';
@@ -32,15 +34,12 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
   String? _firebaseUid;
   XFile? _avatarFile;
   String _passwordText = '';
-  bool _confirmTouched = false;
 
   @override
   void initState() {
     super.initState();
     _pass.addListener(() => setState(() => _passwordText = _pass.text));
-    _confirmPass.addListener(() {
-      if (_confirmTouched) setState(() {});
-    });
+    _confirmPass.addListener(() => setState(() {}));
   }
 
   @override
@@ -93,10 +92,14 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
     return null;
   }
 
-  bool get _passwordsMatch =>
-      _confirmPass.text.isNotEmpty && _confirmPass.text == _pass.text;
-
   Future<void> _triggerOtp() async {
+    if (AppConfig.devMode) {
+      setState(() {
+        _phoneVerified = true;
+        _firebaseUid = AppConfig.devFirebaseUid;
+      });
+      return;
+    }
     final err = _validatePhone(_phone.text);
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -143,7 +146,9 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
         centerTitle: true,
         elevation: 0,
       ),
-      body: SingleChildScrollView(
+      body: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Form(
           key: _formKey,
@@ -292,24 +297,27 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                     ),
                   )
                 else
-                  Container(
-                    height: 56,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                        color: AppColors.accentLight,
-                        borderRadius: BorderRadius.circular(10)),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.check_circle,
-                          color: AppColors.accent, size: 18),
-                      const SizedBox(width: 4),
-                      Text('Verified',
-                          style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.accent)),
-                    ]),
-                  ),
+                  Row(children: [
+                    Container(padding: const EdgeInsets.all(8), 
+                      decoration: BoxDecoration(color:AppColors.accentLight, borderRadius:BorderRadius.circular(10)),
+                      child: Row(children: [
+                        const Icon(Icons.check_circle, color:AppColors.accent, size:18),
+                        const SizedBox(width:4),
+                        Text('Verified', style:GoogleFonts.poppins(
+                          color:AppColors.accent, fontSize:12, fontWeight:FontWeight.w600)),
+                      ])),
+                    const SizedBox(width:4),
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        _phoneVerified = false;
+                        _firebaseUid = null;
+                        _phone.clear();
+                      }),
+                      child: Text('Edit', style:GoogleFonts.poppins(
+                        color:AppColors.textSecondary, fontSize:12,
+                        decoration:TextDecoration.underline)),
+                    ),
+                  ]),
               ]),
               const SizedBox(height: 16),
 
@@ -355,52 +363,28 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                 suffix: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Real-time match indicator
                     if (_confirmPass.text.isNotEmpty)
                       Icon(
-                        _passwordsMatch ? Icons.check_circle : Icons.cancel,
-                        color: _passwordsMatch
-                            ? AppColors.accent
-                            : AppColors.error,
+                        _confirmPass.text == _pass.text
+                            ? Icons.check_circle
+                            : Icons.cancel,
+                        color: _confirmPass.text == _pass.text
+                            ? const Color(0xFF22C55E)
+                            : const Color(0xFFDC2626),
                         size: 20,
                       ),
                     IconButton(
-                        icon: Icon(
-                            _obscureConfirm
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                            color: AppColors.textSecondary,
-                            size: 20),
-                        onPressed: () => setState(() {
-                              _obscureConfirm = !_obscureConfirm;
-                              _confirmTouched = true;
-                            })),
+                      icon: Icon(
+                        _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                        color: AppColors.textSecondary,
+                        size: 20,
+                      ),
+                      onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    ),
                   ],
                 ),
                 validator: _validateConfirmPassword,
               ),
-              // Real-time match text
-              if (_confirmPass.text.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Row(children: [
-                  const SizedBox(width: 4),
-                  Icon(
-                    _passwordsMatch ? Icons.check_circle : Icons.info_outline,
-                    size: 14,
-                    color: _passwordsMatch ? AppColors.accent : AppColors.error,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    _passwordsMatch ? 'Passwords match' : 'Passwords do not match',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      color:
-                          _passwordsMatch ? AppColors.accent : AppColors.error,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ]),
-              ],
               const SizedBox(height: 32),
 
               // ─── Create Account ───
@@ -408,10 +392,28 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                 return CustomButton(
                   text: 'Create Account',
                   isLoading: auth.isLoading,
-                  onPressed: !_phoneVerified
-                      ? null
-                      : () async {
+                  onPressed: () async {
                           if (!_formKey.currentState!.validate()) return;
+                          if (!_phoneVerified) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text('Please verify your phone number first',
+                                  style: GoogleFonts.poppins()),
+                              backgroundColor: AppColors.warning,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ));
+                            return;
+                          }
+
+                          auth.setLoading(true);
+
+                          String? avatarUrl;
+                          if (_avatarFile != null) {
+                            final cloudinary = CloudinaryService();
+                            avatarUrl = await cloudinary.uploadImage(_avatarFile!.path, folder: 'avatars');
+                          }
+
                           final ok = await auth.registerPlayer(
                             name: _name.text.trim(),
                             phone: _phone.text.trim(),
@@ -420,11 +422,53 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                                 ? null
                                 : _email.text.trim(),
                             firebaseUid: _firebaseUid!,
+                            avatarUrl: avatarUrl,
                           );
                           if (!context.mounted) return;
                           if (ok) {
-                            Navigator.pushNamedAndRemoveUntil(
-                                context, '/player-home', (r) => false);
+                            // Show success dialog
+                            await showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (ctx) => AlertDialog(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                                  const SizedBox(height: 8),
+                                  const CircleAvatar(
+                                    radius: 36,
+                                    backgroundColor: AppColors.accentLight,
+                                    child: Icon(Icons.check_circle, color: AppColors.accent, size: 40),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text('Account Created!',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 20, fontWeight: FontWeight.bold,
+                                      color: AppColors.textPrimary)),
+                                  const SizedBox(height: 8),
+                                  Text('Welcome to SportLynk. Your player account is ready.',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13, color: AppColors.textSecondary)),
+                                  const SizedBox(height: 24),
+                                  SizedBox(width: double.infinity,
+                                    child: ElevatedButton(
+                                      onPressed: () {
+                                        Navigator.of(ctx).pop();
+                                        Navigator.pushNamedAndRemoveUntil(
+                                          context, '/login', (r) => false);
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.accent,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(28)),
+                                        padding: const EdgeInsets.symmetric(vertical: 14)),
+                                      child: Text('Start Booking',
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white, fontWeight: FontWeight.w600)),
+                                    )),
+                                ]),
+                              ),
+                            );
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                               content: Text(
@@ -439,14 +483,6 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                         },
                 );
               }),
-              if (!_phoneVerified)
-                Center(
-                    child: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text('Verify your phone number first',
-                      style: GoogleFonts.poppins(
-                          fontSize: 12, color: AppColors.warning)),
-                )),
               const SizedBox(height: 20),
 
               // ─── Login link ───
@@ -474,6 +510,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
               const SizedBox(height: 32),
             ],
           ),
+        ),
         ),
       ),
     );

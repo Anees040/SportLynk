@@ -45,7 +45,7 @@ class WelcomeScreen extends StatelessWidget {
                         ],
                       ),
                       child: CircleAvatar(
-                        radius: 52,
+                        radius: 72,
                         backgroundColor: AppColors.white,
                         backgroundImage:
                             const AssetImage('assets/images/logo.png'),
@@ -100,72 +100,75 @@ class WelcomeScreen extends StatelessWidget {
                   top: Radius.circular(32),
                 ),
               ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Get Started',
-                      style: GoogleFonts.poppins(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      "Join Pakistan's #1 sports venue community",
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Player button
-                    CustomButton(
-                      text: '🏃  I am a Player',
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/register/player'),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Owner button (outlined)
-                    CustomButton(
-                      text: '🏟️  I own a Venue',
-                      variant: 'outlined',
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/register/owner'),
-                    ),
-                    const SizedBox(height: 28),
-
-                    // Login link
-                    Center(
-                      child: RichText(
-                        text: TextSpan(
-                          style: GoogleFonts.poppins(fontSize: 13),
-                          children: [
-                            TextSpan(
-                              text: 'Already have an account? ',
-                              style:
-                                  TextStyle(color: AppColors.textSecondary),
-                            ),
-                            TextSpan(
-                              text: 'Log In',
-                              style: TextStyle(
-                                color: AppColors.accent,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () =>
-                                    Navigator.pushNamed(context, '/login'),
-                            ),
-                          ],
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Get Started',
+                        style: GoogleFonts.poppins(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 6),
+                      Text(
+                        "Join Pakistan's #1 sports venue community",
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // Player button
+                      CustomButton(
+                        text: '🏃  I am a Player',
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/register/player'),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Owner button (outlined)
+                      CustomButton(
+                        text: '🏟️  I own a Venue',
+                        variant: 'outlined',
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/register/owner'),
+                      ),
+                      const SizedBox(height: 28),
+
+                      // Login link
+                      Center(
+                        child: RichText(
+                          text: TextSpan(
+                            style: GoogleFonts.poppins(fontSize: 13),
+                            children: [
+                              TextSpan(
+                                text: 'Already have an account? ',
+                                style:
+                                    TextStyle(color: AppColors.textSecondary),
+                              ),
+                              TextSpan(
+                                text: 'Log In',
+                                style: TextStyle(
+                                  color: AppColors.accent,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () =>
+                                      Navigator.pushNamed(context, '/login'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

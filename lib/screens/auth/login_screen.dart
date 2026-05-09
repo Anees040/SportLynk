@@ -26,162 +26,190 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // ─── Dark gradient header ───
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 8,
-                bottom: 40,
-              ),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF0A1F13), Color(0xFF166534)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
-              ),
-              child: Column(children: [
-                // Back button
+      body: SafeArea(
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
                 Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: AppColors.white),
+                    icon: const Icon(Icons.arrow_back_ios, color: AppColors.textPrimary, size: 20),
                     onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 40),
                 // Logo
                 Container(
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha: 0.2), blurRadius: 16, spreadRadius: 2)],
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.accent.withValues(alpha: 0.15),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
                   child: CircleAvatar(
-                    radius: 36,
+                    radius: 42,
                     backgroundColor: AppColors.white,
                     backgroundImage: const AssetImage('assets/images/logo.png'),
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text('Welcome Back', style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.white)),
-                const SizedBox(height: 4),
-                Text('Sign in to continue', style: GoogleFonts.poppins(fontSize: 13, color: AppColors.white.withValues(alpha: 0.7))),
-              ]),
-            ),
-
-            // ─── White card (overlaps header by 20px) ───
-            Transform.translate(
-              offset: const Offset(0, -20),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20),
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 8)),
-                  ],
+                const SizedBox(height: 24),
+                Text(
+                  'Welcome Back!',
+                  style: GoogleFonts.poppins(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Sign In', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                      const SizedBox(height: 4),
-                      Text('Enter your credentials', style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
-                      const SizedBox(height: 24),
-
-                      // Phone or Email
-                      SportTextField(
-                        label: 'Phone or Email',
-                        hint: '03XXXXXXXXX or email@domain.com',
-                        prefixIcon: Icons.phone_android,
-                        controller: _idCtrl,
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Required';
-                          final val = v.trim();
-                          if (val.contains('@')) {
-                            if (!RegExp(r'^[\w.]+@[\w]+\.\w+$').hasMatch(val)) return 'Invalid email';
-                          } else {
-                            if (!RegExp(r'^03[0-9]{9}$').hasMatch(val)) return 'Enter valid phone (03XXXXXXXXX)';
-                          }
-                          return null;
-                        },
+                const SizedBox(height: 8),
+                Text(
+                  'Sign in to your account to continue',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 40),
+                
+                // Form
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 24,
+                        offset: const Offset(0, 4),
                       ),
-                      const SizedBox(height: 16),
-
-                      // Password
-                      SportTextField(
-                        label: 'Password',
-                        hint: 'Your password',
-                        prefixIcon: Icons.lock_outline,
-                        controller: _pwCtrl,
-                        obscure: _obscure,
-                        suffix: IconButton(
-                          icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: const Color(0xFF64748B), size: 20),
-                          onPressed: () => setState(() => _obscure = !_obscure),
-                        ),
-                        validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-                      ),
-
-                      // Forgot Password
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
-                          child: Text('Forgot Password?', style: GoogleFonts.poppins(fontSize: 13, color: AppColors.accent, fontWeight: FontWeight.w500)),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Login button
-                      Consumer<AuthProvider>(builder: (context, auth, _) {
-                        return CustomButton(
-                          text: 'Log In',
-                          isLoading: auth.isLoading,
-                          onPressed: () async {
-                            if (!_formKey.currentState!.validate()) return;
-                            final ok = await auth.login(_idCtrl.text.trim(), _pwCtrl.text);
-                            if (!context.mounted) return;
-                            if (!ok) {
-                              if (auth.isPendingOwner) {
-                                Navigator.pushNamedAndRemoveUntil(context, '/owner-pending', (r) => false);
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text(auth.errorMessage ?? 'Login failed', style: GoogleFonts.poppins()),
-                                  backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ));
-                              }
-                              return;
+                    ],
+                  ),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Phone or Email
+                        SportTextField(
+                          label: 'Phone or Email',
+                          hint: '03XXXXXXXXX or email',
+                          prefixIcon: Icons.phone_android,
+                          controller: _idCtrl,
+                          keyboardType: TextInputType.emailAddress,
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Required';
+                            final val = v.trim();
+                            if (val.contains('@')) {
+                              if (!RegExp(r'^[\w.]+@[\w]+\.\w+$').hasMatch(val)) return 'Invalid email';
+                            } else {
+                              if (!RegExp(r'^03[0-9]{9}$').hasMatch(val)) return 'Enter valid phone (03XXXXXXXXX)';
                             }
-                            final route = auth.currentUser?.role == 'owner' ? '/owner-home' : '/player-home';
-                            Navigator.pushNamedAndRemoveUntil(context, route, (r) => false);
+                            return null;
                           },
-                        );
-                      }),
-                      const SizedBox(height: 24),
+                        ),
+                        const SizedBox(height: 20),
 
-                      // Sign Up
-                      Center(
-                        child: RichText(text: TextSpan(style: GoogleFonts.poppins(fontSize: 13), children: [
-                          TextSpan(text: "Don't have an account? ", style: TextStyle(color: AppColors.textSecondary)),
-                          TextSpan(text: 'Sign Up', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w700),
-                            recognizer: TapGestureRecognizer()..onTap = () => Navigator.pushNamed(context, '/welcome')),
-                        ])),
+                        // Password
+                        SportTextField(
+                          label: 'Password',
+                          hint: 'Your password',
+                          prefixIcon: Icons.lock_outline,
+                          controller: _pwCtrl,
+                          obscure: _obscure,
+                          suffix: IconButton(
+                            icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: const Color(0xFF64748B), size: 20),
+                            onPressed: () => setState(() => _obscure = !_obscure),
+                          ),
+                          validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                        ),
+
+                        // Forgot Password
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(
+                              'Forgot Password?',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: AppColors.accent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Login button
+                        Consumer<AuthProvider>(builder: (context, auth, _) {
+                          return CustomButton(
+                            text: 'Log In',
+                            isLoading: auth.isLoading,
+                            onPressed: () async {
+                              if (!_formKey.currentState!.validate()) return;
+                              final ok = await auth.login(_idCtrl.text.trim(), _pwCtrl.text);
+                              if (!context.mounted) return;
+                              if (!ok) {
+                                if (auth.isPendingOwner) {
+                                  Navigator.pushNamedAndRemoveUntil(context, '/owner-pending', (r) => false);
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text(auth.errorMessage ?? 'Login failed', style: GoogleFonts.poppins()),
+                                    backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ));
+                                }
+                                return;
+                              }
+                              final route = auth.currentUser?.role == 'owner' ? '/owner-home' : '/player-home';
+                              Navigator.pushNamedAndRemoveUntil(context, route, (r) => false);
+                            },
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // Sign Up
+                RichText(
+                  text: TextSpan(
+                    style: GoogleFonts.poppins(fontSize: 14),
+                    children: [
+                      const TextSpan(text: "Don't have an account? ", style: TextStyle(color: AppColors.textSecondary)),
+                      TextSpan(
+                        text: 'Sign Up',
+                        style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold),
+                        recognizer: TapGestureRecognizer()..onTap = () => Navigator.pushNamed(context, '/welcome'),
                       ),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(height: 20),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

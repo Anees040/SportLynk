@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -24,7 +26,38 @@ class _NoScrollbarBehavior extends MaterialScrollBehavior {
   @override
   Widget buildScrollbar(
       BuildContext context, Widget child, ScrollableDetails details) {
-    return child;
+    return child; // strips all scrollbars
+  }
+  
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+  };
+}
+
+class AuthGuard extends StatelessWidget {
+  final Widget child;
+  const AuthGuard({required this.child, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (context, auth, _) {
+        if (auth.currentUser == null) {
+          // Not logged in — redirect to welcome
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.pushNamedAndRemoveUntil(
+              context, '/welcome', (r) => false);
+          });
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return child;
+      },
+    );
   }
 }
 
@@ -33,6 +66,10 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  // Hide Firebase reCAPTCHA badge injected by Firebase Auth web
+  if (kIsWeb) {
+    // reCAPTCHA badge auto-hides, no action needed on mobile
+  }
   runApp(const SportLynkApp());
 }
 
@@ -47,7 +84,9 @@ class SportLynkApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => VenueProvider()),
         ChangeNotifierProvider(create: (_) => BookingProvider()),
       ],
-      child: MaterialApp(
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: MaterialApp(
         title: 'SportLynk',
         debugShowCheckedModeBanner: false,
         scrollBehavior: _NoScrollbarBehavior(),
@@ -74,10 +113,11 @@ class SportLynkApp extends StatelessWidget {
           '/register/owner': (_) => const OwnerRegisterScreen(),
           '/otp': (_) => const OtpScreen(),
           '/forgot-password': (_) => const ForgotPasswordScreen(),
-          '/owner-pending': (_) => const OwnerPendingScreen(),
-          '/player-home': (_) => const PlayerHomeScreen(),
-          '/owner-home': (_) => const OwnerHomeScreen(),
+          '/owner-pending': (_) => const AuthGuard(child: OwnerPendingScreen()),
+          '/player-home': (_) => const AuthGuard(child: PlayerHomeScreen()),
+          '/owner-home': (_) => const AuthGuard(child: OwnerHomeScreen()),
         },
+        ),
       ),
     );
   }

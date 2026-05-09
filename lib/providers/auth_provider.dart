@@ -24,6 +24,11 @@ class AuthProvider extends ChangeNotifier {
   bool get isPendingOwner => _isPendingOwner;
   String? get ownerRejectionReason => _ownerRejectionReason;
 
+  void setLoading(bool val) {
+    _isLoading = val;
+    notifyListeners();
+  }
+
   Future<bool> login(String identifier, String password) async {
     _isLoading = true;
     _errorMessage = null;

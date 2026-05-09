@@ -58,18 +58,34 @@ class _OtpScreenState extends State<OtpScreen> {
     await _otp.sendOtp(
       phone: _phone,
       onCodeSent: (vid) {
-        if (mounted) { setState(() => _sending = false); _foci[0].requestFocus(); }
+        if (!mounted) return;
+        setState(() => _sending = false);
+        _foci[0].requestFocus();
       },
       onError: (e) {
-        if (mounted) {
-          setState(() => _sending = false);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(e, style: GoogleFonts.poppins()),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ));
+        if (!mounted) return;
+        setState(() => _sending = false);
+        String userMessage;
+        if (e.contains('billing-not-enabled')) {
+          userMessage = 'SMS service not configured yet.\n'
+              'For testing: add test numbers in Firebase Console:\n'
+              'Authentication → Phone → Phone numbers for testing';
+        } else if (e.contains('invalid-phone-number')) {
+          userMessage = 'Invalid phone number format. Use 03XXXXXXXXX';
+        } else if (e.contains('too-many-requests')) {
+          userMessage = 'Too many attempts. Please wait 1 hour.';
+        } else if (e.contains('network-request-failed')) {
+          userMessage = 'No internet connection. Check WiFi/mobile data.';
+        } else {
+          userMessage = 'OTP failed: $e';
         }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(userMessage, style: GoogleFonts.poppins()),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 6),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
       },
       onAutoVerified: (uid) { if (mounted) Navigator.pop(context, uid); },
     );

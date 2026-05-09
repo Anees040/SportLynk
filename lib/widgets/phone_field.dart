@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../constants/colors.dart';
+import '../constants/app_config.dart';
 import 'sport_text_field.dart';
 
 class PhoneField extends StatefulWidget {
   final TextEditingController controller;
   final Function(String firebaseUid) onVerified;
+  final VoidCallback? onEdit;
   final bool isVerified;
 
   const PhoneField({
     super.key,
     required this.controller,
     required this.onVerified,
+    this.onEdit,
     this.isVerified = false,
   });
 
@@ -56,6 +59,11 @@ class _PhoneFieldState extends State<PhoneField> {
   }
 
   Future<void> _sendOtp() async {
+    if (AppConfig.devMode) {
+      setState(() => _verified = true);
+      widget.onVerified(AppConfig.devFirebaseUid);
+      return;
+    }
     final error = _validatePhone(widget.controller.text);
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,78 +91,93 @@ class _PhoneFieldState extends State<PhoneField> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: SportTextField(
-                label: 'Phone Number *',
-                hint: '03XXXXXXXXX',
-                prefixIcon: Icons.phone_android,
-                controller: widget.controller,
-                keyboardType: TextInputType.phone,
-                enabled: !_verified,
-                validator: _validatePhone,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(11),
-                ],
+        Expanded(
+          child: SportTextField(
+            label: 'Phone Number *',
+            hint: '03XXXXXXXXX',
+            prefixIcon: Icons.phone_android,
+            controller: widget.controller,
+            keyboardType: TextInputType.phone,
+            readOnly: _verified,
+            validator: _validatePhone,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(11),
+            ],
+            suffix: _verified
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentLight,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.accent.withValues(alpha: 0.5)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.check_circle, color: AppColors.accent, size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Verified',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.accent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.textSecondary),
+                        onPressed: () {
+                          setState(() => _verified = false);
+                          if (widget.onEdit != null) widget.onEdit!();
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  )
+                : null,
+          ),
+        ),
+        if (!_verified) ...[
+          const SizedBox(width: 12),
+          Padding(
+            padding: const EdgeInsets.only(top: 28.0),
+            child: SizedBox(
+              height: 54,
+              child: ElevatedButton(
+                onPressed: _sendOtp,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: AppColors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                ),
+                child: Text(
+                  'Verify',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            if (!_verified)
-              SizedBox(
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _sendOtp,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accent,
-                    foregroundColor: AppColors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                  ),
-                  child: Text(
-                    'Verify',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            if (_verified)
-              Container(
-                height: 56,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.accentLight,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.accent),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.check_circle, color: AppColors.accent, size: 18),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Verified',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.accent,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
+          ),
+        ]
       ],
     );
   }

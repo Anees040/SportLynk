@@ -80,5 +80,15 @@ Completed:
   - Consumer<AuthProvider> create account (disabled until phone verified)
   - Warning text "Verify your phone number first"
   - "Already have account? Log In" link
-- [x] CustomButton updated: borderRadius 28, GoogleFonts.poppins text
 - [x] flutter analyze: 0 issues
+
+## Day 4
+Completed:
+- [x] Hardened Auth Flow: Implemented `devMode` for OTP bypass during testing.
+- [x] Cloudinary Integration: Upload player avatars and owner documents to Cloudinary, saving secure URLs to DB.
+- [x] Fixed `player_register_screen.dart` confirm password real-time validation and visibility toggle.
+- [x] Professional UI redesign for PhoneField (removed disabled grey background, inline verified badge).
+- [x] Modern UI redesign for LoginScreen (centered, clean white layout, logo focus, removed heavy gradient).
+- [x] Redirect `/login` after successful player registration.
+- [x] Resolved all compile errors and `cloudinary_public` versioning issues.
+- [x] flutter analyze: 0 issues (only minor unused import/print warnings fixed).
