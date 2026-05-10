@@ -53,6 +53,9 @@ const DUMMY_VENUES = [
 async function seed() {
   try {
     console.log('Connecting to DB...');
+    await pool.query('DELETE FROM wallet_transactions');
+    await pool.query('DELETE FROM transactions');
+    await pool.query('DELETE FROM bookings');
     await pool.query('DELETE FROM venues'); // Clear old dummy venues (cascades slots & bookings)
     console.log('Cleared existing venues.');
 
@@ -65,29 +68,39 @@ async function seed() {
       const photos = v.sport_type === 'football' ? FOOTBALL_PICS : CRICKET_PICS;
       const mainImage = photos[Math.floor(Math.random() * photos.length)];
 
+      const amenities = JSON.stringify({
+        lights: true,
+        equipment: v.sport_type === 'football' ? 'Ball, Bibs' : 'Bat, Ball, Stumps',
+      });
+
       const res = await pool.query(`
         INSERT INTO venues (
           owner_id, name, description, sport_type, city, address, 
           latitude, longitude, base_price, current_price, price_per_hour,
-          image_url, venue_photos, video_url, is_active, rating, total_reviews, ground_type
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+          image_url, venue_photos, video_url, is_active, rating, total_reviews, ground_type, amenities
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         RETURNING id
       `, [
         ownerId, v.name, `Premium ${v.sport_type} facility in ${v.city}. Professional lighting and high-quality ${v.type}.`,
         v.sport_type, v.city, v.address, v.lat, v.lng, v.price, v.price, v.price,
-        mainImage, photos, VIDEO_URL, true, v.rating, v.rev, v.type
+        mainImage, photos, VIDEO_URL, true, v.rating, v.rev, v.type, amenities
       ]);
 
       const venueId = res.rows[0].id;
 
       // Generate Slots for the next 7 days, 16:00 to 23:00
+      const statuses = ['available', 'available', 'available', 'available', 'booked', 'booked', 'blocked', 'temporarily_locked'];
       for (let day = 0; day <= 7; day++) {
         for (let hour = 16; hour <= 23; hour++) {
+          const isPeak = hour >= 18 && hour <= 21;
+          const slotPrice = isPeak ? v.price * 1.2 : v.price;
+          const status = statuses[Math.floor(Math.random() * statuses.length)];
+          
           await pool.query(`
             INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status)
-            VALUES ($1, CURRENT_DATE + $2::integer, $3::time, $4::time, $5, 'available')
+            VALUES ($1, CURRENT_DATE + $2::integer, $3::time, $4::time, $5, $6)
           `, [
-            venueId, day, `${hour}:00:00`, `${hour+1}:00:00`, v.price
+            venueId, day, `${hour}:00:00`, `${hour+1}:00:00`, slotPrice, status
           ]);
         }
       }

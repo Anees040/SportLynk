@@ -22,9 +22,14 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   DateTime _selectedDate = DateTime.now();
   String? _selectedSlotId;
   Map<String, dynamic>? _selectedSlot;
+  int _galleryPage = 0;
+  final PageController _galleryCtrl = PageController();
 
   @override
   void initState() { super.initState(); _load(); }
+
+  @override
+  void dispose() { _galleryCtrl.dispose(); super.dispose(); }
 
   String _dateStr(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
@@ -55,6 +60,46 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     return double.tryParse(val.toString()) ?? 0.0;
   }
 
+  /// Convert "HH:MM:SS" or "HH:MM" to 12-hour AM/PM format
+  String _to12Hour(dynamic t) {
+    if (t == null) return '';
+    final str = t.toString();
+    final parts = str.split(':');
+    if (parts.length < 2) return str;
+    int hour = int.tryParse(parts[0]) ?? 0;
+    final min = parts[1];
+    final ampm = hour >= 12 ? 'PM' : 'AM';
+    if (hour == 0) {
+      hour = 12;
+    } else if (hour > 12) {
+      hour -= 12;
+    }
+    return '$hour:$min $ampm';
+  }
+
+  /// Get gallery images from venue_photos array
+  List<String> get _galleryImages {
+    if (_venue == null) return [];
+    final photos = _venue!['venue_photos'];
+    if (photos is List && photos.isNotEmpty) {
+      return photos.map((e) => e.toString()).toList();
+    }
+    // Fallback to single image_url
+    if (_venue!['image_url'] != null) return [_venue!['image_url'].toString()];
+    return [];
+  }
+
+  /// Parse amenities from JSONB
+  Map<String, dynamic> get _amenities {
+    if (_venue == null) return {};
+    final a = _venue!['amenities'];
+    if (a is Map) return Map<String, dynamic>.from(a);
+    if (a is String) {
+      try { return Map<String, dynamic>.from(jsonDecode(a)); } catch(_) {}
+    }
+    return {};
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -70,6 +115,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
 
     final price = _parseDouble(_venue!['price_per_hour']);
     final sportType = (_venue!['sport_type'] ?? 'sport').toString();
+    final images = _galleryImages;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -77,27 +123,25 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // ── HERO ────────────────────────────────────────────
+          // ── HERO GALLERY ─────────────────────────────────────
           SliverAppBar(
-            expandedHeight: 260,
+            expandedHeight: 280,
             pinned: true,
             backgroundColor: AppColors.primary,
             iconTheme: const IconThemeData(color: Colors.white),
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(children: [
-                if (_venue!['image_url'] != null)
-                  Positioned.fill(
-                    child: Image.network(_venue!['image_url'], fit: BoxFit.cover),
+                if (images.isNotEmpty)
+                  PageView.builder(
+                    controller: _galleryCtrl,
+                    itemCount: images.length,
+                    onPageChanged: (i) => setState(() => _galleryPage = i),
+                    itemBuilder: (_, i) => Image.network(images[i],
+                      fit: BoxFit.cover, width: double.infinity,
+                      errorBuilder: (_, e, st) => _gradientPlaceholder(sportType)),
                   )
                 else
-                  Container(width: double.infinity, height: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [const Color(0xFF0A1F13), _sportColor(sportType).withValues(alpha: 0.6)],
-                        begin: Alignment.topCenter, end: Alignment.bottomRight))),
-                if (_venue!['image_url'] == null)
-                  Center(child: Icon(_sportIcon(sportType),
-                    color: Colors.white.withValues(alpha: 0.08), size: 160)),
+                  _gradientPlaceholder(sportType),
                 // Gradient overlay at bottom
                 Positioned.fill(child: Container(
                   decoration: BoxDecoration(
@@ -105,9 +149,38 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                       begin: Alignment.topCenter, end: Alignment.bottomCenter,
                       stops: const [0.4, 1.0],
                       colors: [Colors.transparent,
-                        Colors.black.withValues(alpha: 0.7)])))),
-                // Rating & Sport badges
-                Positioned(top: 100, right: 16,
+                        Colors.black.withValues(alpha: 0.75)])))),
+                // Page indicator dots
+                if (images.length > 1)
+                  Positioned(bottom: 70, left: 0, right: 0,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(images.length, (i) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: _galleryPage == i ? 24 : 8, height: 8,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: _galleryPage == i ? Colors.white : Colors.white54,
+                          borderRadius: BorderRadius.circular(4)),
+                      )),
+                    ),
+                  ),
+                // Photo count badge
+                if (images.length > 1)
+                  Positioned(top: 100, right: 16,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.black54,
+                        borderRadius: BorderRadius.circular(10)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.photo_library_outlined, color: Colors.white, size: 14),
+                        const SizedBox(width: 4),
+                        Text('${_galleryPage + 1}/${images.length}',
+                          style: GoogleFonts.poppins(color: Colors.white,
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                      ]))),
+                // Rating badge
+                Positioned(top: 100, left: 16,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(color: Colors.black45,
@@ -193,6 +266,65 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
               )),
           ),
 
+          // ── AMENITIES SECTION ──────────────────────────────
+          if (_amenities.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 10, offset: const Offset(0, 2))]),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: const Color(0xFFE0E7FF),
+                          borderRadius: BorderRadius.circular(10)),
+                        child: const Icon(Icons.checklist_rounded, color: Color(0xFF6366F1), size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Text('Amenities & Facilities', style: GoogleFonts.poppins(
+                        fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    ]),
+                    const SizedBox(height: 16),
+                    ..._amenities.entries.map((e) {
+                      final key = e.key.toString();
+                      final val = e.value;
+                      final isBool = val is bool;
+                      final displayKey = key.replaceAll('_', ' ');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(children: [
+                          Icon(
+                            isBool ? (val ? Icons.check_circle : Icons.cancel)
+                              : Icons.info_outline,
+                            color: isBool
+                              ? (val ? AppColors.accent : AppColors.error)
+                              : AppColors.textSecondary,
+                            size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(
+                            displayKey[0].toUpperCase() + displayKey.substring(1),
+                            style: GoogleFonts.poppins(fontSize: 13,
+                              color: AppColors.textPrimary, fontWeight: FontWeight.w500))),
+                          Text(isBool ? (val ? 'Yes' : 'No') : val.toString(),
+                            style: GoogleFonts.poppins(fontSize: 13,
+                              color: isBool
+                                ? (val ? AppColors.accent : AppColors.error)
+                                : AppColors.textSecondary,
+                              fontWeight: FontWeight.w600)),
+                        ]),
+                      );
+                    }),
+                  ]),
+                ),
+              ),
+            ),
+
           // ── DATE SELECTOR ──────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
@@ -256,17 +388,19 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
             ),
           ),
 
-          // ── SLOTS HEADER ───────────────────────────────────
+          // ── SLOTS HEADER + LEGEND ──────────────────────────
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Available Slots', style: GoogleFonts.poppins(
                   fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                Row(children: [
-                  _legend(AppColors.accent, 'Free'),
-                  const SizedBox(width: 12),
-                  _legend(AppColors.disabled, 'Booked'),
+                const SizedBox(height: 8),
+                Wrap(spacing: 16, runSpacing: 6, children: [
+                  _legend(const Color(0xFF22C55E), 'Available'),
+                  _legend(const Color(0xFFF59E0B), 'Booked'),
+                  _legend(const Color(0xFFEF4444), 'Blocked'),
+                  _legend(const Color(0xFF3B82F6), 'Temp Locked'),
                 ]),
               ]),
             ),
@@ -275,47 +409,58 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           // ── SLOT GRID ──────────────────────────────────────
           if (_slots.isNotEmpty)
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
               sliver: SliverGrid(
                 delegate: SliverChildBuilderDelegate(
                   (_, i) {
                     final slot = _slots[i];
-                    final booked = slot['status'] == 'booked';
+                    final status = (slot['status'] ?? 'available').toString();
+                    final isAvailable = status == 'available';
                     final selected = _selectedSlotId == slot['id'];
-                    final time = (slot['start_time'] as String).substring(0, 5);
+                    final time12 = _to12Hour(slot['start_time']);
                     final slotPrice = _parseDouble(slot['price']);
+                    final statusColor = _slotStatusColor(status);
+
                     return GestureDetector(
-                      onTap: booked ? null : () => setState(() {
+                      onTap: isAvailable ? () => setState(() {
                         _selectedSlotId = selected ? null : slot['id'];
                         _selectedSlot = selected ? null : slot;
-                      }),
+                      }) : null,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         decoration: BoxDecoration(
                           gradient: selected ? const LinearGradient(
                             colors: [Color(0xFF0A1F13), Color(0xFF166534)],
                             begin: Alignment.topLeft, end: Alignment.bottomRight) : null,
-                          color: booked ? AppColors.inputFill
-                            : selected ? null : Colors.white,
+                          color: selected ? null
+                            : isAvailable ? Colors.white
+                            : statusColor.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: booked ? AppColors.disabled
-                              : selected ? AppColors.primary : AppColors.border,
-                            width: selected ? 0 : 1),
+                            color: selected ? AppColors.primary
+                              : isAvailable ? AppColors.border
+                              : statusColor.withValues(alpha: 0.3),
+                            width: selected ? 2 : 1),
                           boxShadow: selected ? [BoxShadow(
                             color: AppColors.primary.withValues(alpha: 0.25),
                             blurRadius: 8, offset: const Offset(0, 3))] : null,
                         ),
                         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Text(time,
+                          Text(time12,
                             style: GoogleFonts.poppins(
-                              fontSize: 14, fontWeight: FontWeight.bold,
-                              color: booked ? AppColors.disabled
-                                : selected ? Colors.white : AppColors.textPrimary,
-                              decoration: booked ? TextDecoration.lineThrough : null)),
-                          if (!booked) Text('PKR ${slotPrice.toStringAsFixed(0)}',
+                              fontSize: 12, fontWeight: FontWeight.bold,
+                              color: selected ? Colors.white
+                                : isAvailable ? AppColors.textPrimary
+                                : statusColor,
+                              decoration: !isAvailable ? TextDecoration.lineThrough : null)),
+                          const SizedBox(height: 2),
+                          if (isAvailable) Text('PKR ${slotPrice.toStringAsFixed(0)}',
                             style: GoogleFonts.poppins(fontSize: 9,
-                              color: selected ? Colors.white70 : AppColors.textSecondary)),
+                              color: selected ? Colors.white70 : AppColors.textSecondary))
+                          else Text(
+                            _slotStatusLabel(status),
+                            style: GoogleFonts.poppins(fontSize: 8,
+                              color: statusColor, fontWeight: FontWeight.w600)),
                         ]),
                       ),
                     );
@@ -348,6 +493,16 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
         ],
       ),
     );
+  }
+
+  Widget _gradientPlaceholder(String sportType) {
+    return Container(width: double.infinity, height: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [const Color(0xFF0A1F13), _sportColor(sportType).withValues(alpha: 0.6)],
+          begin: Alignment.topCenter, end: Alignment.bottomRight)),
+      child: Center(child: Icon(_sportIcon(sportType),
+        color: Colors.white.withValues(alpha: 0.08), size: 160)));
   }
 
   Widget _bottomBar() {
@@ -407,12 +562,27 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
       maxLines: 2, overflow: TextOverflow.ellipsis)),
   ]);
 
-  Widget _legend(Color color, String label) => Row(children: [
+  Widget _legend(Color color, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
     Container(width: 10, height: 10,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
     const SizedBox(width: 4),
     Text(label, style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
   ]);
+
+  Color _slotStatusColor(String status) => switch (status) {
+    'available' => const Color(0xFF22C55E),
+    'booked' => const Color(0xFFF59E0B),
+    'blocked' => const Color(0xFFEF4444),
+    'temporarily_locked' => const Color(0xFF3B82F6),
+    _ => AppColors.disabled,
+  };
+
+  String _slotStatusLabel(String status) => switch (status) {
+    'booked' => 'BOOKED',
+    'blocked' => 'BLOCKED',
+    'temporarily_locked' => 'LOCKED',
+    _ => status.toUpperCase(),
+  };
 
   Color _sportColor(String sport) => switch (sport.toLowerCase()) {
     'football' || 'futsal' => const Color(0xFF22C55E),

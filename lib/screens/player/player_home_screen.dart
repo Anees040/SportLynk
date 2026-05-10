@@ -20,8 +20,6 @@ class PlayerHomeScreen extends StatefulWidget {
 class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   int _tab = 0;
   Map<String, dynamic>? _homeData;
-  bool _loading = true;
-  String? _error;
 
   @override
   void initState() {
@@ -32,10 +30,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   Future<void> _load() async {
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token;
-      if (token == null) {
-        if (mounted) setState(() { _loading = false; _error = 'Not authenticated'; });
-        return;
-      }
+      if (token == null) return;
       final resp = await http.get(
         Uri.parse('${ApiConstants.baseUrl}/player/home'),
         headers: {'Authorization': 'Bearer $token'},
@@ -44,16 +39,11 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
         if (mounted && data['success'] == true) {
-          setState(() { _homeData = data['data']; _loading = false; });
-        } else {
-          if (mounted) setState(() { _loading = false; _error = data['message']; });
+          setState(() { _homeData = data['data']; });
         }
-      } else {
-        if (mounted) setState(() { _loading = false; _error = 'Server error (${resp.statusCode})'; });
       }
     } catch (e) {
       debugPrint('Home load error: $e');
-      if (mounted) setState(() { _loading = false; _error = e.toString(); });
     }
   }
 
@@ -142,7 +132,6 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     return RefreshIndicator(
       color: AppColors.accent,
       onRefresh: () async {
-        setState(() { _loading = true; _error = null; });
         await _load();
       },
       child: CustomScrollView(
@@ -232,7 +221,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
             ),
           ),
 
-          // ── QUICK ACTIONS ──────────────────────────────────────
+          // ── QUICK ACTIONS (2x2 GRID) ─────────────────────────
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
@@ -241,15 +230,24 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
                   style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary)),
                 const SizedBox(height: 14),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  _quickAction(Icons.sports_soccer, 'Football', const Color(0xFF22C55E), () =>
-                    Navigator.pushNamed(context, '/find-venues', arguments: {'sport': 'football'})),
-                  _quickAction(Icons.sports_cricket, 'Cricket', const Color(0xFFF59E0B), () =>
-                    Navigator.pushNamed(context, '/find-venues', arguments: {'sport': 'cricket'})),
-                  _quickAction(Icons.calendar_month, 'My Bookings', const Color(0xFF3B82F6), () =>
-                    setState(() => _tab = 1)),
-                  _quickAction(Icons.account_balance_wallet, 'Wallet', const Color(0xFF8B5CF6), () =>
-                    setState(() => _tab = 3)),
+                Row(children: [
+                  Expanded(child: _bigActionCard(
+                    Icons.stadium_outlined, 'Book a Venue', const Color(0xFFD0E0FF),
+                    () => Navigator.pushNamed(context, '/find-venues'))),
+                  const SizedBox(width: 14),
+                  Expanded(child: _bigActionCard(
+                    Icons.search_rounded, 'Find an\nOpponent', const Color(0xFFD0E0FF),
+                    () => Navigator.pushNamed(context, '/find-opponents'))),
+                ]),
+                const SizedBox(height: 14),
+                Row(children: [
+                  Expanded(child: _bigActionCard(
+                    Icons.emoji_events_outlined, 'Join\nTournament', const Color(0xFFD0E0FF),
+                    () {})),
+                  const SizedBox(width: 14),
+                  Expanded(child: _bigActionCard(
+                    Icons.bar_chart_rounded, 'View\nRankings', const Color(0xFFD0E0FF),
+                    () => Navigator.pushNamed(context, '/team-rankings'))),
                 ]),
               ]),
             ),
@@ -260,60 +258,33 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
             child: _buildUpcomingBookings(),
           ),
 
-          // ── POPULAR VENUES HEADER ──────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 10),
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('Popular Venues',
-                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary)),
-                GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/find-venues'),
-                  child: Text('See All',
-                    style: GoogleFonts.poppins(fontSize: 13, color: AppColors.accent,
-                      fontWeight: FontWeight.w600)),
-                ),
-              ]),
-            ),
-          ),
-
-          // ── VENUE CARDS OR LOADING/ERROR STATE ─────────────────
-          if (_loading)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(40),
-                child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
-              ),
-            )
-          else if (_error != null && (_homeData == null))
-            SliverToBoxAdapter(child: _errorState())
-          else ...[
-            _buildVenueList(),
-          ],
-
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
       ),
     );
   }
 
-  // ── QUICK ACTION BUTTON ─────────────────────────────────────
-  Widget _quickAction(IconData icon, String label, Color color, VoidCallback onTap) {
+  Widget _bigActionCard(IconData icon, String label, Color bgColor, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(children: [
-        Container(width: 64, height: 64,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withValues(alpha: 0.15)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Column(children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
+            child: Icon(icon, color: const Color(0xFF475569), size: 28),
           ),
-          child: Icon(icon, color: color, size: 28)),
-        const SizedBox(height: 8),
-        Text(label, style: GoogleFonts.poppins(fontSize: 11,
-          color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
-      ]),
+          const SizedBox(height: 16),
+          Text(label, textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B), height: 1.2)),
+        ]),
+      ),
     );
   }
 
@@ -347,7 +318,6 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     );
   }
 
-  // ── EMPTY BOOKINGS ──────────────────────────────────────────
   Widget _emptyBookings() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -383,7 +353,6 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     );
   }
 
-  // ── BOOKING CARD ────────────────────────────────────────────
   Widget _bookingCard(Map<String, dynamic> b) {
     return Container(
       width: 250,
@@ -426,188 +395,4 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     if (str.length >= 5) return str.substring(0, 5);
     return str;
   }
-
-  // ── VENUE LIST ──────────────────────────────────────────────
-  Widget _buildVenueList() {
-    final venues = (_homeData?['featuredVenues'] as List?) ?? [];
-    if (venues.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(children: [
-              const Icon(Icons.stadium_outlined, size: 48, color: AppColors.disabled),
-              const SizedBox(height: 12),
-              Text('No venues available yet',
-                style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500)),
-              const SizedBox(height: 4),
-              Text('Check back soon for new venues near you',
-                style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-            ]),
-          ),
-        ),
-      );
-    }
-
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (_, i) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-          child: _venueCard(venues[i]),
-        ),
-        childCount: venues.length,
-      ),
-    );
-  }
-
-  // ── VENUE CARD ──────────────────────────────────────────────
-  Widget _venueCard(Map<String, dynamic> v) {
-    final sportType = (v['sport_type'] ?? 'sport').toString();
-    final sportColor = _sportColor(sportType);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(
-          color: Colors.black.withValues(alpha: 0.05),
-          blurRadius: 10, offset: const Offset(0, 2),
-        )],
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Image placeholder
-        ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-          child: Container(
-            height: 120, width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [const Color(0xFF0A1F13), sportColor.withValues(alpha: 0.7)],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
-              ),
-            ),
-            child: Stack(children: [
-              Center(child: Icon(_sportIcon(sportType),
-                color: Colors.white.withValues(alpha: 0.15), size: 64)),
-              // Rating badge
-              Positioned(top: 10, right: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(8)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
-                    const SizedBox(width: 3),
-                    Text('${v['rating'] ?? 'New'}',
-                      style: GoogleFonts.poppins(color: Colors.white,
-                        fontSize: 12, fontWeight: FontWeight.bold)),
-                  ]),
-                )),
-              // Sport type badge
-              Positioned(bottom: 10, left: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: sportColor,
-                    borderRadius: BorderRadius.circular(8)),
-                  child: Text(sportType.toUpperCase(),
-                    style: GoogleFonts.poppins(color: Colors.white,
-                      fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                )),
-            ]),
-          ),
-        ),
-        // Info section
-        Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(v['name'] ?? 'Venue',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 4),
-              Row(children: [
-                const Icon(Icons.location_on_outlined,
-                  color: AppColors.textSecondary, size: 14),
-                const SizedBox(width: 3),
-                Flexible(child: Text(v['city'] ?? v['address'] ?? '',
-                  style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
-              ]),
-            ])),
-            const SizedBox(width: 8),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('PKR ${_formatPrice(v['price_per_hour'])}',
-                style: GoogleFonts.poppins(color: AppColors.accent,
-                  fontSize: 15, fontWeight: FontWeight.bold)),
-              Text('/hour', style: GoogleFonts.poppins(fontSize: 10,
-                color: AppColors.textSecondary)),
-            ]),
-          ]),
-        ),
-      ]),
-    );
-  }
-
-  String _formatPrice(dynamic price) {
-    if (price == null) return '0';
-    if (price is num) return price.toStringAsFixed(0);
-    return price.toString();
-  }
-
-  Color _sportColor(String sport) {
-    switch (sport.toLowerCase()) {
-      case 'football': return const Color(0xFF22C55E);
-      case 'cricket': return const Color(0xFFF59E0B);
-      case 'badminton': return const Color(0xFF3B82F6);
-      case 'futsal': return const Color(0xFFEC4899);
-      case 'basketball': return const Color(0xFFF97316);
-      default: return const Color(0xFF8B5CF6);
-    }
-  }
-
-  IconData _sportIcon(String sport) {
-    switch (sport.toLowerCase()) {
-      case 'football': return Icons.sports_soccer;
-      case 'cricket': return Icons.sports_cricket;
-      case 'badminton': return Icons.sports_tennis;
-      case 'futsal': return Icons.sports_soccer;
-      case 'basketball': return Icons.sports_basketball;
-      default: return Icons.sports;
-    }
-  }
-
-  // ── ERROR STATE ─────────────────────────────────────────────
-  Widget _errorState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(children: [
-          const Icon(Icons.cloud_off_outlined, size: 48, color: AppColors.textSecondary),
-          const SizedBox(height: 12),
-          Text('Could not load venues',
-            style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary)),
-          const SizedBox(height: 4),
-          Text('Pull down to refresh',
-            style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-        ]),
-      ),
-    );
-  }
-
 }

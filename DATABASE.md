@@ -55,21 +55,22 @@ Both have IDENTICAL schema.
 | price_per_hour | DECIMAL(10,2) | |
 | image_url | TEXT | |
 | venue_photos | TEXT[] | DEFAULT '{}' |
+| amenities | JSONB | DEFAULT '{}'::jsonb |
 | rating | DECIMAL(3,2) | DEFAULT NULL |
 | total_reviews | INT | DEFAULT 0 |
 | operating_hours_from | TIME | DEFAULT NULL |
 | operating_hours_to | TIME | DEFAULT NULL |
 | is_active | BOOLEAN | DEFAULT true |
 
-### venue_slots
+### slots
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | UUID | PK |
 | venue_id | UUID | FK→venues |
-| date | DATE | |
+| slot_date | DATE | |
 | start_time | TIME | |
 | end_time | TIME | |
-| status | ENUM('available','booked','blocked') | DEFAULT 'available' |
+| status | ENUM('available','booked','blocked','temporarily_locked') | DEFAULT 'available' |
 | price | DECIMAL(10,2) | |
 
 ### bookings
@@ -78,10 +79,10 @@ Both have IDENTICAL schema.
 | id | UUID | PK |
 | venue_id | UUID | FK→venues |
 | player_id | UUID | FK→users |
-| slot_id | UUID | FK→venue_slots |
+| slot_id | UUID | FK→slots |
 | status | ENUM('pending','confirmed','checked_in','no_show','cancelled') | DEFAULT 'pending' |
 | total_amount | DECIMAL(10,2) | |
-| deposit_amount | DECIMAL(10,2) | 30% of total, frozen in wallet |
+| deposit_amount | DECIMAL(10,2) | 30% of total, frozen in owner wallet (Escrow) |
 | qr_code_hash | VARCHAR(512) | HMAC-SHA256 of bookingId |
 | created_at | TIMESTAMP | DEFAULT NOW() |
 

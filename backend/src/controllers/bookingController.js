@@ -32,10 +32,18 @@ const createBooking = async (req, res) => {
     // 3. Update slot status
     await client.query('UPDATE venue_slots SET status = $1 WHERE id = $2', ['booked', slotId]);
 
-    // 4. Freeze deposit
+    // 4. Escrow: Deduct deposit from player and freeze it in owner's wallet
+    const venueRes = await client.query('SELECT owner_id FROM venues WHERE id = $1', [venueId]);
+    const ownerId = venueRes.rows[0].owner_id;
+
     await client.query(
-      'UPDATE wallets SET balance = balance - $1, frozen_balance = frozen_balance + $1 WHERE user_id = $2',
+      'UPDATE wallets SET balance = balance - $1 WHERE user_id = $2',
       [depositAmount, playerId]
+    );
+
+    await client.query(
+      'UPDATE wallets SET frozen_balance = frozen_balance + $1 WHERE user_id = $2',
+      [depositAmount, ownerId]
     );
 
     // 5. Generate booking ID and QR hash

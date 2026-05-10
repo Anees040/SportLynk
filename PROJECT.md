@@ -3,6 +3,7 @@
 ## Overview
 Flutter mobile app for sports venue booking in Pakistan.
 Players find and book sports grounds. Owners manage facilities.
+**Current Status:** Phase 4 (High-Fidelity UI & Escrow) Complete.
 
 ## Team
 - Mudassar Akram (SP23-BSE-028)

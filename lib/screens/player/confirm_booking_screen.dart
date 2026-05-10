@@ -52,6 +52,13 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     return double.tryParse(val.toString()) ?? 0.0;
   }
 
+  String _safeTime(dynamic t) {
+    if (t == null) return '—';
+    final s = t.toString();
+    if (s.length >= 5) return s.substring(0, 5);
+    return s;
+  }
+
   Future<void> _confirmBooking() async {
     final price = _parseDouble(widget.slot['price']);
     if (_walletBalance < price) {
@@ -123,8 +130,8 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
               _confirmRow('Venue', widget.venue['name'] ?? ''),
               _confirmRow('Date', _fmtDate(widget.selectedDate)),
               _confirmRow('Time',
-                '${(widget.slot['start_time'] as String).substring(0,5)} – '
-                '${(widget.slot['end_time'] as String).substring(0,5)}'),
+                '${_safeTime(widget.slot['start_time'])} – '
+                '${_safeTime(widget.slot['end_time'])}'),
             ])),
           const SizedBox(height: 20),
           SizedBox(width: double.infinity,
@@ -157,7 +164,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   @override
   Widget build(BuildContext context) {
     final price = _parseDouble(widget.slot['price']);
-    final deposit = (price * 0.2).roundToDouble();
+    final deposit = double.parse((price * 0.3).toStringAsFixed(2));
     final remaining = _walletBalance - price;
 
     return Scaffold(
@@ -221,8 +228,8 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                   const Icon(Icons.access_time_outlined, size: 13,
                     color: AppColors.textSecondary),
                   const SizedBox(width: 4),
-                  Text('${(widget.slot['start_time'] as String).substring(0,5)} – '
-                    '${(widget.slot['end_time'] as String).substring(0,5)}',
+                  Text('${_safeTime(widget.slot['start_time'])} – '
+                    '${_safeTime(widget.slot['end_time'])}',
                     style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
                 ]),
               ])),

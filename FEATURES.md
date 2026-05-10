@@ -7,11 +7,12 @@
 - Phone Verification & Firebase integration
 - User Profiles & Avatar Uploads (Cloudinary)
 - Venue Listing & Filtering (Football & Cricket)
-- Venue Details & Time Slot selection
+- Venue Details (Image Gallery, Amenities, 12-hour AM/PM color-coded slots)
 - Wallet display, Top-up, and Transaction History
-- Booking creation & checkout (with Wallet validation)
+- Booking creation & checkout (with Wallet validation & True Owner Escrow)
 - Booking Management (Upcoming, Past, Cancel & Refund)
 - Security (Password reset & change)
+- High-Fidelity UI Redesigns (Grid-based Home, Horizontal venue lists, AI Recommended cards)
 
 ## IN PROGRESS
 - Owner dashboard (Pending)

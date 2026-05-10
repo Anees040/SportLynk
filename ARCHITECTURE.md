@@ -14,6 +14,14 @@ Node.js → pg pool (parameterized SQL) → PostgreSQL
 Node.js → Cloudinary API (image uploads)
 Flutter → Firebase Auth API (OTP requests)
 
+## Booking & Escrow Flow
+1. Player clicks 'Book Now' (deposits 30% via Wallet)
+2. Backend creates booking (status: pending)
+3. Backend deducts 30% from Player's wallet and adds to Owner's `frozen_balance` (Escrow)
+4. Owner scans QR Code at venue (status → checked_in)
+5. Owner collects remaining 70% in cash.
+6. Owner's `frozen_balance` moves to real `balance`.
+
 ## Local vs Cloud Database
 Development: LOCAL PostgreSQL (localhost:5432)
 Production/Demo: Supabase PostgreSQL (cloud)

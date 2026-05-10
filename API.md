@@ -21,20 +21,20 @@ POST  /users/me/change-password body:{currentPassword,newPassword} → {success}
 
 ## Wallet (Token required)
 ```
-GET  /wallet                    → {balance, frozen_balance}
+GET  /wallet/me                 → {balance, frozen_balance}
 GET  /wallet/transactions       → [{transaction}]
 POST /wallet/topup              body:{amount,paymentMethod} → {newBalance}
 ```
 
-## Venues (Public — no token)
+## Venues (Token required)
 ```
-GET /venues?city=&sport_type=&date=&min_price=&max_price=   → [{venue}]
+GET /venues?city=&sport_type=&date=&min_price=&max_price=   → [{venue with amenities and media}]
 GET /venues/:id?date=YYYY-MM-DD                 → {venue_with_slots}
 ```
 
 ## Bookings (Player token required)
 ```
-POST  /bookings                 body:{slotId,venueId} → {bookingId,qrData,depositAmount}
+POST  /bookings                 body:{slotId,venueId} → {bookingId, qrData, depositAmount} (Deducts 30% from Player, Freezes in Owner Wallet)
 GET   /bookings/my              → [{booking with venue+slot info}]
 PATCH /bookings/:id/cancel      → {success, refund issued}
 ```

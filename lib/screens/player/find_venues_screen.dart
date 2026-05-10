@@ -352,7 +352,7 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
               ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Container(
                     padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: AppColors.inputFill,
                       shape: BoxShape.circle,
                     ),
@@ -389,11 +389,57 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
               : RefreshIndicator(
                   color: AppColors.accent,
                   onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _venues.length,
+                  child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                    itemBuilder: (_, i) => _venueCard(_venues[i]),
+                    slivers: [
+                      if (_venues.isNotEmpty) ...[
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.auto_awesome, color: AppColors.accent, size: 20),
+                                const SizedBox(width: 8),
+                                Text('AI Recommended',
+                                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: 240,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _venues.take(5).length,
+                              itemBuilder: (_, i) => _aiRecommendedCard(_venues[i]),
+                            ),
+                          ),
+                        ),
+                      ],
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+                          child: Text('Nearby Venues',
+                            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                        ),
+                      ),
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (_, i) {
+                            // Skip the ones in AI recommended if possible, but for now just show all or offset
+                            final venue = _venues[i];
+                            return Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                              child: _nearbyVenueCard(venue),
+                            );
+                          },
+                          childCount: _venues.length,
+                        ),
+                      ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                    ],
                   ),
                 ),
         ),
@@ -401,7 +447,7 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
     );
   }
 
-  Widget _venueCard(Map<String, dynamic> v) {
+  Widget _aiRecommendedCard(Map<String, dynamic> v) {
     final sportType = (v['sport_type'] ?? 'sport').toString();
     final sportColor = _sportColor(sportType);
     
@@ -409,92 +455,168 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
       onTap: () => Navigator.push(context, MaterialPageRoute(
         builder: (_) => VenueDetailScreen(venueId: v['id']))),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
+        width: 280,
+        margin: const EdgeInsets.only(right: 16),
         decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.border),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10, offset: const Offset(0, 4))]),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Image
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-            child: Container(height: 160, width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [const Color(0xFF0A1F13), sportColor.withValues(alpha: 0.7)],
-                  begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            children: [
+              // Background Image/Gradient
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [const Color(0xFF0A1F13), sportColor.withValues(alpha: 0.8)],
+                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  ),
+                ),
+                child: Center(
+                  child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.1), size: 100),
+                ),
               ),
-              child: Stack(children: [
-                Center(child: Icon(_sportIcon(sportType),
-                  color: Colors.white.withValues(alpha: 0.15), size: 72)),
-                // Rating badge
-                Positioned(top: 12, right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(color: Colors.black54,
-                      borderRadius: BorderRadius.circular(10)),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
-                      const SizedBox(width: 4),
-                      Text('${v['rating'] ?? 'N/A'}',
-                        style: GoogleFonts.poppins(color: Colors.white,
-                          fontSize: 12, fontWeight: FontWeight.bold)),
-                    ]),
-                  )),
-                // Sport badge
-                Positioned(bottom: 12, left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: sportColor,
-                      borderRadius: BorderRadius.circular(8)),
-                    child: Text(sportType.toUpperCase(),
-                      style: GoogleFonts.poppins(color: Colors.white,
-                        fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)))),
-              ]),
+              // Gradient Overlay
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.transparent, Colors.black87],
+                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                    stops: [0.4, 1.0],
+                  ),
+                ),
+              ),
+              // Rating Badge
+              Positioned(
+                top: 12, right: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
+                    const SizedBox(width: 4),
+                    Text('${v['rating'] ?? 'N/A'}',
+                      style: GoogleFonts.poppins(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+              ),
+              // Content
+              Positioned(
+                bottom: 16, left: 16, right: 16,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(v['name'] ?? 'Venue',
+                      style: GoogleFonts.poppins(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on, color: Colors.white70, size: 14),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(v['address'] ?? v['city'] ?? '',
+                            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('PKR ${_parseDouble(v['price_per_hour']).toStringAsFixed(0)}/hr',
+                          style: GoogleFonts.poppins(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.bold)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(8)),
+                          child: Text('Book', style: GoogleFonts.poppins(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _nearbyVenueCard(Map<String, dynamic> v) {
+    final sportType = (v['sport_type'] ?? 'sport').toString();
+    final sportColor = _sportColor(sportType);
+    
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(
+        builder: (_) => VenueDetailScreen(venueId: v['id']))),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white, borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))]),
+        child: Row(
+          children: [
+            // Image Left
+            ClipRRect(
+              borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+              child: Container(
+                width: 120, height: 120,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [const Color(0xFF0A1F13), sportColor.withValues(alpha: 0.7)],
+                    begin: Alignment.topLeft, end: Alignment.bottomRight),
+                ),
+                child: Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.2), size: 48)),
+              ),
             ),
-          ),
-          // Info
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(v['name'] ?? 'Venue',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 6),
-                Row(children: [
-                  const Icon(Icons.location_on_outlined,
-                    color: AppColors.textSecondary, size: 14),
-                  const SizedBox(width: 4),
-                  Flexible(child: Text(v['address'] ?? v['city'] ?? '',
-                    style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
-                    maxLines: 1, overflow: TextOverflow.ellipsis)),
-                ]),
-                if (v['total_reviews'] != null) ...[
-                  const SizedBox(height: 6),
-                  Text('${v['total_reviews']} reviews',
-                    style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
-                ],
-              ])),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text('PKR ${_parseDouble(v['price_per_hour']).toStringAsFixed(0)}',
-                  style: GoogleFonts.poppins(color: AppColors.accent,
-                    fontSize: 16, fontWeight: FontWeight.bold)),
-                Text('/hour', style: GoogleFonts.poppins(
-                  fontSize: 11, color: AppColors.textSecondary)),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(color: AppColors.accentLight,
-                    borderRadius: BorderRadius.circular(10)),
-                  child: Text('Book', style: GoogleFonts.poppins(
-                    color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.bold))),
-              ]),
-            ]),
-          ),
-        ]),
+            // Details Right
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: sportColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                          child: Text(sportType.toUpperCase(),
+                            style: GoogleFonts.poppins(color: sportColor, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        ),
+                        Row(
+                          children: [
+                            const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
+                            const SizedBox(width: 4),
+                            Text('${v['rating'] ?? 'N/A'}', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(v['name'] ?? 'Venue', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, color: AppColors.textSecondary, size: 14),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(v['address'] ?? v['city'] ?? '', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text('PKR ${_parseDouble(v['price_per_hour']).toStringAsFixed(0)}/hr', style: GoogleFonts.poppins(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
