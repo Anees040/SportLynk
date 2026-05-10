@@ -84,12 +84,12 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
     if (!venue.rows.length)
       return res.status(404).json({ success:false, message:'Venue not found' });
       
-    // Auto-release expired locks (5 minute TTL)
+    // Auto-release expired locks (2 minute TTL)
     await pool.query(
       `UPDATE slots 
-       SET status='available', locked_at=null 
+       SET status='available', locked_at=null, locked_by=null
        WHERE venue_id=$1 AND slot_date=$2 AND status='temporarily_locked' 
-       AND locked_at < NOW() - INTERVAL '5 minutes'`,
+       AND locked_at < NOW() - INTERVAL '2 minutes'`,
       [id, slotDate]);
       
     const slots = await pool.query(

@@ -11,27 +11,52 @@ import '../../utils/snackbar_util.dart';
 class BookingsScreen extends StatefulWidget {
   const BookingsScreen({super.key});
   @override
-  State<BookingsScreen> createState() => _BookingsScreenState();
+  State<BookingsScreen> createState() => BookingsScreenState();
 }
 
-class _BookingsScreenState extends State<BookingsScreen>
-    with SingleTickerProviderStateMixin {
+class BookingsScreenState extends State<BookingsScreen>
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   late TabController _tab;
   List<Map<String, dynamic>> _upcoming = [], _past = [];
   bool _loading = true;
+  DateTime? _lastLoadTime;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
   @override
-  void dispose() { _tab.dispose(); super.dispose(); }
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _tab.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshIfStale();
+  }
+
+  /// Called by parent (PlayerHomeScreen) when Bookings tab becomes active
+  void refreshIfNeeded() => _refreshIfStale();
+
+  void _refreshIfStale() {
+    final now = DateTime.now();
+    if (_lastLoadTime == null || now.difference(_lastLoadTime!).inSeconds > 5) {
+      _load();
+    }
+  }
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    _lastLoadTime = DateTime.now();
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       final resp = await http.get(Uri.parse('${ApiConstants.baseUrl}/bookings/my'),
@@ -91,6 +116,7 @@ class _BookingsScreenState extends State<BookingsScreen>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required by AutomaticKeepAliveClientMixin
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -141,6 +167,19 @@ class _BookingsScreenState extends State<BookingsScreen>
       ));
   }
 
+  double _parseDouble(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
+  String _safeTime(dynamic t) {
+    if (t == null) return '—';
+    final s = t.toString();
+    if (s.length >= 5) return s.substring(0, 5);
+    return s;
+  }
+
   Widget _bookingCard(Map<String, dynamic> b, {required bool upcoming}) {
     final status = b['status'] as String;
     final statusColor = _statusColor(status);
@@ -179,15 +218,14 @@ class _BookingsScreenState extends State<BookingsScreen>
               b['slot_date'] ?? ''),
             const SizedBox(width: 20),
             _infoItem(Icons.access_time_outlined,
-              '${(b['start_time'] ?? '').toString().substring(0, 5)} – '
-              '${(b['end_time'] ?? '').toString().substring(0, 5)}'),
+              '${_safeTime(b['start_time'])} – ${_safeTime(b['end_time'])}'),
           ]),
           const SizedBox(height: 8),
           Row(children: [
             _infoItem(Icons.location_on_outlined, b['city'] ?? ''),
             const SizedBox(width: 20),
             _infoItem(Icons.currency_rupee,
-              'PKR ${(b['total_amount'] as num?)?.toStringAsFixed(0) ?? '0'}'),
+              'PKR ${_parseDouble(b['total_amount']).toStringAsFixed(0)}'),
           ]),
           if (upcoming && status == 'confirmed') ...[
             const SizedBox(height: 12),

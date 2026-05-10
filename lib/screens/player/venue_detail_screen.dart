@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -25,21 +26,49 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   Map<String, dynamic>? _selectedSlot;
   int _galleryPage = 0;
   final PageController _galleryCtrl = PageController();
+  
+  // Countdown timer for slot lock (120 seconds = 2 minutes)
+  Timer? _lockTimer;
+  int _lockSecondsLeft = 0;
+  static const int _lockDuration = 120;
 
   @override
   void initState() { super.initState(); _load(); }
 
   @override
   void dispose() { 
+    _lockTimer?.cancel();
     if (_selectedSlotId != null) _unlockSlot(_selectedSlotId!);
     _galleryCtrl.dispose(); 
     super.dispose(); 
+  }
+
+  void _startLockTimer() {
+    _lockTimer?.cancel();
+    _lockSecondsLeft = _lockDuration;
+    _lockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) { timer.cancel(); return; }
+      setState(() => _lockSecondsLeft--);
+      if (_lockSecondsLeft <= 0) {
+        timer.cancel();
+        // Auto-unlock: slot expired
+        if (_selectedSlotId != null) {
+          _unlockSlot(_selectedSlotId!);
+          setState(() { _selectedSlotId = null; _selectedSlot = null; });
+          _load(_selectedDate); // refresh to show slot as available
+          if (mounted) {
+            SnackbarUtil.showError(context, 'Slot released — lock expired after 2 minutes.');
+          }
+        }
+      }
+    });
   }
 
   String _dateStr(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
 
   Future<void> _load([DateTime? date]) async {
+    final isDateChange = date != null && _dateStr(date) != _dateStr(_selectedDate);
     setState(() => _loading = true);
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
@@ -49,11 +78,23 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
         headers: {'Authorization': 'Bearer $token'});
       final data = jsonDecode(resp.body);
       if (mounted && data['success'] == true) {
+        final prevSelectedId = _selectedSlotId;
         setState(() {
           _venue = data['data'];
           _slots = List<Map<String,dynamic>>.from(data['data']['slots'] ?? []);
           _loading = false;
-          _selectedSlotId = null; _selectedSlot = null;
+          // Only clear selection when changing dates
+          if (isDateChange) {
+            _selectedSlotId = null; _selectedSlot = null;
+            _lockTimer?.cancel();
+            _lockSecondsLeft = 0;
+          } else if (prevSelectedId != null) {
+            // Re-find the slot in refreshed data to keep selection alive
+            final found = _slots.where((s) => s['id'] == prevSelectedId).toList();
+            if (found.isNotEmpty) {
+              _selectedSlot = found.first;
+            }
+          }
         });
       } else { if (mounted) setState(() => _loading = false); }
     } catch (_) { if (mounted) setState(() => _loading = false); }
@@ -61,13 +102,21 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
 
   Future<void> _handleSlotSelection(Map<String, dynamic> slot, bool isCurrentlySelected) async {
     if (isCurrentlySelected) {
+      // Deselect: unlock and cancel timer
       _unlockSlot(slot['id']);
-      setState(() { _selectedSlotId = null; _selectedSlot = null; });
+      _lockTimer?.cancel();
+      setState(() { _selectedSlotId = null; _selectedSlot = null; _lockSecondsLeft = 0; });
+      _load(_selectedDate); // refresh slots
       return;
     }
-    if (_selectedSlotId != null) _unlockSlot(_selectedSlotId!);
+    // No need to manually unlock previous — backend auto-releases per-venue
     
-    setState(() => _loading = true);
+    // Optimistic UI update
+    setState(() {
+      _selectedSlotId = slot['id'];
+      _selectedSlot = slot;
+    });
+
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       final resp = await http.post(
@@ -77,24 +126,20 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
       
       if (mounted) {
         if (data['success'] == true) {
-          setState(() {
-            _selectedSlotId = slot['id'];
-            _selectedSlot = slot;
-            _loading = false;
-          });
-          final idx = _slots.indexWhere((s) => s['id'] == slot['id']);
-          if (idx != -1) {
-            setState(() => _slots[idx]['status'] = 'temporarily_locked');
-          }
+          // Start the countdown timer
+          _startLockTimer();
+          // Refresh slots to show updated lock states
+          _load(_selectedDate);
         } else {
-          setState(() => _loading = false);
+          // Revert on failure
+          setState(() { _selectedSlotId = null; _selectedSlot = null; });
           SnackbarUtil.showError(context, data['message'] ?? 'Failed to lock slot');
           _load(_selectedDate);
         }
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() { _selectedSlotId = null; _selectedSlot = null; });
         SnackbarUtil.showError(context, 'Network error while locking slot');
       }
     }
@@ -563,45 +608,87 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
 
   Widget _bottomBar() {
     final slotPrice = _selectedSlot != null ? _parseDouble(_selectedSlot!['price']) : 0.0;
+    final timerStr = _lockSecondsLeft > 0 
+        ? '${(_lockSecondsLeft ~/ 60).toString().padLeft(1, '0')}:${(_lockSecondsLeft % 60).toString().padLeft(2, '0')}'
+        : null;
+    final isUrgent = _lockSecondsLeft > 0 && _lockSecondsLeft <= 30;
+    
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08),
           blurRadius: 12, offset: const Offset(0, -4))]),
       child: SafeArea(top: false,
-        child: Row(children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min, children: [
-            Text('TOTAL AMOUNT', style: GoogleFonts.poppins(
-              fontSize: 10, color: AppColors.textSecondary, letterSpacing: 0.5)),
-            Text(_selectedSlot != null
-                ? 'PKR ${slotPrice.toStringAsFixed(0)}'
-                : 'Select a slot',
-              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold,
-                color: _selectedSlot != null ? AppColors.textPrimary : AppColors.textSecondary)),
-          ]),
-          const SizedBox(width: 16),
-          Expanded(child: ElevatedButton(
-            onPressed: _selectedSlot == null ? null : _goToConfirm,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              disabledBackgroundColor: AppColors.disabled,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              elevation: _selectedSlot != null ? 4 : 0,
-              shadowColor: AppColors.accent.withValues(alpha: 0.4),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Countdown timer bar
+          if (_selectedSlot != null && timerStr != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: isUrgent 
+                    ? AppColors.error.withValues(alpha: 0.1)
+                    : AppColors.accentLight,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: isUrgent 
+                    ? AppColors.error.withValues(alpha: 0.3)
+                    : AppColors.accent.withValues(alpha: 0.3))),
+              child: Row(children: [
+                Icon(Icons.timer_outlined, size: 14,
+                  color: isUrgent ? AppColors.error : AppColors.accent),
+                const SizedBox(width: 6),
+                Expanded(child: Text(
+                  'Slot held for you — book within $timerStr',
+                  style: GoogleFonts.poppins(fontSize: 11,
+                    color: isUrgent ? AppColors.error : AppColors.primary,
+                    fontWeight: FontWeight.w500))),
+                // Timer countdown
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isUrgent ? AppColors.error : AppColors.accent,
+                    borderRadius: BorderRadius.circular(6)),
+                  child: Text(timerStr, style: GoogleFonts.poppins(
+                    color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ]),
             ),
-            child: Text('Book Now', style: GoogleFonts.poppins(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-          )),
-        ]),
-      ),
+          ],
+          Row(children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min, children: [
+              Text('TOTAL AMOUNT', style: GoogleFonts.poppins(
+                fontSize: 10, color: AppColors.textSecondary, letterSpacing: 0.5)),
+              Text(_selectedSlot != null
+                  ? 'PKR ${slotPrice.toStringAsFixed(0)}'
+                  : 'Select a slot',
+                style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold,
+                  color: _selectedSlot != null ? AppColors.textPrimary : AppColors.textSecondary)),
+            ]),
+            const SizedBox(width: 16),
+            Expanded(child: ElevatedButton(
+              onPressed: _selectedSlot == null ? null : _goToConfirm,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                disabledBackgroundColor: AppColors.disabled,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                elevation: _selectedSlot != null ? 4 : 0,
+                shadowColor: AppColors.accent.withValues(alpha: 0.4),
+              ),
+              child: Text('Book Now', style: GoogleFonts.poppins(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            )),
+          ]),
+        ])),
     );
   }
 
   void _goToConfirm() {
     if (_selectedSlot == null || _venue == null) return;
+    // Cancel timer during checkout — the booking will finalize the slot
+    _lockTimer?.cancel();
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => ConfirmBookingScreen(
         venue: _venue!,

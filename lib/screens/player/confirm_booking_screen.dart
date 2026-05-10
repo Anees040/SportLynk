@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
@@ -63,7 +62,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     final price = _parseDouble(widget.slot['price']);
     final deposit = double.parse((price * 0.30).toStringAsFixed(2));
     if (_walletBalance < deposit) {
-      _snack('Insufficient wallet balance. Please top up your wallet.', AppColors.error);
+      SnackbarUtil.showError(context, 'Insufficient wallet balance. Please top up your wallet.');
       return;
     }
     setState(() => _loading = true);
@@ -79,87 +78,37 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
       if (mounted) {
         setState(() => _loading = false);
         if (data['success'] == true) {
-          _showSuccessDialog(data['data']);
+          _showSuccessScreen(data['data']);
         } else {
-          _snack(data['message'] ?? 'Booking failed', AppColors.error);
+          SnackbarUtil.showError(context, data['message'] ?? 'Booking failed');
         }
       }
     } catch (e) {
-      if (mounted) { setState(() => _loading = false); _snack('Error: $e', AppColors.error); }
+      if (mounted) {
+        setState(() => _loading = false);
+        SnackbarUtil.showError(context, 'Network error. Please try again.');
+      }
     }
   }
 
-  void _showSuccessDialog(Map<String, dynamic> booking) {
-    final bookingId = booking['id'] as String? ?? 'UNKNOWN';
-    final manualCode = bookingId.length >= 6 ? bookingId.substring(0, 6).toUpperCase() : bookingId.toUpperCase();
+  /// Navigate to a full success screen instead of a dialog to avoid render issues
+  void _showSuccessScreen(Map<String, dynamic> booking) {
+    final bookingId = (booking['id'] ?? booking['qr_code'] ?? 'UNKNOWN').toString();
+    final manualCode = bookingId.length >= 6
+        ? bookingId.substring(0, 6).toUpperCase()
+        : bookingId.toUpperCase();
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(height: 8),
-          Text('Booking Confirmed!', textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary)),
-          const SizedBox(height: 8),
-          Text('Show this QR code at the venue.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
-          const SizedBox(height: 16),
-          // QR Code
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border)),
-            child: QrImageView(
-              data: bookingId,
-              version: QrVersions.auto,
-              size: 140.0,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text('Manual Entry Code:', style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
-          Text(manualCode, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2)),
-          const SizedBox(height: 20),
-          Container(padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: AppColors.inputFill,
-              borderRadius: BorderRadius.circular(10)),
-            child: Column(children: [
-              _confirmRow('Venue', widget.venue['name'] ?? ''),
-              _confirmRow('Date', _fmtDate(widget.selectedDate)),
-              _confirmRow('Time',
-                '${_safeTime(widget.slot['start_time'])} – '
-                '${_safeTime(widget.slot['end_time'])}'),
-            ])),
-          const SizedBox(height: 20),
-          SizedBox(width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).pop();
-                Navigator.of(context).pop();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                padding: const EdgeInsets.symmetric(vertical: 14)),
-              child: Text('Done', style: GoogleFonts.poppins(
-                color: Colors.white, fontWeight: FontWeight.w600)),
-            )),
-        ]),
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => _BookingSuccessScreen(
+          bookingId: bookingId,
+          manualCode: manualCode,
+          venueName: widget.venue['name'] ?? '',
+          date: _fmtDate(widget.selectedDate),
+          time: '${_safeTime(widget.slot['start_time'])} – ${_safeTime(widget.slot['end_time'])}',
+        ),
       ),
     );
-  }
-
-  void _snack(String msg, Color c) {
-    if (c == AppColors.error) {
-      SnackbarUtil.showError(context, msg);
-    } else {
-      SnackbarUtil.showSuccess(context, msg);
-    }
   }
 
   @override
@@ -184,9 +133,10 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2))]),
         child: SafeArea(top: false,
           child: ElevatedButton(
-            onPressed: _loading ? null : _confirmBooking,
+            onPressed: (_loading || remainingWallet < 0) ? null : _confirmBooking,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accent,
+              disabledBackgroundColor: AppColors.disabled,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
               padding: const EdgeInsets.symmetric(vertical: 16)),
             child: _loading
@@ -374,16 +324,138 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           color: valueColor ?? AppColors.textPrimary)),
       ]));
 
-  Widget _confirmRow(String l, String v) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
-    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-      Text(l, style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-      Text(v, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary)),
-    ]));
-
   String _fmtDate(DateTime d) {
     const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return '${d.day} ${m[d.month-1]}, ${d.year}';
   }
+}
+
+// ── BOOKING SUCCESS SCREEN ──────────────────────────────────
+// Full-screen success page instead of AlertDialog to avoid render crashes
+class _BookingSuccessScreen extends StatelessWidget {
+  final String bookingId;
+  final String manualCode;
+  final String venueName;
+  final String date;
+  final String time;
+
+  const _BookingSuccessScreen({
+    required this.bookingId,
+    required this.manualCode,
+    required this.venueName,
+    required this.date,
+    required this.time,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(32),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                // Success checkmark
+                Container(
+                  width: 80, height: 80,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.1),
+                    shape: BoxShape.circle),
+                  child: const Icon(Icons.check_circle_rounded,
+                    color: AppColors.accent, size: 60),
+                ),
+                const SizedBox(height: 24),
+                Text('Booking Confirmed!', style: GoogleFonts.poppins(
+                  fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                const SizedBox(height: 8),
+                Text('Show this code at the venue for check-in',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
+                const SizedBox(height: 32),
+
+                // QR Code section — using a text-based code instead of QR widget
+                // to avoid Flutter Web render assertion failures
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.border),
+                    boxShadow: [BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 16, offset: const Offset(0, 4))]),
+                  child: Column(children: [
+                    Text('CHECK-IN CODE', style: GoogleFonts.poppins(
+                      fontSize: 10, color: AppColors.textSecondary,
+                      letterSpacing: 1, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
+                    // Large readable code
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(12)),
+                      child: Text(manualCode,
+                        style: GoogleFonts.poppins(
+                          fontSize: 32, fontWeight: FontWeight.bold,
+                          color: Colors.white, letterSpacing: 6)),
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(color: AppColors.border),
+                    const SizedBox(height: 12),
+                    _infoRow(Icons.stadium_outlined, venueName),
+                    const SizedBox(height: 8),
+                    _infoRow(Icons.calendar_today_outlined, date),
+                    const SizedBox(height: 8),
+                    _infoRow(Icons.access_time_outlined, time),
+                  ]),
+                ),
+                const SizedBox(height: 16),
+                // Escrow info
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentLight,
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Icon(Icons.lock_outline, color: AppColors.accent, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(
+                      'Your deposit is held securely. It will be released to the venue owner '
+                      'when you check in with this code.',
+                      style: GoogleFonts.poppins(fontSize: 11, color: AppColors.primary))),
+                  ]),
+                ),
+                const SizedBox(height: 32),
+                // Done button
+                SizedBox(width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      // Pop back to player home
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                      padding: const EdgeInsets.symmetric(vertical: 16)),
+                    child: Text('Back to Home', style: GoogleFonts.poppins(
+                      color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  )),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String text) => Row(children: [
+    Icon(icon, size: 16, color: AppColors.textSecondary),
+    const SizedBox(width: 8),
+    Expanded(child: Text(text, style: GoogleFonts.poppins(
+      fontSize: 13, color: AppColors.textPrimary, fontWeight: FontWeight.w500))),
+  ]);
 }

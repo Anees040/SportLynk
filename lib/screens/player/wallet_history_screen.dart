@@ -183,7 +183,7 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
           _detailRow('Timestamp', _fmtDate(t['created_at'])),
           if (t['balance_after'] != null)
             _detailRow('Balance After',
-              'PKR ${(t['balance_after'] as num).toStringAsFixed(0)}'),
+              'PKR ${_parseDouble(t['balance_after']).toStringAsFixed(0)}'),
           const SizedBox(height: 24),
         ]),
       ));

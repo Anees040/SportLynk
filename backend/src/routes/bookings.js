@@ -9,21 +9,25 @@ const crypto = require('crypto');
 router.post('/', authMiddleware, checkRole('player'), async (req, res, next) => {
   const { slotId, venueId, notes } = req.body;
   if (!slotId || !venueId)
-    return res.status(400).json({ success:false, message:'slotId and venueId required' });
+    return res.status(400).json({ success: false, message: 'slotId and venueId required' });
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
-    // Lock slot
+    // 1. Lock the slot row and verify it's available or locked BY THIS player
     const slotRes = await client.query(
       `SELECT s.*, v.name as venue_name, v.price_per_hour, v.owner_id
        FROM slots s JOIN venues v ON v.id = s.venue_id
-       WHERE s.id=$1 AND s.venue_id=$2 AND s.status IN ('available', 'temporarily_locked') FOR UPDATE`,
-      [slotId, venueId]);
+       WHERE s.id=$1 AND s.venue_id=$2 
+         AND (s.status = 'available' 
+              OR (s.status = 'temporarily_locked' AND s.locked_by = $3))
+       FOR UPDATE`,
+      [slotId, venueId, req.user.id]);
       
     if (!slotRes.rows.length) {
       await client.query('ROLLBACK');
-      return res.status(409).json({ success:false, message:'Slot no longer available' });
+      return res.status(409).json({ success: false, message: 'Slot no longer available. It may have been booked by someone else.' });
     }
     
     const slot = slotRes.rows[0];
@@ -31,60 +35,68 @@ router.post('/', authMiddleware, checkRole('player'), async (req, res, next) => 
     const deposit = Math.round(basePrice * 0.30); // 30% deposit
     const total = basePrice;
     
-    // Check player wallet
+    // 2. Check player wallet
     const playerWallet = await client.query(
       `SELECT * FROM wallets WHERE user_id=$1 FOR UPDATE`, [req.user.id]);
       
     if (!playerWallet.rows.length || parseFloat(playerWallet.rows[0].balance) < deposit) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ success:false, message:'Insufficient wallet balance for deposit' });
+      return res.status(400).json({ success: false, message: 'Insufficient wallet balance for deposit' });
     }
     
-    // Get owner wallet to freeze balance
+    // 3. Get owner wallet to freeze balance
     const ownerWallet = await client.query(
       `SELECT * FROM wallets WHERE user_id=$1 FOR UPDATE`, [slot.owner_id]);
       
     if (!ownerWallet.rows.length) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ success:false, message:'Venue owner wallet not found' });
+      return res.status(400).json({ success: false, message: 'Venue owner wallet not found' });
     }
 
-    // Generate QR
+    // 4. Generate QR
     const qrData = crypto.randomUUID();
     
-    // Create booking
+    // 5. Create booking
     const booking = await client.query(`
       INSERT INTO bookings (player_id, venue_id, slot_id, slot_date, start_time,
         end_time, base_price, security_deposit, total_amount, status, qr_code, notes)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'confirmed',$10,$11)
       RETURNING *`,
       [req.user.id, venueId, slotId, slot.slot_date, slot.start_time,
-       slot.end_time, basePrice, deposit, total, qrData, notes||null]);
+       slot.end_time, basePrice, deposit, total, qrData, notes || null]);
        
-    // Mark slot booked
-    await client.query(`UPDATE slots SET status='booked' WHERE id=$1`, [slotId]);
+    // 6. Mark slot as booked and clear lock metadata
+    await client.query(
+      `UPDATE slots SET status='booked', locked_at=null, locked_by=null WHERE id=$1`, [slotId]);
     
-    // Deduct deposit from player wallet
+    // 7. Deduct deposit from player wallet (FROZEN, not permanent deduction)
     const newPlayerBalance = parseFloat(playerWallet.rows[0].balance) - deposit;
     await client.query(
       `UPDATE wallets SET balance=$1 WHERE id=$2`, [newPlayerBalance, playerWallet.rows[0].id]);
       
-    // Add deposit to owner frozen balance
+    // 8. Add deposit to owner frozen balance (held until QR check-in)
     const newOwnerFrozen = parseFloat(ownerWallet.rows[0].frozen_balance || 0) + deposit;
     await client.query(
       `UPDATE wallets SET frozen_balance=$1 WHERE id=$2`, [newOwnerFrozen, ownerWallet.rows[0].id]);
       
-    // Log player transaction
+    // 9. Log player transaction
     await client.query(`
       INSERT INTO transactions (wallet_id, user_id, booking_id, type, amount,
         balance_after, description, counterparty_name)
       VALUES ($1,$2,$3,'booking_payment',$4,$5,$6,$7)`,
       [playerWallet.rows[0].id, req.user.id, booking.rows[0].id,
-       -deposit, newPlayerBalance, `Booking deposit at ${slot.venue_name}`, slot.venue_name]);
+       -deposit, newPlayerBalance, 
+       'Booking deposit at ' + slot.venue_name, slot.venue_name]);
+
+    // 10. Release any other locks this player has on this venue
+    await client.query(
+      `UPDATE slots SET status='available', locked_at=null, locked_by=null
+       WHERE venue_id=$1 AND locked_by=$2 AND status='temporarily_locked' AND id!=$3`,
+      [venueId, req.user.id, slotId]);
        
     await client.query('COMMIT');
-    res.status(201).json({ success:true, data: booking.rows[0] });
-  } catch(e){ 
+    res.status(201).json({ success: true, data: booking.rows[0] });
+  } catch(e) { 
     await client.query('ROLLBACK'); 
     console.error('Booking creation error:', e);
     next(e); 
@@ -105,7 +117,7 @@ router.get('/my', authMiddleware, async (req, res, next) => {
       FROM bookings b JOIN venues v ON v.id=b.venue_id
       WHERE ${where}
       ORDER BY b.created_at DESC LIMIT 50`, params);
-    res.json({ success:true, data: result.rows });
+    res.json({ success: true, data: result.rows });
   } catch(e){ next(e); }
 });
 
@@ -122,8 +134,8 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
       WHERE b.id=$1 AND (b.player_id=$2 OR $3='owner')`,
       [req.params.id, req.user.id, req.user.role]);
     if (!result.rows.length)
-      return res.status(404).json({ success:false, message:'Booking not found' });
-    res.json({ success:true, data: result.rows[0] });
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    res.json({ success: true, data: result.rows[0] });
   } catch(e){ next(e); }
 });
 
@@ -141,12 +153,12 @@ router.patch('/:id/cancel', authMiddleware, async (req, res, next) => {
       
     if (!b.rows.length) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ success:false, message:'Booking not found' });
+      return res.status(404).json({ success: false, message: 'Booking not found' });
     }
       
     if (!['pending','confirmed'].includes(b.rows[0].status)) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ success:false, message:'Cannot cancel this booking' });
+      return res.status(400).json({ success: false, message: 'Cannot cancel this booking' });
     }
       
     // Refund deposit
@@ -158,8 +170,8 @@ router.patch('/:id/cancel', authMiddleware, async (req, res, next) => {
       [deposit, req.user.id]);
       
     // Owner wallet (unfreeze)
-    const ownerWallet = await client.query(
-      `UPDATE wallets SET frozen_balance=frozen_balance-$1 WHERE user_id=$2 RETURNING frozen_balance, id`,
+    await client.query(
+      `UPDATE wallets SET frozen_balance=GREATEST(frozen_balance-$1, 0) WHERE user_id=$2`,
       [deposit, b.rows[0].owner_id]);
       
     await client.query(
@@ -167,7 +179,8 @@ router.patch('/:id/cancel', authMiddleware, async (req, res, next) => {
       [req.params.id]);
       
     await client.query(
-      `UPDATE slots SET status='available' WHERE id=$1`, [b.rows[0].slot_id]);
+      `UPDATE slots SET status='available', locked_at=null, locked_by=null WHERE id=$1`, 
+      [b.rows[0].slot_id]);
       
     await client.query(`
       INSERT INTO transactions (wallet_id, user_id, booking_id, type, amount,
@@ -176,7 +189,7 @@ router.patch('/:id/cancel', authMiddleware, async (req, res, next) => {
       [playerWallet.rows[0].id, req.user.id, req.params.id, deposit, playerWallet.rows[0].balance]);
       
     await client.query('COMMIT');
-    res.json({ success:true, message:'Booking cancelled and deposit refunded' });
+    res.json({ success: true, message: 'Booking cancelled and deposit refunded' });
   } catch(e){ 
     await client.query('ROLLBACK'); 
     console.error('Booking cancellation error:', e);
