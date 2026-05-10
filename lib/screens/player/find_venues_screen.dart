@@ -47,10 +47,36 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
     if (_searchCtrl.text.length >= 2 || _searchCtrl.text.isEmpty) _load();
   }
 
+  List<String> _userPrefs = [];
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
+      
+      // Fetch profile for AI recommendations if needed
+      if (_userPrefs.isEmpty) {
+        try {
+          final pResp = await http.get(
+            Uri.parse('${ApiConstants.baseUrl}/users/me/player'),
+            headers: {'Authorization': 'Bearer $token'});
+          if (pResp.statusCode == 200) {
+            final pData = jsonDecode(pResp.body)['data'];
+            if (pData['sport_preferences'] != null) {
+              _userPrefs = List<String>.from(pData['sport_preferences']);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // If no initial sport is selected, auto-select based on AI prefs
+      if (widget.initialSport == null && _selectedSport == '' && _userPrefs.isNotEmpty) {
+        final pref = _userPrefs.first.toLowerCase();
+        if (_sports.any((s) => s.toLowerCase() == pref)) {
+          _selectedSport = _sports.firstWhere((s) => s.toLowerCase() == pref);
+        }
+      }
+
       final params = <String, String>{};
       if (_searchCtrl.text.trim().isNotEmpty) params['search'] = _searchCtrl.text.trim();
       if (_selectedSport.isNotEmpty && _selectedSport.toLowerCase() != 'all') params['sport'] = _selectedSport.toLowerCase();
@@ -63,11 +89,26 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
       final uri = Uri.parse('${ApiConstants.baseUrl}/venues').replace(queryParameters: params);
       final resp = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
       final data = jsonDecode(resp.body);
+      
       if (mounted) {
         setState(() {
-          _venues = data['success'] == true
-            ? List<Map<String, dynamic>>.from(data['data'])
-            : [];
+          if (data['success'] == true) {
+            _venues = List<Map<String, dynamic>>.from(data['data']);
+            // Sort AI recommendations to top if they match preferences
+            if (_userPrefs.isNotEmpty && _selectedSport == 'All') {
+              _venues.sort((a, b) {
+                final aSport = (a['sport_type'] ?? '').toString().toLowerCase();
+                final bSport = (b['sport_type'] ?? '').toString().toLowerCase();
+                final aPref = _userPrefs.map((e) => e.toLowerCase()).contains(aSport);
+                final bPref = _userPrefs.map((e) => e.toLowerCase()).contains(bSport);
+                if (aPref && !bPref) return -1;
+                if (!aPref && bPref) return 1;
+                return 0;
+              });
+            }
+          } else {
+            _venues = [];
+          }
           _loading = false;
         });
       }

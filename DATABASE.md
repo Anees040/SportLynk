@@ -71,6 +71,7 @@ Both have IDENTICAL schema.
 | start_time | TIME | |
 | end_time | TIME | |
 | status | ENUM('available','booked','blocked','temporarily_locked') | DEFAULT 'available' |
+| locked_at | TIMESTAMP | DEFAULT NULL (for 5-min TTL) |
 | price | DECIMAL(10,2) | |
 
 ### bookings
@@ -81,27 +82,39 @@ Both have IDENTICAL schema.
 | player_id | UUID | FK→users |
 | slot_id | UUID | FK→slots |
 | status | ENUM('pending','confirmed','checked_in','no_show','cancelled') | DEFAULT 'pending' |
-| total_amount | DECIMAL(10,2) | |
-| deposit_amount | DECIMAL(10,2) | 30% of total, frozen in owner wallet (Escrow) |
+| total_amount | DECIMAL(10,2) | Full price of the slot |
+| deposit_amount | DECIMAL(10,2) | 30% of total, deducted from player → frozen in owner wallet |
 | qr_code_hash | VARCHAR(512) | HMAC-SHA256 of bookingId |
 | created_at | TIMESTAMP | DEFAULT NOW() |
 
-### wallets
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | UUID | PK |
-| user_id | UUID | FK→users UNIQUE |
-| balance | DECIMAL(10,2) | DEFAULT 500.00 |
-| frozen_balance | DECIMAL(10,2) | DEFAULT 0.00 |
+...
 
-### wallet_transactions
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | UUID | PK |
-| wallet_id | UUID | FK→wallets |
-| type | VARCHAR(50) | 'topup', 'booking_payment', 'refund', etc. |
-| amount | DECIMAL(10,2) | |
-| reference_id | VARCHAR(255)| |
-| counterparty_name | VARCHAR(255)| |
-| balance_after | DECIMAL(10,2) | |
-| created_at | TIMESTAMP | DEFAULT NOW() |
+## Escrow & Slot Locking Flow
+
+### 1. Slot Selection (Locking)
+- When a user selects a slot, the app calls `POST /api/slots/:id/lock`.
+- The status changes to `temporarily_locked` and `locked_at` is set to `NOW()`.
+- If the user doesn't complete the booking within 5 minutes, the lock expires.
+- Expired locks are released automatically during venue fetch or via background cleanup.
+
+### 2. Booking (Escrow)
+- When the user confirms the booking:
+  1. 30% of `total_amount` is calculated as `deposit_amount`.
+  2. `deposit_amount` is deducted from player's `wallets.balance`.
+  3. `deposit_amount` is added to owner's `wallets.frozen_balance`.
+  4. Slot status changes to `booked`.
+  5. Booking status is `confirmed`.
+
+### 3. Completion (Settlement)
+- When the player checks in at the venue:
+  1. The remaining 70% is paid in cash at the venue.
+  2. The owner marks the booking as `checked_in`.
+  3. The `frozen_balance` (30%) is moved to the owner's available `balance`.
+
+### 4. Cancellation (Refunds)
+- If the player cancels within the allowed timeframe (e.g., 24h before):
+  1. The `frozen_balance` (30%) is moved back to the player's `balance`.
+  2. Slot becomes `available`.
+- If the player cancels too late or is a `no_show`:
+  1. The `frozen_balance` (30%) is released from owner's `frozen_balance` to their available `balance` as a penalty fee.
+

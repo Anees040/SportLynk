@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/snackbar_util.dart';
 import 'confirm_booking_screen.dart';
 
 class VenueDetailScreen extends StatefulWidget {
@@ -29,7 +30,11 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   void initState() { super.initState(); _load(); }
 
   @override
-  void dispose() { _galleryCtrl.dispose(); super.dispose(); }
+  void dispose() { 
+    if (_selectedSlotId != null) _unlockSlot(_selectedSlotId!);
+    _galleryCtrl.dispose(); 
+    super.dispose(); 
+  }
 
   String _dateStr(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
@@ -52,6 +57,56 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
         });
       } else { if (mounted) setState(() => _loading = false); }
     } catch (_) { if (mounted) setState(() => _loading = false); }
+  }
+
+  Future<void> _handleSlotSelection(Map<String, dynamic> slot, bool isCurrentlySelected) async {
+    if (isCurrentlySelected) {
+      _unlockSlot(slot['id']);
+      setState(() { _selectedSlotId = null; _selectedSlot = null; });
+      return;
+    }
+    if (_selectedSlotId != null) _unlockSlot(_selectedSlotId!);
+    
+    setState(() => _loading = true);
+    try {
+      final token = Provider.of<AuthProvider>(context, listen: false).token!;
+      final resp = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/slots/${slot['id']}/lock'),
+        headers: {'Authorization': 'Bearer $token'});
+      final data = jsonDecode(resp.body);
+      
+      if (mounted) {
+        if (data['success'] == true) {
+          setState(() {
+            _selectedSlotId = slot['id'];
+            _selectedSlot = slot;
+            _loading = false;
+          });
+          final idx = _slots.indexWhere((s) => s['id'] == slot['id']);
+          if (idx != -1) {
+            setState(() => _slots[idx]['status'] = 'temporarily_locked');
+          }
+        } else {
+          setState(() => _loading = false);
+          SnackbarUtil.showError(context, data['message'] ?? 'Failed to lock slot');
+          _load(_selectedDate);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+        SnackbarUtil.showError(context, 'Network error while locking slot');
+      }
+    }
+  }
+
+  Future<void> _unlockSlot(String slotId) async {
+    try {
+      final token = Provider.of<AuthProvider>(context, listen: false).token!;
+      await http.delete(
+        Uri.parse('${ApiConstants.baseUrl}/slots/$slotId/lock'),
+        headers: {'Authorization': 'Bearer $token'});
+    } catch (_) {}
   }
 
   double _parseDouble(dynamic val) {
@@ -147,12 +202,12 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                      stops: const [0.4, 1.0],
+                      stops: const [0.3, 1.0],
                       colors: [Colors.transparent,
-                        Colors.black.withValues(alpha: 0.75)])))),
+                        Colors.black.withValues(alpha: 0.85)])))),
                 // Page indicator dots
                 if (images.length > 1)
-                  Positioned(bottom: 70, left: 0, right: 0,
+                  Positioned(bottom: 90, left: 0, right: 0,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(images.length, (i) => AnimatedContainer(
@@ -167,33 +222,37 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                   ),
                 // Photo count badge
                 if (images.length > 1)
-                  Positioned(top: 100, right: 16,
+                  Positioned(top: 90, right: 16,
+                    child: SafeArea(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.black54,
+                          borderRadius: BorderRadius.circular(10)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.photo_library_outlined, color: Colors.white, size: 14),
+                          const SizedBox(width: 4),
+                          Text('${_galleryPage + 1}/${images.length}',
+                            style: GoogleFonts.poppins(color: Colors.white,
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                        ])),
+                    )),
+                // Rating badge
+                Positioned(top: 90, left: 16,
+                  child: SafeArea(
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.black54,
+                      decoration: BoxDecoration(color: Colors.black45,
                         borderRadius: BorderRadius.circular(10)),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.photo_library_outlined, color: Colors.white, size: 14),
+                        const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
                         const SizedBox(width: 4),
-                        Text('${_galleryPage + 1}/${images.length}',
+                        Text('${_venue!['rating'] ?? '0.0'}',
                           style: GoogleFonts.poppins(color: Colors.white,
-                            fontSize: 12, fontWeight: FontWeight.w600)),
-                      ]))),
-                // Rating badge
-                Positioned(top: 100, left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(color: Colors.black45,
-                      borderRadius: BorderRadius.circular(10)),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                      const SizedBox(width: 4),
-                      Text('${_venue!['rating'] ?? '0.0'}',
-                        style: GoogleFonts.poppins(color: Colors.white,
-                          fontSize: 13, fontWeight: FontWeight.bold)),
-                      Text(' (${_venue!['total_reviews'] ?? 0})',
-                        style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11)),
-                    ]))),
+                            fontSize: 13, fontWeight: FontWeight.bold)),
+                        Text(' (${_venue!['total_reviews'] ?? 0})',
+                          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11)),
+                      ])),
+                  )),
                 // Venue name at bottom of hero
                 Positioned(bottom: 16, left: 16, right: 16,
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -422,10 +481,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                     final statusColor = _slotStatusColor(status);
 
                     return GestureDetector(
-                      onTap: isAvailable ? () => setState(() {
-                        _selectedSlotId = selected ? null : slot['id'];
-                        _selectedSlot = selected ? null : slot;
-                      }) : null,
+                      onTap: (isAvailable || selected) ? () => _handleSlotSelection(slot, selected) : null,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         decoration: BoxDecoration(

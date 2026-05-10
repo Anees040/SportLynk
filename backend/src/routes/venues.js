@@ -55,6 +55,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
     const result = await pool.query(`
       SELECT v.*, 
         COALESCE(v.venue_photos[1], null) as cover_photo,
+        v.venue_photos,
         u.name as owner_name
       FROM venues v
       LEFT JOIN users u ON u.id = v.owner_id
@@ -82,6 +83,15 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
        WHERE v.id = $1 AND v.is_active = true`, [id]);
     if (!venue.rows.length)
       return res.status(404).json({ success:false, message:'Venue not found' });
+      
+    // Auto-release expired locks (5 minute TTL)
+    await pool.query(
+      `UPDATE slots 
+       SET status='available', locked_at=null 
+       WHERE venue_id=$1 AND slot_date=$2 AND status='temporarily_locked' 
+       AND locked_at < NOW() - INTERVAL '5 minutes'`,
+      [id, slotDate]);
+      
     const slots = await pool.query(
       `SELECT * FROM slots WHERE venue_id=$1 AND slot_date=$2 ORDER BY start_time`,
       [id, slotDate]);

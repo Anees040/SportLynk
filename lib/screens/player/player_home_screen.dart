@@ -243,7 +243,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
                 Row(children: [
                   Expanded(child: _bigActionCard(
                     Icons.emoji_events_outlined, 'Join\nTournament', const Color(0xFFD0E0FF),
-                    () {})),
+                    () => Navigator.pushNamed(context, '/tournaments'))),
                   const SizedBox(width: 14),
                   Expanded(child: _bigActionCard(
                     Icons.bar_chart_rounded, 'View\nRankings', const Color(0xFFD0E0FF),

@@ -19,6 +19,7 @@ const ownerRoutes = require('./routes/owner');
 const walletRoutes = require('./routes/wallet');
 const playerRoutes = require('./routes/player');
 const userRoutes = require('./routes/users');
+const slotRoutes = require('./routes/slotLock');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/venues', venueRoutes);
@@ -27,6 +28,7 @@ app.use('/api/owner', ownerRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/player', playerRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/slots', slotRoutes);
 
 // ─── Health check ────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

@@ -61,7 +61,8 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
 
   Future<void> _confirmBooking() async {
     final price = _parseDouble(widget.slot['price']);
-    if (_walletBalance < price) {
+    final deposit = double.parse((price * 0.30).toStringAsFixed(2));
+    if (_walletBalance < deposit) {
       _snack('Insufficient wallet balance. Please top up your wallet.', AppColors.error);
       return;
     }
@@ -164,8 +165,9 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   @override
   Widget build(BuildContext context) {
     final price = _parseDouble(widget.slot['price']);
-    final deposit = double.parse((price * 0.3).toStringAsFixed(2));
-    final remaining = _walletBalance - price;
+    final deposit = double.parse((price * 0.30).toStringAsFixed(2));
+    final payAtVenue = price - deposit;
+    final remainingWallet = _walletBalance - deposit;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -190,7 +192,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
             child: _loading
               ? const SizedBox(width: 20, height: 20,
                   child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : Text('Confirm & Pay PKR ${price.toStringAsFixed(0)}',
+              : Text('Pay Deposit PKR ${deposit.toStringAsFixed(0)}',
                   style: GoogleFonts.poppins(color: Colors.white,
                     fontWeight: FontWeight.bold, fontSize: 15)),
           )),
@@ -271,27 +273,39 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: AppColors.inputFill,
                   borderRadius: BorderRadius.circular(10)),
-                child: Row(children: [
-                  Expanded(child: Column(children: [
-                    Text('PAYABLE', style: GoogleFonts.poppins(fontSize: 9,
-                      color: AppColors.textSecondary, letterSpacing: 0.5)),
-                    const SizedBox(height: 2),
-                    Text('- PKR ${price.toStringAsFixed(0)}',
-                      style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
-                        color: AppColors.error)),
-                  ])),
-                  Container(width: 1, height: 32, color: AppColors.border),
-                  Expanded(child: Column(children: [
-                    Text('REMAINING', style: GoogleFonts.poppins(fontSize: 9,
-                      color: AppColors.textSecondary, letterSpacing: 0.5)),
-                    const SizedBox(height: 2),
-                    Text('PKR ${remaining.toStringAsFixed(0)}',
-                      style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
-                        color: remaining >= 0 ? AppColors.success : AppColors.error)),
-                  ])),
+                child: Column(children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('Total Slot Price', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
+                    Text('PKR ${price.toStringAsFixed(0)}', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ]),
+                  const SizedBox(height: 8),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('Pay at Venue (70%)', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
+                    Text('PKR ${payAtVenue.toStringAsFixed(0)}', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ]),
+                  const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(height: 1)),
+                  Row(children: [
+                    Expanded(child: Column(children: [
+                      Text('ADVANCE (30%)', style: GoogleFonts.poppins(fontSize: 9,
+                        color: AppColors.textSecondary, letterSpacing: 0.5)),
+                      const SizedBox(height: 2),
+                      Text('- PKR ${deposit.toStringAsFixed(0)}',
+                        style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
+                          color: AppColors.error)),
+                    ])),
+                    Container(width: 1, height: 32, color: AppColors.border),
+                    Expanded(child: Column(children: [
+                      Text('WALLET AFTER', style: GoogleFonts.poppins(fontSize: 9,
+                        color: AppColors.textSecondary, letterSpacing: 0.5)),
+                      const SizedBox(height: 2),
+                      Text('PKR ${remainingWallet.toStringAsFixed(0)}',
+                        style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
+                          color: remainingWallet >= 0 ? AppColors.success : AppColors.error)),
+                    ])),
+                  ]),
                 ]),
               ),
-              if (remaining < 0) ...[
+              if (remainingWallet < 0) ...[
                 const SizedBox(height: 8),
                 Container(padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(color: const Color(0xFFFEE2E2),

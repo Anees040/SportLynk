@@ -32,6 +32,12 @@ GET /venues?city=&sport_type=&date=&min_price=&max_price=   → [{venue with ame
 GET /venues/:id?date=YYYY-MM-DD                 → {venue_with_slots}
 ```
 
+## Slots (Token required)
+```
+POST   /slots/:id/lock    → {success, expiresAt} (Sets status to temporarily_locked for 5 min)
+DELETE /slots/:id/lock    → {success} (Releases the lock)
+```
+
 ## Bookings (Player token required)
 ```
 POST  /bookings                 body:{slotId,venueId} → {bookingId, qrData, depositAmount} (Deducts 30% from Player, Freezes in Owner Wallet)
