@@ -14,6 +14,8 @@
 - State goes in Provider, never setState for shared state
 - API calls always show loading state
 - Always handle errors with SnackBar
+- Always maintain Flutter analyzer at 0 errors/warnings
+- Keep UI consistent (use modern curves, standard paddings, and avoiding deprecated methods like withOpacity)
 
 ## Folder structure already defined in PROJECT.md
 ## Colors already defined in PROJECT.md

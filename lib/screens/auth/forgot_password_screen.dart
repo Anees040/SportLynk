@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../widgets/sport_text_field.dart';
 import '../../widgets/password_strength_bar.dart';
 import '../../widgets/custom_button.dart';
+import '../../utils/snackbar_util.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -40,12 +41,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   void _snack(String msg, {Color bg = AppColors.error}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: GoogleFonts.poppins()),
-      backgroundColor: bg,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
+    if (bg == AppColors.error || bg == AppColors.warning) {
+      SnackbarUtil.showError(context, msg);
+    } else {
+      SnackbarUtil.showSuccess(context, msg);
+    }
   }
 
   // Step 0: Send OTP

@@ -246,6 +246,7 @@ class AuthProvider extends ChangeNotifier {
     _currentUser = _currentUser!.copyWith(
       name: data['name'],
       email: data['email'],
+      avatarUrl: data['avatarUrl'] ?? data['avatar_url'],
     );
     notifyListeners();
   }

@@ -4,22 +4,39 @@ Base URL: http://localhost:3000/api
 
 ## Auth (No token required)
 ```
-POST /auth/register  body:{name,email,password,role,phone} → {token,user}
-POST /auth/login     body:{email,password} → {token,user}
-GET  /auth/me        header:Bearer token → {user}
+POST /auth/register/player  body:{name,phone,password,firebaseUid,email,avatarUrl} → {token,user}
+POST /auth/register/owner   body:{personal,ground,documents} → {token,user,status}
+POST /auth/login            body:{identifier,password} → {token,user,status}
+POST /auth/verify-phone     body:{firebaseUid,phone}
+POST /auth/forgot-password/send-otp
+POST /auth/forgot-password/reset
+```
+
+## Users (Token required)
+```
+GET   /users/me                 → {user}
+PATCH /users/me/update          body:{name,email,avatarUrl} → {user}
+POST  /users/me/change-password body:{currentPassword,newPassword} → {success}
+```
+
+## Wallet (Token required)
+```
+GET  /wallet                    → {balance, frozen_balance}
+GET  /wallet/transactions       → [{transaction}]
+POST /wallet/topup              body:{amount,paymentMethod} → {newBalance}
 ```
 
 ## Venues (Public — no token)
 ```
-GET /venues?city=&sport_type=   → [{venue}]
-GET /venues/:id                  → {venue}
-GET /venues/:id/slots?date=YYYY-MM-DD → [{slot}]
+GET /venues?city=&sport_type=&date=&min_price=&max_price=   → [{venue}]
+GET /venues/:id?date=YYYY-MM-DD                 → {venue_with_slots}
 ```
 
 ## Bookings (Player token required)
 ```
-POST /bookings              body:{slotId,venueId} → {bookingId,qrData,depositAmount}
-GET  /bookings/my           → [{booking with venue+slot info}]
+POST  /bookings                 body:{slotId,venueId} → {bookingId,qrData,depositAmount}
+GET   /bookings/my              → [{booking with venue+slot info}]
+PATCH /bookings/:id/cancel      → {success, refund issued}
 ```
 
 ## Owner (Owner token required)

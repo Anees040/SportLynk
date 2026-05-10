@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../constants/colors.dart';
 import '../../services/firebase_otp_service.dart';
 import '../../widgets/custom_button.dart';
+import '../../utils/snackbar_util.dart';
 
 class OtpScreen extends StatefulWidget {
   const OtpScreen({super.key});
@@ -79,13 +80,7 @@ class _OtpScreenState extends State<OtpScreen> {
         } else {
           userMessage = 'OTP failed: $e';
         }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(userMessage, style: GoogleFonts.poppins()),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 6),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ));
+        SnackbarUtil.showError(context, userMessage);
       },
       onAutoVerified: (uid) { if (mounted) Navigator.pop(context, uid); },
     );
@@ -94,10 +89,7 @@ class _OtpScreenState extends State<OtpScreen> {
   Future<void> _verifyOtp() async {
     final code = _ctrls.map((c) => c.text).join();
     if (code.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Enter all 6 digits', style: GoogleFonts.poppins()),
-        backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating,
-      ));
+      SnackbarUtil.showError(context, 'Enter all 6 digits');
       return;
     }
     setState(() => _loading = true);
@@ -107,10 +99,7 @@ class _OtpScreenState extends State<OtpScreen> {
     if (uid != null) {
       Navigator.pop(context, uid);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Invalid or expired code. Try again.', style: GoogleFonts.poppins()),
-        backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating,
-      ));
+      SnackbarUtil.showError(context, 'Invalid or expired code. Try again.');
       for (final c in _ctrls) { c.clear(); }
       _foci[0].requestFocus();
     }

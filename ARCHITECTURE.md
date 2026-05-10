@@ -3,11 +3,16 @@
 ## Pattern: Layered Architecture
 Layer 1 — Presentation: Flutter (Dart) mobile app
 Layer 2 — Business Logic: Node.js Express API
-Layer 3 — Data: PostgreSQL (local dev / Supabase cloud)
+Layer 3 — Data & Services: 
+          - PostgreSQL (local dev / Supabase cloud)
+          - Firebase Authentication (SMS/OTP validation)
+          - Cloudinary (Image storage for avatars and venues)
 
 ## Communication
 Flutter → HTTPS REST + JWT Bearer → Node.js
 Node.js → pg pool (parameterized SQL) → PostgreSQL
+Node.js → Cloudinary API (image uploads)
+Flutter → Firebase Auth API (OTP requests)
 
 ## Local vs Cloud Database
 Development: LOCAL PostgreSQL (localhost:5432)

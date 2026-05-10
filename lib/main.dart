@@ -21,6 +21,7 @@ import 'screens/player/player_home_screen.dart';
 import 'screens/owner/owner_home_screen.dart';
 import 'screens/player/trust_score_screen.dart';
 import 'screens/player/find_venues_screen.dart';
+import 'screens/player/venue_detail_screen.dart';
 
 /// Removes scrollbar overlay on all platforms (fixes white line on web).
 class _NoScrollbarBehavior extends MaterialScrollBehavior {
@@ -153,7 +154,14 @@ class SportLynkApp extends StatelessWidget {
           '/player-home': (_) => const AuthGuard(requiredRole: 'player', child: PlayerHomeScreen()),
           '/owner-home': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerHomeScreen()),
           '/trust-score': (_) => const AuthGuard(requiredRole: 'player', child: TrustScoreScreen(profile: {})),
-          '/find-venues': (_) => const AuthGuard(requiredRole: 'player', child: FindVenuesScreen()),
+          '/find-venues': (context) {
+            final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+            return AuthGuard(requiredRole: 'player', child: FindVenuesScreen(initialSport: args?['sport']));
+          },
+          '/venue-detail': (context) {
+            final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+            return AuthGuard(requiredRole: 'player', child: VenueDetailScreen(venueId: args['venueId']));
+          },
         },
         ),
       ),

@@ -92,3 +92,36 @@ Completed:
 - [x] Redirect `/login` after successful player registration.
 - [x] Resolved all compile errors and `cloudinary_public` versioning issues.
 - [x] flutter analyze: 0 issues (only minor unused import/print warnings fixed).
+
+## Day 5
+Completed:
+- [x] Context built (notes saved at .agent_notes.md)
+- [x] Fixed backend pool.js destructuring bug in users/wallet/bookings/venues/player routes
+- [x] Added backend POST /api/users/me/change-password (bcrypt verify+rehash)
+- [x] Updated PATCH /api/users/me/update to accept avatarUrl
+- [x] Added migration 001_fix_schema.sql to ensure venues columns + bilal wallet seed
+- [x] Restricted sports to Football+Cricket in profile + home + register
+- [x] Redesigned player_profile_screen: Insta-style edit, avatar pick+upload, change password section
+- [x] Updated home QuickActions: Football, Cricket, My Bookings, Wallet (no badminton/all)
+- [x] Implemented find_venues_screen per PROMPT_3
+- [x] Implemented venue_detail_screen per PROMPT_3
+- [x] Implemented confirm_booking_screen per PROMPT_3
+- [x] Replaced bookings_screen with cancel + refund per PROMPT_4
+- [x] Replaced wallet_screen with topup sheet + history link per PROMPT_4
+- [x] Implemented wallet_history_screen per PROMPT_4
+- [x] Added User.copyWith avatarUrl + auth_provider updateLocalUser avatarUrl
+- [x] Ran flutter analyze - 0 errors
+- [x] Updated md docs: API.md, DATABASE.md, PROJECT.md, FEATURES.md, PROGRESS.md, ARCHITECTURE.md, CODING_STANDARDS.md.
+
+## Day 6 (Phase 2 Finalization)
+Completed:
+- [x] Fixed backend `venues.js` SQL param bug that broke filtering.
+- [x] Fixed backend `users.js` profile save 500 error (email uniqueness logic).
+- [x] Fixed `venue_detail_screen` crash (`toStringAsFixed` on String via PostgreSQL `DECIMAL`).
+- [x] Fixed `confirm_booking_screen` wallet balance parsing bug.
+- [x] Fixed web splash screen to use SportLynk logo instead of default Flutter logo.
+- [x] Redesigned `find_venues_screen` with advanced filter bottom sheet (price range, minimum rating, sort by).
+- [x] Redesigned `venue_detail_screen` with gradient hero, animated date/slot selection, and professional cards.
+- [x] Implemented Teams feature (UI Only) via 5 new screens: `teams_screen.dart`, `create_team_screen.dart`, `team_roster_screen.dart`, `find_opponents_screen.dart`, `team_rankings_screen.dart`.
+- [x] Wired Teams feature into `player_home_screen.dart`.
+- [x] Resolved unused imports; `flutter analyze` shows 0 issues.

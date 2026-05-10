@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcrypt');
 const pool = require('../db/pool');
 const authMiddleware = require('../middleware/authMiddleware');
 
@@ -47,23 +48,23 @@ router.get('/me/player', authMiddleware, async (req, res, next) => {
 
 // PATCH /api/users/me/update
 router.patch('/me/update', authMiddleware, async (req, res, next) => {
-  const { name, email, sportPreferences } = req.body;
+  const { name, email, sportPreferences, avatarUrl } = req.body;
   const userId = req.user.id;
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Update users table (name, email)
+    // Update users table (name, email, avatar_url)
     if (name) {
       await client.query('UPDATE users SET name = $1 WHERE id = $2', [name, userId]);
     }
     
     if (email !== undefined) {
-      // Check if email already exists for another user
-      if (email !== null && email.trim() !== '') {
+      const cleanEmail = (email && typeof email === 'string' && email.trim() !== '') ? email.trim() : null;
+      if (cleanEmail) {
         const existing = await client.query(
-          'SELECT id FROM users WHERE email = $1 AND id != $2', [email.trim(), userId]);
+          'SELECT id FROM users WHERE email = $1 AND id != $2', [cleanEmail, userId]);
         if (existing.rows.length > 0) {
           await client.query('ROLLBACK');
           return res.status(409).json({ success: false, message: 'Email already in use' });
@@ -71,7 +72,13 @@ router.patch('/me/update', authMiddleware, async (req, res, next) => {
       }
       await client.query(
         'UPDATE users SET email = $1 WHERE id = $2', 
-        [email ? email.trim() : null, userId]);
+        [cleanEmail, userId]);
+    }
+
+    if (avatarUrl !== undefined) {
+      await client.query(
+        'UPDATE users SET avatar_url = $1 WHERE id = $2',
+        [avatarUrl || null, userId]);
     }
 
     // Update player_profiles table (sport_preferences) using UPSERT
@@ -81,7 +88,7 @@ router.patch('/me/update', authMiddleware, async (req, res, next) => {
         VALUES ($1, $2, 1000, 100)
         ON CONFLICT (user_id) DO UPDATE 
         SET sport_preferences = $2
-      `, [userId, JSON.stringify(sportPreferences)]);
+      `, [userId, sportPreferences]);
     }
 
     await client.query('COMMIT');
@@ -89,7 +96,7 @@ router.patch('/me/update', authMiddleware, async (req, res, next) => {
     // Fetch updated data
     const result = await pool.query(`
       SELECT 
-        u.name, u.email,
+        u.name, u.email, u.avatar_url,
         COALESCE(pp.sport_preferences, '{}') as sport_preferences
       FROM users u
       LEFT JOIN player_profiles pp ON pp.user_id = u.id
@@ -103,6 +110,42 @@ router.patch('/me/update', authMiddleware, async (req, res, next) => {
     next(err);
   } finally {
     client.release();
+  }
+});
+
+// POST /api/users/me/change-password
+router.post('/me/change-password', authMiddleware, async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current and new password are required' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 8 characters' });
+    }
+
+    // Fetch current hash
+    const userRes = await pool.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    if (!userRes.rows.length) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Verify current password
+    const match = await bcrypt.compare(currentPassword, userRes.rows[0].password_hash);
+    if (!match) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    // Hash new password and update
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashed, userId]);
+
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (err) {
+    console.error('POST /me/change-password error:', err);
+    next(err);
   }
 });
 

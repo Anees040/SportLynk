@@ -46,13 +46,19 @@ Both have IDENTICAL schema.
 | name | VARCHAR(255) | |
 | description | TEXT | |
 | sport_type | VARCHAR(50) | |
+| ground_type | VARCHAR(20) | ENUM-like ('turf', 'futsal', 'indoor', etc.) |
 | city | VARCHAR(100) | |
 | address | TEXT | |
 | latitude | DECIMAL(10,8) | |
 | longitude | DECIMAL(11,8) | |
 | base_price | DECIMAL(10,2) | |
-| current_price | DECIMAL(10,2) | |
+| price_per_hour | DECIMAL(10,2) | |
 | image_url | TEXT | |
+| venue_photos | TEXT[] | DEFAULT '{}' |
+| rating | DECIMAL(3,2) | DEFAULT NULL |
+| total_reviews | INT | DEFAULT 0 |
+| operating_hours_from | TIME | DEFAULT NULL |
+| operating_hours_to | TIME | DEFAULT NULL |
 | is_active | BOOLEAN | DEFAULT true |
 
 ### venue_slots
@@ -92,7 +98,9 @@ Both have IDENTICAL schema.
 |--------|------|-------------|
 | id | UUID | PK |
 | wallet_id | UUID | FK→wallets |
-| type | VARCHAR(50) | 'deposit_freeze','deposit_release','refund','earning' |
+| type | VARCHAR(50) | 'topup', 'booking_payment', 'refund', etc. |
 | amount | DECIMAL(10,2) | |
-| reference_id | UUID | |
+| reference_id | VARCHAR(255)| |
+| counterparty_name | VARCHAR(255)| |
+| balance_after | DECIMAL(10,2) | |
 | created_at | TIMESTAMP | DEFAULT NOW() |

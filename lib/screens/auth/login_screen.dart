@@ -6,6 +6,7 @@ import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/sport_text_field.dart';
 import '../../widgets/custom_button.dart';
+import '../../utils/snackbar_util.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -176,11 +177,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         if (auth.isPendingOwner) {
                                           Navigator.pushNamedAndRemoveUntil(context, '/owner-pending', (r) => false);
                                         } else {
-                                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                            content: Text(auth.errorMessage ?? 'Login failed', style: GoogleFonts.poppins()),
-                                            backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                          ));
+                                          SnackbarUtil.showError(context, auth.errorMessage ?? 'Login failed');
                                         }
                                         return;
                                       }

@@ -6,10 +6,17 @@ class TrustScoreScreen extends StatelessWidget {
   final Map<String, dynamic> profile;
   const TrustScoreScreen({super.key, required this.profile});
 
+  num _parseNum(dynamic val, num fallback) {
+    if (val == null) return fallback;
+    if (val is num) return val;
+    if (val is String) return num.tryParse(val) ?? fallback;
+    return fallback;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final score = (profile['trust_score'] ?? 100) as num;
-    final elo = (profile['elo_rating'] ?? 1000) as num;
+    final score = _parseNum(profile['trust_score'], 100);
+    final elo = _parseNum(profile['elo_rating'], 1000);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(

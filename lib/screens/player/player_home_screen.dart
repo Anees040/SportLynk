@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import 'player_profile_screen.dart';
 import 'bookings_screen.dart';
 import 'wallet_screen.dart';
+import 'teams_screen.dart';
 
 class PlayerHomeScreen extends StatefulWidget {
   const PlayerHomeScreen({super.key});
@@ -66,7 +67,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
         children: [
           _buildHome(auth),
           const BookingsScreen(),
-          _teamsStub(),
+          const TeamsScreen(),
           const WalletScreen(),
           const PlayerProfileScreen(),
         ],
@@ -241,10 +242,14 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
                     color: AppColors.textPrimary)),
                 const SizedBox(height: 14),
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  _quickAction(Icons.sports_soccer, 'Football', const Color(0xFF22C55E), 'football'),
-                  _quickAction(Icons.sports_cricket, 'Cricket', const Color(0xFFF59E0B), 'cricket'),
-                  _quickAction(Icons.sports_tennis, 'Badminton', const Color(0xFF3B82F6), 'badminton'),
-                  _quickAction(Icons.sports, 'All Sports', const Color(0xFF8B5CF6), ''),
+                  _quickAction(Icons.sports_soccer, 'Football', const Color(0xFF22C55E), () =>
+                    Navigator.pushNamed(context, '/find-venues', arguments: {'sport': 'football'})),
+                  _quickAction(Icons.sports_cricket, 'Cricket', const Color(0xFFF59E0B), () =>
+                    Navigator.pushNamed(context, '/find-venues', arguments: {'sport': 'cricket'})),
+                  _quickAction(Icons.calendar_month, 'My Bookings', const Color(0xFF3B82F6), () =>
+                    setState(() => _tab = 1)),
+                  _quickAction(Icons.account_balance_wallet, 'Wallet', const Color(0xFF8B5CF6), () =>
+                    setState(() => _tab = 3)),
                 ]),
               ]),
             ),
@@ -294,10 +299,9 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   }
 
   // ── QUICK ACTION BUTTON ─────────────────────────────────────
-  Widget _quickAction(IconData icon, String label, Color color, String sport) {
+  Widget _quickAction(IconData icon, String label, Color color, VoidCallback onTap) {
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, '/find-venues',
-        arguments: {'sport': sport}),
+      onTap: onTap,
       child: Column(children: [
         Container(width: 64, height: 64,
           decoration: BoxDecoration(
@@ -606,30 +610,4 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     );
   }
 
-  // ── TEAMS STUB ──────────────────────────────────────────────
-  Widget _teamsStub() {
-    return Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 80, height: 80,
-          decoration: BoxDecoration(
-            color: AppColors.accentLight,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: const Icon(Icons.groups_outlined, size: 40, color: AppColors.accent),
-        ),
-        const SizedBox(height: 16),
-        Text('Teams Coming Soon',
-          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary)),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 40),
-          child: Text('Challenge teams, track rankings, and compete with others',
-            style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
-            textAlign: TextAlign.center),
-        ),
-      ]),
-    );
-  }
 }

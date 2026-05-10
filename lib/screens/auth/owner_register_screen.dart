@@ -12,6 +12,7 @@ import '../../widgets/sport_text_field.dart';
 import '../../widgets/phone_field.dart';
 import '../../widgets/password_strength_bar.dart';
 import '../../widgets/custom_button.dart';
+import '../../utils/snackbar_util.dart';
 
 class OwnerRegisterScreen extends StatefulWidget {
   const OwnerRegisterScreen({super.key});
@@ -70,7 +71,11 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
   }
 
   void _snack(String msg, {Color bg = AppColors.error}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg, style: GoogleFonts.poppins()), backgroundColor: bg, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))));
+    if (bg == AppColors.error || bg == AppColors.warning) {
+      SnackbarUtil.showError(context, msg);
+    } else {
+      SnackbarUtil.showSuccess(context, msg);
+    }
   }
 
   Future<XFile?> _pickImg() async => await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1024, imageQuality: 85);

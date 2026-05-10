@@ -12,6 +12,7 @@ import '../../widgets/sport_text_field.dart';
 import '../../widgets/password_strength_bar.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/phone_field.dart';
+import '../../utils/snackbar_util.dart';
 
 class PlayerRegisterScreen extends StatefulWidget {
   const PlayerRegisterScreen({super.key});
@@ -365,19 +366,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                         onPressed: () async {
                           if (!_formKey.currentState!.validate()) return;
                           if (!_phoneVerified) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Please verify your phone number first',
-                                  style: GoogleFonts.poppins(),
-                                ),
-                                backgroundColor: AppColors.warning,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            );
+                            SnackbarUtil.showError(context, 'Please verify your phone number first');
                             return;
                           }
 
@@ -480,19 +469,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                               ),
                             );
                           } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  auth.errorMessage ?? 'Registration failed',
-                                  style: GoogleFonts.poppins(),
-                                ),
-                                backgroundColor: AppColors.error,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            );
+                            SnackbarUtil.showError(context, auth.errorMessage ?? 'Registration failed');
                           }
                         },
                       );

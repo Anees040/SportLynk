@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../constants/colors.dart';
 import '../constants/app_config.dart';
 import 'sport_text_field.dart';
+import '../utils/snackbar_util.dart';
 
 class PhoneField extends StatefulWidget {
   final TextEditingController controller;
@@ -66,14 +67,7 @@ class _PhoneFieldState extends State<PhoneField> {
     }
     final error = _validatePhone(widget.controller.text);
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error, style: GoogleFonts.poppins()),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      SnackbarUtil.showError(context, error);
       return;
     }
 
