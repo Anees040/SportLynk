@@ -14,9 +14,9 @@ class TeamRosterScreen extends StatelessWidget {
   ];
 
   static const _recommended = [
-    {'name': 'Leo Sterling', 'match': '88%', 'elo': 1200},
-    {'name': 'Max Haris', 'match': '82%', 'elo': 1160},
-    {'name': 'Ali Raza', 'match': '79%', 'elo': 1140},
+    {'name': 'Salar Wasil', 'match': '88%', 'elo': 1200},
+    {'name': 'Mudassar', 'match': '82%', 'elo': 1160},
+    {'name': 'Uzair', 'match': '79%', 'elo': 1140},
   ];
 
   @override

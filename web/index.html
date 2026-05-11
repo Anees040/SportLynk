@@ -4,8 +4,35 @@
   <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  
+  <!-- Suppress DDC logs and provide Noto fonts -->
+  <script>
+    (function() {
+      const originalLog = console.log;
+      const originalWarn = console.warn;
+      const filterStrings = [
+        'DDC is about to load',
+        'This app is linked to the debug service',
+        'Starting application from main method',
+        'Found an existing <meta name="viewport">'
+      ];
+
+      console.log = function(...args) {
+        if (typeof args[0] === 'string' && filterStrings.some(s => args[0].includes(s))) return;
+        originalLog.apply(console, args);
+      };
+      
+      console.warn = function(...args) {
+        // Suppress the Noto fonts warning specifically
+        if (typeof args[0] === 'string' && args[0].includes('Could not find a set of Noto fonts')) return;
+        originalWarn.apply(console, args);
+      };
+    })();
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans&display=swap" rel="stylesheet">
+
   <meta name="description" content="SportLynk — Book Sports Venues">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
