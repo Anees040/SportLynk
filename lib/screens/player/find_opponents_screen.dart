@@ -28,9 +28,9 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text('Find Opponents', style: GoogleFonts.poppins(
-          color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
-        backgroundColor: AppColors.background,
-        iconTheme: const IconThemeData(color: AppColors.textPrimary),
+          color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: AppColors.primary,
+        iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
         actions: _sports.map((s) => GestureDetector(
           onTap: () => setState(() => _sport = s),
@@ -38,10 +38,10 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
             margin: const EdgeInsets.only(right: 8),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
-              color: _sport == s ? AppColors.primary : AppColors.inputFill,
+              color: _sport == s ? AppColors.accent : Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(20)),
             child: Text(s, style: GoogleFonts.poppins(fontSize: 12,
-              color: _sport == s ? Colors.white : AppColors.textSecondary,
+              color: Colors.white,
               fontWeight: _sport == s ? FontWeight.bold : FontWeight.normal))),
         )).toList(),
       ),

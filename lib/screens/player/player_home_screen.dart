@@ -137,158 +137,146 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     final firstName = userName.split(' ').first;
     final initial = userName.isNotEmpty ? userName[0].toUpperCase() : 'P';
 
+    final wallet = _homeData?['wallet'] as Map<String, dynamic>?;
+    final profile = _homeData?['profile'] as Map<String, dynamic>?;
+    final upcomingBookings = (_homeData?['upcomingBookings'] as List?) ?? [];
+    final balance = _parseNum(wallet?['balance'], 0);
+    final trustScore = _parseNum(profile?['trust_score'], 100).round();
+    final upcomingCount = upcomingBookings.length;
+
     return RefreshIndicator(
       color: AppColors.accent,
       onRefresh: _load,
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         slivers: [
-          // ── HEADER & SEARCH BAR (Overlapping) ─────────────────
+          // ── HEADER ────────────────────────────────────────────
           SliverToBoxAdapter(
-            child: Column(
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF0A1F13), Color(0xFF14532D)],
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                ),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                  child: Row(children: [
+                    // Logo
                     Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF0A1F13), Color(0xFF14532D)],
-                          begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                        ),
-                      ),
-                      child: SafeArea(
-                        bottom: false,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 40), // Extra padding at bottom to separate from text
-                          child: Row(children: [
-                        // Logo
-                        Container(
-                          width: 42, height: 42,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [BoxShadow(
-                              color: AppColors.accent.withValues(alpha: 0.3),
-                              blurRadius: 8, offset: const Offset(0, 2),
-                            )],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.asset('assets/images/logo.png', fit: BoxFit.cover,
-                              errorBuilder: (a, b, c) => Container(
-                                color: AppColors.accent,
-                                child: Center(child: Text('S',
-                                  style: GoogleFonts.poppins(color: Colors.white,
-                                    fontSize: 18, fontWeight: FontWeight.bold))),
-                              )),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('Hello, $firstName! 👋',
-                            style: GoogleFonts.poppins(color: Colors.white,
-                              fontSize: 18, fontWeight: FontWeight.bold)),
-                          Text('Ready to play today?',
-                            style: GoogleFonts.poppins(color: Colors.white60, fontSize: 12)),
-                        ])),
-                        // Avatar
-                        GestureDetector(
-                          onTap: () => _onTabChanged(4),
-                          child: CircleAvatar(radius: 20,
-                            backgroundColor: AppColors.accent.withValues(alpha: 0.2),
-                            child: Text(initial,
-                              style: GoogleFonts.poppins(color: AppColors.accent,
-                                fontSize: 16, fontWeight: FontWeight.bold))),
-                        ),
-                      ]),
-                    ),
-                  ),
-                ),
-                // Search Bar
-                Positioned(
-                  left: 20, right: 20, bottom: -20, // Perfectly overlaps bottom edge
-                  child: GestureDetector(
-                    onTap: () => Navigator.pushNamed(context, '/find-venues'),
-                    child: Container(
-                      height: 56,
+                      width: 42, height: 42,
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(12),
                         boxShadow: [BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 24, offset: const Offset(0, 8))],
+                          color: AppColors.accent.withValues(alpha: 0.3),
+                          blurRadius: 8, offset: const Offset(0, 2),
+                        )],
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentLight,
-                            borderRadius: BorderRadius.circular(8)),
-                          child: const Icon(Icons.search_rounded,
-                            color: AppColors.accent, size: 18),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(child: Text('Search venues, sports, opponents...',
-                          style: GoogleFonts.poppins(
-                            color: AppColors.textSecondary, fontSize: 12),
-                          maxLines: 1, overflow: TextOverflow.ellipsis)),
-                        const Icon(Icons.tune_rounded,
-                          color: AppColors.textSecondary, size: 18),
-                      ]),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.asset('assets/images/logo.png', fit: BoxFit.cover,
+                          errorBuilder: (a, b, c) => Container(
+                            color: AppColors.accent,
+                            child: Center(child: Text('S',
+                              style: GoogleFonts.poppins(color: Colors.white,
+                                fontSize: 18, fontWeight: FontWeight.bold))),
+                          )),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Hello, $firstName! 👋',
+                        style: GoogleFonts.poppins(color: Colors.white,
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text('Ready to play today?',
+                        style: GoogleFonts.poppins(color: Colors.white60, fontSize: 12)),
+                    ])),
+                    // Avatar
+                    GestureDetector(
+                      onTap: () => _onTabChanged(4),
+                      child: CircleAvatar(radius: 20,
+                        backgroundColor: AppColors.accent.withValues(alpha: 0.2),
+                        child: Text(initial,
+                          style: GoogleFonts.poppins(color: AppColors.accent,
+                            fontSize: 16, fontWeight: FontWeight.bold))),
+                    ),
+                  ]),
                 ),
-              ],
+              ),
             ),
-            const SizedBox(height: 30), // Space to account for search bar overlap
-          ],
-        ),
-      ),
+          ),
 
-          // ── QUICK ACTIONS (3-column creative grid) ──────────────
+          // ── SEARCH BAR ────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: GestureDetector(
+                onTap: () => Navigator.pushNamed(context, '/find-venues'),
+                child: Container(
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border),
+                    boxShadow: [BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 12, offset: const Offset(0, 4))],
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(children: [
+                    const Icon(Icons.search_rounded, color: AppColors.accent, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text('Search venues, sports, opponents...',
+                      style: GoogleFonts.poppins(color: AppColors.textSecondary, fontSize: 13))),
+                    const Icon(Icons.tune_rounded, color: AppColors.textSecondary, size: 18),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+
+          // ── LIVE STATS STRIP ──────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(children: [
+                _miniStat(Icons.calendar_today_outlined, '$upcomingCount', 'Bookings', AppColors.accent),
+                const SizedBox(width: 10),
+                _miniStat(Icons.account_balance_wallet_outlined, 'PKR $balance', 'Balance', const Color(0xFF3B82F6)),
+                const SizedBox(width: 10),
+                _miniStat(Icons.shield_outlined, '$trustScore', 'Trust Score', AppColors.success),
+              ]),
+            ),
+          ),
+
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Quick Actions',
-                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary)),
-                const SizedBox(height: 14),
-                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(
-                    flex: 2,
-                    child: Column(children: [
-                      Row(children: [
-                        Expanded(child: _imageQuickAction(
-                          'assets/images/icon_book_venue.png', 'Book a\nVenue',
-                          const Color(0xFFDCFCE7), () => Navigator.pushNamed(context, '/find-venues'))),
-                        const SizedBox(width: 12),
-                        Expanded(child: _imageQuickAction(
-                          'assets/images/icon_find_opponent.png', 'Find an\nOpponent',
-                          const Color(0xFFE0E7FF), () => Navigator.pushNamed(context, '/find-opponents'))),
-                      ]),
-                      const SizedBox(height: 12),
-                      Row(children: [
-                        Expanded(child: _imageQuickAction(
-                          'assets/images/icon_tournament.png', 'Join\nTournament',
-                          const Color(0xFFFEF3C7), () => Navigator.pushNamed(context, '/tournaments'))),
-                        const SizedBox(width: 12),
-                        Expanded(child: _imageQuickAction(
-                          'assets/images/icon_rankings.png', 'View\nRankings',
-                          const Color(0xFFFFE4E6), () => Navigator.pushNamed(context, '/team-rankings'))),
-                      ]),
-                    ]),
-                  ),
+                Text('Quick Actions', style: GoogleFonts.poppins(
+                  fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: _quickAction('⚽', 'Book a\nVenue',
+                    [const Color(0xFF22C55E), const Color(0xFF16A34A)],
+                    () => Navigator.pushNamed(context, '/find-venues'))),
                   const SizedBox(width: 12),
-                  Expanded(
-                    flex: 1,
-                    child: _imageQuickAction(
-                      'assets/images/icon_search_venue.png', 'Search\nVenue',
-                      const Color(0xFFCCFBF1), () => Navigator.pushNamed(context, '/find-venues'),
-                      height: 232, isTall: true),
-                  ),
+                  Expanded(child: _quickAction('👥', 'Find\nOpponent',
+                    [const Color(0xFF6366F1), const Color(0xFF4F46E5)],
+                    () => Navigator.pushNamed(context, '/find-opponents'))),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: _quickAction('🏆', 'Join\nTournament',
+                    [const Color(0xFFF59E0B), const Color(0xFFD97706)],
+                    () => Navigator.pushNamed(context, '/tournaments'))),
+                  const SizedBox(width: 12),
+                  Expanded(child: _quickAction('📊', 'View\nRankings',
+                    [const Color(0xFFEC4899), const Color(0xFFBE185D)],
+                    () => Navigator.pushNamed(context, '/team-rankings'))),
                 ]),
               ]),
             ),
@@ -303,134 +291,205 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     );
   }
 
-  // ── QUICK ACTION CARD ───────────────────────────────────────
-  Widget _imageQuickAction(String imageAsset, String label, Color bgColor, VoidCallback onTap, {double height = 110, bool isTall = false}) {
+  // ── HELPERS ─────────────────────────────────────────────────
+  num _parseNum(dynamic val, num fallback) {
+    if (val == null) return fallback;
+    if (val is num) return val;
+    return num.tryParse(val.toString()) ?? fallback;
+  }
+
+  Widget _miniStat(IconData icon, String value, String label, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 4),
+          Text(value,
+            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(label, style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textSecondary)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _quickAction(String emoji, String label, List<Color> gradientColors, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: height,
-        padding: EdgeInsets.symmetric(vertical: isTall ? 20 : 12, horizontal: 8),
+        height: 110,
         decoration: BoxDecoration(
-          color: bgColor,
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2),
-          boxShadow: [BoxShadow(color: bgColor.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 6))],
+          boxShadow: [
+            BoxShadow(
+              color: gradientColors.first.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Expanded(child: Image.asset(imageAsset, fit: BoxFit.contain)),
-          SizedBox(height: isTall ? 12 : 6),
+          Text(emoji, style: const TextStyle(fontSize: 40)),
+          const SizedBox(height: 8),
           Text(label, textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary, height: 1.2)),
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              height: 1.2,
+              shadows: [const Shadow(color: Colors.black26, blurRadius: 4)],
+            )),
         ]),
       ),
     );
   }
 
-  // ── UPCOMING BOOKINGS SECTION ───────────────────────────────
   Widget _buildUpcomingBookings() {
     final bookings = (_homeData?['upcomingBookings'] as List?) ?? [];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text('Upcoming Bookings',
-            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700,
+            style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700,
               color: AppColors.textPrimary)),
           GestureDetector(
             onTap: () => _onTabChanged(1),
-            child: Text('View All',
-              style: GoogleFonts.poppins(fontSize: 13, color: AppColors.accent,
-                fontWeight: FontWeight.w600)),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.accentLight,
+                borderRadius: BorderRadius.circular(8)),
+              child: Text('View All',
+                style: GoogleFonts.poppins(
+                  fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w600)),
+            ),
           ),
         ]),
         const SizedBox(height: 12),
-        bookings.isEmpty ? _emptyBookings() : SizedBox(
-          height: 130,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: bookings.length,
-            itemBuilder: (_, i) => _bookingCard(bookings[i]),
-          ),
-        ),
-      ]),
-    );
-  }
-
-  Widget _emptyBookings() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(children: [
-        Container(
-          width: 48, height: 48,
-          decoration: BoxDecoration(
-            color: AppColors.accentLight,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(Icons.calendar_today_outlined,
-            color: AppColors.accent, size: 22),
-        ),
-        const SizedBox(width: 14),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('No upcoming bookings',
-            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary)),
-          const SizedBox(height: 2),
-          GestureDetector(
-            onTap: () => Navigator.pushNamed(context, '/find-venues'),
-            child: Text('Book a venue now →',
-              style: GoogleFonts.poppins(fontSize: 12, color: AppColors.accent,
-                fontWeight: FontWeight.w500)),
-          ),
-        ])),
+        bookings.isEmpty
+            ? Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(children: [
+                  Container(
+                    width: 52, height: 52,
+                    decoration: BoxDecoration(
+                      color: AppColors.accentLight,
+                      borderRadius: BorderRadius.circular(14)),
+                    child: const Icon(Icons.calendar_today_outlined,
+                      color: AppColors.accent, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('No upcoming bookings',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14, fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
+                    const SizedBox(height: 4),
+                    GestureDetector(
+                      onTap: () => Navigator.pushNamed(context, '/find-venues'),
+                      child: Text('Book a venue now →',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12, color: AppColors.accent,
+                          fontWeight: FontWeight.w500)),
+                    ),
+                  ])),
+                ]),
+              )
+            : Column(
+                children: bookings.take(3).map((b) =>
+                  _bookingCard(b as Map<String, dynamic>)).toList(),
+              ),
       ]),
     );
   }
 
   Widget _bookingCard(Map<String, dynamic> b) {
-    return Container(
-      width: 260,
-      margin: const EdgeInsets.only(right: 12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0A1F13), Color(0xFF166534)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
+    final status = b['status'] as String? ?? 'confirmed';
+    final Color statusColor = status == 'confirmed'
+        ? AppColors.accent
+        : status == 'pending'
+            ? AppColors.warning
+            : AppColors.textSecondary;
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/booking-detail',
+        arguments: {'bookingId': b['id']}),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6, offset: const Offset(0, 2))],
         ),
-        borderRadius: BorderRadius.circular(16),
+        child: Row(children: [
+          Container(
+            width: 48, height: 48,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0A1F13), Color(0xFF166534)]),
+              borderRadius: BorderRadius.circular(12)),
+            child: const Icon(Icons.stadium_outlined,
+              color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(b['venue_name'] ?? 'Venue',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold, fontSize: 13,
+                color: AppColors.textPrimary),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 3),
+            Row(children: [
+              const Icon(Icons.calendar_today_outlined,
+                size: 11, color: AppColors.textSecondary),
+              const SizedBox(width: 4),
+              Text(_fmtSlotDate(b['slot_date']),
+                style: GoogleFonts.poppins(
+                  fontSize: 11, color: AppColors.textSecondary)),
+              const SizedBox(width: 10),
+              const Icon(Icons.access_time,
+                size: 11, color: AppColors.textSecondary),
+              const SizedBox(width: 4),
+              Text(_formatTime(b['start_time']),
+                style: GoogleFonts.poppins(
+                  fontSize: 11, color: AppColors.textSecondary)),
+            ]),
+          ])),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8)),
+            child: Text(status.toUpperCase(),
+              style: GoogleFonts.poppins(
+                fontSize: 9, color: statusColor,
+                fontWeight: FontWeight.bold, letterSpacing: 0.3)),
+          ),
+        ]),
       ),
-      padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(b['venue_name'] ?? 'Venue',
-          style: GoogleFonts.poppins(color: Colors.white,
-            fontWeight: FontWeight.bold, fontSize: 14),
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-        const SizedBox(height: 4),
-        Row(children: [
-          const Icon(Icons.calendar_today_outlined, color: Colors.white54, size: 13),
-          const SizedBox(width: 4),
-          Text(_fmtSlotDate(b['slot_date']),
-            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11)),
-        ]),
-        Row(children: [
-          const Icon(Icons.access_time, color: Colors.white54, size: 13),
-          const SizedBox(width: 4),
-          Text(_formatTime(b['start_time']),
-            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11)),
-        ]),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.accent, borderRadius: BorderRadius.circular(8)),
-          child: Text((b['status'] ?? 'confirmed').toString().toUpperCase(),
-            style: GoogleFonts.poppins(color: Colors.white,
-              fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-        ),
-      ]),
     );
   }
 

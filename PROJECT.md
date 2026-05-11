@@ -1,38 +1,67 @@
-# SportLynk FYP
+# SportLynk — FYP Project
 
 ## Overview
-Flutter mobile app for sports venue booking in Pakistan.
-Players find and book sports grounds. Owners manage facilities.
-**Current Status:** Phase 4 (Player Interface, Dynamic Slots, & Escrow Logic) Complete. Ready for Phase 5 (Owner Interface).
+SportLynk is a full-stack sports venue booking platform for Pakistan. Players discover and book sports grounds with an escrow-protected payment system. Venue owners manage their facilities, review booking requests, scan QR codes to check in players, and track earnings — all from a dedicated mobile interface.
+
+**Current Status:** Phase 5 Complete — Both Player and Owner interfaces are fully functional.
+
 ## Team
 - Mudassar Akram (SP23-BSE-028)
 - Muhammad Anees (SP23-BSE-030)
-- Supervisor: Miss Ayesha Hussain | COMSATS University Islamabad
+- **Supervisor:** Miss Ayesha Hussain | COMSATS University Islamabad
 
 ## Tech Stack
-- Mobile: Flutter (Dart) — Android
-- Backend: Node.js + Express.js
-- Local DB: PostgreSQL 16 (localhost:5432/sportlynk, user: postgres, pass: sportlynk123)
-- Cloud DB: Supabase (PostgreSQL — same schema as local)
-- Auth: JWT (HS256, 24h expiry) + bcrypt (cost 12)
-- State: Provider pattern
-- SMS/OTP: Firebase Authentication
-- Storage: Cloudinary (Avatars & Venue Images)
+| Layer | Technology |
+|-------|-----------|
+| Mobile App | Flutter (Dart) — Android |
+| Backend API | Node.js + Express.js |
+| Database | PostgreSQL 16 (local dev) + Supabase (cloud demo) |
+| Authentication | JWT (HS256, 24h) + bcrypt (cost 12) + Firebase OTP |
+| File Storage | Cloudinary (avatars, venue photos) |
+| State Management | Provider pattern |
+| Fonts | Google Fonts — Poppins |
 
-## Colors
-Primary: #0A1F13 | Accent: #22C55E | Error: #DC2626 | BG: #F9FAFB
-Font: Google Fonts Poppins
+## App Colors
+- Primary: `#0A1F13` (dark green)
+- Accent: `#22C55E` (bright green)
+- Background: `#F8FAFC` (light grey)
+- Error: `#DC2626` | Warning: `#F59E0B` | Success: `#16A34A`
 
 ## API
-Dev: http://10.0.2.2:3000/api  (Android emulator)
-Dev (real device): http://192.170.0.1:3000/api  (your WiFi IP)
+- Android emulator: `http://10.0.2.2:3000/api`
+- Real device/web: `http://{your-wifi-ip}:3000/api`
 
-## Folder: lib/
-constants/ — colors.dart, api_constants.dart
-models/ — user.dart, venue.dart, slot.dart, booking.dart, wallet.dart
-services/ — api_service.dart, auth_service.dart, cloudinary_service.dart, firebase_otp_service.dart
-providers/ — auth_provider.dart, venue_provider.dart, booking_provider.dart
-screens/auth/ — welcome_screen.dart, login_screen.dart, owner_register_screen.dart, player_register_screen.dart, otp_screen.dart, forgot_password_screen.dart
-screens/player/ — player_home_screen.dart, find_venues_screen.dart, venue_detail_screen.dart, confirm_booking_screen.dart, bookings_screen.dart, wallet_screen.dart, wallet_history_screen.dart, player_profile_screen.dart, teams_screen.dart, create_team_screen.dart, team_roster_screen.dart, find_opponents_screen.dart, team_rankings_screen.dart
-screens/owner/ — owner_home_screen.dart, owner_pending_screen.dart
-widgets/ — sport_text_field.dart, phone_field.dart, password_strength_bar.dart, auth_guard.dart
+## Project Structure
+```
+lib/
+  constants/   — colors.dart, api_constants.dart, app_colors.dart
+  models/      — user.dart, venue.dart, slot.dart, booking.dart, wallet.dart
+  providers/   — auth_provider.dart, venue_provider.dart, booking_provider.dart
+  services/    — cloudinary_service.dart, firebase_otp_service.dart
+  screens/
+    auth/      — welcome, login, register (player+owner), otp, forgot_password
+    player/    — home, find_venues, venue_detail, confirm_booking, bookings,
+                  player_booking_detail, wallet, wallet_history, profile,
+                  teams, create_team, team_roster, find_opponents, team_rankings,
+                  trust_score, tournaments, help_support
+    owner/     — home (with 5-tab nav), booking_requests, slot_calendar,
+                  qr_scanner, venue_screen, profile
+  widgets/     — custom_button.dart, custom_loader.dart, sport_text_field.dart
+
+backend/src/
+  routes/      — auth.js, bookings.js, owner.js, player.js, users.js, venues.js, wallet.js
+  middleware/  — authMiddleware.js, roleMiddleware.js
+  db/          — pool.js
+  scripts/     — seed.js, seed_venues.js, run_migration.js
+  migrations/  — 001 through 007
+```
+
+## Documentation Files
+| File | Description |
+|------|-------------|
+| `ARCHITECTURE.md` | System design, patterns, security decisions |
+| `API.md` | All REST endpoints with request/response |
+| `DATABASE.md` | PostgreSQL schema with escrow flow |
+| `FEATURES.md` | Feature completion tracker |
+| `PROGRESS.md` | Daily development log |
+| `RUN_GUIDE.md` | Setup and run instructions |

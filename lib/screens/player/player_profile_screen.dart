@@ -25,10 +25,10 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
   Map<String, dynamic>? _profile;
   bool _loading = true, _saving = false;
   bool _isEditing = false;
-  
+
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  
+
   List<String> _sports = [];
   static const _allowedSports = ['Football', 'Cricket'];
 
@@ -116,16 +116,16 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 80);
       if (pickedFile == null) return;
-      
+
       setState(() => _saving = true);
-      
+
       final url = await CloudinaryService().uploadImage(pickedFile.path, folder: 'avatars');
       if (url == null) {
         setState(() => _saving = false);
         _snack('Failed to upload image. Check Cloudinary settings.', AppColors.error);
         return;
       }
-      
+
       await _saveProfile(avatarUrl: url);
     } catch (e) {
       setState(() => _saving = false);
@@ -149,13 +149,13 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
       if (avatarUrl != null) {
         body['avatarUrl'] = avatarUrl;
       }
-      
+
       final resp = await http.patch(
         Uri.parse('${ApiConstants.baseUrl}/users/me/update'),
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
         body: jsonEncode(body),
       ).timeout(const Duration(seconds: 8));
-      
+
       final data = jsonDecode(resp.body);
       if (mounted) {
         setState(() => _saving = false);
@@ -246,7 +246,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
           child: Text('Retry', style: GoogleFonts.poppins(color: AppColors.accent))),
       ]));
     }
-    
+
     final avatarUrl = _profile!['avatar_url'] as String?;
     final name = _profile!['name'] ?? 'Player';
     final initial = name.isNotEmpty ? name[0].toUpperCase() : 'P';
@@ -306,7 +306,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
                         radius: 54,
                         backgroundColor: AppColors.accentLight,
                         backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                        child: avatarUrl == null 
+                        child: avatarUrl == null
                             ? Text(initial, style: GoogleFonts.poppins(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.accent))
                             : null,
                       ),
@@ -334,9 +334,9 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
               ],
             ),
           ),
-          
+
           const SizedBox(height: 12),
-          
+
           // Stats Row
           Container(
             color: Colors.white,
@@ -351,9 +351,9 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
               }),
             ]),
           ),
-          
+
           const SizedBox(height: 12),
-          
+
           // Interests
           Container(
             color: Colors.white,
@@ -369,7 +369,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
-                  children: _isEditing 
+                  children: _isEditing
                     ? _allowedSports.map((s) {
                         final selected = _sports.contains(s);
                         return FilterChip(
@@ -395,7 +395,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
               ],
             ),
           ),
-          
+
           if (_isEditing) ...[
             const SizedBox(height: 24),
             Padding(
@@ -498,6 +498,9 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   bool _saving = false;
   bool _obsCur = true;
   bool _obsNew = true;
+  String? _errorMsg;
+
+  void _showError(String msg) => setState(() => _errorMsg = msg);
 
   @override
   void dispose() {
@@ -530,16 +533,22 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
     final conf = _confCtrl.text;
 
     if (cur.isEmpty || newP.isEmpty || conf.isEmpty) {
-      SnackbarUtil.showError(context, 'Please fill in all fields.');
-      return;
+      _showError('Please fill in all fields.'); return;
+    }
+    if (newP == cur) {
+      _showError('New password must be different from current.'); return;
     }
     if (newP.length < 8) {
-      SnackbarUtil.showError(context, 'New password must be at least 8 characters.');
-      return;
+      _showError('Password must be at least 8 characters.'); return;
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(newP)) {
+      _showError('Password must contain at least one uppercase letter.'); return;
+    }
+    if (!RegExp(r'[0-9]').hasMatch(newP)) {
+      _showError('Password must contain at least one number.'); return;
     }
     if (newP != conf) {
-      SnackbarUtil.showError(context, 'Passwords do not match.');
-      return;
+      _showError('Passwords do not match.'); return;
     }
 
     setState(() => _saving = true);
@@ -550,7 +559,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
         body: jsonEncode({'currentPassword': cur, 'newPassword': newP}),
       ).timeout(const Duration(seconds: 8));
-      
+
       final data = jsonDecode(resp.body);
       if (mounted) {
         setState(() => _saving = false);
@@ -558,13 +567,12 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
           Navigator.pop(context);
           SnackbarUtil.showSuccess(context, 'Your password has been changed securely.');
         } else {
-          SnackbarUtil.showError(context, data['message'] ?? 'Failed to change password');
+          _showError(data['message'] ?? 'Failed to change password');
         }
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _saving = false);
-        SnackbarUtil.showError(context, 'Network Error: $e');
+        setState(() { _saving = false; _errorMsg = 'Network Error: $e'; });
       }
     }
   }
@@ -599,10 +607,11 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
           const SizedBox(height: 8),
           Text('Secure your account by updating your password.', style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
           const SizedBox(height: 24),
-          
+
           TextField(
             controller: _curCtrl,
             obscureText: _obsCur,
+            onChanged: (_) => setState(() => _errorMsg = null),
             style: GoogleFonts.poppins(fontSize: 14),
             decoration: InputDecoration(
               labelText: 'Current Password',
@@ -617,11 +626,11 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           TextField(
             controller: _newCtrl,
             obscureText: _obsNew,
-            onChanged: (v) => setState(() {}),
+            onChanged: (_) => setState(() => _errorMsg = null),
             style: GoogleFonts.poppins(fontSize: 14),
             decoration: InputDecoration(
               labelText: 'New Password',
@@ -650,11 +659,27 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
             )),
           ),
           const SizedBox(height: 16),
-          
+          if (_errorMsg != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.error_outline, color: AppColors.error, size: 16),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_errorMsg!,
+                  style: GoogleFonts.poppins(fontSize: 12, color: AppColors.error))),
+              ]),
+            ),
+
           TextField(
             controller: _confCtrl,
             obscureText: true,
-            onChanged: (v) => setState(() {}),
+            onChanged: (_) => setState(() => _errorMsg = null),
             style: GoogleFonts.poppins(fontSize: 14),
             decoration: InputDecoration(
               labelText: 'Confirm Password',
@@ -681,7 +706,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
               padding: const EdgeInsets.only(top: 6, left: 12),
               child: Text('Passwords do not match', style: GoogleFonts.poppins(fontSize: 11, color: AppColors.error)),
             ),
-            
+
           const SizedBox(height: 32),
           CustomButton(
             text: 'Change Password',

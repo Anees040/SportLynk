@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,7 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
-import '../../utils/snackbar_util.dart';
+
 import '../../widgets/custom_loader.dart';
 import 'confirm_booking_screen.dart';
 
@@ -27,42 +26,14 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   Map<String, dynamic>? _selectedSlot;
   int _galleryPage = 0;
   final PageController _galleryCtrl = PageController();
-  
-  // Countdown timer for slot lock (120 seconds = 2 minutes)
-  Timer? _lockTimer;
-  int _lockSecondsLeft = 0;
-  static const int _lockDuration = 120;
 
   @override
   void initState() { super.initState(); _load(); }
 
   @override
-  void dispose() { 
-    _lockTimer?.cancel();
-    if (_selectedSlotId != null) _unlockSlot(_selectedSlotId!);
-    _galleryCtrl.dispose(); 
-    super.dispose(); 
-  }
-
-  void _startLockTimer() {
-    _lockTimer?.cancel();
-    _lockSecondsLeft = _lockDuration;
-    _lockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) { timer.cancel(); return; }
-      setState(() => _lockSecondsLeft--);
-      if (_lockSecondsLeft <= 0) {
-        timer.cancel();
-        // Auto-unlock: slot expired
-        if (_selectedSlotId != null) {
-          _unlockSlot(_selectedSlotId!);
-          setState(() { _selectedSlotId = null; _selectedSlot = null; });
-          _load(_selectedDate); // refresh to show slot as available
-          if (mounted) {
-            SnackbarUtil.showError(context, 'Slot released — lock expired after 2 minutes.');
-          }
-        }
-      }
-    });
+  void dispose() {
+    _galleryCtrl.dispose();
+    super.dispose();
   }
 
   String _dateStr(DateTime d) =>
@@ -86,9 +57,8 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           _loading = false;
           // Only clear selection when changing dates
           if (isDateChange) {
-            _selectedSlotId = null; _selectedSlot = null;
-            _lockTimer?.cancel();
-            _lockSecondsLeft = 0;
+            _selectedSlotId = null;
+            _selectedSlot = null;
           } else if (prevSelectedId != null) {
             // Re-find the slot in refreshed data to keep selection alive
             final found = _slots.where((s) => s['id'] == prevSelectedId).toList();
@@ -101,64 +71,15 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     } catch (_) { if (mounted) setState(() => _loading = false); }
   }
 
-  Future<void> _handleSlotSelection(Map<String, dynamic> slot, bool isCurrentlySelected) async {
+  void _handleSlotSelection(Map<String, dynamic> slot, bool isCurrentlySelected) {
     if (isCurrentlySelected) {
-      // Deselect: unlock and cancel timer
-      _unlockSlot(slot['id']);
-      _lockTimer?.cancel();
-      setState(() { _selectedSlotId = null; _selectedSlot = null; _lockSecondsLeft = 0; });
-      _load(_selectedDate); // refresh slots
+      setState(() { _selectedSlotId = null; _selectedSlot = null; });
       return;
     }
-    // No need to manually unlock previous — backend auto-releases per-venue
-    
-    // Optimistic UI update
     setState(() {
-      if (_selectedSlotId != null) {
-        final prevIndex = _slots.indexWhere((s) => s['id'] == _selectedSlotId);
-        if (prevIndex != -1) _slots[prevIndex]['status'] = 'available';
-      }
-      _selectedSlotId = slot['id'];
+      _selectedSlotId = slot['id'] as String?;
       _selectedSlot = slot;
-      final newIndex = _slots.indexWhere((s) => s['id'] == slot['id']);
-      if (newIndex != -1) _slots[newIndex]['status'] = 'temporarily_locked';
     });
-
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final resp = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/slots/${slot['id']}/lock'),
-        headers: {'Authorization': 'Bearer $token'});
-      final data = jsonDecode(resp.body);
-      
-      if (mounted) {
-        if (data['success'] == true) {
-          // Start the countdown timer
-          _startLockTimer();
-          // Refresh slots to show updated lock states
-          _load(_selectedDate);
-        } else {
-          // Revert on failure
-          setState(() { _selectedSlotId = null; _selectedSlot = null; });
-          SnackbarUtil.showError(context, data['message'] ?? 'Failed to lock slot');
-          _load(_selectedDate);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() { _selectedSlotId = null; _selectedSlot = null; });
-        SnackbarUtil.showError(context, 'Network error while locking slot');
-      }
-    }
-  }
-
-  Future<void> _unlockSlot(String slotId) async {
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      await http.delete(
-        Uri.parse('${ApiConstants.baseUrl}/slots/$slotId/lock'),
-        headers: {'Authorization': 'Bearer $token'});
-    } catch (_) {}
   }
 
   double _parseDouble(dynamic val) {
@@ -615,11 +536,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
 
   Widget _bottomBar() {
     final slotPrice = _selectedSlot != null ? _parseDouble(_selectedSlot!['price']) : 0.0;
-    final timerStr = _lockSecondsLeft > 0 
-        ? '${(_lockSecondsLeft ~/ 60).toString().padLeft(1, '0')}:${(_lockSecondsLeft % 60).toString().padLeft(2, '0')}'
-        : null;
-    final isUrgent = _lockSecondsLeft > 0 && _lockSecondsLeft <= 30;
-    
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
       decoration: BoxDecoration(
@@ -628,40 +545,6 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           blurRadius: 12, offset: const Offset(0, -4))]),
       child: SafeArea(top: false,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          // Countdown timer bar
-          if (_selectedSlot != null && timerStr != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              margin: const EdgeInsets.only(bottom: 10),
-              decoration: BoxDecoration(
-                color: isUrgent 
-                    ? AppColors.error.withValues(alpha: 0.1)
-                    : AppColors.accentLight,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: isUrgent 
-                    ? AppColors.error.withValues(alpha: 0.3)
-                    : AppColors.accent.withValues(alpha: 0.3))),
-              child: Row(children: [
-                Icon(Icons.timer_outlined, size: 14,
-                  color: isUrgent ? AppColors.error : AppColors.accent),
-                const SizedBox(width: 6),
-                Expanded(child: Text(
-                  'Slot held for you — book within $timerStr',
-                  style: GoogleFonts.poppins(fontSize: 11,
-                    color: isUrgent ? AppColors.error : AppColors.primary,
-                    fontWeight: FontWeight.w500))),
-                // Timer countdown
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isUrgent ? AppColors.error : AppColors.accent,
-                    borderRadius: BorderRadius.circular(6)),
-                  child: Text(timerStr, style: GoogleFonts.poppins(
-                    color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
-              ]),
-            ),
-          ],
           Row(children: [
             Column(crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min, children: [
@@ -694,8 +577,6 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
 
   void _goToConfirm() {
     if (_selectedSlot == null || _venue == null) return;
-    // Cancel timer during checkout — the booking will finalize the slot
-    _lockTimer?.cancel();
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => ConfirmBookingScreen(
         venue: _venue!,
@@ -723,14 +604,12 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     'available' => const Color(0xFF22C55E),
     'booked' => const Color(0xFFF59E0B),
     'blocked' => const Color(0xFFEF4444),
-    'temporarily_locked' => const Color(0xFF3B82F6),
     _ => AppColors.disabled,
   };
 
   String _slotStatusLabel(String status) => switch (status) {
     'booked' => 'BOOKED',
     'blocked' => 'BLOCKED',
-    'temporarily_locked' => 'LOCKED',
     _ => status.toUpperCase(),
   };
 

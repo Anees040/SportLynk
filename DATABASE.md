@@ -72,9 +72,8 @@ Both have IDENTICAL schema.
 | slot_date | DATE | |
 | start_time | TIME | |
 | end_time | TIME | |
-| status | ENUM('available','booked','blocked','temporarily_locked') | DEFAULT 'available' |
-| locked_by | UUID | FK→users — Player who locked the slot |
-| locked_at | TIMESTAMP | DEFAULT NULL — Auto-released after 2 minutes |
+| status | ENUM('available','booked','blocked') | DEFAULT 'available' |
+| locked_by | UUID | FK→users (legacy, no longer used) |
 | price | DECIMAL(10,2) | |
 
 ### bookings
@@ -90,8 +89,11 @@ Both have IDENTICAL schema.
 | base_price | DECIMAL(10,2) | Price of the slot |
 | security_deposit | DECIMAL(10,2) | Amount frozen in the player's wallet |
 | total_amount | DECIMAL(10,2) | Full price of the slot |
-| status | ENUM('pending','confirmed','checked_in','completed','no_show','cancelled') | DEFAULT 'pending' |
-| qr_code | VARCHAR(512) | UUID used for venue check-in |
+| status | ENUM('pending','confirmed','checked_in','no_show','cancelled') | DEFAULT 'pending' |
+| qr_code | TEXT | UUID used for venue check-in |
+| owner_id | UUID | FK→users (denormalized for fast owner queries) |
+| checked_in_at | TIMESTAMP | Set when owner scans QR |
+| no_show_at | TIMESTAMP | Set when owner marks no-show |
 | notes | TEXT | |
 | cancelled_at | TIMESTAMP | Set on cancellation |
 | cancellation_reason | VARCHAR(255) | 'user_cancelled' or 'late_cancellation' |
@@ -123,55 +125,58 @@ Both have IDENTICAL schema.
 
 #### Transaction Types
 | Type | Meaning |
-|------|---------|
+|------|--------|
 | `topup` | Player added money to wallet |
-| `booking_payment` | Security deposit frozen at booking time |
-| `refund` | Full refund on early cancellation (>= 12 hours before slot) |
-| `escrow_release` | Late cancellation penalty deducted from player |
-| `escrow_received` | Owner receives late cancellation penalty |
+| `booking_payment` | Full deposit frozen at booking time |
+| `refund` | Full refund (early cancellation or owner rejection) |
+| `escrow_release` | Deposit deducted from player frozen balance |
+| `escrow_received` | Owner receives deposit (check-in, no-show, late cancel) |
+| `no_show_penalty` | Player's deposit forfeited for no-show |
+| `owner_payout` | Owner withdrew balance |
+| `withdrawal` | User withdrew wallet balance |
 
-## Escrow & Slot Locking Flow
+## Escrow & Booking Flow (Phase 5)
 
-### 1. Slot Selection (Optimistic Locking)
-- When a player selects a slot, the app calls `POST /api/slots/:id/lock`.
-- The status changes to `temporarily_locked`, `locked_by` is set to the player's ID, and `locked_at` to `NOW()`.
-- **Only one slot per player** — selecting a new slot auto-releases the previous one.
-- If the player doesn't complete the booking within **2 minutes**, the lock expires.
-- Expired locks are released automatically during venue fetch.
+### 1. Slot Selection (No Locking — Atomic)
+- Player selects a slot in the UI. No lock API is called.
+- When player taps 'Book Now', the backend uses `SELECT ... FOR UPDATE` to atomically claim the slot.
+- If two players book the same slot simultaneously, the second gets a 409 conflict error.
+- No `temporarily_locked` status is ever set. No timer needed.
 
-### 2. Booking (Escrow Freeze)
-When the player confirms the booking:
-1. `security_deposit` (dynamic %, based on `venue.upfront_percent`) is deducted from the player's `wallets.balance`.
-2. `security_deposit` is added to the player's `wallets.frozen_balance` (NOT the owner's wallet).
-3. A `booking_payment` transaction is recorded.
-4. Slot status changes to `booked`.
-5. Booking status is `confirmed`.
+### 2. Booking Creation (Escrow Freeze)
+1. Backend verifies slot is `available` under row-level lock.
+2. Full amount deducted from player's `wallets.balance`.
+3. Full amount added to player's `wallets.frozen_balance` (escrow).
+4. Booking created with status: `pending`, `owner_id` populated.
+5. Slot status changes to `booked`.
+6. `booking_payment` transaction recorded.
 
-### 3. Dynamic Slot Filtering
-- Slots for **past dates** are never shown (API returns empty).
-- Slots for **today** only return slots where `start_time > current PKT time`.
-- This prevents players from booking a 6 AM slot at 9 AM.
+### 3. Owner Approval
+- Owner sees booking in Pending tab with player trust score.
+- **Approve** → booking status: `confirmed`; money stays frozen.
+- **Reject** → player `frozen_balance` refunded to `balance`; slot freed; `refund` transaction.
+- **Auto-approve** after 2 hours (displayed as notice in UI).
 
-### 4. Completion (Settlement via Owner Resolution)
-When the player arrives at the venue:
-1. The owner calls `POST /api/bookings/:id/resolve` with `{ "status": "completed" }`.
-2. The `security_deposit` is deducted from the player's `frozen_balance`.
-3. The `security_deposit` is added to the owner's `balance`.
-4. Transactions are recorded for both parties.
+### 4. QR Check-in (Settlement)
+When player arrives and owner scans QR (`POST /owner/scan-qr`):
+1. `player.frozen_balance -= deposit` → `owner.balance += deposit`.
+2. `escrow_release` (player) + `escrow_received` (owner) transactions created.
+3. Booking status → `checked_in`.
 
-### 5. Cancellation (12-Hour Policy)
-**Early Cancellation** (>= 12 hours before slot):
-1. The `frozen_balance` is deducted.
-2. The same amount is added back to the player's `balance`.
-3. A `refund` transaction is created.
-4. Slot becomes `available`.
+### 5. No-Show
+`POST /owner/no-show/:id`:
+1. Same financial transfer as check-in.
+2. `player.trust_score -= 10` (via `player_profiles`).
+3. `no_show_penalty` (player) + `escrow_received` (owner) transactions.
+4. Booking status → `no_show`.
 
-**Late Cancellation** (< 12 hours before slot):
-1. The `frozen_balance` is deducted from the player.
-2. The deposit is transferred to the owner's `balance`.
-3. An `escrow_release` transaction (player) and `escrow_received` transaction (owner) are created.
-4. Slot becomes `available`.
+### 6. Cancellation (12-Hour Policy)
+**Early** (>= 12 hours before slot):
+- Full `frozen_balance` refunded to player `balance`. `refund` transaction. Slot freed.
 
-### 6. No-Show
-1. Owner calls `POST /api/bookings/:id/resolve` with `{ "status": "no_show" }`.
-2. Same financial flow as late cancellation — the deposit goes to the owner.
+**Late** (< 12 hours before slot):
+- Deposit transferred to owner. `escrow_release` + `escrow_received` transactions. Slot freed.
+
+### 7. Dynamic Slot Filtering
+- Past time slots never shown (filtered at API level using PKT time).
+- Today's slots: only `start_time > current PKT time` returned.

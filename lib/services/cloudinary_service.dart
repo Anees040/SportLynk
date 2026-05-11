@@ -15,8 +15,8 @@ class CloudinaryService {
 
   Future<String?> uploadImage(String filePath, {String folder = 'general'}) async {
     try {
-      if (AppConfig.cloudinaryCloudName == 'YOUR_CLOUD_NAME') {
-        debugPrint('Cloudinary not configured. Skipping upload.');
+      if (AppConfig.cloudinaryCloudName.isEmpty || AppConfig.cloudinaryUploadPreset.isEmpty) {
+        debugPrint('Cloudinary not configured. Skipping upload (no --dart-define provided).');
         return null;
       }
 

@@ -99,13 +99,13 @@ class TeamsScreen extends StatelessWidget {
             fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: _actionCard(Icons.emoji_events_outlined,
-              'Rankings', 'See city leaderboard', AppColors.warning,
+            Expanded(child: _actionCard('🏆', 'Rankings', 'See city leaderboard',
+              [const Color(0xFFF59E0B), const Color(0xFFD97706)],
               () => Navigator.push(context, MaterialPageRoute(
                 builder: (_) => const TeamRankingsScreen())))),
             const SizedBox(width: 10),
-            Expanded(child: _actionCard(Icons.add_circle_outline,
-              'New Team', 'Create a team', AppColors.accent,
+            Expanded(child: _actionCard('➕', 'New Team', 'Create a team',
+              [const Color(0xFF22C55E), const Color(0xFF16A34A)],
               () => Navigator.push(context, MaterialPageRoute(
                 builder: (_) => const CreateTeamScreen())))),
           ]),
@@ -148,25 +148,36 @@ class TeamsScreen extends StatelessWidget {
             color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
         ])));
 
-  Widget _actionCard(IconData icon, String title, String sub,
-    Color color, VoidCallback onTap) =>
-    GestureDetector(onTap: onTap,
+  Widget _actionCard(String emoji, String title, String sub,
+    List<Color> colors, VoidCallback onTap) =>
+    GestureDetector(
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(width: 40, height: 40,
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: color, size: 22)),
-          const SizedBox(height: 10),
-          Text(title, style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary)),
-          Text(sub, style: GoogleFonts.poppins(
-            fontSize: 11, color: AppColors.textSecondary)),
-        ])));
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: colors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(
+            color: colors.first.withValues(alpha: 0.3),
+            blurRadius: 8, offset: const Offset(0, 4))],
+        ),
+        child: Row(children: [
+          Text(emoji, style: const TextStyle(fontSize: 28)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: GoogleFonts.poppins(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(sub, style: GoogleFonts.poppins(
+              color: Colors.white70, fontSize: 11)),
+          ])),
+          const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 14),
+        ]),
+      ),
+    );
 
   Widget _challengeCard(String opp, String time, String venue, String status) {
     final isConfirmed = status == 'Confirmed';

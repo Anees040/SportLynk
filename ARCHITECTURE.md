@@ -15,12 +15,28 @@ Node.js → Cloudinary API (image uploads)
 Flutter → Firebase Auth API (OTP requests)
 
 ## Booking & Escrow Flow
-1. Player clicks 'Book Now' (deposits 30% via Wallet)
-2. Backend creates booking (status: pending)
-3. Backend deducts 30% from Player's wallet and adds to Owner's `frozen_balance` (Escrow)
-4. Owner scans QR Code at venue (status → checked_in)
-5. Owner collects remaining 70% in cash.
-6. Owner's `frozen_balance` moves to real `balance`.
+1. Player selects slot and taps 'Book Now' (no slot locking — instant DB-atomic claim)
+2. Backend uses `SELECT ... FOR UPDATE` to claim the slot — handles simultaneous bookings at microsecond level
+3. Full deposit deducted from Player's `balance` → added to Player's `frozen_balance`
+4. Booking created with status: `pending`
+5. Owner reviews booking (sees trust score) → Approve or Reject
+   - Approve → status: `confirmed`; money stays frozen
+   - Reject → player `frozen_balance` refunded to `balance`; slot freed
+   - Auto-approve after 2 hours (shown to both parties)
+6. Owner scans Player's QR code at venue (`POST /owner/scan-qr`)
+   - `player.frozen_balance -= deposit` → `owner.balance += deposit`
+   - Booking status → `checked_in`
+7. No-show: Owner marks `POST /owner/no-show/:id`
+   - Same escrow transfer as check-in
+   - Player `trust_score -= 10`
+   - Booking status → `no_show`
+
+## Race Condition Prevention (Slot Booking)
+The app does NOT use temporary slot locking (removed in Phase 5).
+Instead, PostgreSQL's `FOR UPDATE` row-level lock in the booking transaction ensures:
+- If two players book simultaneously, the second gets a clean 409 error
+- No slots can be "held" by bad actors to block availability
+- No 2-minute timers or lock expiry logic needed
 
 ## Local vs Cloud Database
 Development: LOCAL PostgreSQL (localhost:5432)

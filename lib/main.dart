@@ -25,6 +25,8 @@ import 'screens/player/venue_detail_screen.dart';
 import 'screens/player/find_opponents_screen.dart';
 import 'screens/player/team_rankings_screen.dart';
 import 'screens/player/tournaments_screen.dart';
+import 'screens/player/player_booking_detail_screen.dart';
+import 'screens/owner/owner_qr_scanner_screen.dart';
 
 /// Removes scrollbar overlay on all platforms (fixes white line on web).
 class _NoScrollbarBehavior extends MaterialScrollBehavior {
@@ -33,7 +35,7 @@ class _NoScrollbarBehavior extends MaterialScrollBehavior {
       BuildContext context, Widget child, ScrollableDetails details) {
     return child; // strips all scrollbars
   }
-  
+
   @override
   Set<PointerDeviceKind> get dragDevices => {
     PointerDeviceKind.touch,
@@ -168,6 +170,11 @@ class SportLynkApp extends StatelessWidget {
           '/find-opponents': (_) => const AuthGuard(requiredRole: 'player', child: FindOpponentsScreen()),
           '/team-rankings': (_) => const AuthGuard(requiredRole: 'player', child: TeamRankingsScreen()),
           '/tournaments': (_) => const AuthGuard(requiredRole: 'player', child: TournamentsScreen()),
+          '/booking-detail': (ctx) {
+            final args = ModalRoute.of(ctx)!.settings.arguments as Map<String, dynamic>;
+            return AuthGuard(requiredRole: 'player', child: PlayerBookingDetailScreen(bookingId: args['bookingId']));
+          },
+          '/owner-scan-qr': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerQrScannerScreen()),
         },
         ),
       ),

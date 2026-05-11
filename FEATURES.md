@@ -1,44 +1,49 @@
-# Feature Status
+# Feature Status — SportLynk
 
-## COMPLETE — Player Interface (Production Ready)
-- Database setup (local PostgreSQL + Supabase cloud — identical schema)
-- Backend architecture (Node.js + Express + JWT auth + bcrypt)
-- Auth screens & flow (Welcome, Login, Player/Owner Register, Forgot Password, OTP)
-- Phone Verification & Firebase Authentication integration
-- User Profiles & Avatar Uploads (Cloudinary)
-- Venue Listing & Filtering (Sport, City, Price Range, Rating, Sort options)
-- Venue Details (Image Gallery, Amenities, Dynamic Date/Slot Selection)
-- Wallet (Top-up, Available Balance, Frozen Balance, Full Transaction History)
-- Real-time Slot Locking (2-minute TTL, single-slot-per-player, auto-release)
-- True Escrow Booking (Dynamic % deposit freeze based on venue's `upfront_percent`)
-- Dynamic Slot Filtering (Past slots hidden based on PKT time — no stale bookings)
-- Booking creation & checkout (Wallet validation, upfront/full payment toggle)
-- Booking Management (Upcoming, Past, Cancel & Refund with pull-to-refresh)
-- 12-Hour Cancellation Penalty Policy (Early cancel = refund, Late cancel = deposit forfeited to owner)
-- Security (Password reset, change, JWT guard on all routes)
-- High-Fidelity UI Redesigns (Gradient headers, overlapping search bar, branded loaders)
-- AI Sport Recommendations (Based on player profile preferences)
-- Help & Support Screen (FAQ accordion + contact methods)
-- Custom Branded Loader (replaces all generic CircularProgressIndicator)
+## ✅ COMPLETE — Player Interface
+- Authentication (Register, Login, Phone OTP, Forgot Password)
+- Player Profile (Avatar upload via Cloudinary, sport preferences, edit inline)
+- Change Password (inline strength bar, uppercase/number validation)
+- Venue Discovery (Search, filter by sport/price/rating, sort by distance/rating)
+- Venue Details (Image gallery, amenities, date selector, slot picker)
+- Booking Flow (Wallet validation, deposit freeze, pending→confirmed flow)
+- Booking Management (Upcoming/Past tabs, cancel with 12hr penalty policy, tap for details)
+- Booking Detail Screen (Status banner, QR code display for confirmed bookings)
+- Wallet (Balance, frozen balance display, top-up, full transaction history)
+- Escrow Payment System (Deposit frozen on booking, released on check-in, forfeited on no-show)
+- 12-Hour Cancellation Policy (Early = full refund, Late = deposit forfeited to owner)
+- Help & Support Screen (FAQ accordion, contact methods)
+- Teams (UI-only: Create team, roster, find opponents, rankings)
+- Tournaments Screen (Coming Soon UI)
+- AI Sport Recommendations (Based on player preferences)
 
-## COMPLETE (UI Only — Phase 2-5)
-- Team Formation & Management
-- AI Team Recommendations
-- Matchmaking & Opponent Finding
-- City-wide Leaderboards
-- Tournaments (Coming Soon UI)
+## ✅ COMPLETE — Owner Interface  
+- Owner Home Dashboard (Stats: revenue today, bookings, pending count, AI price suggestion, wallet card, upcoming bookings)
+- Booking Requests Screen (Pending/Confirmed/Rejected tabs, trust score badges, approve/reject with player refund)
+- Slot Calendar Screen (Month grid, slot status AVAILABLE/BOOKED/BLOCKED/PAST, block/unblock slots)
+- QR Scanner Screen (Dark theme, camera scan, manual booking ID entry, success dialog with payment details, no-show marking)
+- Venue Operations Screen (Analytics with revenue chart, image gallery, venue details, financials breakdown)
+- Owner Profile Screen (Info, verification badge, logout)
+- Auto-approval flow (2-hour notice shown, pending bookings display)
+- Escrow check-in (QR scan transfers deposit to owner balance instantly)
+- No-show penalty (Trust score deduction + deposit forfeiture)
 
-## IN PROGRESS — Owner Interface (Phase 5)
-- Owner Dashboard (Stats, Earnings summary)
-- Venue Management (Create/Edit venues with photos)
-- Slot Generation (Bulk create slots for date ranges)
-- Booking Resolution (Mark bookings as completed/no_show to claim escrow)
-- Owner Wallet & Transaction View
+## ✅ COMPLETE — Backend
+- Full REST API with JWT auth and RBAC
+- Atomic booking creation (PostgreSQL FOR UPDATE — handles race conditions at microsecond level)
+- Slot locking REMOVED — no more 2-minute lock abuse; real-time DB-level conflict prevention
+- Escrow wallet system (frozen_balance, escrow_release, escrow_received)
+- Auto-migration scripts for schema updates
+- Slot management API (block/unblock per owner)
 
-## NOT STARTED
-- Push Notifications (Booking confirmations, cancellation alerts)
-- QR Code Check-in at Venue
+## 🚧 NOT STARTED
+- Push Notifications (booking confirmations, approvals, rejections)
+- Auto-approval background job (cron to auto-confirm pending after 2 hours)
+- Real payment gateway (JazzCash/EasyPaisa top-up)
+- Owner venue creation with photo upload
+- Rating & Reviews system
 
-## OUT OF SCOPE (FYP-2)
-- In-app chat
-- Payment gateway integration (JazzCash/EasyPaisa)
+## 📅 OUT OF SCOPE (FYP-2)
+- In-app chat between players and owners
+- Live GPS location tracking
+- Tournament bracket management

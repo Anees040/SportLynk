@@ -190,7 +190,10 @@ class BookingsScreenState extends State<BookingsScreen>
   Widget _bookingCard(Map<String, dynamic> b, {required bool upcoming}) {
     final status = b['status'] as String;
     final statusColor = _statusColor(status);
-    return Container(
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/booking-detail',
+          arguments: {'bookingId': b['id']}),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -252,6 +255,7 @@ class BookingsScreenState extends State<BookingsScreen>
           ],
         ])),
       ]),
+    ),
     );
   }
 
