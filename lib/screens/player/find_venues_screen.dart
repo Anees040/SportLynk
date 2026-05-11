@@ -490,7 +490,6 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
 
   Widget _aiRecommendedCard(Map<String, dynamic> v) {
     final sportType = (v['sport_type'] ?? 'sport').toString();
-    final sportColor = _sportColor(sportType);
     
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(
@@ -508,15 +507,11 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
             children: [
               // Background Image/Gradient
               Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [const Color(0xFF0A1F13), sportColor.withValues(alpha: 0.8)],
-                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                  ),
-                ),
-                child: Center(
-                  child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.1), size: 100),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF0A1F13)),
+                child: (v['venue_photos'] != null && (v['venue_photos'] as List).isNotEmpty)
+                    ? Image.network(v['venue_photos'][0], fit: BoxFit.cover, width: double.infinity, height: double.infinity,
+                        errorBuilder: (ctx, err, stack) => Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.1), size: 100)))
+                    : Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.1), size: 100)),
               ),
               // Gradient Overlay
               Container(
@@ -605,12 +600,11 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
               borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
               child: Container(
                 width: 120, height: 120,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [const Color(0xFF0A1F13), sportColor.withValues(alpha: 0.7)],
-                    begin: Alignment.topLeft, end: Alignment.bottomRight),
-                ),
-                child: Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.2), size: 48)),
+                decoration: BoxDecoration(color: const Color(0xFF0A1F13)),
+                child: (v['venue_photos'] != null && (v['venue_photos'] as List).isNotEmpty)
+                    ? Image.network(v['venue_photos'][0], fit: BoxFit.cover, width: 120, height: 120,
+                        errorBuilder: (ctx, err, stack) => Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.2), size: 48)))
+                    : Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.2), size: 48)),
               ),
             ),
             // Details Right

@@ -53,6 +53,8 @@ Both have IDENTICAL schema.
 | longitude | DECIMAL(11,8) | |
 | base_price | DECIMAL(10,2) | |
 | price_per_hour | DECIMAL(10,2) | |
+| upfront_percent | DECIMAL(5,2) | DEFAULT 30.00 — Dynamic % taken at booking |
+| discount_percent | DECIMAL(5,2) | DEFAULT 0.00 — Discount for full payment |
 | image_url | TEXT | |
 | venue_photos | TEXT[] | DEFAULT '{}' |
 | amenities | JSONB | DEFAULT '{}'::jsonb |
@@ -71,7 +73,8 @@ Both have IDENTICAL schema.
 | start_time | TIME | |
 | end_time | TIME | |
 | status | ENUM('available','booked','blocked','temporarily_locked') | DEFAULT 'available' |
-| locked_at | TIMESTAMP | DEFAULT NULL (for 5-min TTL) |
+| locked_by | UUID | FK→users — Player who locked the slot |
+| locked_at | TIMESTAMP | DEFAULT NULL — Auto-released after 2 minutes |
 | price | DECIMAL(10,2) | |
 
 ### bookings
@@ -81,40 +84,94 @@ Both have IDENTICAL schema.
 | venue_id | UUID | FK→venues |
 | player_id | UUID | FK→users |
 | slot_id | UUID | FK→slots |
-| status | ENUM('pending','confirmed','checked_in','no_show','cancelled') | DEFAULT 'pending' |
+| slot_date | DATE | Date of the booked slot |
+| start_time | TIME | Slot start time |
+| end_time | TIME | Slot end time |
+| base_price | DECIMAL(10,2) | Price of the slot |
+| security_deposit | DECIMAL(10,2) | Amount frozen in the player's wallet |
 | total_amount | DECIMAL(10,2) | Full price of the slot |
-| deposit_amount | DECIMAL(10,2) | 30% of total, deducted from player → frozen in owner wallet |
-| qr_code_hash | VARCHAR(512) | HMAC-SHA256 of bookingId |
+| status | ENUM('pending','confirmed','checked_in','completed','no_show','cancelled') | DEFAULT 'pending' |
+| qr_code | VARCHAR(512) | UUID used for venue check-in |
+| notes | TEXT | |
+| cancelled_at | TIMESTAMP | Set on cancellation |
+| cancellation_reason | VARCHAR(255) | 'user_cancelled' or 'late_cancellation' |
+| created_at | TIMESTAMP | DEFAULT NOW() |
+| updated_at | TIMESTAMP | DEFAULT NOW() |
+
+### wallets
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | UUID | PK |
+| user_id | UUID | FK→users UNIQUE |
+| balance | DECIMAL(10,2) | DEFAULT 500.00 — Available to spend/withdraw |
+| frozen_balance | DECIMAL(10,2) | DEFAULT 0.00 — Escrow holdings for active bookings |
+
+### transactions
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | UUID | PK |
+| wallet_id | UUID | FK→wallets |
+| user_id | UUID | FK→users |
+| booking_id | UUID | FK→bookings (nullable) |
+| type | VARCHAR(50) | See Transaction Types below |
+| amount | DECIMAL(10,2) | Positive = credit, Negative = debit |
+| balance_after | DECIMAL(10,2) | Wallet balance snapshot after transaction |
+| description | TEXT | Human-readable summary |
+| counterparty_name | VARCHAR(255) | Venue or player name |
+| reference_id | VARCHAR(100) | Unique reference (TRX-xxxxx) |
 | created_at | TIMESTAMP | DEFAULT NOW() |
 
-...
+#### Transaction Types
+| Type | Meaning |
+|------|---------|
+| `topup` | Player added money to wallet |
+| `booking_payment` | Security deposit frozen at booking time |
+| `refund` | Full refund on early cancellation (>= 12 hours before slot) |
+| `escrow_release` | Late cancellation penalty deducted from player |
+| `escrow_received` | Owner receives late cancellation penalty |
 
 ## Escrow & Slot Locking Flow
 
-### 1. Slot Selection (Locking)
-- When a user selects a slot, the app calls `POST /api/slots/:id/lock`.
-- The status changes to `temporarily_locked` and `locked_at` is set to `NOW()`.
-- If the user doesn't complete the booking within 5 minutes, the lock expires.
-- Expired locks are released automatically during venue fetch or via background cleanup.
+### 1. Slot Selection (Optimistic Locking)
+- When a player selects a slot, the app calls `POST /api/slots/:id/lock`.
+- The status changes to `temporarily_locked`, `locked_by` is set to the player's ID, and `locked_at` to `NOW()`.
+- **Only one slot per player** — selecting a new slot auto-releases the previous one.
+- If the player doesn't complete the booking within **2 minutes**, the lock expires.
+- Expired locks are released automatically during venue fetch.
 
-### 2. Booking (Escrow)
-- When the user confirms the booking:
-  1. 30% of `total_amount` is calculated as `deposit_amount`.
-  2. `deposit_amount` is deducted from player's `wallets.balance`.
-  3. `deposit_amount` is added to owner's `wallets.frozen_balance`.
-  4. Slot status changes to `booked`.
-  5. Booking status is `confirmed`.
+### 2. Booking (Escrow Freeze)
+When the player confirms the booking:
+1. `security_deposit` (dynamic %, based on `venue.upfront_percent`) is deducted from the player's `wallets.balance`.
+2. `security_deposit` is added to the player's `wallets.frozen_balance` (NOT the owner's wallet).
+3. A `booking_payment` transaction is recorded.
+4. Slot status changes to `booked`.
+5. Booking status is `confirmed`.
 
-### 3. Completion (Settlement)
-- When the player checks in at the venue:
-  1. The remaining 70% is paid in cash at the venue.
-  2. The owner marks the booking as `checked_in`.
-  3. The `frozen_balance` (30%) is moved to the owner's available `balance`.
+### 3. Dynamic Slot Filtering
+- Slots for **past dates** are never shown (API returns empty).
+- Slots for **today** only return slots where `start_time > current PKT time`.
+- This prevents players from booking a 6 AM slot at 9 AM.
 
-### 4. Cancellation (Refunds)
-- If the player cancels within the allowed timeframe (e.g., 24h before):
-  1. The `frozen_balance` (30%) is moved back to the player's `balance`.
-  2. Slot becomes `available`.
-- If the player cancels too late or is a `no_show`:
-  1. The `frozen_balance` (30%) is released from owner's `frozen_balance` to their available `balance` as a penalty fee.
+### 4. Completion (Settlement via Owner Resolution)
+When the player arrives at the venue:
+1. The owner calls `POST /api/bookings/:id/resolve` with `{ "status": "completed" }`.
+2. The `security_deposit` is deducted from the player's `frozen_balance`.
+3. The `security_deposit` is added to the owner's `balance`.
+4. Transactions are recorded for both parties.
 
+### 5. Cancellation (12-Hour Policy)
+**Early Cancellation** (>= 12 hours before slot):
+1. The `frozen_balance` is deducted.
+2. The same amount is added back to the player's `balance`.
+3. A `refund` transaction is created.
+4. Slot becomes `available`.
+
+**Late Cancellation** (< 12 hours before slot):
+1. The `frozen_balance` is deducted from the player.
+2. The deposit is transferred to the owner's `balance`.
+3. An `escrow_release` transaction (player) and `escrow_received` transaction (owner) are created.
+4. Slot becomes `available`.
+
+### 6. No-Show
+1. Owner calls `POST /api/bookings/:id/resolve` with `{ "status": "no_show" }`.
+2. Same financial flow as late cancellation — the deposit goes to the owner.

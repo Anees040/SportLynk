@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
@@ -26,6 +27,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   bool _loading = false;
   double _walletBalance = 0;
   bool _walletLoaded = false;
+  String _paymentType = 'upfront'; // 'upfront' or 'full'
 
   @override
   void initState() { super.initState(); _loadWallet(); }
@@ -60,8 +62,13 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
 
   Future<void> _confirmBooking() async {
     final price = _parseDouble(widget.slot['price']);
-    final deposit = double.parse((price * 0.30).toStringAsFixed(2));
-    if (_walletBalance < deposit) {
+    final upfrontPct = _parseDouble(widget.venue['upfront_percent'] ?? 30);
+    final discountPct = _parseDouble(widget.venue['discount_percent'] ?? 0);
+    final upfrontAmount = price * (upfrontPct / 100);
+    final fullAmount = price * (1 - (discountPct / 100));
+    final amountToPay = _paymentType == 'upfront' ? upfrontAmount : fullAmount;
+
+    if (_walletBalance < amountToPay) {
       SnackbarUtil.showError(context, 'Insufficient wallet balance. Please top up your wallet.');
       return;
     }
@@ -73,6 +80,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
         body: jsonEncode({
           'slotId': widget.slot['id'],
           'venueId': widget.venue['id'],
+          'paymentType': _paymentType,
         }));
       final data = jsonDecode(resp.body);
       if (mounted) {
@@ -114,9 +122,12 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   @override
   Widget build(BuildContext context) {
     final price = _parseDouble(widget.slot['price']);
-    final deposit = double.parse((price * 0.30).toStringAsFixed(2));
-    final payAtVenue = price - deposit;
-    final remainingWallet = _walletBalance - deposit;
+    final upfrontPct = _parseDouble(widget.venue['upfront_percent'] ?? 30);
+    final discountPct = _parseDouble(widget.venue['discount_percent'] ?? 0);
+    final upfrontAmount = double.parse((price * (upfrontPct / 100)).toStringAsFixed(2));
+    final fullAmount = double.parse((price * (1 - (discountPct / 100))).toStringAsFixed(2));
+    final amountToPay = _paymentType == 'upfront' ? upfrontAmount : fullAmount;
+    final remainingWallet = _walletBalance - amountToPay;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -142,7 +153,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
             child: _loading
               ? const SizedBox(width: 20, height: 20,
                   child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : Text('Pay Deposit PKR ${deposit.toStringAsFixed(0)}',
+              : Text('Pay PKR ${amountToPay.toStringAsFixed(0)}',
                   style: GoogleFonts.poppins(color: Colors.white,
                     fontWeight: FontWeight.bold, fontSize: 15)),
           )),
@@ -189,19 +200,73 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           ),
           const SizedBox(height: 16),
 
-          // ── PAYMENT BREAKDOWN ─────────────────────────────
-          _section('Payment Breakdown', [
-            _row('Base Price', 'PKR ${price.toStringAsFixed(0)}'),
-            _row('Security Deposit', 'PKR ${deposit.toStringAsFixed(0)}',
-              sub: 'REFUNDABLE', subColor: AppColors.accent),
-            const Divider(color: AppColors.border),
-            _row('Total Amount', 'PKR ${price.toStringAsFixed(0)}',
-              bold: true, valueColor: AppColors.accent),
+          // ── PAYMENT OPTIONS ───────────────────────────────
+          _section('Payment Options', [
+            // Upfront option
+            GestureDetector(
+              onTap: () => setState(() => _paymentType = 'upfront'),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _paymentType == 'upfront' ? AppColors.accentLight : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _paymentType == 'upfront' ? AppColors.accent : AppColors.border),
+                ),
+                child: Row(children: [
+                  Container(
+                    margin: const EdgeInsets.only(right: 12),
+                    width: 20, height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _paymentType == 'upfront' ? AppColors.accent : AppColors.textSecondary, width: 2),
+                    ),
+                    child: _paymentType == 'upfront' ? Center(child: Container(width: 10, height: 10, decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.accent))) : null,
+                  ),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Pay Upfront (${upfrontPct.toStringAsFixed(0)}%)', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                    Text('Pay remaining PKR ${(price - upfrontAmount).toStringAsFixed(0)} at venue', style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
+                  ])),
+                  Text('PKR ${upfrontAmount.toStringAsFixed(0)}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.accent)),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Full Advance option
+            GestureDetector(
+              onTap: () => setState(() => _paymentType = 'full'),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _paymentType == 'full' ? AppColors.accentLight : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _paymentType == 'full' ? AppColors.accent : AppColors.border),
+                ),
+                child: Row(children: [
+                  Container(
+                    margin: const EdgeInsets.only(right: 12),
+                    width: 20, height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _paymentType == 'full' ? AppColors.accent : AppColors.textSecondary, width: 2),
+                    ),
+                    child: _paymentType == 'full' ? Center(child: Container(width: 10, height: 10, decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.accent))) : null,
+                  ),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Pay Full Advance', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                    if (discountPct > 0)
+                      Text('Get ${discountPct.toStringAsFixed(0)}% OFF!', style: GoogleFonts.poppins(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold))
+                    else
+                      Text('Skip the payment at venue', style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
+                  ])),
+                  Text('PKR ${fullAmount.toStringAsFixed(0)}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.accent)),
+                ]),
+              ),
+            ),
           ]),
           const SizedBox(height: 16),
 
           // ── PAYMENT METHOD ────────────────────────────────
-          _section('Payment Method', [
+          _section('Wallet Balance', [
             Row(children: [
               Container(width: 42, height: 42,
                 decoration: BoxDecoration(color: AppColors.accentLight,
@@ -215,7 +280,6 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                 Text('Available: PKR ${_walletBalance.toStringAsFixed(0)}',
                   style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
               ])),
-              const Icon(Icons.check_circle, color: AppColors.accent, size: 20),
             ]),
             if (_walletLoaded) ...[
               const SizedBox(height: 12),
@@ -224,22 +288,12 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                 decoration: BoxDecoration(color: AppColors.inputFill,
                   borderRadius: BorderRadius.circular(10)),
                 child: Column(children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('Total Slot Price', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-                    Text('PKR ${price.toStringAsFixed(0)}', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ]),
-                  const SizedBox(height: 8),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('Pay at Venue (70%)', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-                    Text('PKR ${payAtVenue.toStringAsFixed(0)}', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ]),
-                  const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(height: 1)),
                   Row(children: [
                     Expanded(child: Column(children: [
-                      Text('ADVANCE (30%)', style: GoogleFonts.poppins(fontSize: 9,
+                      Text('PAYMENT', style: GoogleFonts.poppins(fontSize: 9,
                         color: AppColors.textSecondary, letterSpacing: 0.5)),
                       const SizedBox(height: 2),
-                      Text('- PKR ${deposit.toStringAsFixed(0)}',
+                      Text('- PKR ${amountToPay.toStringAsFixed(0)}',
                         style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
                           color: AppColors.error)),
                     ])),
@@ -304,25 +358,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     ]),
   );
 
-  Widget _row(String label, String value,
-    {String? sub, Color? subColor, bool bold = false, Color? valueColor}) =>
-    Padding(padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Row(children: [
-          Text(label, style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
-          if (sub != null) ...[
-            const SizedBox(width: 6),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(color: (subColor ?? AppColors.accent).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4)),
-              child: Text(sub, style: GoogleFonts.poppins(fontSize: 9,
-                color: subColor ?? AppColors.accent, fontWeight: FontWeight.bold))),
-          ],
-        ]),
-        Text(value, style: GoogleFonts.poppins(fontSize: 13,
-          fontWeight: bold ? FontWeight.bold : FontWeight.w500,
-          color: valueColor ?? AppColors.textPrimary)),
-      ]));
+
 
   String _fmtDate(DateTime d) {
     const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -392,16 +428,33 @@ class _BookingSuccessScreen extends StatelessWidget {
                       fontSize: 10, color: AppColors.textSecondary,
                       letterSpacing: 1, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 12),
-                    // Large readable code
+                    // QR Code + Manual Code
+                    SizedBox(
+                      width: 160, height: 160,
+                      child: QrImageView(
+                        data: bookingId,
+                        version: QrVersions.auto,
+                        size: 160,
+                        gapless: false,
+                        errorStateBuilder: (cxt, err) {
+                          return const Center(child: Text('Uh oh! Something went wrong...'));
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('OR MANUAL CODE:', style: GoogleFonts.poppins(
+                      fontSize: 10, color: AppColors.textSecondary,
+                      letterSpacing: 1, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                       decoration: BoxDecoration(
                         color: AppColors.primary,
                         borderRadius: BorderRadius.circular(12)),
                       child: Text(manualCode,
                         style: GoogleFonts.poppins(
-                          fontSize: 32, fontWeight: FontWeight.bold,
-                          color: Colors.white, letterSpacing: 6)),
+                          fontSize: 24, fontWeight: FontWeight.bold,
+                          color: Colors.white, letterSpacing: 4)),
                     ),
                     const SizedBox(height: 16),
                     const Divider(color: AppColors.border),
@@ -434,8 +487,8 @@ class _BookingSuccessScreen extends StatelessWidget {
                 SizedBox(width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
-                      // Pop back to player home
-                      Navigator.of(context).popUntil((route) => route.isFirst);
+                      // Push and remove until to trigger a clean rebuild and reload of home data
+                      Navigator.of(context).pushNamedAndRemoveUntil('/player-home', (route) => false);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,

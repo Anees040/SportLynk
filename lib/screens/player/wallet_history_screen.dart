@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/custom_loader.dart';
 
 class WalletHistoryScreen extends StatefulWidget {
   const WalletHistoryScreen({super.key});
@@ -80,7 +81,7 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
               }).toList())))),
       ),
       body: _loading
-        ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+        ? const CustomLoader()
         : _txns.isEmpty
           ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.disabled),
@@ -102,9 +103,13 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
   Widget _txnCard(Map<String, dynamic> t) {
     final type = t['type'] as String;
     final amount = _parseDouble(t['amount']);
-    final isCredit = ['topup', 'refund'].contains(type);
-    final label = _label(type);
-    final color = isCredit ? AppColors.success : AppColors.error;
+    final isCredit = ['topup', 'refund', 'escrow_received'].contains(type);
+    final isFrozen = type == 'booking_payment';
+    
+    final label = isFrozen ? 'Security Deposit' : _label(type);
+    final color = isFrozen ? Colors.orange : (isCredit ? AppColors.success : AppColors.error);
+    final iconData = isFrozen ? Icons.lock_outline : _icon(type);
+    
     return GestureDetector(
       onTap: () => _showDetail(t),
       child: Container(
@@ -116,7 +121,7 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
           Container(width: 44, height: 44,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-            child: Icon(_icon(type), color: color, size: 20)),
+            child: Icon(iconData, color: color, size: 20)),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: GoogleFonts.poppins(
@@ -129,7 +134,7 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
               style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary)),
           ])),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('${isCredit ? '+' : ''}PKR ${amount.abs().toStringAsFixed(0)}',
+            Text(isFrozen ? 'Frozen ${amount.abs().toStringAsFixed(0)}' : '${isCredit ? '+' : ''}PKR ${amount.abs().toStringAsFixed(0)}',
               style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
                 color: color)),
             if (t['reference_id'] != null)

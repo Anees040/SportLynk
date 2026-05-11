@@ -8,6 +8,7 @@ import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/custom_loader.dart';
 import 'confirm_booking_screen.dart';
 
 class VenueDetailScreen extends StatefulWidget {
@@ -69,7 +70,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
 
   Future<void> _load([DateTime? date]) async {
     final isDateChange = date != null && _dateStr(date) != _dateStr(_selectedDate);
-    setState(() => _loading = true);
+    if (_venue == null || isDateChange) setState(() => _loading = true);
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       final d = date ?? _selectedDate;
@@ -113,8 +114,14 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     
     // Optimistic UI update
     setState(() {
+      if (_selectedSlotId != null) {
+        final prevIndex = _slots.indexWhere((s) => s['id'] == _selectedSlotId);
+        if (prevIndex != -1) _slots[prevIndex]['status'] = 'available';
+      }
       _selectedSlotId = slot['id'];
       _selectedSlot = slot;
+      final newIndex = _slots.indexWhere((s) => s['id'] == slot['id']);
+      if (newIndex != -1) _slots[newIndex]['status'] = 'temporarily_locked';
     });
 
     try {
@@ -204,7 +211,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(backgroundColor: AppColors.background,
-        body: const Center(child: CircularProgressIndicator(color: AppColors.accent)));
+        body: const CustomLoader());
     }
     if (_venue == null) {
       return Scaffold(appBar: AppBar(backgroundColor: AppColors.primary,
@@ -319,7 +326,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
 
           // ── VENUE INFO CARD ──────────────────────────────
           SliverToBoxAdapter(
-            child: Transform.translate(offset: const Offset(0, -20),
+            child: Transform.translate(offset: const Offset(0, 0),
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 padding: const EdgeInsets.all(18),

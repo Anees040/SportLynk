@@ -1,0 +1,3 @@
+ALTER TABLE venues 
+ADD COLUMN upfront_percent NUMERIC DEFAULT 30,
+ADD COLUMN discount_percent NUMERIC DEFAULT 0;

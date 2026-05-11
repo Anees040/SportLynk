@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
@@ -67,14 +68,14 @@ class BookingsScreenState extends State<BookingsScreen>
         final now = DateTime.now();
         setState(() {
           _upcoming = all.where((b) {
-            final d = DateTime.tryParse(b['slot_date'] ?? '');
+            final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
             return d != null && !d.isBefore(DateTime(now.year, now.month, now.day))
               && ['confirmed','pending'].contains(b['status']);
           }).toList();
           _past = all.where((b) {
-            final d = DateTime.tryParse(b['slot_date'] ?? '');
+            final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
             return d == null || d.isBefore(DateTime(now.year, now.month, now.day))
-              || ['cancelled','no_show','checked_in','refunded'].contains(b['status']);
+              || ['cancelled','no_show','checked_in','completed','refunded'].contains(b['status']);
           }).toList();
           _loading = false;
         });
@@ -160,7 +161,7 @@ class BookingsScreenState extends State<BookingsScreen>
     }
     return RefreshIndicator(color: AppColors.accent, onRefresh: _load,
       child: ListView.builder(
-        physics: const BouncingScrollPhysics(),
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         padding: const EdgeInsets.all(16),
         itemCount: items.length,
         itemBuilder: (_, i) => _bookingCard(items[i], upcoming: upcoming),
@@ -171,6 +172,12 @@ class BookingsScreenState extends State<BookingsScreen>
     if (val == null) return 0.0;
     if (val is num) return val.toDouble();
     return double.tryParse(val.toString()) ?? 0.0;
+  }
+
+  String _fmtSlotDate(String isoStr) {
+    final d = DateTime.tryParse(isoStr);
+    if (d == null) return isoStr;
+    return DateFormat('dd MMM, yyyy').format(d.toLocal());
   }
 
   String _safeTime(dynamic t) {
@@ -215,7 +222,7 @@ class BookingsScreenState extends State<BookingsScreen>
         Padding(padding: const EdgeInsets.all(14), child: Column(children: [
           Row(children: [
             _infoItem(Icons.calendar_today_outlined,
-              b['slot_date'] ?? ''),
+              _fmtSlotDate(b['slot_date'] ?? '')),
             const SizedBox(width: 20),
             _infoItem(Icons.access_time_outlined,
               '${_safeTime(b['start_time'])} – ${_safeTime(b['end_time'])}'),

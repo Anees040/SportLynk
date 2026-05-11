@@ -246,10 +246,13 @@ class _WalletScreenState extends State<WalletScreen> {
   Widget _txnTile(Map<String, dynamic> t) {
     final type = t['type'] as String;
     final amount = _parseDouble(t['amount']);
-    final isCredit = ['topup', 'refund'].contains(type);
-    final icon = _txnIcon(type);
-    final color = _txnColor(type);
-    final label = _txnLabel(type);
+    final isCredit = ['topup', 'refund', 'escrow_received'].contains(type);
+    final isFrozen = type == 'booking_payment';
+
+    final icon = isFrozen ? Icons.lock_outline : _txnIcon(type);
+    final color = isFrozen ? Colors.orange : (isCredit ? AppColors.success : AppColors.error);
+    final label = isFrozen ? 'Security Deposit' : _txnLabel(type);
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
@@ -268,9 +271,9 @@ class _WalletScreenState extends State<WalletScreen> {
           Text(_fmtDate(t['created_at']),
             style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
         ])),
-        Text('${isCredit ? '+' : '-'}PKR ${amount.abs().toStringAsFixed(0)}',
+        Text(isFrozen ? 'Frozen ${amount.abs().toStringAsFixed(0)}' : '${isCredit ? '+' : ''}PKR ${amount.abs().toStringAsFixed(0)}',
           style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
-            color: isCredit ? AppColors.success : AppColors.error)),
+            color: color)),
       ]),
     );
   }
@@ -284,14 +287,6 @@ class _WalletScreenState extends State<WalletScreen> {
     _ => Icons.swap_horiz,
   };
 
-  Color _txnColor(String t) => switch (t) {
-    'topup' => AppColors.success,
-    'booking_payment' => AppColors.error,
-    'security_deposit' => AppColors.warning,
-    'refund' => AppColors.accent,
-    'no_show_penalty' => AppColors.error,
-    _ => AppColors.textSecondary,
-  };
 
   String _txnLabel(String t) => switch (t) {
     'topup' => 'Wallet Top-up',

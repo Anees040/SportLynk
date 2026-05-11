@@ -92,9 +92,23 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
        AND locked_at < NOW() - INTERVAL '2 minutes'`,
       [id, slotDate]);
       
-    const slots = await pool.query(
-      `SELECT * FROM slots WHERE venue_id=$1 AND slot_date=$2 ORDER BY start_time`,
-      [id, slotDate]);
+    // Calculate current PKT time for dynamic filtering
+    const now = new Date();
+    const pktNow = new Date(now.getTime() + (5 * 60 * 60 * 1000));
+    const todayLocalStr = pktNow.toISOString().split('T')[0];
+    const nowTimeStr = pktNow.toISOString().split('T')[1].split('.')[0]; // HH:mm:ss
+    
+    let slots = { rows: [] };
+    if (slotDate > todayLocalStr) {
+      slots = await pool.query(
+        `SELECT * FROM slots WHERE venue_id=$1 AND slot_date=$2 ORDER BY start_time`,
+        [id, slotDate]);
+    } else if (slotDate === todayLocalStr) {
+      slots = await pool.query(
+        `SELECT * FROM slots WHERE venue_id=$1 AND slot_date=$2 AND start_time > $3 ORDER BY start_time`,
+        [id, slotDate, nowTimeStr]);
+    } // If slotDate < todayLocalStr, returns empty slots array
+
     res.json({ success:true, data: { ...venue.rows[0], slots: slots.rows } });
   } catch(e){ next(e); }
 });

@@ -13,6 +13,7 @@ import '../../widgets/custom_button.dart';
 import '../../services/cloudinary_service.dart';
 import 'trust_score_screen.dart';
 import '../../utils/snackbar_util.dart';
+import 'help_support_screen.dart';
 
 class PlayerProfileScreen extends StatefulWidget {
   const PlayerProfileScreen({super.key});
@@ -415,7 +416,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
                   _actionTile(Icons.lock_outline, 'Change Password', onTap: _showChangePasswordModal),
                   const Divider(height: 1, indent: 56),
                   _actionTile(Icons.help_outline, 'Help & Support', onTap: () {
-                    SnackbarUtil.showSuccess(context, 'Help & Support coming soon!');
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpSupportScreen()));
                   }),
                   const Divider(height: 1, indent: 56),
                   _actionTile(Icons.logout, 'Log Out', isDestructive: true, onTap: _logout),
