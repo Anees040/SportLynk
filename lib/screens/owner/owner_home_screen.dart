@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
+import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import 'owner_booking_requests_screen.dart';
 import 'owner_slot_calendar_screen.dart';
@@ -21,7 +22,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
   int _tab = 0;
   Map<String, dynamic>? _data;
   bool _loading = true;
-  static const _base = 'http://10.0.2.2:3000/api';
+  static String get _base => ApiConstants.baseUrl;
 
   @override
   void initState() {

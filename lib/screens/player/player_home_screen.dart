@@ -258,25 +258,39 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Quick Actions', style: GoogleFonts.poppins(
                   fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 Row(children: [
-                  Expanded(child: _quickAction('⚽', 'Book a\nVenue',
-                    [const Color(0xFF22C55E), const Color(0xFF16A34A)],
-                    () => Navigator.pushNamed(context, '/find-venues'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: _quickAction('👥', 'Find\nOpponent',
-                    [const Color(0xFF6366F1), const Color(0xFF4F46E5)],
-                    () => Navigator.pushNamed(context, '/find-opponents'))),
-                ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: _quickAction('🏆', 'Join\nTournament',
-                    [const Color(0xFFF59E0B), const Color(0xFFD97706)],
-                    () => Navigator.pushNamed(context, '/tournaments'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: _quickAction('📊', 'View\nRankings',
-                    [const Color(0xFFEC4899), const Color(0xFFBE185D)],
-                    () => Navigator.pushNamed(context, '/team-rankings'))),
+                  _quickActionTile(
+                    Icons.search_rounded,
+                    'Book Venue',
+                    const Color(0xFF22C55E),
+                    const Color(0xFFDCFCE7),
+                    () => Navigator.pushNamed(context, '/find-venues'),
+                  ),
+                  const SizedBox(width: 10),
+                  _quickActionTile(
+                    Icons.sports_kabaddi,
+                    'Opponent',
+                    const Color(0xFF6366F1),
+                    const Color(0xFFE0E7FF),
+                    () => Navigator.pushNamed(context, '/find-opponents'),
+                  ),
+                  const SizedBox(width: 10),
+                  _quickActionTile(
+                    Icons.emoji_events_rounded,
+                    'Tournament',
+                    const Color(0xFFF59E0B),
+                    const Color(0xFFFEF3C7),
+                    () => Navigator.pushNamed(context, '/tournaments'),
+                  ),
+                  const SizedBox(width: 10),
+                  _quickActionTile(
+                    Icons.leaderboard_rounded,
+                    'Rankings',
+                    const Color(0xFFEC4899),
+                    const Color(0xFFFCE7F3),
+                    () => Navigator.pushNamed(context, '/team-rankings'),
+                  ),
                 ]),
               ]),
             ),
@@ -320,38 +334,53 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     );
   }
 
-  Widget _quickAction(String emoji, String label, List<Color> gradientColors, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 110,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradientColors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+  Widget _quickActionTile(
+    IconData icon,
+    String label,
+    Color iconColor,
+    Color bgColor,
+    VoidCallback onTap,
+  ) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: gradientColors.first.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: iconColor, size: 22),
             ),
-          ],
+            const SizedBox(height: 8),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+                height: 1.2,
+              ),
+            ),
+          ]),
         ),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text(emoji, style: const TextStyle(fontSize: 40)),
-          const SizedBox(height: 8),
-          Text(label, textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              height: 1.2,
-              shadows: [const Shadow(color: Colors.black26, blurRadius: 4)],
-            )),
-        ]),
       ),
     );
   }

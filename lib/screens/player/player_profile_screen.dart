@@ -564,15 +564,30 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       if (mounted) {
         setState(() => _saving = false);
         if (data['success'] == true) {
+          // Pop the sheet first
           Navigator.pop(context);
-          SnackbarUtil.showSuccess(context, 'Your password has been changed securely.');
+          // Then show success snackbar on the parent scaffold
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Row(children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Text('Password changed successfully!',
+                    style: GoogleFonts.poppins(color: Colors.white, fontSize: 13)),
+              ]),
+              backgroundColor: AppColors.accent,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              margin: const EdgeInsets.all(16),
+            ));
+          });
         } else {
           _showError(data['message'] ?? 'Failed to change password');
         }
       }
     } catch (e) {
       if (mounted) {
-        setState(() { _saving = false; _errorMsg = 'Network Error: $e'; });
+        setState(() { _saving = false; _errorMsg = 'Network error. Check your connection.'; });
       }
     }
   }

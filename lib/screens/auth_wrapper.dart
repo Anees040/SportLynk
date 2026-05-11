@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import 'auth/welcome_screen.dart';
 import 'player/player_home_screen.dart';
 import 'owner/owner_home_screen.dart';
+import 'admin/admin_home_screen.dart';
 
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
@@ -82,6 +83,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         if (auth.isAuthenticated) {
+          if (auth.userRole == 'admin') {
+            return const AdminHomeScreen();
+          }
           if (auth.userRole == 'owner') {
             return const OwnerHomeScreen();
           }

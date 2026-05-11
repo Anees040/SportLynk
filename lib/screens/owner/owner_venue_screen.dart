@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
+import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 
 class OwnerVenueScreen extends StatefulWidget {
@@ -16,7 +17,7 @@ class _OwnerVenueScreenState extends State<OwnerVenueScreen> {
   Map<String, dynamic>? _venue;
   Map<String, dynamic>? _analytics;
   bool _loading = true;
-  static const _base = 'http://10.0.2.2:3000/api';
+  static String get _base => ApiConstants.baseUrl;
 
   @override
   void initState() {

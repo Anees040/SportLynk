@@ -12,14 +12,13 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
 });
 
-const VIDEO_URL = "https://www.w3schools.com/html/mov_bbb.mp4";
-
+// Working Unsplash photo URLs (direct CDN format)
 const DUMMY_VENUES = [
   {
     name: "F-11 Markaz Football Arena",
     sport: "football",
     city: "Islamabad",
-    address: "F-11 Markaz",
+    address: "F-11 Markaz, Islamabad",
     lat: 33.6844,
     lng: 73.0479,
     price: 2000,
@@ -27,19 +26,13 @@ const DUMMY_VENUES = [
     rating: 4.8,
     rev: 124,
     hours: [16, 23],
-    amenities: {
-      lights: true,
-      parking: true,
-      washroom: true,
-      equipment: "Ball, Bibs",
-    },
+    amenities: { lights: true, parking: true, washroom: true, equipment: "Ball, Bibs" },
     photos: [
-      "https://images.unsplash.com/photo-1546519638-68e109498ffc?w=800&q=80",
-      "https://images.unsplash.com/photo-1459865264687-595d652de67e?w=800&q=80",
-      "https://images.unsplash.com/photo-1560272564-c83b66b1ad12?w=800&q=80",
+      "https://images.unsplash.com/photo-1459865264687-595d652de67e?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1574629810360-7efbb1924043?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1553778263-73a83bab9b0c?auto=format&fit=crop&w=800",
     ],
   },
-
   {
     name: "Jinnah Sports Complex",
     sport: "football",
@@ -54,11 +47,11 @@ const DUMMY_VENUES = [
     hours: [8, 22],
     amenities: { lights: true, lockers: true, seating: true },
     photos: [
-      "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80",
-      "https://images.unsplash.com/photo-1519766304817-4f37bda74a26?w=800&q=80",
+      "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1543326727-cf6c39e8f84c?auto=format&fit=crop&w=800",
     ],
   },
-
   {
     name: "Centaurus Kickoff",
     sport: "football",
@@ -70,19 +63,19 @@ const DUMMY_VENUES = [
     type: "turf",
     rating: 4.9,
     rev: 210,
-    hours: [10, 24],
+    hours: [10, 23],
     amenities: { lights: true, cafe: true, parking: true },
     photos: [
-      "https://images.unsplash.com/photo-1459865264687-595d652de67e?w=800&q=80",
-      "https://images.unsplash.com/photo-1574629810360-7efbb1924043?w=800&q=80",
+      "https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1459865264687-595d652de67e?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1553778263-73a83bab9b0c?auto=format&fit=crop&w=800",
     ],
   },
-
   {
     name: "Bahria Town Futsal",
     sport: "football",
     city: "Rawalpindi",
-    address: "Phase 4, Bahria",
+    address: "Phase 4, Bahria Town",
     lat: 33.5516,
     lng: 73.1166,
     price: 1800,
@@ -92,16 +85,16 @@ const DUMMY_VENUES = [
     hours: [14, 22],
     amenities: { lights: true, parking: true },
     photos: [
-      "https://images.unsplash.com/photo-1529900748604-07564a03e7a6?w=800&q=80",
-      "https://images.unsplash.com/photo-1560272564-c83b66b1ad12?w=800&q=80",
+      "https://images.unsplash.com/photo-1574629810360-7efbb1924043?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=800",
     ],
   },
-
   {
     name: "DHA Phase 2 Arena",
     sport: "football",
     city: "Islamabad",
-    address: "DHA Phase 2",
+    address: "DHA Phase 2, Islamabad",
     lat: 33.535,
     lng: 73.15,
     price: 2200,
@@ -111,16 +104,16 @@ const DUMMY_VENUES = [
     hours: [12, 23],
     amenities: { lights: true, ac: true, washroom: true },
     photos: [
-      "https://images.unsplash.com/photo-1560272564-c83b66b1ad12?w=800&q=80",
-      "https://images.unsplash.com/photo-1574629810360-7efbb1924043?w=800&q=80",
+      "https://images.unsplash.com/photo-1543326727-cf6c39e8f84c?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1529900748604-07564a03e7a6?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1574629810360-7efbb1924043?auto=format&fit=crop&w=800",
     ],
   },
-
   {
     name: "Diamond Cricket Ground",
     sport: "cricket",
     city: "Islamabad",
-    address: "Sector G-8/2",
+    address: "Sector G-8/2, Islamabad",
     lat: 33.694,
     lng: 73.05,
     price: 3500,
@@ -130,16 +123,16 @@ const DUMMY_VENUES = [
     hours: [6, 18],
     amenities: { pavilion: true, pitch: "grass", parking: true },
     photos: [
-      "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800&q=80",
-      "https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=800&q=80",
+      "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1624526267942-ab0f0b580098?auto=format&fit=crop&w=800",
     ],
   },
-
   {
     name: "Shalimar Cricket Academy",
     sport: "cricket",
     city: "Islamabad",
-    address: "F-7 Markaz",
+    address: "F-7 Markaz, Islamabad",
     lat: 33.72,
     lng: 73.055,
     price: 2800,
@@ -149,16 +142,16 @@ const DUMMY_VENUES = [
     hours: [9, 21],
     amenities: { lights: true, bowling_machine: true, nets: 4 },
     photos: [
-      "https://images.unsplash.com/photo-1624526267942-ab0f0b580098?w=800&q=80",
-      "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80",
+      "https://images.unsplash.com/photo-1624526267942-ab0f0b580098?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=800",
     ],
   },
-
   {
     name: "Rawalpindi Cricket Nets",
     sport: "cricket",
     city: "Rawalpindi",
-    address: "Stadium Road",
+    address: "Stadium Road, Rawalpindi",
     lat: 33.64,
     lng: 73.076,
     price: 1500,
@@ -168,16 +161,16 @@ const DUMMY_VENUES = [
     hours: [10, 22],
     amenities: { lights: true, coaching: true },
     photos: [
-      "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800&q=80",
-      "https://images.unsplash.com/photo-1624526267942-ab0f0b580098?w=800&q=80",
+      "https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1624526267942-ab0f0b580098?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800",
     ],
   },
-
   {
     name: "Bahria Cricket Arena",
     sport: "cricket",
     city: "Rawalpindi",
-    address: "Phase 7, Bahria",
+    address: "Phase 7, Bahria Town",
     lat: 33.53,
     lng: 73.12,
     price: 2200,
@@ -187,16 +180,16 @@ const DUMMY_VENUES = [
     hours: [7, 19],
     amenities: { parking: true, seating: true },
     photos: [
-      "https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=800&q=80",
-      "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800&q=80",
+      "https://images.unsplash.com/photo-1624526267942-ab0f0b580098?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800",
     ],
   },
-
   {
     name: "Margalla Cricket Club",
     sport: "cricket",
     city: "Islamabad",
-    address: "F-9 Park",
+    address: "F-9 Park, Islamabad",
     lat: 33.705,
     lng: 73.015,
     price: 4000,
@@ -206,45 +199,49 @@ const DUMMY_VENUES = [
     hours: [6, 20],
     amenities: { lights: true, pavilion: true, parking: true, washroom: true },
     photos: [
-      "https://images.unsplash.com/photo-1624526267942-ab0f0b580098?w=800&q=80",
-      "https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=800&q=80",
-      "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800&q=80",
+      "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1624526267942-ab0f0b580098?auto=format&fit=crop&w=800",
+      "https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=800",
     ],
   },
 ];
 
 async function seed() {
+  const client = await pool.connect();
   try {
     console.log("Connecting to DB...");
-    await pool.query("DELETE FROM wallet_transactions");
-    await pool.query("DELETE FROM transactions");
-    await pool.query("DELETE FROM bookings");
-    await pool.query("DELETE FROM venues"); // Cascades to slots
 
-    // Find owner
-    const ownerRes = await pool.query(
-      "SELECT id FROM users WHERE role='owner' LIMIT 1",
+    // Find owner — use first owner found (preserves all users)
+    const ownerRes = await client.query(
+      "SELECT id FROM users WHERE role='owner' LIMIT 1"
     );
     const ownerId = ownerRes.rows.length > 0 ? ownerRes.rows[0].id : null;
 
     if (!ownerId) {
-      console.log("No owner found. Run seed_users.js first.");
+      console.log("No owner found. Register an owner account first.");
       return;
     }
 
-    console.log("Inserting venues...");
+    console.log(`Using owner ID: ${ownerId}`);
+
+    // Only delete venues (and cascade slots/bookings) — NOT users or wallets
+    await client.query("DELETE FROM transactions WHERE booking_id IN (SELECT id FROM bookings WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1))", [ownerId]);
+    await client.query("DELETE FROM bookings WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1)", [ownerId]);
+    await client.query("DELETE FROM slots WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1)", [ownerId]);
+    await client.query("DELETE FROM venues WHERE owner_id = $1", [ownerId]);
+
+    console.log("Inserting venues with working photo URLs...");
     for (const v of DUMMY_VENUES) {
       const amenitiesJson = JSON.stringify(v.amenities);
 
-      const res = await pool.query(
-        `
-        INSERT INTO venues (
+      const res = await client.query(
+        `INSERT INTO venues (
           owner_id, name, description, sport_type, city, address,
           latitude, longitude, base_price, current_price, price_per_hour,
-          image_url, venue_photos, video_url, is_active, rating, total_reviews, ground_type, amenities
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-        RETURNING id
-      `,
+          image_url, venue_photos, is_active,
+          rating, total_reviews, ground_type, amenities
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, $14, $15, $16, $17)
+        RETURNING id`,
         [
           ownerId,
           v.name,
@@ -259,55 +256,46 @@ async function seed() {
           v.price,
           v.photos[0],
           v.photos,
-          VIDEO_URL,
-          true,
           v.rating,
           v.rev,
           v.type,
           amenitiesJson,
-        ],
+        ]
       );
 
       const venueId = res.rows[0].id;
-
       const startHr = v.hours[0];
       const endHr = v.hours[1];
 
-      // Seed 7 days
-      for (let day = 0; day <= 7; day++) {
+      // Seed 14 days of slots
+      for (let day = 0; day <= 14; day++) {
         for (let hour = startHr; hour < endHr; hour++) {
-          const isPeak = hour >= 18 && hour <= 21;
-          const slotPrice = isPeak ? v.price * 1.2 : v.price;
+          const isPeak = hour >= 17 && hour <= 21;
+          const slotPrice = isPeak ? Math.round(v.price * 1.2) : v.price;
 
-          // Random status but mostly available
-          const rand = Math.random();
-          let status = "available";
-          if (rand > 0.8) status = "booked";
-          else if (rand > 0.9) status = "temporarily_locked";
-          else if (rand > 0.95) status = "blocked";
-
-          await pool.query(
-            `
-            INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status)
-            VALUES ($1, CURRENT_DATE + $2::integer, $3::time, $4::time, $5, $6)
-          `,
+          await client.query(
+            `INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status)
+             VALUES ($1, CURRENT_DATE + $2::integer, $3::time, $4::time, $5, 'available')
+             ON CONFLICT DO NOTHING`,
             [
               venueId,
               day,
-              `${hour}:00:00`,
-              `${hour + 1}:00:00`,
+              `${hour.toString().padStart(2, "0")}:00:00`,
+              `${(hour + 1).toString().padStart(2, "0")}:00:00`,
               slotPrice,
-              status,
-            ],
+            ]
           );
         }
       }
+      console.log(`  ✓ ${v.name} — ${14 * (endHr - startHr)} slots created`);
     }
 
-    console.log("Successfully seeded venues and slots.");
+    console.log("\n✅ Successfully seeded venues and slots with working photo URLs.");
+    console.log("   Player/Owner accounts preserved.");
   } catch (e) {
-    console.error("Seeding error:", e);
+    console.error("Seeding error:", e.message);
   } finally {
+    client.release();
     pool.end();
   }
 }

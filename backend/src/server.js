@@ -21,6 +21,7 @@ const walletRoutes = require("./routes/wallet");
 const playerRoutes = require("./routes/player");
 const userRoutes = require("./routes/users");
 const slotRoutes = require("./routes/slotLock");
+const { startNoShowJob } = require("./jobs/noShowJob");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/venues", venueRoutes);
@@ -52,4 +53,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 SportLynk API running on port ${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
+  // Start background jobs
+  startNoShowJob();
 });

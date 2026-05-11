@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/colors.dart';
+import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 
 class OwnerProfileScreen extends StatefulWidget {
@@ -286,7 +287,7 @@ class _OwnerChangePasswordSheetState extends State<_OwnerChangePasswordSheet> {
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       final resp = await http.post(
-        Uri.parse('http://10.0.2.2:3000/api/users/me/change-password'),
+        Uri.parse('${ApiConstants.baseUrl}/users/me/change-password'),
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
         body: jsonEncode({'currentPassword': cur, 'newPassword': newP}));
       final data = jsonDecode(resp.body);
@@ -386,7 +387,7 @@ class _OwnerEditProfileSheetState extends State<_OwnerEditProfileSheet> {
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       final resp = await http.patch(
-        Uri.parse('http://10.0.2.2:3000/api/users/me/update'),
+        Uri.parse('${ApiConstants.baseUrl}/users/me/update'),
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
         body: jsonEncode({'name': _nameCtrl.text.trim(), 'email': _emailCtrl.text.trim()}));
       final data = jsonDecode(resp.body);

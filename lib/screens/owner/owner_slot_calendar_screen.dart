@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
+import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 
 class OwnerSlotCalendarScreen extends StatefulWidget {
@@ -16,7 +17,7 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
   DateTime _selectedDate = DateTime.now();
   List<Map<String, dynamic>> _slots = [];
   bool _loading = false;
-  static const _base = 'http://10.0.2.2:3000/api';
+  static String get _base => ApiConstants.baseUrl;
 
   @override
   void initState() {
