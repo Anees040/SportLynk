@@ -263,6 +263,3 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen> {
       ),
     );
   }
-
-}
-}

@@ -19,6 +19,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
   Map<String, dynamic>? _wallet;
   List<Map<String, dynamic>> _txns = [];
   bool _loading = true;
+  static const _amounts = [500.0, 1000.0, 2000.0, 5000.0];
 
   @override
   void initState() { super.initState(); _load(); }
@@ -48,6 +49,47 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
     if (val == null) return 0.0;
     if (val is num) return val.toDouble();
     return double.tryParse(val.toString()) ?? 0.0;
+  }
+
+  Future<void> _topUp(double amount) async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token!;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _PaymentSimulationDialog(),
+    );
+    await Future.delayed(const Duration(seconds: 3));
+
+    try {
+      final resp = await http.post(Uri.parse('${ApiConstants.baseUrl}/wallet/topup'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'amount': amount}));
+      final data = jsonDecode(resp.body);
+      if (mounted) {
+        Navigator.pop(context); // close simulation dialog
+        if (data['success'] == true) {
+          SnackbarUtil.showSuccess(context, 'PKR ${amount.toStringAsFixed(0)} added to wallet!');
+          _load();
+        } else {
+          SnackbarUtil.showError(context, data['message'] ?? 'Top-up failed');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        SnackbarUtil.showError(context, 'Error: $e');
+      }
+    }
+  }
+
+  void _showTopUpSheet() {
+    showModalBottomSheet(context: context, isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => _TopUpSheet(amounts: _amounts, onTopUp: (amt) {
+        Navigator.pop(context);
+        _topUp(amt);
+      }));
   }
 
 
@@ -148,8 +190,22 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                 // ── ACTIONS ────────────────────────────────
                 Row(children: [
                   Expanded(child: ElevatedButton.icon(
+                    icon: const Icon(Icons.add_circle_outline, size: 18),
+                    label: Text('Top Up Wallet', style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600, fontSize: 13)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.accent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                        side: const BorderSide(color: AppColors.accent, width: 1.5)),
+                      padding: const EdgeInsets.symmetric(vertical: 13)),
+                    onPressed: _showTopUpSheet,
+                  )),
+                  const SizedBox(width: 12),
+                  Expanded(child: ElevatedButton.icon(
                     icon: const Icon(Icons.north_east, size: 18),
-                    label: Text('Withdraw Funds', style: GoogleFonts.poppins(
+                    label: Text('Withdraw', style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w600, fontSize: 13)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
@@ -256,3 +312,152 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
   }
 }
 
+// ── TOP UP SHEET ─────────────────────────────────────────────
+
+class _TopUpSheet extends StatefulWidget {
+  final List<double> amounts;
+  final void Function(double) onTopUp;
+  const _TopUpSheet({required this.amounts, required this.onTopUp});
+  @override
+  State<_TopUpSheet> createState() => _TopUpSheetState();
+}
+
+class _TopUpSheetState extends State<_TopUpSheet> {
+  double? _selected;
+  final _customCtrl = TextEditingController();
+
+  @override
+  void dispose() { _customCtrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20,
+        20 + MediaQuery.of(context).viewInsets.bottom),
+      child: Column(mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Center(child: Container(width: 40, height: 4,
+          decoration: BoxDecoration(color: AppColors.border,
+            borderRadius: BorderRadius.circular(2)))),
+        const SizedBox(height: 16),
+        Text('Top Up Wallet', style: GoogleFonts.poppins(
+          fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        const SizedBox(height: 6),
+        Text('Select amount or enter custom amount',
+          style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
+        const SizedBox(height: 16),
+        // Quick amounts
+        GridView.count(crossAxisCount: 2, shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 3.0,
+          children: widget.amounts.map((amt) {
+            final sel = _selected == amt;
+            return GestureDetector(
+              onTap: () => setState(() { _selected = amt; _customCtrl.clear(); }),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: sel ? AppColors.accent : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: sel ? AppColors.accent : AppColors.border,
+                    width: sel ? 2 : 1)),
+                child: Center(child: Text('PKR ${amt.toStringAsFixed(0)}',
+                  style: GoogleFonts.poppins(
+                    color: sel ? Colors.white : AppColors.textPrimary,
+                    fontWeight: FontWeight.w600, fontSize: 14))),
+              ),
+            );
+          }).toList()),
+        const SizedBox(height: 12),
+        // Custom amount
+        TextField(
+          controller: _customCtrl,
+          keyboardType: TextInputType.number,
+          onChanged: (v) => setState(() => _selected = null),
+          style: GoogleFonts.poppins(fontSize: 14),
+          decoration: InputDecoration(
+            hintText: 'Or enter custom amount (PKR 100 – 50,000)',
+            hintStyle: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
+            prefixText: 'PKR ',
+            prefixStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+            filled: true, fillColor: AppColors.inputFill,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.accent, width: 1.5)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(width: double.infinity,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+              padding: const EdgeInsets.symmetric(vertical: 14)),
+            onPressed: () {
+              double? amt = _selected;
+              if (amt == null && _customCtrl.text.isNotEmpty) {
+                amt = double.tryParse(_customCtrl.text);
+              }
+              if (amt == null || amt < 100 || amt > 50000) {
+                SnackbarUtil.showError(context, 'Enter amount between PKR 100 and 50,000');
+                return;
+              }
+              widget.onTopUp(amt);
+            },
+            child: Text('Add to Wallet', style: GoogleFonts.poppins(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+          )),
+        const SizedBox(height: 8),
+      ]),
+    );
+  }
+}
+
+class _PaymentSimulationDialog extends StatefulWidget {
+  const _PaymentSimulationDialog();
+  @override
+  State<_PaymentSimulationDialog> createState() => _PaymentSimulationDialogState();
+}
+
+class _PaymentSimulationDialogState extends State<_PaymentSimulationDialog> {
+  String _status = 'Initializing secure gateway...';
+
+  @override
+  void initState() {
+    super.initState();
+    _simulate();
+  }
+
+  Future<void> _simulate() async {
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (mounted) setState(() => _status = 'Verifying bank details...');
+    await Future.delayed(const Duration(milliseconds: 1000));
+    if (mounted) setState(() => _status = 'Processing payment...');
+    await Future.delayed(const Duration(milliseconds: 1000));
+    if (mounted) setState(() => _status = 'Payment successful!');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: AppColors.accent),
+            const SizedBox(height: 20),
+            Text(
+              _status,
+              style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
