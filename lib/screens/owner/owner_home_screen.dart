@@ -8,7 +8,7 @@ import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import 'owner_booking_requests_screen.dart';
 import 'owner_slot_calendar_screen.dart';
-import 'owner_venue_screen.dart';
+import 'owner_my_venues_screen.dart';
 import 'owner_profile_screen.dart';
 
 
@@ -63,7 +63,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
         _dashboardTab(),
         const OwnerBookingRequestsScreen(),
         const OwnerSlotCalendarScreen(),
-        const OwnerVenueScreen(),
+        const OwnerMyVenuesScreen(),   // multi-venue list
         const OwnerProfileScreen(),
       ]),
       bottomNavigationBar: _buildNav(),
@@ -75,7 +75,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
       ('DASHBOARD', Icons.grid_view_rounded, Icons.grid_view_outlined),
       ('BOOKINGS', Icons.pending_actions, Icons.pending_actions_outlined),
       ('SCHEDULE', Icons.calendar_month, Icons.calendar_month_outlined),
-      ('MY VENUE', Icons.stadium, Icons.stadium_outlined),
+      ('VENUES', Icons.stadium, Icons.stadium_outlined),
       ('PROFILE', Icons.person, Icons.person_outline),
     ];
     return Container(

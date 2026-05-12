@@ -181,7 +181,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                         }
                                         return;
                                       }
-                                      final route = auth.currentUser?.role == 'owner' ? '/owner-home' : '/player-home';
+                                      // Route based on role — admin gets own dashboard
+                                      final role = auth.currentUser?.role;
+                                      final route = role == 'admin'
+                                          ? '/admin-home'
+                                          : role == 'owner'
+                                              ? '/owner-home'
+                                              : '/player-home';
                                       Navigator.pushNamedAndRemoveUntil(context, route, (r) => false);
                                     },
                                   );

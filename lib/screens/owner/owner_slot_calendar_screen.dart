@@ -90,6 +90,7 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
         elevation: 0,
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'calendar_fab',
         backgroundColor: AppColors.accent,
         onPressed: _showAddSlotSheet,
         child: const Icon(Icons.add, color: Colors.white),

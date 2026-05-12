@@ -40,7 +40,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
         if (mounted && data['success'] == true) {
-          setState(() { _homeData = data['data']; });
+          setState(() => _homeData = data['data']);
         }
       }
     } catch (e) {
@@ -51,7 +51,6 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   void _onTabChanged(int index) {
     _prevTab = _tab;
     setState(() => _tab = index);
-    // Auto-refresh when switching TO home or bookings tab
     if (index == 0 && _prevTab != 0) _load();
   }
 
@@ -87,14 +86,14 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 12, offset: const Offset(0, -3),
+          color: Colors.black.withValues(alpha: 0.08),
+          blurRadius: 16, offset: const Offset(0, -4),
         )],
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: List.generate(items.length, (i) {
@@ -104,23 +103,20 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
                 behavior: HitTestBehavior.opaque,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 14),
+                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.accent.withValues(alpha: 0.1) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Icon(selected ? items[i].$2 : items[i].$3,
-                      color: selected ? AppColors.accent : AppColors.textSecondary,
-                      size: selected ? 26 : 24),
-                    const SizedBox(height: 2),
+                      color: selected ? AppColors.accent : const Color(0xFF94A3B8),
+                      size: 24),
+                    const SizedBox(height: 3),
                     Text(items[i].$1,
                       style: GoogleFonts.poppins(fontSize: 10,
-                        color: selected ? AppColors.accent : AppColors.textSecondary,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.normal)),
-                    if (selected)
-                      Container(
-                        margin: const EdgeInsets.only(top: 3),
-                        width: 4, height: 4,
-                        decoration: const BoxDecoration(
-                          color: AppColors.accent, shape: BoxShape.circle),
-                      ),
+                        color: selected ? AppColors.accent : const Color(0xFF94A3B8),
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.normal)),
                   ]),
                 ),
               );
@@ -136,6 +132,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     final userName = auth.currentUser?.name ?? 'Player';
     final firstName = userName.split(' ').first;
     final initial = userName.isNotEmpty ? userName[0].toUpperCase() : 'P';
+    final avatarUrl = auth.currentUser?.avatarUrl;
 
     final wallet = _homeData?['wallet'] as Map<String, dynamic>?;
     final profile = _homeData?['profile'] as Map<String, dynamic>?;
@@ -150,157 +147,205 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         slivers: [
-          // ── HEADER ────────────────────────────────────────────
+          // ── HERO HEADER ──────────────────────────────────────
           SliverToBoxAdapter(
             child: Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF0A1F13), Color(0xFF14532D)],
-                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [Color(0xFF052010), Color(0xFF0D3B20), Color(0xFF166534)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
               ),
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                  child: Row(children: [
-                    // Logo
-                    Container(
-                      width: 42, height: 42,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [BoxShadow(
-                          color: AppColors.accent.withValues(alpha: 0.3),
-                          blurRadius: 8, offset: const Offset(0, 2),
-                        )],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.asset('assets/images/logo.png', fit: BoxFit.cover,
-                          errorBuilder: (a, b, c) => Container(
-                            color: AppColors.accent,
-                            child: Center(child: Text('S',
+              child: Stack(children: [
+                // Decorative circles
+                Positioned(right: -30, top: -30,
+                  child: Container(width: 160, height: 160,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.04)))),
+                Positioned(right: 60, top: 60,
+                  child: Container(width: 80, height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.accent.withValues(alpha: 0.08)))),
+
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      // Top row: logo + avatar
+                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        // Logo + brand
+                        Row(children: [
+                          Container(
+                            width: 38, height: 38,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.asset('assets/images/logo.png', fit: BoxFit.cover,
+                                errorBuilder: (a, b, c) => Container(
+                                  color: AppColors.accent,
+                                  child: Center(child: Text('S',
+                                    style: GoogleFonts.poppins(color: Colors.white,
+                                      fontSize: 16, fontWeight: FontWeight.bold))))),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          RichText(text: TextSpan(children: [
+                            TextSpan(text: 'Sport',
                               style: GoogleFonts.poppins(color: Colors.white,
-                                fontSize: 18, fontWeight: FontWeight.bold))),
-                          )),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Hello, $firstName! 👋',
+                                fontSize: 16, fontWeight: FontWeight.w800)),
+                            TextSpan(text: 'Lynk',
+                              style: GoogleFonts.poppins(color: AppColors.accent,
+                                fontSize: 16, fontWeight: FontWeight.w800)),
+                          ])),
+                        ]),
+
+                        // Avatar + notification bell
+                        Row(children: [
+                          Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                            ),
+                            child: const Icon(Icons.notifications_outlined, color: Colors.white, size: 20),
+                          ),
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: () => _onTabChanged(4),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppColors.accent, width: 2.5),
+                              ),
+                              child: CircleAvatar(
+                                radius: 20,
+                                backgroundColor: AppColors.accent.withValues(alpha: 0.2),
+                                backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
+                                    ? NetworkImage(avatarUrl) : null,
+                                child: (avatarUrl == null || avatarUrl.isEmpty)
+                                    ? Text(initial, style: GoogleFonts.poppins(
+                                        color: AppColors.accent, fontSize: 16, fontWeight: FontWeight.bold))
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ]),
+                      ]),
+
+                      const SizedBox(height: 20),
+
+                      // Greeting
+                      Text('Good ${_greeting()}, $firstName! 👋',
+                        style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13)),
+                      const SizedBox(height: 4),
+                      Text('Ready to\nPlay Today?',
                         style: GoogleFonts.poppins(color: Colors.white,
-                          fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text('Ready to play today?',
-                        style: GoogleFonts.poppins(color: Colors.white60, fontSize: 12)),
-                    ])),
-                    // Avatar — shows Cloudinary photo if set, else initial
-                    GestureDetector(
-                      onTap: () => _onTabChanged(4),
-                      child: () {
-                        final avatarUrl = auth.currentUser?.avatarUrl;
-                        if (avatarUrl != null && avatarUrl.isNotEmpty) {
-                          return CircleAvatar(
-                            radius: 22,
-                            backgroundColor: AppColors.accent.withValues(alpha: 0.2),
-                            backgroundImage: NetworkImage(avatarUrl),
-                          );
-                        }
-                        return CircleAvatar(
-                          radius: 22,
-                          backgroundColor: AppColors.accent.withValues(alpha: 0.2),
-                          child: Text(initial,
-                            style: GoogleFonts.poppins(color: AppColors.accent,
-                              fontSize: 16, fontWeight: FontWeight.bold)),
-                        );
-                      }(),
-                    ),
-                  ]),
-                ),
-              ),
-            ),
-          ),
+                          fontSize: 28, fontWeight: FontWeight.w800, height: 1.15)),
 
-          // ── SEARCH BAR ────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: GestureDetector(
-                onTap: () => Navigator.pushNamed(context, '/find-venues'),
-                child: Container(
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
-                    boxShadow: [BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 12, offset: const Offset(0, 4))],
+                      const SizedBox(height: 20),
+
+                      // Stats strip inside header
+                      Row(children: [
+                        _headerStat('$upcomingCount', 'Bookings', Icons.calendar_month_rounded),
+                        _headerDivider(),
+                        _headerStat('$trustScore', 'Trust Score', Icons.shield_rounded),
+                        _headerDivider(),
+                        _headerStat('PKR ${balance.toStringAsFixed(0)}', 'Balance', Icons.account_balance_wallet_rounded),
+                      ]),
+                    ]),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(children: [
-                    const Icon(Icons.search_rounded, color: AppColors.accent, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text('Search venues, sports, opponents...',
-                      style: GoogleFonts.poppins(color: AppColors.textSecondary, fontSize: 13))),
-                    const Icon(Icons.tune_rounded, color: AppColors.textSecondary, size: 18),
-                  ]),
                 ),
-              ),
-            ),
-          ),
-
-          // ── LIVE STATS STRIP ──────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Row(children: [
-                _miniStat(Icons.calendar_today_outlined, '$upcomingCount', 'Bookings', AppColors.accent),
-                const SizedBox(width: 10),
-                _miniStat(Icons.account_balance_wallet_outlined, 'PKR $balance', 'Balance', const Color(0xFF3B82F6)),
-                const SizedBox(width: 10),
-                _miniStat(Icons.shield_outlined, '$trustScore', 'Trust Score', AppColors.success),
               ]),
             ),
           ),
 
+          // ── SEARCH BAR ───────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Transform.translate(
+              offset: const Offset(0, -1),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                child: GestureDetector(
+                  onTap: () => Navigator.pushNamed(context, '/find-venues'),
+                  child: Container(
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [BoxShadow(
+                        color: AppColors.accent.withValues(alpha: 0.15),
+                        blurRadius: 16, offset: const Offset(0, 4))],
+                      border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent, borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.search_rounded, color: Colors.white, size: 16),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text('Find venues, sports, opponents...',
+                        style: GoogleFonts.poppins(color: const Color(0xFF94A3B8), fontSize: 13))),
+                      const Icon(Icons.tune_rounded, color: AppColors.accent, size: 18),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ── QUICK ACTIONS ─────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Quick Actions', style: GoogleFonts.poppins(
-                  fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                Text('Quick Actions',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
                 const SizedBox(height: 14),
+                // 2×2 Grid
                 Row(children: [
-                  _quickActionTile(
-                    Icons.search_rounded,
-                    'Book Venue',
-                    const Color(0xFF22C55E),
-                    const Color(0xFFDCFCE7),
+                  _quickTile(
+                    Icons.stadium_rounded, 'Book Venue',
+                    'Find & book grounds',
+                    const Color(0xFF22C55E), const Color(0xFFDCFCE7),
                     () => Navigator.pushNamed(context, '/find-venues'),
                   ),
-                  const SizedBox(width: 10),
-                  _quickActionTile(
-                    Icons.sports_kabaddi,
-                    'Opponent',
-                    const Color(0xFF6366F1),
-                    const Color(0xFFE0E7FF),
+                  const SizedBox(width: 12),
+                  _quickTile(
+                    Icons.sports_kabaddi, 'Find Opponent',
+                    'Challenge players',
+                    const Color(0xFF6366F1), const Color(0xFFE0E7FF),
                     () => Navigator.pushNamed(context, '/find-opponents'),
                   ),
-                  const SizedBox(width: 10),
-                  _quickActionTile(
-                    Icons.emoji_events_rounded,
-                    'Tournament',
-                    const Color(0xFFF59E0B),
-                    const Color(0xFFFEF3C7),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  _quickTile(
+                    Icons.emoji_events_rounded, 'Tournaments',
+                    'Join competitions',
+                    const Color(0xFFF59E0B), const Color(0xFFFEF3C7),
                     () => Navigator.pushNamed(context, '/tournaments'),
                   ),
-                  const SizedBox(width: 10),
-                  _quickActionTile(
-                    Icons.leaderboard_rounded,
-                    'Rankings',
-                    const Color(0xFFEC4899),
-                    const Color(0xFFFCE7F3),
+                  const SizedBox(width: 12),
+                  _quickTile(
+                    Icons.leaderboard_rounded, 'Rankings',
+                    'Team leaderboard',
+                    const Color(0xFFEC4899), const Color(0xFFFCE7F3),
                     () => Navigator.pushNamed(context, '/team-rankings'),
                   ),
                 ]),
@@ -308,89 +353,77 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
             ),
           ),
 
-          // ── UPCOMING BOOKINGS ──────────────────────────────────
+          // ── UPCOMING BOOKINGS ─────────────────────────────────
           SliverToBoxAdapter(child: _buildUpcomingBookings()),
 
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
     );
   }
 
   // ── HELPERS ─────────────────────────────────────────────────
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Morning';
+    if (h < 17) return 'Afternoon';
+    return 'Evening';
+  }
+
   num _parseNum(dynamic val, num fallback) {
     if (val == null) return fallback;
     if (val is num) return val;
     return num.tryParse(val.toString()) ?? fallback;
   }
 
-  Widget _miniStat(IconData icon, String value, String label, Color color) {
+  Widget _headerStat(String value, String label, IconData icon) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(height: 4),
-          Text(value,
-            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary),
-            maxLines: 1, overflow: TextOverflow.ellipsis),
-          Text(label, style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textSecondary)),
-        ]),
-      ),
+      child: Column(children: [
+        Icon(icon, color: AppColors.accent, size: 16),
+        const SizedBox(height: 4),
+        Text(value, style: GoogleFonts.poppins(
+          color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+        Text(label, style: GoogleFonts.poppins(color: Colors.white54, fontSize: 10)),
+      ]),
     );
   }
 
-  Widget _quickActionTile(
-    IconData icon,
-    String label,
-    Color iconColor,
-    Color bgColor,
-    VoidCallback onTap,
+  Widget _headerDivider() => Container(
+    width: 1, height: 36,
+    color: Colors.white.withValues(alpha: 0.15),
+    margin: const EdgeInsets.symmetric(horizontal: 4),
+  );
+
+  Widget _quickTile(
+    IconData icon, String title, String subtitle,
+    Color iconColor, Color bgColor, VoidCallback onTap,
   ) {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
+            boxShadow: [BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 12, offset: const Offset(0, 4))],
           ),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: iconColor, size: 22),
+              width: 48, height: 48,
+              decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(14)),
+              child: Icon(icon, color: iconColor, size: 24),
             ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-                height: 1.2,
-              ),
-            ),
+            const SizedBox(height: 12),
+            Text(title, style: GoogleFonts.poppins(
+              fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            const SizedBox(height: 2),
+            Text(subtitle, style: GoogleFonts.poppins(
+              fontSize: 10, color: AppColors.textSecondary)),
           ]),
         ),
       ),
@@ -404,53 +437,47 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text('Upcoming Bookings',
-            style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700,
+            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w800,
               color: AppColors.textPrimary)),
           GestureDetector(
             onTap: () => _onTabChanged(1),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               decoration: BoxDecoration(
-                color: AppColors.accentLight,
-                borderRadius: BorderRadius.circular(8)),
-              child: Text('View All',
-                style: GoogleFonts.poppins(
-                  fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w600)),
+                color: AppColors.accentLight, borderRadius: BorderRadius.circular(10)),
+              child: Text('View All', style: GoogleFonts.poppins(
+                fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w700)),
             ),
           ),
         ]),
         const SizedBox(height: 12),
         bookings.isEmpty
             ? Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(18),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Row(children: [
                   Container(
                     width: 52, height: 52,
                     decoration: BoxDecoration(
-                      color: AppColors.accentLight,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0D3B20), Color(0xFF166534)]),
                       borderRadius: BorderRadius.circular(14)),
-                    child: const Icon(Icons.calendar_today_outlined,
-                      color: AppColors.accent, size: 24),
+                    child: const Icon(Icons.calendar_today_outlined, color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 16),
-                  Expanded(child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('No upcoming bookings',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14, fontWeight: FontWeight.w600,
+                      style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary)),
                     const SizedBox(height: 4),
                     GestureDetector(
                       onTap: () => Navigator.pushNamed(context, '/find-venues'),
-                      child: Text('Book a venue now →',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12, color: AppColors.accent,
-                          fontWeight: FontWeight.w500)),
+                      child: Text('Book a venue now →', style: GoogleFonts.poppins(
+                        fontSize: 12, color: AppColors.accent, fontWeight: FontWeight.w600)),
                     ),
                   ])),
                 ]),
@@ -468,7 +495,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     final Color statusColor = status == 'confirmed'
         ? AppColors.accent
         : status == 'pending'
-            ? AppColors.warning
+            ? const Color(0xFFF59E0B)
             : AppColors.textSecondary;
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, '/booking-detail',
@@ -481,8 +508,8 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
           boxShadow: [BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 6, offset: const Offset(0, 2))],
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8, offset: const Offset(0, 2))],
         ),
         child: Row(children: [
           Container(
@@ -491,43 +518,34 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
               gradient: const LinearGradient(
                 colors: [Color(0xFF0A1F13), Color(0xFF166534)]),
               borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.stadium_outlined,
-              color: Colors.white, size: 22),
+            child: const Icon(Icons.stadium_outlined, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 12),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(b['venue_name'] ?? 'Venue',
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold, fontSize: 13,
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13,
                 color: AppColors.textPrimary),
               maxLines: 1, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 3),
+            const SizedBox(height: 4),
             Row(children: [
-              const Icon(Icons.calendar_today_outlined,
-                size: 11, color: AppColors.textSecondary),
+              const Icon(Icons.calendar_today_outlined, size: 11, color: Color(0xFF94A3B8)),
               const SizedBox(width: 4),
               Text(_fmtSlotDate(b['slot_date']),
-                style: GoogleFonts.poppins(
-                  fontSize: 11, color: AppColors.textSecondary)),
+                style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF94A3B8))),
               const SizedBox(width: 10),
-              const Icon(Icons.access_time,
-                size: 11, color: AppColors.textSecondary),
+              const Icon(Icons.access_time, size: 11, color: Color(0xFF94A3B8)),
               const SizedBox(width: 4),
               Text(_formatTime(b['start_time']),
-                style: GoogleFonts.poppins(
-                  fontSize: 11, color: AppColors.textSecondary)),
+                style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF94A3B8))),
             ]),
           ])),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: statusColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8)),
-            child: Text(status.toUpperCase(),
-              style: GoogleFonts.poppins(
-                fontSize: 9, color: statusColor,
-                fontWeight: FontWeight.bold, letterSpacing: 0.3)),
+            child: Text(status.toUpperCase(), style: GoogleFonts.poppins(
+              fontSize: 9, color: statusColor, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
           ),
         ]),
       ),

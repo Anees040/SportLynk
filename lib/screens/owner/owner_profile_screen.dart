@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/cloudinary_service.dart';
 
 class OwnerProfileScreen extends StatefulWidget {
   const OwnerProfileScreen({super.key});
@@ -16,6 +18,8 @@ class OwnerProfileScreen extends StatefulWidget {
 
 class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   bool _dontShowLogout = false;
+  bool _uploadingAvatar = false;
+  final _cloudinary = CloudinaryService();
 
   @override
   void initState() {
@@ -102,7 +106,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(children: [
-          // Header Section
+          // Header Section with tappable avatar
           Container(
             width: double.infinity,
             decoration: const BoxDecoration(
@@ -112,15 +116,45 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
             ),
             padding: const EdgeInsets.fromLTRB(20, 32, 20, 40),
             child: Column(children: [
-              Container(
-                width: 80, height: 80,
-                decoration: BoxDecoration(
-                  color: AppColors.accent.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.accent, width: 2.5),
-                ),
-                child: Center(child: Text(initial,
-                  style: GoogleFonts.poppins(color: AppColors.accent, fontSize: 32, fontWeight: FontWeight.bold))),
+              GestureDetector(
+                onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
+                child: Stack(alignment: Alignment.bottomRight, children: [
+                  Container(
+                    width: 88, height: 88,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.accent, width: 2.5),
+                    ),
+                    child: ClipOval(
+                      child: () {
+                        final avatarUrl = auth.currentUser?.avatarUrl;
+                        if (_uploadingAvatar) {
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.accent, strokeWidth: 2));
+                        }
+                        if (avatarUrl != null && avatarUrl.isNotEmpty) {
+                          return Image.network(avatarUrl, fit: BoxFit.cover,
+                            errorBuilder: (ctx, err, stack) => Center(
+                              child: Text(initial,
+                                style: GoogleFonts.poppins(color: AppColors.accent,
+                                  fontSize: 32, fontWeight: FontWeight.bold))));
+                        }
+                        return Center(child: Text(initial,
+                          style: GoogleFonts.poppins(color: AppColors.accent,
+                            fontSize: 32, fontWeight: FontWeight.bold)));
+                      }(),
+                    ),
+                  ),
+                  // Camera badge
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: AppColors.accent, shape: BoxShape.circle),
+                    child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                  ),
+                ]),
               ),
               const SizedBox(height: 12),
               Text(name, style: GoogleFonts.poppins(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
@@ -219,6 +253,51 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
         ),
       ),
     );
+  }
+
+  // ── Avatar Upload ─────────────────────────────────────────────────────────
+  Future<void> _pickAndUploadAvatar() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+        source: ImageSource.gallery, imageQuality: 80, maxWidth: 600);
+    if (picked == null) return;
+    if (!mounted) return;
+
+    // Capture context-dependent references BEFORE any async gap
+    final authProv = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProv.token!;
+
+    setState(() => _uploadingAvatar = true);
+    try {
+      final url = await _cloudinary.uploadImage(picked.path, folder: 'owner_avatars');
+      if (url == null) {
+        if (mounted) _showSnack('Upload failed. Check Cloudinary config.', isError: true);
+        return;
+      }
+      // Save to backend
+      final resp = await http.patch(
+        Uri.parse('${ApiConstants.baseUrl}/users/me/update'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'avatarUrl': url}),
+      );
+      final data = jsonDecode(resp.body);
+      if (data['success'] == true && mounted) {
+        authProv.updateLocalUser({'avatarUrl': url});
+        _showSnack('Profile photo updated!');
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Error: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
+
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: GoogleFonts.poppins(color: Colors.white)),
+      backgroundColor: isError ? AppColors.error : AppColors.accent,
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   void _showChangePassword() {

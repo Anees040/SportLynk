@@ -6,61 +6,73 @@ const checkRole = require("../middleware/roleMiddleware");
 
 router.use(auth, checkRole("owner"));
 
-// GET /api/owner/dashboard
+// GET /api/owner/dashboard — optimized with Promise.all
 router.get("/dashboard", async (req, res, next) => {
   try {
     const ownerId = req.user.id;
     const today = new Date().toLocaleDateString("en-CA");
 
-    const venueRes = await pool.query(
-      "SELECT * FROM venues WHERE owner_id=$1 AND is_active=true ORDER BY created_at ASC LIMIT 1",
-      [ownerId],
-    );
-    const venue = venueRes.rows[0] || null;
-
-    const statsRes = await pool.query(
-      `
-      SELECT
-        COUNT(*) FILTER (WHERE b.slot_date=$1::DATE AND b.status IN ('confirmed','checked_in')) AS "bookingsToday",
-        COALESCE(SUM(b.security_deposit) FILTER (WHERE b.status='checked_in' AND b.slot_date=$1::DATE), 0) AS "revenueToday",
-        COUNT(*) FILTER (WHERE b.status='pending') AS "pendingCount"
-      FROM bookings b JOIN venues v ON b.venue_id=v.id WHERE v.owner_id=$2
-    `,
-      [today, ownerId],
-    );
-
-    const upcomingRes = await pool.query(
-      `
-      SELECT b.id, b.status, b.start_time, b.end_time, b.slot_date, b.total_amount, b.security_deposit,
-             u.name AS player_name, COALESCE(pp.trust_score,100) AS trust_score
-      FROM bookings b
-      JOIN users u ON b.player_id=u.id
-      LEFT JOIN player_profiles pp ON pp.user_id=u.id
-      JOIN venues v ON b.venue_id=v.id
-      WHERE v.owner_id=$1 AND b.slot_date>=$2::DATE AND b.status IN ('confirmed','checked_in')
-      ORDER BY b.slot_date ASC, b.start_time ASC LIMIT 10
-    `,
-      [ownerId, today],
-    );
-
-    const walletRes = await pool.query(
-      "SELECT balance, frozen_balance FROM wallets WHERE user_id=$1",
-      [ownerId],
-    );
+    // Run all 4 queries in PARALLEL — reduces latency from ~4x to ~1x round-trip
+    const [venueRes, statsRes, upcomingRes, walletRes] = await Promise.all([
+      pool.query(
+        "SELECT * FROM venues WHERE owner_id=$1 AND is_active=true ORDER BY created_at ASC LIMIT 1",
+        [ownerId],
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE b.slot_date=$1::DATE AND b.status IN ('confirmed','checked_in')) AS "bookingsToday",
+           COALESCE(SUM(b.security_deposit) FILTER (WHERE b.status='checked_in' AND b.slot_date=$1::DATE), 0) AS "revenueToday",
+           COUNT(*) FILTER (WHERE b.status='pending') AS "pendingCount"
+         FROM bookings b JOIN venues v ON b.venue_id=v.id WHERE v.owner_id=$2`,
+        [today, ownerId],
+      ),
+      pool.query(
+        `SELECT b.id, b.status, b.start_time, b.end_time, b.slot_date, b.total_amount, b.security_deposit,
+                u.name AS player_name, COALESCE(pp.trust_score,100) AS trust_score
+         FROM bookings b
+         JOIN users u ON b.player_id=u.id
+         LEFT JOIN player_profiles pp ON pp.user_id=u.id
+         JOIN venues v ON b.venue_id=v.id
+         WHERE v.owner_id=$1 AND b.slot_date>=$2::DATE AND b.status IN ('confirmed','checked_in')
+         ORDER BY b.slot_date ASC, b.start_time ASC LIMIT 10`,
+        [ownerId, today],
+      ),
+      pool.query(
+        "SELECT balance, frozen_balance FROM wallets WHERE user_id=$1",
+        [ownerId],
+      ),
+    ]);
 
     res.json({
       success: true,
       data: {
-        venue,
-        stats: statsRes.rows[0] || {
-          bookingsToday: 0,
-          revenueToday: 0,
-          pendingCount: 0,
-        },
+        venue: venueRes.rows[0] || null,
+        stats: statsRes.rows[0] || { bookingsToday: 0, revenueToday: 0, pendingCount: 0 },
         upcomingBookings: upcomingRes.rows,
         wallet: walletRes.rows[0] || { balance: 0, frozen_balance: 0 },
       },
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /api/owner/venues — returns ALL active venues owned by this owner (multi-venue)
+router.get("/venues", async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT v.id, v.name, v.sport_type, v.city, v.address,
+              v.price_per_hour, v.rating, v.total_reviews,
+              v.venue_photos, v.operating_hours_from, v.operating_hours_to,
+              v.is_active, v.created_at,
+              (SELECT COUNT(*) FROM bookings b WHERE b.venue_id = v.id AND b.status='pending') AS pending_bookings,
+              (SELECT COUNT(*) FROM bookings b WHERE b.venue_id = v.id AND b.slot_date = CURRENT_DATE AND b.status IN ('confirmed','checked_in')) AS todays_bookings
+       FROM venues v
+       WHERE v.owner_id = $1 AND v.is_active = true
+       ORDER BY v.created_at ASC`,
+      [req.user.id],
+    );
+    res.json({ success: true, data: result.rows });
   } catch (e) {
     next(e);
   }

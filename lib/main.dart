@@ -19,6 +19,7 @@ import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/owner_pending_screen.dart';
 import 'screens/player/player_home_screen.dart';
 import 'screens/owner/owner_home_screen.dart';
+import 'screens/admin/admin_home_screen.dart';
 import 'screens/player/trust_score_screen.dart';
 import 'screens/player/find_venues_screen.dart';
 import 'screens/player/venue_detail_screen.dart';
@@ -44,8 +45,6 @@ class _NoScrollbarBehavior extends MaterialScrollBehavior {
   };
 }
 
-/// Protects routes: redirects to /welcome if not authenticated.
-/// Optionally checks role to prevent cross-role access.
 class AuthGuard extends StatelessWidget {
   final Widget child;
   final String? requiredRole;
@@ -81,11 +80,15 @@ class AuthGuard extends StatelessWidget {
           );
         }
 
-        // Role mismatch — redirect to correct home
+        // Role mismatch — redirect to correct home for each role
         if (requiredRole != null && auth.userRole != requiredRole) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (context.mounted) {
-              final route = auth.userRole == 'owner' ? '/owner-home' : '/player-home';
+              final route = auth.userRole == 'admin'
+                  ? '/admin-home'
+                  : auth.userRole == 'owner'
+                      ? '/owner-home'
+                      : '/player-home';
               Navigator.pushNamedAndRemoveUntil(context, route, (r) => false);
             }
           });
@@ -158,6 +161,7 @@ class SportLynkApp extends StatelessWidget {
           '/owner-pending': (_) => const AuthGuard(child: OwnerPendingScreen()),
           '/player-home': (_) => const AuthGuard(requiredRole: 'player', child: PlayerHomeScreen()),
           '/owner-home': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerHomeScreen()),
+          '/admin-home': (_) => const AuthGuard(requiredRole: 'admin', child: AdminHomeScreen()),
           '/trust-score': (_) => const AuthGuard(requiredRole: 'player', child: TrustScoreScreen(profile: {})),
           '/find-venues': (context) {
             final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;

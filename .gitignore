@@ -60,3 +60,8 @@ lib/constants/app_config.dart
 **/secrets.json
 **/config/*.env
 **/config/*.json
+
+# Agent system files
+.agents/
+skills-lock.json
+
