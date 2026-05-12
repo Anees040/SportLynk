@@ -59,12 +59,15 @@ router.get('/', authMiddleware, async (req, res, next) => {
         u.name as owner_name
       FROM venues v
       LEFT JOIN users u ON u.id = v.owner_id
+      LEFT JOIN owner_profiles op ON op.user_id = v.owner_id
       WHERE ${where}
+        AND (op.verification_status = 'approved' OR op.verification_status IS NULL)
       ORDER BY ${orderBy}
       LIMIT $${i} OFFSET $${i + 1}
     `, [...params, limit, offset]);
 
     res.json({ success: true, data: result.rows });
+
   } catch(e) {
     console.error('GET /venues error:', e);
     next(e);

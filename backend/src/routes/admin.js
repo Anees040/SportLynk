@@ -81,7 +81,7 @@ router.patch('/registrations/:id/approve', async (req, res, next) => {
     await client.query(
       `UPDATE owner_profiles
        SET verification_status = 'approved',
-           reviewed_at = NOW(),
+           verified_at = NOW(),
            reviewed_by = $1
        WHERE id = $2`,
       [req.user.id, id]
@@ -99,11 +99,11 @@ router.patch('/registrations/:id/approve', async (req, res, next) => {
          owner_id, name, description, sport_type, city, address,
          base_price, price_per_hour, upfront_percent, venue_photos,
          operating_hours_from, operating_hours_to,
-         is_active, is_verified, verification_status,
-         rating, total_reviews
+         is_active, rating, total_reviews
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 30, $9, $10, $11, true, true, 'approved', 0, 0)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 30, $9, $10, $11, true, 0, 0)
        RETURNING id`,
+
       [
         op.user_id,
         op.ground_name || op.business_name || 'Venue',
@@ -177,7 +177,7 @@ router.patch('/registrations/:id/reject', async (req, res, next) => {
       `UPDATE owner_profiles
        SET verification_status = 'rejected',
            rejection_reason    = $1,
-           reviewed_at         = NOW(),
+           verified_at         = NOW(),
            reviewed_by         = $2
        WHERE id = $3 AND verification_status = 'pending'
        RETURNING id`,

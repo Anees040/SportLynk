@@ -8,10 +8,11 @@ const pool = new Pool({
   port: parseInt(process.env.DB_PORT || '5432'),
 });
 
-pool.query("SELECT column_name FROM information_schema.columns WHERE table_name='venues'")
+pool.query("SELECT column_name FROM information_schema.columns WHERE table_name='owner_profiles'")
   .then(r => {
-    console.log('venues columns:', r.rows.map(x => x.column_name).join(', '));
+    console.log('owner_profiles:', r.rows.map(x => x.column_name).join(', '));
     pool.end();
   })
   .catch(e => { console.error(e.message); pool.end(); });
+
 

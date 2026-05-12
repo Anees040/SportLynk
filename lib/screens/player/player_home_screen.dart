@@ -194,14 +194,26 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
                       Text('Ready to play today?',
                         style: GoogleFonts.poppins(color: Colors.white60, fontSize: 12)),
                     ])),
-                    // Avatar
+                    // Avatar — shows Cloudinary photo if set, else initial
                     GestureDetector(
                       onTap: () => _onTabChanged(4),
-                      child: CircleAvatar(radius: 20,
-                        backgroundColor: AppColors.accent.withValues(alpha: 0.2),
-                        child: Text(initial,
-                          style: GoogleFonts.poppins(color: AppColors.accent,
-                            fontSize: 16, fontWeight: FontWeight.bold))),
+                      child: () {
+                        final avatarUrl = auth.currentUser?.avatarUrl;
+                        if (avatarUrl != null && avatarUrl.isNotEmpty) {
+                          return CircleAvatar(
+                            radius: 22,
+                            backgroundColor: AppColors.accent.withValues(alpha: 0.2),
+                            backgroundImage: NetworkImage(avatarUrl),
+                          );
+                        }
+                        return CircleAvatar(
+                          radius: 22,
+                          backgroundColor: AppColors.accent.withValues(alpha: 0.2),
+                          child: Text(initial,
+                            style: GoogleFonts.poppins(color: AppColors.accent,
+                              fontSize: 16, fontWeight: FontWeight.bold)),
+                        );
+                      }(),
                     ),
                   ]),
                 ),

@@ -211,6 +211,45 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
             ),
           ),
 
+          // ── QUICK ACTIONS ─────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Quick Actions',
+                  style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                const SizedBox(height: 12),
+                Row(children: [
+                  _quickActionTile(
+                    Icons.qr_code_scanner_rounded, 'Scan QR',
+                    const Color(0xFFEDE9FE), const Color(0xFF7C3AED),
+                    () => Navigator.pushNamed(context, '/owner-scan-qr'),
+                  ),
+                  const SizedBox(width: 12),
+                  _quickActionTile(
+                    Icons.pending_actions_rounded, 'Requests',
+                    const Color(0xFFFEF3C7), const Color(0xFFD97706),
+                    () => setState(() => _tab = 1),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  _quickActionTile(
+                    Icons.stadium_rounded, 'My Venue',
+                    const Color(0xFFD1FAE5), AppColors.accent,
+                    () => setState(() => _tab = 3),
+                  ),
+                  const SizedBox(width: 12),
+                  _quickActionTile(
+                    Icons.calendar_month_rounded, 'Schedule',
+                    const Color(0xFFDBEAFE), const Color(0xFF2563EB),
+                    () => setState(() => _tab = 2),
+                  ),
+                ]),
+              ]),
+            ),
+          ),
+
           // ── AI PRICE SUGGESTION ──────────────────────────
           SliverToBoxAdapter(
             child: Padding(
@@ -450,6 +489,35 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
               label,
               style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textSecondary, letterSpacing: 0.3),
             ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _quickActionTile(IconData icon, String label, Color bg, Color iconColor, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: iconColor.withValues(alpha: 0.15)),
+          ),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Text(label, style: GoogleFonts.poppins(
+              fontSize: 13, fontWeight: FontWeight.w600, color: iconColor)),
           ]),
         ),
       ),
