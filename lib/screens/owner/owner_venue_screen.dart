@@ -256,7 +256,7 @@ class _OwnerVenueScreenState extends State<OwnerVenueScreen> {
                 const Divider(color: AppColors.border),
                 _finRow(
                   'Total Bookings (Month)',
-                  '${weeklyData.fold(0, (s, w) => s + ((w['total_bookings'] as num?)?.toInt() ?? 0))}',
+                  '${weeklyData.fold(0, (s, w) => s + (int.tryParse(w['total_bookings']?.toString() ?? '') ?? 0))}',
                   AppColors.accent,
                 ),
                 const Divider(color: AppColors.border),

@@ -272,7 +272,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
                 _detRow(
                   Icons.currency_rupee,
                   'Amount Paid (Deposit)',
-                  'PKR ${(_booking!['security_deposit'] as num?)?.toStringAsFixed(0) ?? (_booking!['total_amount'] as num?)?.toStringAsFixed(0) ?? '0'}',
+                  'PKR ${_parseNum(_booking!['security_deposit'], _parseNum(_booking!['total_amount'], 0)).toStringAsFixed(0)}',
                   valueColor: AppColors.accent,
                 ),
               ]),
@@ -304,6 +304,12 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
           ),
         ]),
       );
+
+  double _parseNum(dynamic val, [double fallback = 0]) {
+    if (val == null) return fallback;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? fallback;
+  }
 
   Color _statusColor(String s) => switch (s) {
         'confirmed' => AppColors.accent,

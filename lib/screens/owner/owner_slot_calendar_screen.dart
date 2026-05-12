@@ -16,24 +16,50 @@ class OwnerSlotCalendarScreen extends StatefulWidget {
 class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
   DateTime _selectedDate = DateTime.now();
   List<Map<String, dynamic>> _slots = [];
+  List<Map<String, dynamic>> _venues = [];
+  String? _selectedVenueId;
   bool _loading = false;
   static String get _base => ApiConstants.baseUrl;
 
   @override
   void initState() {
     super.initState();
-    _loadSlots();
+    _loadVenues();
   }
 
   String _dateStr(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  Future<void> _loadSlots() async {
+  Future<void> _loadVenues() async {
     if (mounted) setState(() => _loading = true);
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       final resp = await http.get(
-        Uri.parse('$_base/owner/slots?date=${_dateStr(_selectedDate)}'),
+        Uri.parse('$_base/owner/venues'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      final data = jsonDecode(resp.body);
+      if (mounted) {
+        if (data['success'] == true) {
+          _venues = List<Map<String, dynamic>>.from(data['data']);
+          if (_venues.isNotEmpty) {
+            _selectedVenueId = _venues.first['id'].toString();
+          }
+        }
+      }
+    } catch (_) {}
+    _loadSlots();
+  }
+
+  Future<void> _loadSlots() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final token = Provider.of<AuthProvider>(context, listen: false).token!;
+      String url = '$_base/owner/slots?date=${_dateStr(_selectedDate)}';
+      if (_selectedVenueId != null) url += '&venueId=$_selectedVenueId';
+      
+      final resp = await http.get(
+        Uri.parse(url),
         headers: {'Authorization': 'Bearer $token'},
       );
       final data = jsonDecode(resp.body);
@@ -45,6 +71,27 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _generateSlots() async {
+    if (_selectedVenueId == null) return;
+    if (mounted) setState(() => _loading = true);
+    try {
+      final token = Provider.of<AuthProvider>(context, listen: false).token!;
+      final resp = await http.post(
+        Uri.parse('$_base/owner/slots/generate'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'venueId': _selectedVenueId}),
+      );
+      final data = jsonDecode(resp.body);
+      if (mounted) {
+        _snack(data['message'] ?? 'Action completed', data['success'] == true ? AppColors.accent : AppColors.error);
+        _loadSlots();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+      _snack('Network error', AppColors.error);
     }
   }
 
@@ -84,10 +131,17 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text('Slot Calendar', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text('Schedule', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         automaticallyImplyLeading: false,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Generate Slots for 7 Days',
+            icon: const Icon(Icons.auto_awesome, color: Colors.white),
+            onPressed: _generateSlots,
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'calendar_fab',
@@ -96,6 +150,39 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: Column(children: [
+        if (_venues.isNotEmpty)
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const Icon(Icons.stadium_outlined, color: AppColors.accent, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: _selectedVenueId,
+                      icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.textSecondary),
+                      style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _selectedVenueId = val);
+                          _loadSlots();
+                        }
+                      },
+                      items: _venues.map((v) {
+                        return DropdownMenuItem<String>(
+                          value: v['id'].toString(),
+                          child: Text(v['name'] ?? 'Unknown Venue'),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         // ── CALENDAR WIDGET ──────────────────────────────
         Container(
           color: Colors.white,

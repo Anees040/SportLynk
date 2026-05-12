@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import '../../constants/api_constants.dart';
 import '../../constants/colors.dart';
@@ -108,10 +107,6 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
 
   Future<void> _pickAvatar() async {
     if (!_isEditing) return;
-    if (kIsWeb) {
-      _snack('Avatar upload is currently only supported on the mobile app.', AppColors.warning);
-      return;
-    }
     try {
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 80);

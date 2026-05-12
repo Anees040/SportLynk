@@ -28,6 +28,7 @@ import 'screens/player/team_rankings_screen.dart';
 import 'screens/player/tournaments_screen.dart';
 import 'screens/player/player_booking_detail_screen.dart';
 import 'screens/owner/owner_qr_scanner_screen.dart';
+import 'screens/owner/owner_wallet_screen.dart';
 
 /// Removes scrollbar overlay on all platforms (fixes white line on web).
 class _NoScrollbarBehavior extends MaterialScrollBehavior {
@@ -179,6 +180,7 @@ class SportLynkApp extends StatelessWidget {
             return AuthGuard(requiredRole: 'player', child: PlayerBookingDetailScreen(bookingId: args['bookingId']));
           },
           '/owner-scan-qr': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerQrScannerScreen()),
+          '/owner-wallet': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerWalletScreen()),
         },
         ),
       ),

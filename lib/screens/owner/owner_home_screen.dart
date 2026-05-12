@@ -133,7 +133,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
     final upcoming = (_data?['upcomingBookings'] as List?) ?? [];
     final wallet = _data?['wallet'] as Map<String, dynamic>? ?? {};
     final venue = _data?['venue'] as Map<String, dynamic>?;
-    final basePrice = (venue?['price_per_hour'] as num?)?.toDouble() ?? 2000.0;
+    final basePrice = double.tryParse(venue?['price_per_hour']?.toString() ?? '') ?? 2000.0;
     final suggestedPrice = (basePrice * 1.12).roundToDouble();
 
     return RefreshIndicator(
@@ -341,67 +341,70 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
 
           // ── WALLET CARD ──────────────────────────────────
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0A1F13), Color(0xFF166534)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+            child: GestureDetector(
+              onTap: () => Navigator.pushNamed(context, '/owner-wallet'),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0A1F13), Color(0xFF166534)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(children: [
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(
-                        'WALLET BALANCE',
-                        style: GoogleFonts.poppins(color: Colors.white60, fontSize: 10, letterSpacing: 0.5),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'PKR ${_parseNum(wallet['balance']).toStringAsFixed(0)}',
-                        style: GoogleFonts.poppins(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        'From ${upcoming.where((b) => b['status'] == 'checked_in').length} check-ins',
-                        style: GoogleFonts.poppins(color: Colors.white60, fontSize: 11),
-                      ),
-                    ]),
-                  ),
-                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.lock_outline, color: Colors.white60, size: 13),
-                        const SizedBox(width: 4),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(
-                          'Frozen: PKR ${_parseNum(wallet['frozen_balance']).toStringAsFixed(0)}',
-                          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11),
+                          'WALLET BALANCE',
+                          style: GoogleFonts.poppins(color: Colors.white60, fontSize: 10, letterSpacing: 0.5),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'PKR ${_parseNum(wallet['balance']).toStringAsFixed(0)}',
+                          style: GoogleFonts.poppins(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'From ${upcoming.where((b) => b['status'] == 'checked_in').length} check-ins',
+                          style: GoogleFonts.poppins(color: Colors.white60, fontSize: 11),
                         ),
                       ]),
                     ),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: () {},
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.lock_outline, color: Colors.white60, size: 13),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Frozen: PKR ${_parseNum(wallet['frozen_balance']).toStringAsFixed(0)}',
+                            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11),
+                          ),
+                        ]),
                       ),
-                      child: Text(
-                        'Withdraw',
-                        style: GoogleFonts.poppins(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                      const SizedBox(height: 8),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pushNamed(context, '/owner-wallet'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        ),
+                        child: Text(
+                          'Withdraw',
+                          style: GoogleFonts.poppins(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
                       ),
-                    ),
+                    ]),
                   ]),
-                ]),
+                ),
               ),
             ),
           ),
@@ -525,7 +528,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
   }
 
   Widget _bookingRow(Map<String, dynamic> b) {
-    final trust = (b['trust_score'] as num?)?.toInt() ?? 100;
+    final trust = int.tryParse(b['trust_score']?.toString() ?? '') ?? 100;
     final trustLabel = trust >= 80 ? 'HIGH TRUST' : trust >= 60 ? 'FAIR' : 'LOW TRUST';
     final trustColor = trust >= 80 ? AppColors.accent : trust >= 60 ? AppColors.warning : AppColors.error;
     final isPending = b['status'] == 'pending';

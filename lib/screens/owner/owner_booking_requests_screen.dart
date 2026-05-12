@@ -202,7 +202,7 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
   }
 
   Widget _bookingCard(Map<String, dynamic> b, String status) {
-    final trust = (b['trust_score'] as num?)?.toInt() ?? 100;
+    final trust = int.tryParse(b['trust_score']?.toString() ?? '') ?? 100;
     final isPending = status == 'pending';
     final isConfirmed = status == 'confirmed';
     final trustLabel = trust >= 80 ? 'HIGH TRUST' : trust >= 50 ? 'NEW USER' : 'LOW TRUST';
@@ -303,7 +303,7 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
               ]),
             ]),
             Text(
-              'PKR ${(b['total_amount'] as num?)?.toStringAsFixed(0) ?? '0'}',
+              'PKR ${double.tryParse(b['total_amount']?.toString() ?? '')?.toStringAsFixed(0) ?? '0'}',
               style: GoogleFonts.poppins(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ]),

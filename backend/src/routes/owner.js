@@ -6,10 +6,43 @@ const checkRole = require("../middleware/roleMiddleware");
 
 router.use(auth, checkRole("owner"));
 
+async function autoGenerateVenueIfMissing(ownerId) {
+  const checkVenues = await pool.query('SELECT COUNT(*) FROM venues WHERE owner_id=$1', [ownerId]);
+  if (parseInt(checkVenues.rows[0].count) === 0) {
+    const profileRes = await pool.query("SELECT * FROM owner_profiles WHERE user_id=$1 AND verification_status='approved'", [ownerId]);
+    if (profileRes.rows.length > 0) {
+      const op = profileRes.rows[0];
+      const sportType = op.sport_types && op.sport_types.length > 0 ? op.sport_types[0].toLowerCase() : 'football';
+      const venueName = op.ground_name || op.business_name || 'My Venue';
+      const vRes = await pool.query(
+        `INSERT INTO venues (owner_id, name, description, sport_type, city, address, base_price, price_per_hour, upfront_percent, venue_photos, operating_hours_from, operating_hours_to, is_active, rating, total_reviews)
+         VALUES ($1, $2, 'Venue auto-generated', $3, $4, $5, 2000, 2000, 30, $6, '08:00:00', '23:00:00', true, 0, 0)
+         RETURNING id`,
+        [ownerId, venueName, sportType, op.city || 'Unknown', op.business_address || 'Unknown', op.venue_photos || '[]']
+      );
+      const venueId = vRes.rows[0].id;
+      for (let i = 0; i < 14; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        const dateStr = d.toLocaleDateString("en-CA");
+        for (let hour = 18; hour <= 22; hour++) {
+          const sh = hour.toString().padStart(2, "0") + ":00:00";
+          const eh = (hour + 1).toString().padStart(2, "0") + ":00:00";
+          await pool.query(
+            "INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status) VALUES ($1,$2,$3,$4,$5,'available')",
+            [venueId, dateStr, sh, eh, 2000]
+          );
+        }
+      }
+    }
+  }
+}
+
 // GET /api/owner/dashboard — optimized with Promise.all
 router.get("/dashboard", async (req, res, next) => {
   try {
     const ownerId = req.user.id;
+    await autoGenerateVenueIfMissing(ownerId);
     const today = new Date().toLocaleDateString("en-CA");
 
     // Run all 4 queries in PARALLEL — reduces latency from ~4x to ~1x round-trip
@@ -60,6 +93,7 @@ router.get("/dashboard", async (req, res, next) => {
 // GET /api/owner/venues — returns ALL active venues owned by this owner (multi-venue)
 router.get("/venues", async (req, res, next) => {
   try {
+    await autoGenerateVenueIfMissing(req.user.id);
     const result = await pool.query(
       `SELECT v.id, v.name, v.sport_type, v.city, v.address,
               v.price_per_hour, v.rating, v.total_reviews,
@@ -73,6 +107,54 @@ router.get("/venues", async (req, res, next) => {
       [req.user.id],
     );
     res.json({ success: true, data: result.rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/owner/venues
+router.post("/venues", async (req, res, next) => {
+  try {
+    const ownerId = req.user.id;
+    const {
+      groundName,
+      sportTypes,
+      city,
+      fullAddress,
+      pricePerHour,
+      operatingHoursFrom,
+      operatingHoursTo,
+      groundPhotos
+    } = req.body;
+
+    const sportType = sportTypes && sportTypes.length > 0 ? sportTypes[0].toLowerCase() : 'football';
+
+    // Set is_active = true for demo purposes, so it shows up immediately.
+    const vRes = await pool.query(
+      `INSERT INTO venues (owner_id, name, description, sport_type, city, address, base_price, price_per_hour, upfront_percent, venue_photos, operating_hours_from, operating_hours_to, is_active, rating, total_reviews)
+       VALUES ($1, $2, 'Venue added via owner dashboard', $3, $4, $5, $6, $6, 30, $7, $8, $9, true, 0, 0)
+       RETURNING id`,
+      [ownerId, groundName, sportType, city, fullAddress, pricePerHour, JSON.stringify(groundPhotos || []), operatingHoursFrom, operatingHoursTo]
+    );
+
+    const venueId = vRes.rows[0].id;
+
+    // Auto-generate some slots so it's bookable immediately
+    for (let i = 0; i < 14; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const dateStr = d.toLocaleDateString("en-CA");
+      for (let hour = 18; hour <= 22; hour++) {
+        const sh = hour.toString().padStart(2, "0") + ":00:00";
+        const eh = (hour + 1).toString().padStart(2, "0") + ":00:00";
+        await pool.query(
+          "INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status) VALUES ($1,$2,$3,$4,$5,'available')",
+          [venueId, dateStr, sh, eh, pricePerHour]
+        );
+      }
+    }
+
+    res.json({ success: true, message: 'Venue successfully created', data: { id: venueId } });
   } catch (e) {
     next(e);
   }
@@ -184,15 +266,62 @@ router.patch("/bookings/:id/reject", async (req, res, next) => {
   }
 });
 
-// GET /api/owner/slots?date=YYYY-MM-DD
+// POST /api/owner/slots/generate
+router.post("/slots/generate", async (req, res, next) => {
+  try {
+    const { venueId } = req.body;
+    if (!venueId) return res.status(400).json({ success: false, message: 'venueId is required' });
+
+    // Ensure owner owns the venue
+    const check = await pool.query("SELECT price_per_hour FROM venues WHERE id=$1 AND owner_id=$2", [venueId, req.user.id]);
+    if (!check.rows.length) return res.status(404).json({ success: false, message: 'Venue not found' });
+    const pricePerHour = check.rows[0].price_per_hour;
+
+    // Generate slots for next 7 days
+    let created = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const dateStr = d.toLocaleDateString("en-CA");
+      for (let hour = 18; hour <= 22; hour++) {
+        const sh = hour.toString().padStart(2, "0") + ":00:00";
+        const eh = (hour + 1).toString().padStart(2, "0") + ":00:00";
+        // Check if slot exists
+        const exists = await pool.query(
+          "SELECT id FROM slots WHERE venue_id=$1 AND slot_date=$2 AND start_time=$3",
+          [venueId, dateStr, sh]
+        );
+        if (exists.rows.length === 0) {
+          await pool.query(
+            "INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status) VALUES ($1,$2,$3,$4,$5,'available')",
+            [venueId, dateStr, sh, eh, pricePerHour]
+          );
+          created++;
+        }
+      }
+    }
+
+    res.json({ success: true, message: `Generated ${created} new slots for the next 7 days` });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /api/owner/slots?date=YYYY-MM-DD&venueId=123
 router.get("/slots", async (req, res, next) => {
   try {
     const date = req.query.date || new Date().toLocaleDateString("en-CA");
-    const result = await pool.query(
-      `SELECT s.* FROM slots s JOIN venues v ON s.venue_id=v.id
-       WHERE v.owner_id=$1 AND s.slot_date=$2::DATE ORDER BY s.start_time ASC`,
-      [req.user.id, date],
-    );
+    const venueId = req.query.venueId;
+    let query = `SELECT s.*, v.name AS venue_name FROM slots s JOIN venues v ON s.venue_id=v.id
+                 WHERE v.owner_id=$1 AND s.slot_date=$2::DATE`;
+    const params = [req.user.id, date];
+    if (venueId) {
+      params.push(venueId);
+      query += ` AND s.venue_id=$3`;
+    }
+    query += ` ORDER BY s.start_time ASC`;
+
+    const result = await pool.query(query, params);
     res.json({ success: true, data: result.rows });
   } catch (e) {
     next(e);

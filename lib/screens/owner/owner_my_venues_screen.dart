@@ -7,6 +7,8 @@ import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 
+import 'owner_add_venue_screen.dart';
+
 class OwnerMyVenuesScreen extends StatefulWidget {
   const OwnerMyVenuesScreen({super.key});
   @override
@@ -50,6 +52,16 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen> {
     return double.tryParse(v.toString()) ?? 0;
   }
 
+  Future<void> _addVenue() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const OwnerAddVenueScreen()),
+    );
+    if (result == true) {
+      _load();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -75,7 +87,7 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen> {
               child: _venues.isEmpty ? _buildEmpty() : _buildList(),
             ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddVenueInfo,
+        onPressed: _addVenue,
         backgroundColor: AppColors.accent,
         icon: const Icon(Icons.add, color: Colors.white),
         label: Text('Add Venue', style: GoogleFonts.poppins(
@@ -100,7 +112,7 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen> {
             style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
         const SizedBox(height: 24),
         ElevatedButton.icon(
-          onPressed: _showAddVenueInfo,
+          onPressed: _addVenue,
           icon: const Icon(Icons.add, color: Colors.white),
           label: Text('Register a Venue', style: GoogleFonts.poppins(
               color: Colors.white, fontWeight: FontWeight.w600)),
@@ -252,69 +264,5 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen> {
     );
   }
 
-  void _showAddVenueInfo() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        padding: const EdgeInsets.all(28),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Center(child: Container(
-            width: 40, height: 4,
-            decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)))),
-          const SizedBox(height: 20),
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: AppColors.accentLight, borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.stadium_rounded, color: AppColors.accent, size: 24),
-            ),
-            const SizedBox(width: 14),
-            Expanded(child: Text('Register a New Venue',
-                style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.bold))),
-          ]),
-          const SizedBox(height: 16),
-          _infoStep('1', 'Contact support', 'Email support@sportlynk.pk to request a new venue slot for your account.'),
-          _infoStep('2', 'Submit documents', 'Our team will send you a registration form for the new ground.'),
-          _infoStep('3', 'Admin review', 'Admin reviews and approves within 24–48 hours.'),
-          _infoStep('4', 'Live on SportLynk', 'Your new venue appears here and in the player search.'),
-          const SizedBox(height: 20),
-          SizedBox(width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: Text('Got it', style: GoogleFonts.poppins(
-                  color: Colors.white, fontWeight: FontWeight.bold)),
-            )),
-        ]),
-      ),
-    );
-  }
-
-  Widget _infoStep(String num, String title, String desc) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          width: 28, height: 28,
-          decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
-          child: Center(child: Text(num, style: GoogleFonts.poppins(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
-          Text(desc, style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-        ])),
-      ]),
-    );
-  }
+}
 }

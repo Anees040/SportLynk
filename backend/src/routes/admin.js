@@ -35,7 +35,7 @@ router.get('/registrations', async (req, res, next) => {
         op.utility_bill_url,
         op.ownership_proof_url,
         op.rejection_reason,
-        op.reviewed_at,
+        op.verified_at AS reviewed_at,
         op.created_at,
         u.name   AS owner_name,
         u.phone  AS owner_phone,
