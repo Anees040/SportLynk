@@ -42,7 +42,7 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
   final _sportOpts = ['Football','Cricket'];
 
   // Step 2
-  XFile? _cnicFront, _cnicBack, _selfie, _utilityBill, _ownershipProof;
+  XFile? _utilityBill, _ownershipProof;
   final List<XFile> _groundPhotos = [];
 
   @override
@@ -185,16 +185,6 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
       Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: AppColors.accentLight, borderRadius: BorderRadius.circular(8)),
         child: Row(children: [const Icon(Icons.info_outline, color: AppColors.accent, size: 16), const SizedBox(width: 8), Expanded(child: Text('Documents are encrypted and only viewed by SportLynk admins.', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.accent)))])),
       const SizedBox(height: 20),
-      Text('CNIC Photos *', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-      const SizedBox(height: 8),
-      Row(children: [
-        Expanded(child: _docPicker('CNIC Front', _cnicFront, (f) => setState(() => _cnicFront = f))),
-        const SizedBox(width: 12),
-        Expanded(child: _docPicker('CNIC Back', _cnicBack, (f) => setState(() => _cnicBack = f))),
-      ]),
-      const SizedBox(height: 16),
-      _docPicker('Selfie with CNIC *', _selfie, (f) => setState(() => _selfie = f), full: true, hint: 'Hold CNIC next to your face'),
-      const SizedBox(height: 20),
       Text('Ground Photos * (min 3)', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
       Text('Field view, entrance, facilities', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
       const SizedBox(height: 8),
@@ -252,17 +242,10 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
   }
 
   Future<void> _submit() async {
-    if (_cnicFront == null || _cnicBack == null || _selfie == null) {
-      _snack('CNIC photos and selfie are required');
-      return;
-    }
     if (_groundPhotos.length < 3) {
       _snack('Add at least 3 ground photos');
       return;
     }
-
-    final token = Provider.of<AuthProvider>(context, listen: false).token;
-    if (token == null) return;
 
     setState(() => _isSubmitting = true);
 
@@ -270,15 +253,12 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
       final cloudinary = CloudinaryService();
       
       final futures = await Future.wait([
-        cloudinary.uploadImage(_cnicFront!.path, folder: 'cnics'),
-        cloudinary.uploadImage(_cnicBack!.path, folder: 'cnics'),
-        cloudinary.uploadImage(_selfie!.path, folder: 'selfies'),
         cloudinary.uploadMultipleImages(_groundPhotos.map((e) => e.path).toList(), folder: 'venues'),
         _utilityBill != null ? cloudinary.uploadImage(_utilityBill!.path, folder: 'documents') : Future.value(null),
         _ownershipProof != null ? cloudinary.uploadImage(_ownershipProof!.path, folder: 'documents') : Future.value(null),
       ]);
 
-      final groundUrls = futures[3] as List<String>;
+      final groundUrls = futures[0] as List<String>;
 
       final data = {
         'businessName': _bizCtrl.text.trim(),
@@ -294,6 +274,10 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
         'alternateContactPhone': _altPhoneCtrl.text.trim().isEmpty ? null : _altPhoneCtrl.text.trim(),
         'groundPhotos': groundUrls.isNotEmpty ? groundUrls : _groundPhotos.map((x) => x.path).toList(),
       };
+
+      if (!mounted) return;
+      final token = Provider.of<AuthProvider>(context, listen: false).token;
+      if (token == null) return;
 
       final resp = await http.post(
         Uri.parse('${ApiConstants.baseUrl}/owner/venues'),

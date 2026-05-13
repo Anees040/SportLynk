@@ -104,12 +104,12 @@ class _OwnerQrScannerScreenState extends State<OwnerQrScannerScreen> {
               const Divider(color: AppColors.border),
               _detailRow(
                 'Payment Received',
-                'PKR ${double.tryParse(d['amount']?.toString() ?? '')?.toStringAsFixed(0) ?? '0'}',
+                'PKR ${(d['amount'] as num?)?.toStringAsFixed(0) ?? '0'}',
                 valueColor: AppColors.success,
               ),
               _detailRow(
                 'Your New Balance',
-                'PKR ${double.tryParse(d['newOwnerBalance']?.toString() ?? '')?.toStringAsFixed(0) ?? '0'}',
+                'PKR ${(d['newOwnerBalance'] as num?)?.toStringAsFixed(0) ?? '0'}',
                 valueColor: AppColors.accent,
               ),
             ]),

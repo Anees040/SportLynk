@@ -269,12 +269,12 @@ router.patch("/:id/cancel", authMiddleware, async (req, res, next) => {
       await client.query(
         `
         INSERT INTO transactions (wallet_id, user_id, booking_id, type, amount, balance_after, description)
-        VALUES ($1,$2,$3,'escrow_release',-$4,$5,'Late cancellation penalty to owner')`,
+        VALUES ($1,$2,$3,'escrow_release',$4,$5,'Late cancellation penalty to owner')`,
         [
           playerWallet.rows[0].id,
           playerId,
           bookingId,
-          deposit,
+          -deposit,
           playerWallet.rows[0].balance,
         ],
       );
@@ -419,12 +419,12 @@ router.post(
       await client.query(
         `
       INSERT INTO transactions (wallet_id, user_id, booking_id, type, amount, balance_after, description, counterparty_name)
-      VALUES ($1,$2,$3,'escrow_release',-$4,$5,$6,$7)`,
+      VALUES ($1,$2,$3,'escrow_release',$4,$5,$6,$7)`,
         [
           playerWallet.rows[0].id,
           b.rows[0].player_id,
           req.params.id,
-          deposit,
+          -deposit,
           playerWallet.rows[0].balance,
           `Escrow released to venue owner`,
           b.rows[0].venue_name,

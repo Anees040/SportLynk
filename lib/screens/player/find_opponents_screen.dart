@@ -144,12 +144,12 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
           Expanded(child: ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: (o['score'] as int) / 100,
+              value: (_toInt(o['score'], 0) / 100.0).clamp(0.0, 1.0),
               minHeight: 8,
               backgroundColor: AppColors.inputFill,
               valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent)))),
           const SizedBox(width: 10),
-          Text('${o['score']}%', style: GoogleFonts.poppins(
+          Text('${_toInt(o['score'], 0)}%', style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.accent)),
         ]),
         const SizedBox(height: 12),
@@ -164,5 +164,13 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
               color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)))),
       ]),
     );
+  }
+
+  int _toInt(dynamic value, int fallback) {
+    if (value == null) return fallback;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
   }
 }

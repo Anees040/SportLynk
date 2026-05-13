@@ -257,8 +257,8 @@ class _AdminRegistrationDetailScreenState
           // Submission Date
           _infoCard([
             _row('Submitted', _formatDate(reg['created_at'])),
-            if (reg['reviewed_at'] != null)
-              _row('Reviewed', _formatDate(reg['reviewed_at'])),
+            if (reg['verified_at'] != null)
+              _row('Reviewed', _formatDate(reg['verified_at'])),
           ]),
           const SizedBox(height: 80),
         ]),

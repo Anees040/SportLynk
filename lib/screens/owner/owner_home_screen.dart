@@ -133,7 +133,8 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
     final upcoming = (_data?['upcomingBookings'] as List?) ?? [];
     final wallet = _data?['wallet'] as Map<String, dynamic>? ?? {};
     final venue = _data?['venue'] as Map<String, dynamic>?;
-    final basePrice = double.tryParse(venue?['price_per_hour']?.toString() ?? '') ?? 2000.0;
+    double basePrice = _parseNum(venue?['price_per_hour']);
+    if (basePrice <= 0) basePrice = 2000.0;
     final suggestedPrice = (basePrice * 1.12).roundToDouble();
 
     return RefreshIndicator(
@@ -528,7 +529,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
   }
 
   Widget _bookingRow(Map<String, dynamic> b) {
-    final trust = int.tryParse(b['trust_score']?.toString() ?? '') ?? 100;
+    final trust = (b['trust_score'] as num?)?.toInt() ?? 100;
     final trustLabel = trust >= 80 ? 'HIGH TRUST' : trust >= 60 ? 'FAIR' : 'LOW TRUST';
     final trustColor = trust >= 80 ? AppColors.accent : trust >= 60 ? AppColors.warning : AppColors.error;
     final isPending = b['status'] == 'pending';

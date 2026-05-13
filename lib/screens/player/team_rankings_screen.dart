@@ -87,9 +87,17 @@ class TeamRankingsScreen extends StatelessWidget {
     );
   }
 
+  int _toInt(dynamic value, int fallback) {
+    if (value == null) return fallback;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
   Widget _rankCard(Map<String, dynamic> t) {
     final isMe = t['isMe'] == true;
-    final rank = t['rank'] as int;
+    final rank = _toInt(t['rank'], 0);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -133,7 +141,7 @@ class TeamRankingsScreen extends StatelessWidget {
           Text('W: ${t['wins']}  L: ${t['losses']}  ${t['sport']}',
             style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
         ])),
-        Text('${(t['elo'] as int) >= 1000 ? (t['elo'] as int).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},') : t['elo']}',
+        Text('${_toInt(t['elo'], 0) >= 1000 ? _toInt(t['elo'], 0).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},') : _toInt(t['elo'], 0)}',
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15,
             color: isMe ? AppColors.primary : AppColors.textPrimary)),
       ]),

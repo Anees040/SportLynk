@@ -18,7 +18,7 @@ async function autoGenerateVenueIfMissing(ownerId) {
         `INSERT INTO venues (owner_id, name, description, sport_type, city, address, base_price, price_per_hour, upfront_percent, venue_photos, operating_hours_from, operating_hours_to, is_active, rating, total_reviews)
          VALUES ($1, $2, 'Venue auto-generated', $3, $4, $5, 2000, 2000, 30, $6, '08:00:00', '23:00:00', true, 0, 0)
          RETURNING id`,
-        [ownerId, venueName, sportType, op.city || 'Unknown', op.business_address || 'Unknown', op.venue_photos || '[]']
+        [ownerId, venueName, sportType, op.city || 'Unknown', op.full_address || 'Unknown', op.ground_photos || []]
       );
       const venueId = vRes.rows[0].id;
       for (let i = 0; i < 14; i++) {
@@ -134,7 +134,7 @@ router.post("/venues", async (req, res, next) => {
       `INSERT INTO venues (owner_id, name, description, sport_type, city, address, base_price, price_per_hour, upfront_percent, venue_photos, operating_hours_from, operating_hours_to, is_active, rating, total_reviews)
        VALUES ($1, $2, 'Venue added via owner dashboard', $3, $4, $5, $6, $6, 30, $7, $8, $9, true, 0, 0)
        RETURNING id`,
-      [ownerId, groundName, sportType, city, fullAddress, pricePerHour, JSON.stringify(groundPhotos || []), operatingHoursFrom, operatingHoursTo]
+      [ownerId, groundName, sportType, city, fullAddress, pricePerHour, groundPhotos || [], operatingHoursFrom, operatingHoursTo]
     );
 
     const venueId = vRes.rows[0].id;

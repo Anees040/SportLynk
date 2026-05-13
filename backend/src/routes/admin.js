@@ -35,7 +35,7 @@ router.get('/registrations', async (req, res, next) => {
         op.utility_bill_url,
         op.ownership_proof_url,
         op.rejection_reason,
-        op.verified_at AS reviewed_at,
+        op.verified_at as reviewed_at,
         op.created_at,
         u.name   AS owner_name,
         u.phone  AS owner_phone,
@@ -205,7 +205,7 @@ router.get('/stats', async (req, res, next) => {
       pool.query("SELECT COUNT(*) FROM owner_profiles WHERE verification_status = 'rejected'"),
       pool.query("SELECT COUNT(*) FROM users WHERE role = 'player'"),
       pool.query("SELECT COUNT(*) FROM venues WHERE is_active = true"),
-      pool.query("SELECT COUNT(*) FROM bookings WHERE status IN ('confirmed', 'checked_in')"),
+      pool.query("SELECT COUNT(*) FROM bookings WHERE status IN ('pending', 'confirmed', 'checked_in')"),
     ]);
 
     res.json({

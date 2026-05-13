@@ -19,7 +19,6 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
   Map<String, dynamic>? _wallet;
   List<Map<String, dynamic>> _txns = [];
   bool _loading = true;
-  static const _amounts = [500.0, 1000.0, 2000.0, 5000.0];
 
   @override
   void initState() { super.initState(); _load(); }
@@ -51,48 +50,6 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
     return double.tryParse(val.toString()) ?? 0.0;
   }
 
-  Future<void> _topUp(double amount) async {
-    final token = Provider.of<AuthProvider>(context, listen: false).token!;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const _PaymentSimulationDialog(),
-    );
-    await Future.delayed(const Duration(seconds: 3));
-
-    try {
-      final resp = await http.post(Uri.parse('${ApiConstants.baseUrl}/wallet/topup'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({'amount': amount}));
-      final data = jsonDecode(resp.body);
-      if (mounted) {
-        Navigator.pop(context); // close simulation dialog
-        if (data['success'] == true) {
-          SnackbarUtil.showSuccess(context, 'PKR ${amount.toStringAsFixed(0)} added to wallet!');
-          _load();
-        } else {
-          SnackbarUtil.showError(context, data['message'] ?? 'Top-up failed');
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        SnackbarUtil.showError(context, 'Error: $e');
-      }
-    }
-  }
-
-  void _showTopUpSheet() {
-    showModalBottomSheet(context: context, isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => _TopUpSheet(amounts: _amounts, onTopUp: (amt) {
-        Navigator.pop(context);
-        _topUp(amt);
-      }));
-  }
-
-
   void _snack(String msg, Color c) {
     if (c == AppColors.error) {
       SnackbarUtil.showError(context, msg);
@@ -109,7 +66,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
         title: Text('My Wallet', style: GoogleFonts.poppins(
           color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: true,
         elevation: 0,
         actions: [
           IconButton(icon: const Icon(Icons.help_outline, color: Colors.white70),
@@ -190,22 +147,8 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                 // ── ACTIONS ────────────────────────────────
                 Row(children: [
                   Expanded(child: ElevatedButton.icon(
-                    icon: const Icon(Icons.add_circle_outline, size: 18),
-                    label: Text('Top Up Wallet', style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.accent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                        side: const BorderSide(color: AppColors.accent, width: 1.5)),
-                      padding: const EdgeInsets.symmetric(vertical: 13)),
-                    onPressed: _showTopUpSheet,
-                  )),
-                  const SizedBox(width: 12),
-                  Expanded(child: ElevatedButton.icon(
                     icon: const Icon(Icons.north_east, size: 18),
-                    label: Text('Withdraw', style: GoogleFonts.poppins(
+                    label: Text('Withdraw Funds', style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w600, fontSize: 13)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,

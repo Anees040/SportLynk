@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 class ApiConstants {
   ApiConstants._();
 
-  static const String baseUrl = kIsWeb ? 'http://localhost:3000/api' : 'http://10.0.2.2:3000/api';
+  static const String baseUrl = kIsWeb ? 'http://localhost:3000/api' : 'http://192.170.0.110:3000/api';
 
   // Auth
   static const String registerPlayer = '/auth/register/player';

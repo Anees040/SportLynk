@@ -62,9 +62,17 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
           _stats = d['data'];
           _loadingStats = false;
         });
+      } else {
+        if (mounted) {
+          _snack('Failed to load stats: ${d['message'] ?? 'Unknown error'}');
+          setState(() => _loadingStats = false);
+        }
       }
-    } catch (_) {
-      if (mounted) setState(() => _loadingStats = false);
+    } catch (e) {
+      if (mounted) {
+        _snack('Error loading stats: $e');
+        setState(() => _loadingStats = false);
+      }
     }
   }
 
@@ -85,11 +93,21 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
           _loadingList = false;
         });
       } else {
-        if (mounted) setState(() => _loadingList = false);
+        if (mounted) {
+          _snack('Failed to load $status list: ${d['message'] ?? 'Unknown error'}');
+          setState(() => _loadingList = false);
+        }
       }
-    } catch (_) {
-      if (mounted) setState(() => _loadingList = false);
+    } catch (e) {
+      if (mounted) {
+        _snack('Error loading $status list: $e');
+        setState(() => _loadingList = false);
+      }
     }
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
 
@@ -124,6 +142,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
             child: Text('ADMIN',
                 style: GoogleFonts.poppins(
                     color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+          ),
+          IconButton(
+            tooltip: 'Log out',
+            icon: const Icon(Icons.logout, color: Colors.white),
+            onPressed: () {
+              Provider.of<AuthProvider>(context, listen: false).logout();
+              Navigator.pushNamedAndRemoveUntil(context, '/welcome', (r) => false);
+            },
           ),
         ],
         bottom: TabBar(
@@ -365,6 +391,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     );
   }
 
+  String _getInitial(String? name) {
+    if (name == null || name.trim().isEmpty) return 'O';
+    return name.trim()[0].toUpperCase();
+  }
+
   Widget _regCard(Map<String, dynamic> reg) {
     final vstatus = reg['verification_status'] as String? ?? 'pending';
     final Color statusColor = vstatus == 'approved'
@@ -406,7 +437,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
                 color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
             child: Center(
               child: Text(
-                (reg['owner_name'] as String? ?? 'O')[0].toUpperCase(),
+                _getInitial(reg['owner_name']),
                 style: GoogleFonts.poppins(
                     color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
               ),
@@ -423,18 +454,29 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
                   style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
                   maxLines: 1, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 4),
-              Row(children: [
-                const Icon(Icons.location_on_outlined,
-                    size: 12, color: AppColors.textSecondary),
-                const SizedBox(width: 3),
-                Text(reg['city'] ?? '—',
-                    style: GoogleFonts.poppins(
-                        fontSize: 11, color: AppColors.textSecondary)),
-                const SizedBox(width: 10),
-                const Icon(Icons.currency_rupee, size: 12, color: AppColors.textSecondary),
-                Text('PKR ${reg['price_per_hour'] ?? '—'}/hr',
-                    style: GoogleFonts.poppins(
-                        fontSize: 11, color: AppColors.textSecondary)),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  const Icon(Icons.location_on_outlined,
+                      size: 12, color: AppColors.textSecondary),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: Text(reg['city'] ?? '—',
+                        style: GoogleFonts.poppins(
+                            fontSize: 11, color: AppColors.textSecondary),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                ]),
+                const SizedBox(height: 2),
+                Row(children: [
+                  const Icon(Icons.currency_rupee, size: 12, color: AppColors.textSecondary),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: Text('PKR ${reg['price_per_hour'] ?? '—'}/hr',
+                        style: GoogleFonts.poppins(
+                            fontSize: 11, color: AppColors.textSecondary),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                ]),
               ]),
             ]),
           ),
