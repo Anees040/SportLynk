@@ -133,6 +133,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
     final upcoming = (_data?['upcomingBookings'] as List?) ?? [];
     final wallet = _data?['wallet'] as Map<String, dynamic>? ?? {};
     final venue = _data?['venue'] as Map<String, dynamic>?;
+    final pendingEscrow = _parseNum(_data?['pendingEscrow']);
     double basePrice = _parseNum(venue?['price_per_hour']);
     if (basePrice <= 0) basePrice = 2000.0;
     final suggestedPrice = (basePrice * 1.12).roundToDouble();
@@ -375,6 +376,24 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
                       ]),
                     ),
                     Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      if (pendingEscrow > 0)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.warning.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.hourglass_top, color: AppColors.warning, size: 13),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Escrow: PKR ${pendingEscrow.toStringAsFixed(0)}',
+                              style: GoogleFonts.poppins(color: AppColors.warning, fontSize: 11, fontWeight: FontWeight.w600),
+                            ),
+                          ]),
+                        ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(

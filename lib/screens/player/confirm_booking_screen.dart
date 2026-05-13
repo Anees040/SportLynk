@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
@@ -367,7 +366,8 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
 }
 
 // ── BOOKING SUCCESS SCREEN ──────────────────────────────────
-// Full-screen success page instead of AlertDialog to avoid render crashes
+// Full-screen success page — shows reservation confirmed (pending owner approval)
+// QR code is revealed in booking history AFTER owner approves the booking
 class _BookingSuccessScreen extends StatelessWidget {
   final String bookingId;
   final String manualCode;
@@ -394,26 +394,29 @@ class _BookingSuccessScreen extends StatelessWidget {
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(32),
               child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                // Success checkmark
+                // Hourglass icon (pending, not check)
                 Container(
-                  width: 80, height: 80,
+                  width: 90, height: 90,
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.1),
+                    color: AppColors.warning.withValues(alpha: 0.12),
                     shape: BoxShape.circle),
-                  child: const Icon(Icons.check_circle_rounded,
-                    color: AppColors.accent, size: 60),
+                  child: const Icon(Icons.lock_clock_rounded,
+                    color: AppColors.warning, size: 52),
                 ),
                 const SizedBox(height: 24),
-                Text('Booking Confirmed!', style: GoogleFonts.poppins(
-                  fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                Text('Slot Reserved!', style: GoogleFonts.poppins(
+                  fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                 const SizedBox(height: 8),
-                Text('Show this code at the venue for check-in',
+                Text('Awaiting owner approval',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(fontSize: 14, color: AppColors.warning, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                Text('Your slot is reserved and your payment is held safely in escrow.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
                 const SizedBox(height: 32),
 
-                // QR Code section — using a text-based code instead of QR widget
-                // to avoid Flutter Web render assertion failures
+                // Booking summary card
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -424,46 +427,35 @@ class _BookingSuccessScreen extends StatelessWidget {
                       color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 16, offset: const Offset(0, 4))]),
                   child: Column(children: [
-                    Text('CHECK-IN CODE', style: GoogleFonts.poppins(
-                      fontSize: 10, color: AppColors.textSecondary,
-                      letterSpacing: 1, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 12),
-                    // QR Code + Manual Code
-                    SizedBox(
-                      width: 160, height: 160,
-                      child: QrImageView(
-                        data: bookingId,
-                        version: QrVersions.auto,
-                        size: 160,
-                        gapless: false,
-                        errorStateBuilder: (cxt, err) {
-                          return const Center(child: Text('Uh oh! Something went wrong...'));
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text('OR MANUAL CODE:', style: GoogleFonts.poppins(
-                      fontSize: 10, color: AppColors.textSecondary,
-                      letterSpacing: 1, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(12)),
-                      child: Text(manualCode,
-                        style: GoogleFonts.poppins(
-                          fontSize: 24, fontWeight: FontWeight.bold,
-                          color: Colors.white, letterSpacing: 4)),
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(10)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.hourglass_top, color: AppColors.warning, size: 16),
+                        const SizedBox(width: 6),
+                        Text('PENDING OWNER APPROVAL', style: GoogleFonts.poppins(
+                          fontSize: 11, color: AppColors.warning, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                      ]),
                     ),
-                    const SizedBox(height: 16),
-                    const Divider(color: AppColors.border),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 20),
                     _infoRow(Icons.stadium_outlined, venueName),
                     const SizedBox(height: 8),
                     _infoRow(Icons.calendar_today_outlined, date),
                     const SizedBox(height: 8),
                     _infoRow(Icons.access_time_outlined, time),
+                    const SizedBox(height: 16),
+                    const Divider(color: AppColors.border),
+                    const SizedBox(height: 12),
+                    // Note about QR code
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Icon(Icons.qr_code_2, color: AppColors.textSecondary, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(
+                        'Your QR check-in code will appear in Booking History once the owner approves your booking.',
+                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary))),
+                    ]),
                   ]),
                 ),
                 const SizedBox(height: 16),
@@ -477,17 +469,15 @@ class _BookingSuccessScreen extends StatelessWidget {
                     const Icon(Icons.lock_outline, color: AppColors.accent, size: 16),
                     const SizedBox(width: 8),
                     Expanded(child: Text(
-                      'Your deposit is held securely. It will be released to the venue owner '
-                      'when you check in with this code.',
+                      'Your deposit is frozen safely. If the owner rejects or doesn\'t approve within 2 hours, you get a full automatic refund.',
                       style: GoogleFonts.poppins(fontSize: 11, color: AppColors.primary))),
                   ]),
                 ),
                 const SizedBox(height: 32),
-                // Done button
+                // View Bookings button
                 SizedBox(width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
-                      // Push and remove until to trigger a clean rebuild and reload of home data
                       Navigator.of(context).pushNamedAndRemoveUntil('/player-home', (route) => false);
                     },
                     style: ElevatedButton.styleFrom(
@@ -497,6 +487,15 @@ class _BookingSuccessScreen extends StatelessWidget {
                     child: Text('Back to Home', style: GoogleFonts.poppins(
                       color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                   )),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamedAndRemoveUntil('/player-home', (route) => false);
+                    // Navigate to bookings tab — home screen will handle this via route
+                  },
+                  child: Text('View in Booking History →', style: GoogleFonts.poppins(
+                    color: AppColors.accent, fontWeight: FontWeight.w600, fontSize: 13)),
+                ),
               ]),
             ),
           ),
@@ -512,3 +511,5 @@ class _BookingSuccessScreen extends StatelessWidget {
       fontSize: 13, color: AppColors.textPrimary, fontWeight: FontWeight.w500))),
   ]);
 }
+
+

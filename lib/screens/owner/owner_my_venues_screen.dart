@@ -186,14 +186,28 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen> {
                     style: GoogleFonts.poppins(fontSize: 16,
                         fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.accentLight, borderRadius: BorderRadius.circular(20)),
-                child: Text(sport.toUpperCase(),
-                    style: GoogleFonts.poppins(
-                        color: AppColors.accent, fontSize: 10, fontWeight: FontWeight.bold)),
-              ),
+              if (v['is_active'] == false || v['is_active'] == 'false')
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(20)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.hourglass_top, color: AppColors.warning, size: 12),
+                    const SizedBox(width: 4),
+                    Text('PENDING',
+                        style: GoogleFonts.poppins(
+                            color: AppColors.warning, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ]),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentLight, borderRadius: BorderRadius.circular(20)),
+                  child: Text(sport.toUpperCase(),
+                      style: GoogleFonts.poppins(
+                          color: AppColors.accent, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
             ]),
 
             const SizedBox(height: 6),
@@ -238,6 +252,7 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen> {
           ]),
         ),
       ]),
+      ),
     );
   }
 

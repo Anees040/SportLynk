@@ -45,8 +45,8 @@ router.get("/dashboard", async (req, res, next) => {
     await autoGenerateVenueIfMissing(ownerId);
     const today = new Date().toLocaleDateString("en-CA");
 
-    // Run all 4 queries in PARALLEL — reduces latency from ~4x to ~1x round-trip
-    const [venueRes, statsRes, upcomingRes, walletRes] = await Promise.all([
+    // Run all queries in PARALLEL — reduces latency from ~5x to ~1x round-trip
+    const [venueRes, statsRes, upcomingRes, walletRes, escrowRes] = await Promise.all([
       pool.query(
         "SELECT * FROM venues WHERE owner_id=$1 AND is_active=true ORDER BY created_at ASC LIMIT 1",
         [ownerId],
@@ -74,6 +74,14 @@ router.get("/dashboard", async (req, res, next) => {
         "SELECT balance, frozen_balance FROM wallets WHERE user_id=$1",
         [ownerId],
       ),
+      // Sum of deposits that are frozen with players (pending bookings at this owner's venues)
+      pool.query(
+        `SELECT COALESCE(SUM(b.security_deposit), 0) AS pending_escrow
+         FROM bookings b
+         JOIN venues v ON b.venue_id=v.id
+         WHERE v.owner_id=$1 AND b.status='pending'`,
+        [ownerId],
+      ),
     ]);
 
     res.json({
@@ -83,6 +91,7 @@ router.get("/dashboard", async (req, res, next) => {
         stats: statsRes.rows[0] || { bookingsToday: 0, revenueToday: 0, pendingCount: 0 },
         upcomingBookings: upcomingRes.rows,
         wallet: walletRes.rows[0] || { balance: 0, frozen_balance: 0 },
+        pendingEscrow: parseFloat(escrowRes.rows[0]?.pending_escrow || 0),
       },
     });
   } catch (e) {
@@ -102,8 +111,8 @@ router.get("/venues", async (req, res, next) => {
               (SELECT COUNT(*) FROM bookings b WHERE b.venue_id = v.id AND b.status='pending') AS pending_bookings,
               (SELECT COUNT(*) FROM bookings b WHERE b.venue_id = v.id AND b.slot_date = CURRENT_DATE AND b.status IN ('confirmed','checked_in')) AS todays_bookings
        FROM venues v
-       WHERE v.owner_id = $1 AND v.is_active = true
-       ORDER BY v.created_at ASC`,
+       WHERE v.owner_id = $1
+       ORDER BY v.is_active DESC, v.created_at ASC`,
       [req.user.id],
     );
     res.json({ success: true, data: result.rows });
