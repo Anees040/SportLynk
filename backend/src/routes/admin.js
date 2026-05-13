@@ -222,4 +222,34 @@ router.get('/stats', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── GET /api/admin/venues/pending ────────────────────────────────────────────
+// List venues pending approval
+router.get('/venues/pending', async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT v.id, v.name, v.sport_type, v.city, v.address, v.created_at, u.name as owner_name
+       FROM venues v
+       JOIN users u ON u.id = v.owner_id
+       WHERE v.is_active = false
+       ORDER BY v.created_at DESC`
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (e) { next(e); }
+});
+
+// ─── PATCH /api/admin/venues/:id/approve ──────────────────────────────────────
+// Approve a pending venue
+router.patch('/venues/:id/approve', async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `UPDATE venues SET is_active = true WHERE id = $1 RETURNING id`,
+      [req.params.id]
+    );
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, message: 'Venue not found' });
+    }
+    res.json({ success: true, message: 'Venue approved and live' });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

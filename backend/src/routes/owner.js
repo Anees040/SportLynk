@@ -129,10 +129,10 @@ router.post("/venues", async (req, res, next) => {
 
     const sportType = sportTypes && sportTypes.length > 0 ? sportTypes[0].toLowerCase() : 'football';
 
-    // Set is_active = true for demo purposes, so it shows up immediately.
+    // Set is_active = false so it requires admin approval
     const vRes = await pool.query(
       `INSERT INTO venues (owner_id, name, description, sport_type, city, address, base_price, price_per_hour, upfront_percent, venue_photos, operating_hours_from, operating_hours_to, is_active, rating, total_reviews)
-       VALUES ($1, $2, 'Venue added via owner dashboard', $3, $4, $5, $6, $6, 30, $7, $8, $9, true, 0, 0)
+       VALUES ($1, $2, 'Venue added via owner dashboard', $3, $4, $5, $6, $6, 30, $7, $8, $9, false, 0, 0)
        RETURNING id`,
       [ownerId, groundName, sportType, city, fullAddress, pricePerHour, groundPhotos || [], operatingHoursFrom, operatingHoursTo]
     );
@@ -155,6 +155,56 @@ router.post("/venues", async (req, res, next) => {
     }
 
     res.json({ success: true, message: 'Venue successfully created', data: { id: venueId } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// PATCH /api/owner/venues/:id
+router.patch("/venues/:id", async (req, res, next) => {
+  try {
+    const ownerId = req.user.id;
+    const { id } = req.params;
+    const { description, upfront_percent, price_per_hour, venue_photos } = req.body;
+
+    const vCheck = await pool.query('SELECT id FROM venues WHERE id=$1 AND owner_id=$2', [id, ownerId]);
+    if (!vCheck.rows.length) {
+      return res.status(404).json({ success: false, message: 'Venue not found or unauthorized' });
+    }
+
+    const updates = [];
+    const values = [];
+    let i = 1;
+
+    if (description !== undefined) {
+      updates.push(`description=$${i++}`);
+      values.push(description);
+    }
+    if (upfront_percent !== undefined) {
+      updates.push(`upfront_percent=$${i++}`);
+      values.push(upfront_percent);
+    }
+    if (price_per_hour !== undefined) {
+      updates.push(`price_per_hour=$${i++}`);
+      values.push(price_per_hour);
+      // also update base_price to keep them in sync
+      updates.push(`base_price=$${i++}`);
+      values.push(price_per_hour);
+    }
+    if (venue_photos !== undefined) {
+      updates.push(`venue_photos=$${i++}`);
+      values.push(venue_photos);
+    }
+
+    if (updates.length > 0) {
+      values.push(id);
+      await pool.query(
+        `UPDATE venues SET ${updates.join(', ')} WHERE id=$${i}`,
+        values
+      );
+    }
+
+    res.json({ success: true, message: 'Venue updated successfully' });
   } catch (e) {
     next(e);
   }

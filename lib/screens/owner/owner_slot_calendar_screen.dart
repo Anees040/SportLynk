@@ -159,26 +159,29 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
                 const Icon(Icons.stadium_outlined, color: AppColors.accent, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: _selectedVenueId,
-                      icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.textSecondary),
-                      style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() => _selectedVenueId = val);
-                          _loadSlots();
-                        }
-                      },
-                      items: _venues.map((v) {
-                        return DropdownMenuItem<String>(
-                          value: v['id'].toString(),
-                          child: Text(v['name'] ?? 'Unknown Venue'),
-                        );
-                      }).toList(),
-                    ),
-                  ),
+                  child: _venues.length == 1
+                      ? Text(_venues[0]['name'] ?? 'Your Venue',
+                          style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary))
+                      : DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: _selectedVenueId,
+                            icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.textSecondary),
+                            style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _selectedVenueId = val);
+                                _loadSlots();
+                              }
+                            },
+                            items: _venues.map((v) {
+                              return DropdownMenuItem<String>(
+                                value: v['id'].toString(),
+                                child: Text(v['name'] ?? 'Unknown Venue'),
+                              );
+                            }).toList(),
+                          ),
+                        ),
                 ),
               ],
             ),

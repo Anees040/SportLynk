@@ -21,23 +21,27 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
   List<Map<String, dynamic>> _pending = [];
   List<Map<String, dynamic>> _approved = [];
   List<Map<String, dynamic>> _rejected = [];
+  List<Map<String, dynamic>> _pendingVenues = [];
   bool _loadingStats = true;
   bool _loadingList = true;
 
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 4, vsync: this);
+    _tab = TabController(length: 5, vsync: this);
     _tab.addListener(() {
       if (!_tab.indexIsChanging) {
         final statuses = ['pending', 'approved', 'rejected'];
-        if (_tab.index > 0) {
+        if (_tab.index > 0 && _tab.index < 4) {
           _loadList(statuses[_tab.index - 1]);
+        } else if (_tab.index == 4) {
+          _loadVenues();
         }
       }
     });
     _loadStats();
     _loadList('pending');
+    _loadVenues();
   }
 
   @override
@@ -106,6 +110,27 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     }
   }
 
+  Future<void> _loadVenues() async {
+    if (mounted) setState(() => _loadingList = true);
+    try {
+      final r = await http.get(
+        Uri.parse('$_base/admin/venues/pending'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      final d = jsonDecode(r.body);
+      if (mounted && d['success'] == true) {
+        setState(() {
+          _pendingVenues = List<Map<String, dynamic>>.from(d['data']);
+          _loadingList = false;
+        });
+      } else {
+        if (mounted) setState(() => _loadingList = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingList = false);
+    }
+  }
+
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
@@ -162,9 +187,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
               GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600),
           tabs: const [
             Tab(text: 'DASHBOARD'),
-            Tab(text: 'PENDING'),
-            Tab(text: 'APPROVED'),
-            Tab(text: 'REJECTED'),
+            Tab(text: 'OWNERS (P)'),
+            Tab(text: 'OWNERS (A)'),
+            Tab(text: 'OWNERS (R)'),
+            Tab(text: 'VENUES'),
           ],
         ),
       ),
@@ -175,6 +201,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
           _buildList('pending'),
           _buildList('approved'),
           _buildList('rejected'),
+          _buildVenueList(),
         ],
       ),
     );
@@ -496,6 +523,94 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
           ]),
         ]),
       ),
+    );
+  }
+
+  Future<void> _approveVenue(String venueId) async {
+    try {
+      final r = await http.patch(
+        Uri.parse('$_base/admin/venues/$venueId/approve'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      final d = jsonDecode(r.body);
+      if (mounted && d['success'] == true) {
+        _snack('Venue approved and is now live!');
+        _loadVenues();
+        _loadStats();
+      } else {
+        if (mounted) _snack(d['message'] ?? 'Failed');
+      }
+    } catch (e) {
+      if (mounted) _snack('Network error');
+    }
+  }
+
+  Widget _buildVenueList() {
+    if (_loadingList) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+    }
+    if (_pendingVenues.isEmpty) {
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.stadium_outlined, size: 64, color: AppColors.disabled),
+          const SizedBox(height: 12),
+          Text('No pending venues',
+              style: GoogleFonts.poppins(fontSize: 16, color: AppColors.textSecondary)),
+        ]),
+      );
+    }
+    return RefreshIndicator(
+      color: AppColors.accent,
+      onRefresh: _loadVenues,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _pendingVenues.length,
+        itemBuilder: (_, i) => _venueCard(_pendingVenues[i]),
+      ),
+    );
+  }
+
+  Widget _venueCard(Map<String, dynamic> v) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          CircleAvatar(
+            backgroundColor: AppColors.accentLight,
+            child: const Icon(Icons.stadium, color: AppColors.accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(v['name'] ?? 'Venue',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15)),
+              Text('Owner: ${v['owner_name'] ?? 'Unknown'}',
+                  style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textSecondary),
+          const SizedBox(width: 4),
+          Expanded(child: Text('${v['city'] ?? ''} - ${v['address'] ?? ''}', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary))),
+        ]),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () => _approveVenue(v['id']),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+            child: Text('Approve Venue', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ]),
     );
   }
 }

@@ -272,7 +272,11 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
         'operatingHoursTo': _closeCtrl.text,
         'pricePerHour': _priceCtrl.text.trim(),
         'alternateContactPhone': _altPhoneCtrl.text.trim().isEmpty ? null : _altPhoneCtrl.text.trim(),
-        'groundPhotos': groundUrls.isNotEmpty ? groundUrls : _groundPhotos.map((x) => x.path).toList(),
+        'groundPhotos': groundUrls.isNotEmpty ? groundUrls : [
+          'https://images.unsplash.com/photo-1553778263-73a83bab9b0c?auto=format&fit=crop&w=800',
+          'https://images.unsplash.com/photo-1574629810360-7efbb1924043?auto=format&fit=crop&w=800',
+          'https://images.unsplash.com/photo-1459865264687-595d652de67e?auto=format&fit=crop&w=800'
+        ],
       };
 
       if (!mounted) return;

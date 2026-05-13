@@ -8,6 +8,7 @@ import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 
 import 'owner_add_venue_screen.dart';
+import 'owner_venue_management_screen.dart';
 
 class OwnerMyVenuesScreen extends StatefulWidget {
   const OwnerMyVenuesScreen({super.key});
@@ -142,18 +143,26 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen> {
     final sport = (v['sport_type'] ?? 'sport').toString();
     final rating = _parseNum(v['rating']);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 12, offset: const Offset(0, 4))
-        ],
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return GestureDetector(
+      onTap: () async {
+        final res = await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => OwnerVenueManagementScreen(venue: v)),
+        );
+        if (res == true) _load();
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 12, offset: const Offset(0, 4))
+          ],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // Photo header
         ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),

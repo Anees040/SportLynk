@@ -303,7 +303,7 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
               ]),
             ]),
             Text(
-              'PKR ${(b['total_amount'] as num?)?.toStringAsFixed(0) ?? '0'}',
+              'PKR ${_parseNum(b['total_amount']).toStringAsFixed(0)}',
               style: GoogleFonts.poppins(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ]),
@@ -376,5 +376,11 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
     if (dt.year == now.year && dt.month == now.month && dt.day == now.day) return 'Today';
     const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${dt.day} ${m[dt.month - 1]}';
+  }
+
+  double _parseNum(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
   }
 }
