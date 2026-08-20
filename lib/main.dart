@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-
 import 'constants/colors.dart';
 import 'providers/auth_provider.dart';
 import 'providers/venue_provider.dart';
