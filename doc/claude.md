@@ -50,6 +50,11 @@ trained ML models — never replace them with external AI API calls.
     refresh on re-tap, 409 to others), LAZY expiry so no sweep job, derived
     effective_status paints Blue "held" in the player grid + owner calendar,
     player grid auto-refreshes every 30s.
+  - C done — backend hardening: middleware/rateLimit.js (SEC-6 — 100/min per
+    authenticated user, 20/min per anonymous IP, health exempt), morgan 'dev'
+    logging, envelope closed on unknown routes (was HTML) + malformed JSON (was
+    500), migration 012 indexes (only bookings(venue_id,slot_id) was missing),
+    .env.example committed.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave. API.md / DATABASE.md =
