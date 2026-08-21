@@ -67,6 +67,43 @@ trained ML models — never replace them with external AI API calls.
     PROGRESS.md "Wave D schema notes". global_settings seeded but wired to
     nothing; escrow.js stays the money source of truth. Also deleted the dead
     src/controllers/ directory (4 files, zero references, held a USE-3 leak).
+  - F done — client plumbing + withdrawals + bug sweep. Central ApiClient
+    (services/api_service.dart) attaches the JWT and maps every failure to a
+    readable sentence; timeout is 45s until the first success of the session then
+    10s, because a flat 10s fails every Render cold start. utils/num_util.dart
+    asNum() replaces 11 hand-rolled DECIMAL parsers. Migration 014 adds
+    `withdrawals` — a DELIBERATE single exception to "no schema past 013", since a
+    pending request needs durable state; "one pending at a time" is a PARTIAL
+    UNIQUE INDEX (23505 → 409), not a JS check. POST/GET/DELETE /api/wallet/
+    withdraw(als) + GET /wallet/frozen (FR7.2, returns delta vs frozen_balance),
+    withdrawalJob.js as the third sweep. Money leaves balance at REQUEST time;
+    settlement moves nothing; cancel refunds with a NEW append-only row.
+    SL_TEST_{AUTO_DECIDE,NO_SHOW,SETTLE}_MINUTES + SL_TEST_SWEEP_SECONDS make the
+    timed rules demoable in 1 min — timings only, never money, loud boot banner.
+    Shared withdraw/frozen/transaction-detail sheets; the shared txnLabel/txnIcon/
+    fmtTxnDate fixed two live bugs (escrow_release + escrow_received had NO label
+    or icon in either wallet screen, and every timestamp displayed 5h behind PKT
+    for want of .toLocal()). Also: two screens lied about failure (empty list /
+    "PKR 0" on error), the owner's Withdraw button was a stub, and 4 dead private
+    classes in owner_wallet_screen were blocking flutter analyze.
+  - E done — cloud demo deploy. api_constants.dart baseUrl now
+    bool.hasEnvironment('API_BASE_URL') ? String.fromEnvironment(...) :
+    10.0.2.2 — a physical phone ALWAYS needs --dart-define now (was a baked-in
+    LAN IP). Three Wave-E spec blockers fixed: pool.js derived TLS from NODE_ENV
+    alone (now also from sslmode= in the URL and from the host not being
+    localhost, + 4 mapped connection-failure hints); seed_venues.js loaded .env
+    from the WRONG DIR and built its own localhost/no-SSL Pool so it could never
+    reach Supabase (now require('../db/pool'), plus a destructive pre-flight that
+    counts and warns before it DELETEs that owner's venues/slots/bookings/txns);
+    and the spec's "run schema.sql + migrations 001-010 in the SQL editor" would
+    have DROPPED the live accounts — Supabase is the only DB, so step 2 verifies,
+    never re-runs. package.json engines >=20 (bcrypt native build). server.js now
+    sets trust proxy=1 behind Render, which rateLimit.js had asked for and nobody
+    had done — without it all anonymous traffic shares one 20/min bucket.
+    New docs: DEPLOY_GUIDE.md (11 steps, each with "what you should see", 15-row
+    troubleshooting table) and S1_ACCEPTANCE.md (checklist audited row by row +
+    manual test scripts). Render free tier sleeps: cold start ~30-50s AND all
+    three setInterval sweeps stop while asleep — demo timed features locally.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave. API.md / DATABASE.md =

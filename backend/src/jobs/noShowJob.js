@@ -24,7 +24,7 @@ const {
 } = require('../utils/escrow');
 const { notify } = require('../utils/notify');
 
-const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const SWEEP_INTERVAL_MS = POLICY.SWEEP_INTERVAL_MS;
 
 let _running = false;
 

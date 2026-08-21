@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/num_util.dart';
 
 import '../../widgets/custom_loader.dart';
 import 'confirm_booking_screen.dart';
@@ -178,12 +179,6 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
       behavior: SnackBarBehavior.floating));
   }
 
-  double _parseDouble(dynamic val) {
-    if (val == null) return 0.0;
-    if (val is num) return val.toDouble();
-    return double.tryParse(val.toString()) ?? 0.0;
-  }
-
   /// Convert "HH:MM:SS" or "HH:MM" to 12-hour AM/PM format
   String _to12Hour(dynamic t) {
     if (t == null) return '';
@@ -237,7 +232,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           style: GoogleFonts.poppins(color: AppColors.textSecondary))));
     }
 
-    final price = _parseDouble(_venue!['price_per_hour']);
+    final price = asNum(_venue!['price_per_hour']);
     final sportType = (_venue!['sport_type'] ?? 'sport').toString();
     final images = _galleryImages;
 
@@ -548,7 +543,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                     final selected = _selectedSlotId == slot['id'];
                     final locking = _lockingSlotId == slot['id'];
                     final time12 = _to12Hour(slot['start_time']);
-                    final slotPrice = _parseDouble(slot['price']);
+                    final slotPrice = asNum(slot['price']);
                     final statusColor = _slotStatusColor(status);
 
                     return GestureDetector(
@@ -638,7 +633,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   }
 
   Widget _bottomBar() {
-    final slotPrice = _selectedSlot != null ? _parseDouble(_selectedSlot!['price']) : 0.0;
+    final slotPrice = _selectedSlot != null ? asNum(_selectedSlot!['price']) : 0.0;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),

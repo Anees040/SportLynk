@@ -1,12 +1,12 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
-import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
+import '../../utils/num_util.dart';
 import '../../widgets/custom_loader.dart';
+import '../../widgets/transaction_detail_sheet.dart';
 
 class WalletHistoryScreen extends StatefulWidget {
   const WalletHistoryScreen({super.key});
@@ -15,8 +15,11 @@ class WalletHistoryScreen extends StatefulWidget {
 }
 
 class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
+  final _api = ApiClient();
+
   List<Map<String, dynamic>> _txns = [];
   bool _loading = true;
+  String? _error;
   String _filter = 'all';
   static const _filters = [
     ('all', 'All'), ('topup', 'Top-ups'),
@@ -27,28 +30,30 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final f = _filter == 'all' ? '' : '&type=$_filter';
-      final resp = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/wallet/transactions?limit=50$f'),
-        headers: {'Authorization': 'Bearer $token'});
-      final data = jsonDecode(resp.body);
-      if (mounted) {
-        setState(() {
-          _txns = data['success'] == true
-            ? List<Map<String,dynamic>>.from(data['data']) : [];
-          _loading = false;
-        });
+    setState(() { _loading = true; _error = null; });
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) {
+      setState(() { _loading = false; _error = 'Please log in again to see your history.'; });
+      return;
+    }
+    // Via ApiClient so this screen gets the shared timeout and the friendly
+    // error text. The old raw http.get had no timeout, and it swallowed every
+    // failure into an empty list — a 401 or a dead server both showed
+    // "No transactions found", which is a lie the user cannot act on.
+    final res = await _api.get('/wallet/transactions', token: token, queryParams: {
+      'limit': '50',
+      if (_filter != 'all') 'type': _filter,
+    });
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      if (res['success'] == true) {
+        _txns = List<Map<String, dynamic>>.from(res['data'] ?? const []);
+      } else {
+        _txns = [];
+        _error = (res['message'] ?? 'Could not load your transactions.').toString();
       }
-    } catch (_) { if (mounted) { setState(() => _loading = false); } }
-  }
-
-  double _parseDouble(dynamic val) {
-    if (val == null) return 0.0;
-    if (val is num) return val.toDouble();
-    return double.tryParse(val.toString()) ?? 0.0;
+    });
   }
 
   @override
@@ -83,12 +88,22 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
       body: _loading
         ? const CustomLoader()
         : _txns.isEmpty
-          ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.disabled),
-              const SizedBox(height: 12),
-              Text('No transactions found', style: GoogleFonts.poppins(
-                fontSize: 15, color: AppColors.textSecondary)),
-            ]))
+          ? Center(child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(_error == null ? Icons.receipt_long_outlined : Icons.cloud_off,
+                  size: 64, color: _error == null ? AppColors.disabled : AppColors.error),
+                const SizedBox(height: 12),
+                Text(_error ?? 'No transactions found', textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(fontSize: 15, color: AppColors.textSecondary)),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  TextButton.icon(onPressed: _load,
+                    icon: const Icon(Icons.refresh, size: 18, color: AppColors.accent),
+                    label: Text('Try again', style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600, color: AppColors.accent))),
+                ],
+              ])))
           : RefreshIndicator(color: AppColors.accent, onRefresh: _load,
               child: ListView.separated(
                 physics: const BouncingScrollPhysics(),
@@ -100,18 +115,22 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
     );
   }
 
+  /// One ledger row. Label, icon, credit-direction and the PKT timestamp all
+  /// come from widgets/transaction_detail_sheet.dart — this screen used to keep
+  /// its own copies, which were missing escrow_release / escrow_received and
+  /// printed timestamps in UTC.
   Widget _txnCard(Map<String, dynamic> t) {
-    final type = t['type'] as String;
-    final amount = _parseDouble(t['amount']);
-    final isCredit = ['topup', 'refund', 'escrow_received'].contains(type);
+    final type = (t['type'] ?? '').toString();
+    final amount = asNum(t['amount']);
+    final isCredit = isCreditTxn(type);
     final isFrozen = type == 'booking_payment';
-    
-    final label = isFrozen ? 'Security Deposit' : _label(type);
+
+    final label = isFrozen ? 'Security Deposit' : txnLabel(type);
     final color = isFrozen ? Colors.orange : (isCredit ? AppColors.success : AppColors.error);
-    final iconData = isFrozen ? Icons.lock_outline : _icon(type);
-    
+    final iconData = isFrozen ? Icons.lock_outline : txnIcon(type);
+
     return GestureDetector(
-      onTap: () => _showDetail(t),
+      onTap: () => TransactionDetailSheet.show(context, t),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(color: Colors.white,
@@ -130,7 +149,7 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
             Text(t['counterparty_name'] ?? '',
               style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
               maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(_fmtDate(t['created_at']),
+            Text(fmtTxnDate(t['created_at'] as String?),
               style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary)),
           ])),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -140,89 +159,10 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
             if (t['reference_id'] != null)
               Text('#${(t['reference_id'] as String).replaceAll('TRX-','')}',
                 style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textSecondary)),
+            const Icon(Icons.chevron_right, size: 14, color: AppColors.textSecondary),
           ]),
         ]),
       ),
     );
-  }
-
-  void _showDetail(Map<String, dynamic> t) {
-    final type = t['type'] as String;
-    final amount = _parseDouble(t['amount']);
-    final isCredit = ['topup', 'refund'].contains(type);
-    showModalBottomSheet(context: context, isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 40, height: 4,
-            decoration: BoxDecoration(color: AppColors.border,
-              borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 20),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('TRANSACTION ID', style: GoogleFonts.poppins(
-                fontSize: 10, color: AppColors.textSecondary, letterSpacing: 0.5)),
-              Text(t['reference_id'] ?? '—', style: GoogleFonts.poppins(
-                fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-            ]),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: (isCredit ? AppColors.accent : AppColors.error).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8)),
-              child: Text(isCredit ? 'CREDIT' : 'DEBIT',
-                style: GoogleFonts.poppins(
-                  color: isCredit ? AppColors.accent : AppColors.error,
-                  fontWeight: FontWeight.bold, fontSize: 11))),
-          ]),
-          const SizedBox(height: 20),
-          const Divider(color: AppColors.border),
-          _detailRow('Amount',
-            'PKR ${amount.abs().toStringAsFixed(0)}',
-            valueColor: isCredit ? AppColors.success : AppColors.error),
-          _detailRow('Type', _label(type)),
-          if (t['counterparty_name'] != null)
-            _detailRow('Counterparty', t['counterparty_name']),
-          _detailRow('Timestamp', _fmtDate(t['created_at'])),
-          if (t['balance_after'] != null)
-            _detailRow('Balance After',
-              'PKR ${_parseDouble(t['balance_after']).toStringAsFixed(0)}'),
-          const SizedBox(height: 24),
-        ]),
-      ));
-  }
-
-  Widget _detailRow(String l, String? v, {Color? valueColor}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 10),
-    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(l, style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
-      const SizedBox(width: 16),
-      Flexible(child: Text(v ?? '—', textAlign: TextAlign.end,
-        style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600,
-          color: valueColor ?? AppColors.textPrimary))),
-    ]));
-
-  IconData _icon(String t) => switch(t) {
-    'topup' => Icons.south_west, 'booking_payment' => Icons.north_east,
-    'security_deposit' => Icons.lock_outline, 'refund' => Icons.replay,
-    'no_show_penalty' => Icons.cancel_outlined, _ => Icons.swap_horiz,
-  };
-
-  String _label(String t) => switch(t) {
-    'topup' => 'Wallet Top-up', 'booking_payment' => 'Booking Payment',
-    'security_deposit' => 'Security Deposit', 'refund' => 'Booking Refund',
-    'no_show_penalty' => 'No-Show Penalty', 'owner_payout' => 'Owner Payout',
-    'withdrawal' => 'Withdrawal', _ => 'Transaction',
-  };
-
-  String _fmtDate(String? iso) {
-    if (iso == null) return '';
-    final dt = DateTime.tryParse(iso);
-    if (dt == null) return '';
-    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return '${dt.day} ${m[dt.month-1]}, ${dt.year} • ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
   }
 }

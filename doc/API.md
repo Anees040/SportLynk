@@ -32,8 +32,52 @@
 | Method | Endpoint | Query | Response |
 |--------|----------|-------|----------|
 | GET | `/wallet/me` | — | `{balance, frozen_balance}` |
-| GET | `/wallet/transactions` | `limit?, type?` | `[{id, type, amount, balance_after, description, counterparty_name, reference_id, created_at}]` |
+| GET | `/wallet/transactions` | `limit?, type?` | `[{id, type, amount, balance_after, description, counterparty_name, reference_id, created_at, venue_name, slot_date, start_time, end_time}]` |
 | POST | `/wallet/topup` | — | Body: `{amount}` → `{newBalance}` |
+| GET | `/wallet/frozen` | — | `{items: [{id, total_amount, slot_date, start_time, end_time, status, venue_name}], itemsTotal, walletFrozen, delta}` |
+| GET | `/wallet/withdrawals` | `limit?` | `{items: [{id, amount, status, method, account_name, account_number, requested_at, completed_at, failure_reason}], pending}` |
+| POST | `/wallet/withdraw` | — | Body: `{amount, method?, accountName?, accountNumber?}` → `{withdrawal, newBalance}` |
+| DELETE | `/wallet/withdraw/:id` | — | `{withdrawal, newBalance}` — cancels a pending request and refunds it |
+
+### `GET /wallet/frozen` (FR7.2)
+
+One row per booking that is currently holding escrow — i.e. `status IN
+('pending','confirmed')`, since escrow is released on check-in, cancel, reject and
+no-show. `total_amount` is the frozen amount for that booking.
+
+`delta = walletFrozen - itemsTotal` and should be **0**. It is returned rather
+than hidden so a mismatch is visible: a non-zero delta means legacy rows escrowed
+under the pre-Wave-A 30% rule. Computed server-side rather than filtered in the
+client precisely so the comparison can be made against `wallets.frozen_balance`.
+
+### `POST /wallet/withdraw` (FR7.4 / ER1.6)
+
+| Condition | Status | Message |
+|---|---|---|
+| `amount < 200` | 400 | Minimum withdrawal is PKR 200. |
+| `amount > balance` | 400 | Names the available balance; escrow is not withdrawable. |
+| a `pending` request already exists | **409** | You already have a withdrawal in progress. |
+| bad `method` | 400 | Mirrors migration 014's `CHECK` so a bad value is a readable 400, not a 500 from constraint `23514`. |
+| ok | 201 | `{withdrawal, newBalance}` |
+
+The 409 is enforced by a **partial unique index** (`uq_withdrawals_one_pending ON
+withdrawals (user_id) WHERE status = 'pending'`), not by a JS read-then-insert —
+two fast taps would both read "none pending" and both insert. The route maps
+Postgres error `23505` to the 409.
+
+**Money timing.** The debit happens at **request** time, so you cannot spend money
+you have already asked to withdraw:
+
+| Event | Wallet | Ledger | `withdrawals.status` |
+|---|---|---|---|
+| `POST /withdraw` | `balance -= amount` | 1 row `withdrawal`, `-amount` | `pending` |
+| Settles (24 h, `withdrawalJob`) | **nothing moves** | none | `completed` |
+| `DELETE /withdraw/:id` | `balance += amount` | 1 **new** `refund` row | `cancelled` |
+
+The refund is a new append-only row, not a reversal of the original — the ledger
+keeps both halves of the story. The hold is a plain `balance` debit and
+deliberately **not** `frozen_balance`, because `frozen_balance` means *booking
+escrow* and `GET /wallet/frozen` itemises it per booking.
 
 ---
 
@@ -113,4 +157,4 @@
 | `escrow_received` | Owner received money from player |
 | `no_show_penalty` | Player's deposit forfeited for no-show |
 | `owner_payout` | Owner withdrew balance |
-| `withdrawal` | User withdrew wallet balance |
+| `withdrawal` | User requested a withdrawal — debited at request time, not at settlement |

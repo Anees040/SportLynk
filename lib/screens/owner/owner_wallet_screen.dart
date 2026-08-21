@@ -1,12 +1,13 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
-import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
+import '../../utils/num_util.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/transaction_detail_sheet.dart';
+import '../../widgets/withdraw_sheet.dart';
 import '../player/wallet_history_screen.dart';
 
 class OwnerWalletScreen extends StatefulWidget {
@@ -16,38 +17,58 @@ class OwnerWalletScreen extends StatefulWidget {
 }
 
 class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
+  final _api = ApiClient();
+
   Map<String, dynamic>? _wallet;
   List<Map<String, dynamic>> _txns = [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final walletResp = await http.get(Uri.parse('${ApiConstants.baseUrl}/wallet/me'),
-        headers: {'Authorization': 'Bearer $token'});
-      final txnResp = await http.get(Uri.parse('${ApiConstants.baseUrl}/wallet/transactions?limit=5'),
-        headers: {'Authorization': 'Bearer $token'});
-      if (mounted) {
-        final wData = jsonDecode(walletResp.body);
-        final tData = jsonDecode(txnResp.body);
-        setState(() {
-          _wallet = wData['success'] == true ? wData['data'] : null;
-          _txns = tData['success'] == true
-            ? List<Map<String,dynamic>>.from(tData['data']) : [];
-          _loading = false;
-        });
+    setState(() { _loading = true; _error = null; });
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) {
+      setState(() { _loading = false; _error = 'Please log in again to see your wallet.'; });
+      return;
+    }
+    // Both calls at once instead of one after the other, and through ApiClient
+    // so a hung request times out. The old version caught every failure and
+    // left `_wallet` null, which renders as "PKR 0" — an owner seeing zero
+    // after a network hiccup has no way to tell that from actually losing money.
+    final results = await Future.wait([
+      _api.get('/wallet/me', token: token),
+      _api.get('/wallet/transactions', token: token, queryParams: {'limit': '5'}),
+    ]);
+    if (!mounted) return;
+    final wRes = results[0];
+    final tRes = results[1];
+    setState(() {
+      _loading = false;
+      if (wRes['success'] == true) {
+        _wallet = wRes['data'] as Map<String, dynamic>?;
+      } else {
+        _wallet = null;
+        _error = (wRes['message'] ?? 'Could not load your wallet.').toString();
       }
-    } catch (_) { if (mounted) setState(() => _loading = false); }
+      _txns = tRes['success'] == true
+        ? List<Map<String, dynamic>>.from(tRes['data'] ?? const [])
+        : [];
+    });
   }
 
-  double _parseDouble(dynamic val) {
-    if (val == null) return 0.0;
-    if (val is num) return val.toDouble();
-    return double.tryParse(val.toString()) ?? 0.0;
+  /// Owners are the ones who actually accumulate money — the escrow moves 100%
+  /// of the booking to them at check-in — so the withdraw button here matters
+  /// more than the player one. The endpoint and the sheet are role-agnostic, so
+  /// this is the same flow, not a second implementation.
+  Future<void> _showWithdrawSheet() async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) return;
+    final changed = await WithdrawSheet.show(context, token: token,
+      available: asNum(_wallet?['balance']));
+    if (changed && mounted) _load();
   }
 
   void _snack(String msg, Color c) {
@@ -71,7 +92,8 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
         actions: [
           IconButton(icon: const Icon(Icons.help_outline, color: Colors.white70),
             onPressed: () => _snack(
-              'Wallet balance is used to book venues. Top up via the button below.',
+              'Earnings land here when a player checks in. Frozen means a booking '
+              'is still active. Withdraw available funds with the button below.',
               AppColors.primary)),
         ],
       ),
@@ -82,6 +104,26 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               child: Column(children: [
+                // A failed load must never look like a zero balance.
+                if (_error != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.error.withValues(alpha: 0.25))),
+                    child: Row(children: [
+                      const Icon(Icons.cloud_off, size: 17, color: AppColors.error),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(_error!, style: GoogleFonts.poppins(
+                        fontSize: 12, color: AppColors.textPrimary, height: 1.4))),
+                      TextButton(onPressed: _load, child: Text('Retry',
+                        style: GoogleFonts.poppins(fontSize: 12,
+                          fontWeight: FontWeight.w600, color: AppColors.accent))),
+                    ])),
+                  const SizedBox(height: 12),
+                ],
                 // ── BALANCE CARD ───────────────────────────
                 Container(
                   width: double.infinity,
@@ -95,7 +137,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                     Text('TOTAL BALANCE', style: GoogleFonts.poppins(
                       color: Colors.white60, fontSize: 11, letterSpacing: 1)),
                     const SizedBox(height: 6),
-                    Text('PKR ${_parseDouble(_wallet?['balance']).toStringAsFixed(0)}',
+                    Text('PKR ${asNum(_wallet?['balance']).toStringAsFixed(0)}',
                       style: GoogleFonts.poppins(color: Colors.white,
                         fontSize: 36, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 20),
@@ -114,7 +156,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                               color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
                           ]),
                           const SizedBox(height: 4),
-                          Text('PKR ${_parseDouble(_wallet?['balance']).toStringAsFixed(0)}',
+                          Text('PKR ${asNum(_wallet?['balance']).toStringAsFixed(0)}',
                             style: GoogleFonts.poppins(color: AppColors.accent,
                               fontSize: 16, fontWeight: FontWeight.bold)),
                         ])),
@@ -134,7 +176,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                               color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
                           ]),
                           const SizedBox(height: 4),
-                          Text('PKR ${_parseDouble(_wallet?['frozen_balance']).toStringAsFixed(0)}',
+                          Text('PKR ${asNum(_wallet?['frozen_balance']).toStringAsFixed(0)}',
                             style: GoogleFonts.poppins(color: Colors.white70,
                               fontSize: 16, fontWeight: FontWeight.bold)),
                         ])),
@@ -156,8 +198,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28)),
                       padding: const EdgeInsets.symmetric(vertical: 13)),
-                    onPressed: () => _snack(
-                      'Withdrawals will be available after launch.', AppColors.primary),
+                    onPressed: _showWithdrawSheet,
                   )),
                 ]),
                 const SizedBox(height: 24),
@@ -188,219 +229,51 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
     );
   }
 
+  /// One ledger row. Label, icon, credit-direction and the PKT timestamp come
+  /// from widgets/transaction_detail_sheet.dart. The private copies this screen
+  /// used to hold had no `escrow_received` case — which is the single most
+  /// common row in an *owner's* ledger, since that is how a check-in pays them.
+  /// It rendered as a bare "Transaction" with a generic arrow.
   Widget _txnTile(Map<String, dynamic> t) {
-    final type = t['type'] as String;
-    final amount = _parseDouble(t['amount']);
-    final isCredit = ['topup', 'refund', 'escrow_received'].contains(type);
+    final type = (t['type'] ?? '').toString();
+    final amount = asNum(t['amount']);
+    final isCredit = isCreditTxn(type);
     final isFrozen = type == 'booking_payment';
 
-    final icon = isFrozen ? Icons.lock_outline : _txnIcon(type);
+    final icon = isFrozen ? Icons.lock_outline : txnIcon(type);
     final color = isFrozen ? Colors.orange : (isCredit ? AppColors.success : AppColors.error);
-    final label = isFrozen ? 'Security Deposit' : _txnLabel(type);
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border)),
-      child: Row(children: [
-        Container(width: 42, height: 42,
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.12),
-            shape: BoxShape.circle),
-          child: Icon(icon, color: color, size: 20)),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary)),
-          Text(_fmtDate(t['created_at']),
-            style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
-        ])),
-        Text(isFrozen ? 'Frozen ${amount.abs().toStringAsFixed(0)}' : '${isCredit ? '+' : ''}PKR ${amount.abs().toStringAsFixed(0)}',
-          style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
-            color: color)),
-      ]),
-    );
-  }
+    final label = isFrozen ? 'Security Deposit' : txnLabel(type);
 
-  IconData _txnIcon(String t) => switch (t) {
-    'topup' => Icons.south_west,
-    'booking_payment' => Icons.north_east,
-    'security_deposit' => Icons.lock_outline,
-    'refund' => Icons.replay,
-    'no_show_penalty' => Icons.cancel_outlined,
-    _ => Icons.swap_horiz,
-  };
-
-
-  String _txnLabel(String t) => switch (t) {
-    'topup' => 'Wallet Top-up',
-    'booking_payment' => 'Booking Payment',
-    'security_deposit' => 'Security Deposit',
-    'refund' => 'Booking Refund',
-    'no_show_penalty' => 'No-Show Penalty',
-    'owner_payout' => 'Owner Payout',
-    'withdrawal' => 'Withdrawal',
-    _ => 'Transaction',
-  };
-
-  String _fmtDate(String? iso) {
-    if (iso == null) return '';
-    final dt = DateTime.tryParse(iso);
-    if (dt == null) return '';
-    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    final h = dt.hour.toString().padLeft(2,'0');
-    final min = dt.minute.toString().padLeft(2,'0');
-    return '${dt.day} ${m[dt.month-1]}, ${dt.year} • $h:$min';
-  }
-}
-
-// ── TOP UP SHEET ─────────────────────────────────────────────
-
-class _TopUpSheet extends StatefulWidget {
-  final List<double> amounts;
-  final void Function(double) onTopUp;
-  const _TopUpSheet({required this.amounts, required this.onTopUp});
-  @override
-  State<_TopUpSheet> createState() => _TopUpSheetState();
-}
-
-class _TopUpSheetState extends State<_TopUpSheet> {
-  double? _selected;
-  final _customCtrl = TextEditingController();
-
-  @override
-  void dispose() { _customCtrl.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20,
-        20 + MediaQuery.of(context).viewInsets.bottom),
-      child: Column(mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Center(child: Container(width: 40, height: 4,
-          decoration: BoxDecoration(color: AppColors.border,
-            borderRadius: BorderRadius.circular(2)))),
-        const SizedBox(height: 16),
-        Text('Top Up Wallet', style: GoogleFonts.poppins(
-          fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-        const SizedBox(height: 6),
-        Text('Select amount or enter custom amount',
-          style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-        const SizedBox(height: 16),
-        // Quick amounts
-        GridView.count(crossAxisCount: 2, shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 3.0,
-          children: widget.amounts.map((amt) {
-            final sel = _selected == amt;
-            return GestureDetector(
-              onTap: () => setState(() { _selected = amt; _customCtrl.clear(); }),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: sel ? AppColors.accent : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: sel ? AppColors.accent : AppColors.border,
-                    width: sel ? 2 : 1)),
-                child: Center(child: Text('PKR ${amt.toStringAsFixed(0)}',
-                  style: GoogleFonts.poppins(
-                    color: sel ? Colors.white : AppColors.textPrimary,
-                    fontWeight: FontWeight.w600, fontSize: 14))),
-              ),
-            );
-          }).toList()),
-        const SizedBox(height: 12),
-        // Custom amount
-        TextField(
-          controller: _customCtrl,
-          keyboardType: TextInputType.number,
-          onChanged: (v) => setState(() => _selected = null),
-          style: GoogleFonts.poppins(fontSize: 14),
-          decoration: InputDecoration(
-            hintText: 'Or enter custom amount (PKR 100 – 50,000)',
-            hintStyle: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
-            prefixText: 'PKR ',
-            prefixStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
-            filled: true, fillColor: AppColors.inputFill,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.accent, width: 1.5)),
-          ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(width: double.infinity,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-              padding: const EdgeInsets.symmetric(vertical: 14)),
-            onPressed: () {
-              double? amt = _selected;
-              if (amt == null && _customCtrl.text.isNotEmpty) {
-                amt = double.tryParse(_customCtrl.text);
-              }
-              if (amt == null || amt < 100 || amt > 50000) {
-                SnackbarUtil.showError(context, 'Enter amount between PKR 100 and 50,000');
-                return;
-              }
-              widget.onTopUp(amt);
-            },
-            child: Text('Add to Wallet', style: GoogleFonts.poppins(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-          )),
-        const SizedBox(height: 8),
-      ]),
-    );
-  }
-}
-
-class _PaymentSimulationDialog extends StatefulWidget {
-  const _PaymentSimulationDialog();
-  @override
-  State<_PaymentSimulationDialog> createState() => _PaymentSimulationDialogState();
-}
-
-class _PaymentSimulationDialogState extends State<_PaymentSimulationDialog> {
-  String _status = 'Initializing secure gateway...';
-
-  @override
-  void initState() {
-    super.initState();
-    _simulate();
-  }
-
-  Future<void> _simulate() async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (mounted) setState(() => _status = 'Verifying bank details...');
-    await Future.delayed(const Duration(milliseconds: 1000));
-    if (mounted) setState(() => _status = 'Processing payment...');
-    await Future.delayed(const Duration(milliseconds: 1000));
-    if (mounted) setState(() => _status = 'Payment successful!');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(color: AppColors.accent),
-            const SizedBox(height: 20),
-            Text(
-              _status,
-              style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+    return InkWell(
+      onTap: () => TransactionDetailSheet.show(context, t),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border)),
+        child: Row(children: [
+          Container(width: 42, height: 42,
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.12),
+              shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 20)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary)),
+            Text(fmtTxnDate(t['created_at'] as String?),
+              style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
+          ])),
+          Text(isFrozen ? 'Frozen ${amount.abs().toStringAsFixed(0)}' : '${isCredit ? '+' : ''}PKR ${amount.abs().toStringAsFixed(0)}',
+            style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
+              color: color)),
+          const SizedBox(width: 4),
+          const Icon(Icons.chevron_right, size: 16, color: AppColors.textSecondary),
+        ]),
       ),
     );
   }
 }
+
+

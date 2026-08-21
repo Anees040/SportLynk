@@ -1,3 +1,5 @@
+import '../utils/num_util.dart';
+
 class Venue {
   final String id;
   final String name;
@@ -35,10 +37,10 @@ class Venue {
       sportType: json['sport_type'] as String?,
       city: json['city'] as String?,
       address: json['address'] as String?,
-      latitude: _toDouble(json['latitude']),
-      longitude: _toDouble(json['longitude']),
-      basePrice: _toDouble(json['base_price']),
-      currentPrice: _toDouble(json['current_price']),
+      latitude: asNumOrNull(json['latitude']),
+      longitude: asNumOrNull(json['longitude']),
+      basePrice: asNumOrNull(json['base_price']),
+      currentPrice: asNumOrNull(json['current_price']),
       imageUrl: json['image_url'] as String?,
       isActive: json['is_active'] as bool? ?? true,
     );
@@ -59,13 +61,5 @@ class Venue {
       'image_url': imageUrl,
       'is_active': isActive,
     };
-  }
-
-  static double? _toDouble(dynamic value) {
-    if (value == null) return null;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value);
-    return null;
   }
 }

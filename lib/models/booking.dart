@@ -1,3 +1,5 @@
+import '../utils/num_util.dart';
+
 class Booking {
   final String id;
   final String? venueId;
@@ -40,8 +42,8 @@ class Booking {
       playerId: json['player_id'] as String?,
       slotId: json['slot_id'] as String?,
       status: json['status'] as String? ?? 'pending',
-      totalAmount: _toDouble(json['total_amount']),
-      depositAmount: _toDouble(json['deposit_amount']),
+      totalAmount: asNumOrNull(json['total_amount']),
+      depositAmount: asNumOrNull(json['deposit_amount']),
       qrCodeHash: json['qr_code_hash'] as String?,
       createdAt: json['created_at'] as String?,
       venueName: json['venue_name'] as String?,
@@ -51,13 +53,5 @@ class Booking {
       startTime: json['start_time'] as String?,
       endTime: json['end_time'] as String?,
     );
-  }
-
-  static double? _toDouble(dynamic value) {
-    if (value == null) return null;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value);
-    return null;
   }
 }

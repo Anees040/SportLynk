@@ -24,13 +24,70 @@ const POLICY = {
   NO_SHOW_GRACE_MINUTES: 30,
   /** Trust-score penalty applied on a no-show. */
   NO_SHOW_TRUST_PENALTY: 10,
-  /** A pending request older than this is auto-decided (FR4.10). */
-  AUTO_DECIDE_AFTER_HOURS: 2,
+  /**
+   * A pending request older than this is auto-decided (FR4.10). Held in MINUTES
+   * rather than hours so a test override can be finer-grained than one hour
+   * without pushing a fraction into `('x hours')::INTERVAL`.
+   */
+  AUTO_DECIDE_AFTER_MINUTES: 2 * 60,
   /** Pending requests whose slot starts sooner than this are auto-rejected. */
   AUTO_DECIDE_MIN_LEAD_HOURS: 2,
+  /** Smallest withdrawal SportLynk will accept, in PKR (FR7.4). */
+  WITHDRAWAL_MIN_AMOUNT: 200,
+  /** How long a withdrawal sits `pending` before the job marks it paid out. */
+  WITHDRAWAL_SETTLE_MINUTES: 24 * 60,
+  /** How often the three background sweeps run. */
+  SWEEP_INTERVAL_MS: 5 * 60 * 1000,
   /** Slot dates/times are stored as PKT wall-clock values. */
   TIMEZONE: 'Asia/Karachi',
 };
+
+// ─── Test-only timing overrides ───────────────────────────────────────────────
+//
+// The S1 acceptance checklist asks for the 2h auto-approve rule to be tested
+// "with a 1-min override constant". Editing the constant by hand works exactly
+// once and then risks being committed, so the override lives in the environment
+// instead: absent ⇒ the SRS defaults above, byte for byte.
+//
+// These knobs shift *timing only*. No override can change how much money moves —
+// DEPOSIT_PERCENT, CANCELLATION_WINDOW_HOURS and NO_SHOW_TRUST_PENALTY are
+// deliberately not overridable, because a test run must never be able to produce
+// a ledger split that production would not.
+//
+// Anything set here is collected in ACTIVE_TEST_OVERRIDES so server.js can print
+// a loud banner at boot — a silently sped-up sweep is worse than no override.
+const ACTIVE_TEST_OVERRIDES = [];
+
+function applyTestOverride(envVar, policyKey, scale = 1, unit = 'min') {
+  const raw = process.env[envVar];
+  if (raw === undefined || raw.trim() === '') return;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) {
+    console.warn(`[escrow] ignoring ${envVar}="${raw}" — expected a non-negative number.`);
+    return;
+  }
+  POLICY[policyKey] = n * scale;
+  ACTIVE_TEST_OVERRIDES.push(`${envVar}=${n} ${unit} → POLICY.${policyKey}=${POLICY[policyKey]}`);
+}
+
+applyTestOverride('SL_TEST_AUTO_DECIDE_MINUTES', 'AUTO_DECIDE_AFTER_MINUTES');
+applyTestOverride('SL_TEST_NO_SHOW_MINUTES', 'NO_SHOW_GRACE_MINUTES');
+applyTestOverride('SL_TEST_SETTLE_MINUTES', 'WITHDRAWAL_SETTLE_MINUTES');
+applyTestOverride('SL_TEST_SWEEP_SECONDS', 'SWEEP_INTERVAL_MS', 1000, 'sec');
+
+/**
+ * Human-readable delay for notification bodies: 120 → "2h", 90 → "1h 30m",
+ * 1 → "1 min". Without this, a 1-minute override would tell the player their
+ * booking was confirmed because the venue "did not respond within 0.0167h".
+ */
+function describeDelay(minutes) {
+  const m = Math.max(0, Math.round(asNum(minutes)));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem === 0 ? `${h}h` : `${h}h ${rem}m`;
+}
+
 
 /** pg returns DECIMAL as strings — always parse before doing math. */
 function asNum(value, fallback = 0) {
@@ -109,13 +166,18 @@ async function applyWallet(client, walletId, { balance = 0, frozen = 0 }) {
   return r.rows[0] || null;
 }
 
-/** Append one row to the transaction ledger. */
+/**
+ * Append one row to the transaction ledger. Returns the new row's id so a caller
+ * that needs to point at the ledger entry it just created (withdrawals.txn_id)
+ * can do so without a second query. Existing callers ignore the return value.
+ */
 async function logTxn(client, { walletId, userId, bookingId, type, amount, balanceAfter, description, counterparty }) {
-  if (!walletId) return;
-  await client.query(
+  if (!walletId) return null;
+  const r = await client.query(
     `INSERT INTO transactions
        (wallet_id, user_id, booking_id, type, amount, balance_after, description, counterparty_name)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     RETURNING id`,
     [
       walletId,
       userId,
@@ -127,10 +189,13 @@ async function logTxn(client, { walletId, userId, bookingId, type, amount, balan
       counterparty || null,
     ],
   );
+  return r.rows[0] ? r.rows[0].id : null;
 }
 
 module.exports = {
   POLICY,
+  ACTIVE_TEST_OVERRIDES,
+  describeDelay,
   asNum,
   round2,
   depositFor,

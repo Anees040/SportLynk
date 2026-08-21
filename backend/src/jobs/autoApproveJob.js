@@ -13,10 +13,15 @@
  */
 
 const pool = require('../db/pool');
-const { POLICY, round2, lockWallet, applyWallet, logTxn } = require('../utils/escrow');
+const {
+  POLICY,
+  describeDelay,
+  round2,
+  lockWallet,
+  applyWallet,
+  logTxn,
+} = require('../utils/escrow');
 const { notify } = require('../utils/notify');
-
-const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 let _running = false;
 
@@ -31,7 +36,7 @@ async function processPendingRequests() {
                 WHEN (b.slot_date::DATE + b.start_time::TIME)
                      < (NOW() AT TIME ZONE $1) + ($2 || ' hours')::INTERVAL
                   THEN 'reject'
-                WHEN b.created_at < NOW() - ($3 || ' hours')::INTERVAL
+                WHEN b.created_at < NOW() - ($3 || ' minutes')::INTERVAL
                   THEN 'approve'
                 ELSE 'wait'
               END AS decision
@@ -40,7 +45,7 @@ async function processPendingRequests() {
       [
         POLICY.TIMEZONE,
         String(POLICY.AUTO_DECIDE_MIN_LEAD_HOURS),
-        String(POLICY.AUTO_DECIDE_AFTER_HOURS),
+        String(POLICY.AUTO_DECIDE_AFTER_MINUTES),
       ],
     );
 
@@ -110,14 +115,14 @@ async function autoConfirm(bookingId) {
       bookingId: b.id,
       type: 'booking_auto_confirmed',
       title: 'Booking auto-confirmed',
-      body: `${b.venue_name} did not respond within ${POLICY.AUTO_DECIDE_AFTER_HOURS}h, so your booking was confirmed automatically. Show your QR code at the venue.`,
+      body: `${b.venue_name} did not respond within ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)}, so your booking was confirmed automatically. Show your QR code at the venue.`,
     });
     await notify(client, {
       userId: b.venue_owner_id || b.owner_id,
       bookingId: b.id,
       type: 'booking_auto_confirmed_owner',
       title: 'Request auto-confirmed',
-      body: `${b.player_name}'s request was pending for over ${POLICY.AUTO_DECIDE_AFTER_HOURS}h and has been auto-confirmed.`,
+      body: `${b.player_name}'s request was pending for over ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)} and has been auto-confirmed.`,
     });
 
     await client.query('COMMIT');
@@ -206,11 +211,11 @@ async function autoReject(bookingId) {
 
 function startAutoApproveJob() {
   console.log(
-    `[AutoApproveJob] Started — sweeps every ${SWEEP_INTERVAL_MS / 60000} min ` +
-      `(auto-confirm after ${POLICY.AUTO_DECIDE_AFTER_HOURS}h, auto-reject inside ${POLICY.AUTO_DECIDE_MIN_LEAD_HOURS}h of slot start).`,
+    `[AutoApproveJob] Started — sweeps every ${POLICY.SWEEP_INTERVAL_MS / 60000} min ` +
+      `(auto-confirm after ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)}, auto-reject inside ${POLICY.AUTO_DECIDE_MIN_LEAD_HOURS}h of slot start).`,
   );
   setTimeout(processPendingRequests, 10000);
-  setInterval(processPendingRequests, SWEEP_INTERVAL_MS);
+  setInterval(processPendingRequests, POLICY.SWEEP_INTERVAL_MS);
 }
 
 module.exports = { startAutoApproveJob, processPendingRequests };

@@ -1,9 +1,37 @@
 # Database Schema — PostgreSQL
 
 ## Connection
-Local: postgresql://postgres:sportlynk123@localhost:5432/sportlynk
-Cloud: Supabase URI (see .env in backend)
-Both have IDENTICAL schema.
+**Supabase is the only database** — the same instance serves local development
+and the deployed Render API. There is no local PostgreSQL and no second copy to
+keep in sync.
+
+Use the **session pooler** URI from Supabase → Project Settings → Database, with
+`?sslmode=require`, in `backend/.env` as `DATABASE_URL`. The direct
+`db.<ref>.supabase.co` host is IPv6-only on the free tier and does not resolve
+from every network (including Render's outbound IPv4). `src/db/pool.js` derives
+TLS from `sslmode=` in the URL, from `NODE_ENV`, or from the host simply not being
+localhost — three independent signals, because a missing TLS flag produces one of
+the most confusing errors in this stack.
+
+> ⛔ **Never run `backend/schema.sql` against this database.** It is a
+> from-scratch script and the live data — real accounts, wallets, venues, booking
+> history — is in there. Schema changes go through `backend/migrations/0XX_*.sql`
+> plus their runner, and only ever forward.
+
+## Migration history
+| # | File | Wave | What it added |
+|---|---|---|---|
+| 001–009 | `001_fix_schema` … `009_no_show_job_and_admin` | pre-sprint | Base schema corrections, venue media/amenities, slot-lock columns, payment rules, wallets, owner booking updates, admin + venues, no-show groundwork |
+| 010 | `010_escrow_policy_alignment` | S1-A | `escrow_policy` table (20% deposit / 24 h window), `notifications`, no-show idempotency columns |
+| 011 | `011_slot_locks` | S1-B | `slots.locked_by` / `locked_until` — 5-minute checkout holds (ER1.5 / FR3.7) |
+| 012 | `012_hardening_indexes` | S1-C | Performance indexes; only `bookings(venue_id, slot_id)` was genuinely missing |
+| 013 | `013_fyp2_foundation` | S1-D | 12 tables for milestones S.2–S.7 (teams/matches/tournaments/chat/settings) + columns + 14 indexes. **27 tables total.** Nothing reads them yet, by design. |
+| 014 | `014_withdrawals` | S1-F | `withdrawals` + the partial unique index that enforces one pending request per user |
+
+Each has a `backend/run_migration_0XX.js` runner with machine-checked assertions.
+013 and 014 were each verified **idempotent** — run twice, the second run creates
+nothing — because a migration you are afraid to re-run is a migration that
+silently diverges between environments.
 
 ## Tables
 
@@ -133,7 +161,56 @@ Both have IDENTICAL schema.
 | `escrow_received` | Owner receives money (check-in = full price, no-show / late cancel = 20% deposit) |
 | `no_show_penalty` | Player's 20% deposit forfeited for no-show |
 | `owner_payout` | Owner withdrew balance |
-| `withdrawal` | User withdrew wallet balance |
+| `withdrawal` | Withdrawal requested — debited at request time, not at settlement (see `withdrawals`) |
+
+### withdrawals
+Added by **migration 014** (Wave F). A deliberate single exception to "no schema
+past 013": a withdrawal request needs a durable `pending` state that survives a
+restart, and faking it with a `transactions` row would mean re-deriving "is there
+a request in flight?" by scanning the ledger on every wallet load.
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | UUID | PK DEFAULT gen_random_uuid() |
+| user_id | UUID | FK→users ON DELETE CASCADE |
+| wallet_id | UUID | FK→wallets |
+| amount | DECIMAL(10,2) | CHECK (amount > 0) |
+| status | TEXT | DEFAULT 'pending', CHECK IN ('pending','completed','failed','cancelled') |
+| method | TEXT | DEFAULT 'easypaisa', CHECK IN ('easypaisa','jazzcash','bank') |
+| account_name | TEXT | nullable |
+| account_number | TEXT | nullable |
+| txn_id | UUID | FK→transactions — the debit ledger row |
+| requested_at | TIMESTAMP | DEFAULT NOW() |
+| completed_at | TIMESTAMP | nullable |
+| failure_reason | TEXT | nullable |
+
+Indexes:
+
+| Index | Purpose |
+|---|---|
+| `uq_withdrawals_one_pending` — **UNIQUE** on `(user_id) WHERE status = 'pending'` | Enforces "one pending withdrawal at a time" **in the database**. A JS check reads, decides, then inserts; two fast taps on a slow connection both read "none pending" and both insert. The partial unique index makes the second insert fail with `23505`, which the route maps to `409`. |
+| `idx_withdrawals_user (user_id, requested_at DESC)` | The history list |
+| `idx_withdrawals_pending (status, requested_at) WHERE status = 'pending'` | The 24 h settlement sweep in `withdrawalJob.js` |
+
+`status` is a `CHECK` rather than a new enum type: `txn_type` is an enum, but a
+`withdrawal_status` enum would force an `ALTER TYPE` path in the migration runner
+for no benefit.
+
+**Money timing** — the debit is at request, not at settlement, so you cannot spend
+money you have already asked to withdraw. Settlement moves no money at all; it is
+bookkeeping. Cancelling writes a **new** `refund` row rather than reversing the
+original, because the ledger is append-only.
+
+| Event | `wallets.balance` | `transactions` | `withdrawals.status` |
+|---|---|---|---|
+| Request | `-= amount` | 1 row `withdrawal` | `pending` |
+| Settles (24 h job) | unchanged | none | `completed` |
+| Cancelled / failed | `+= amount` | 1 row `refund` | `cancelled` / `failed` |
+
+The hold is a plain `balance` debit and **not** `frozen_balance` —
+`frozen_balance` means *booking escrow*, and `GET /api/wallet/frozen` itemises it
+per booking. Mixing withdrawal holds in would make that breakdown disagree with
+its own total.
 
 ## Escrow & Booking Flow (Phase 5)
 

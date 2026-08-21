@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/num_util.dart';
 import '../../utils/snackbar_util.dart';
 
 class BookingsScreen extends StatefulWidget {
@@ -168,12 +169,6 @@ class BookingsScreenState extends State<BookingsScreen>
       ));
   }
 
-  double _parseDouble(dynamic val) {
-    if (val == null) return 0.0;
-    if (val is num) return val.toDouble();
-    return double.tryParse(val.toString()) ?? 0.0;
-  }
-
   String _fmtSlotDate(String isoStr) {
     final d = DateTime.tryParse(isoStr);
     if (d == null) return isoStr;
@@ -235,7 +230,7 @@ class BookingsScreenState extends State<BookingsScreen>
             _infoItem(Icons.location_on_outlined, b['city'] ?? ''),
             const SizedBox(width: 20),
             _infoItem(Icons.currency_rupee,
-              'PKR ${_parseDouble(b['total_amount']).toStringAsFixed(0)}'),
+              'PKR ${asNum(b['total_amount']).toStringAsFixed(0)}'),
           ]),
           if (upcoming && status == 'confirmed') ...[
             const SizedBox(height: 12),

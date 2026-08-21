@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/num_util.dart';
 import 'venue_detail_screen.dart';
 
 class FindVenuesScreen extends StatefulWidget {
@@ -115,12 +116,6 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  double _parseDouble(dynamic val) {
-    if (val == null) return 0.0;
-    if (val is num) return val.toDouble();
-    return double.tryParse(val.toString()) ?? 0.0;
   }
 
   void _showFilterModal() {
@@ -562,7 +557,7 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('PKR ${_parseDouble(v['price_per_hour']).toStringAsFixed(0)}/hr',
+                        Text('PKR ${asNum(v['price_per_hour']).toStringAsFixed(0)}/hr',
                           style: GoogleFonts.poppins(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.bold)),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -645,7 +640,7 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text('PKR ${_parseDouble(v['price_per_hour']).toStringAsFixed(0)}/hr', style: GoogleFonts.poppins(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.bold)),
+                    Text('PKR ${asNum(v['price_per_hour']).toStringAsFixed(0)}/hr', style: GoogleFonts.poppins(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),

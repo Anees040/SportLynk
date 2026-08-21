@@ -8,6 +8,24 @@ const { apiRateLimit } = require("./middleware/rateLimit");
 
 const app = express();
 
+// ─── Proxy trust (deployment only) ────────────────────────────
+// Render terminates TLS in its own proxy and forwards the request, so `req.ip`
+// is the proxy's address unless Express is told how many hops to trust. That
+// breaks the anonymous tier of the rate limiter in the worst way: every phone on
+// the internet lands in ONE 20-req/min bucket, so two people using the app at
+// once can 429 each other. express-rate-limit also logs a validation error for
+// exactly this case.
+//
+// `1` — not `true` — is the safe value: Express then reads the hop Render
+// appended to X-Forwarded-For, which a client cannot forge. `true` would take
+// the leftmost, client-supplied entry and hand anyone a way to walk past the
+// limiter (the risk rateLimit.js warns about).
+//
+// RENDER is set by Render itself, so this still works if NODE_ENV is forgotten.
+if (process.env.RENDER || process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // ─── Middleware ───────────────────────────────────────────────
 app.use(cors({ origin: "*" }));
 app.use(helmet());
@@ -30,6 +48,8 @@ const userRoutes = require("./routes/users");
 const slotRoutes = require("./routes/slotLock");
 const { startNoShowJob } = require("./jobs/noShowJob");
 const { startAutoApproveJob } = require("./jobs/autoApproveJob");
+const { startWithdrawalJob } = require("./jobs/withdrawalJob");
+const { ACTIVE_TEST_OVERRIDES } = require("./utils/escrow");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/venues", venueRoutes);
@@ -86,7 +106,20 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 SportLynk API running on port ${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
+
+  // A sped-up sweep or a shortened auto-decide window must never be mistaken for
+  // real behaviour, so it is announced as loudly as a boot banner can manage.
+  if (ACTIVE_TEST_OVERRIDES.length) {
+    console.warn("");
+    console.warn("  ⚠️  ⚠️  ⚠️   TEST TIMING OVERRIDES ACTIVE   ⚠️  ⚠️  ⚠️");
+    for (const line of ACTIVE_TEST_OVERRIDES) console.warn(`      ${line}`);
+    console.warn("      Money splits are UNCHANGED — only timings are shortened.");
+    console.warn("      Unset these SL_TEST_* vars before any demo or deploy.");
+    console.warn("");
+  }
+
   // Start background jobs
   startNoShowJob();
   startAutoApproveJob();
+  startWithdrawalJob();
 });

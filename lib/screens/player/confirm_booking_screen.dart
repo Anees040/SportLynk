@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/num_util.dart';
 import '../../utils/snackbar_util.dart';
 
 class ConfirmBookingScreen extends StatefulWidget {
@@ -44,17 +45,11 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
       final data = jsonDecode(resp.body);
       if (mounted && data['success'] == true) {
         setState(() {
-          _walletBalance = _parseDouble(data['data']['balance']);
+          _walletBalance = asNum(data['data']['balance']);
           _walletLoaded = true;
         });
       }
     } catch (_) {}
-  }
-
-  double _parseDouble(dynamic val) {
-    if (val == null) return 0.0;
-    if (val is num) return val.toDouble();
-    return double.tryParse(val.toString()) ?? 0.0;
   }
 
   String _safeTime(dynamic t) {
@@ -65,7 +60,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   }
 
   Future<void> _confirmBooking() async {
-    final amountToPay = _parseDouble(widget.slot['price']);
+    final amountToPay = asNum(widget.slot['price']);
 
     if (_walletBalance < amountToPay) {
       SnackbarUtil.showError(context, 'Insufficient wallet balance. Please top up your wallet.');
@@ -119,7 +114,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final price = _parseDouble(widget.slot['price']);
+    final price = asNum(widget.slot['price']);
     // Full slot price is escrowed at booking; 20% of it is the at-risk deposit.
     final amountToPay = double.parse(price.toStringAsFixed(2));
     final depositAtRisk =

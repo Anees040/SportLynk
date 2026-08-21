@@ -1,3 +1,5 @@
+import '../utils/num_util.dart';
+
 class VenueSlot {
   final String id;
   final String venueId;
@@ -25,7 +27,7 @@ class VenueSlot {
       startTime: json['start_time'] as String,
       endTime: json['end_time'] as String,
       status: json['status'] as String? ?? 'available',
-      price: _toDouble(json['price']),
+      price: asNum(json['price']),
     );
   }
 
@@ -53,13 +55,5 @@ class VenueSlot {
     final period = hour >= 12 ? 'PM' : 'AM';
     final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
     return '$displayHour:$minute $period';
-  }
-
-  static double _toDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? 0.0;
-    return 0.0;
   }
 }

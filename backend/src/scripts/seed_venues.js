@@ -1,16 +1,16 @@
-const { Pool } = require("pg");
-const dotenv = require("dotenv");
-const path = require("path");
+// Uses the app's own pool — do NOT build a second one here.
+//
+// This script used to create its own Pool from DB_USER/DB_HOST/DB_NAME, which
+// defaulted to a local `postgres@localhost/sportlynk` with SSL off, and loaded
+// .env from D:\sportlynk\.env (the Flutter root — the wrong directory). The net
+// effect was that it could never reach Supabase, which is the only database this
+// project has. Requiring ../db/pool gets DATABASE_URL, TLS and the error hints
+// for free.
+const pool = require("../db/pool");
 
-dotenv.config({ path: path.join(__dirname, "../../../.env") });
-
-const pool = new Pool({
-  user: process.env.DB_USER || "postgres",
-  host: process.env.DB_HOST || "localhost",
-  database: process.env.DB_NAME || "sportlynk",
-  password: process.env.DB_PASSWORD || "sportlynk123",
-  port: process.env.DB_PORT || 5432,
-});
+// `--yes` (or SL_SEED_YES=1) skips the countdown, for scripted runs.
+const SKIP_CONFIRM =
+  process.argv.includes("--yes") || process.env.SL_SEED_YES === "1";
 
 // Working Unsplash photo URLs (direct CDN format)
 const DUMMY_VENUES = [
@@ -224,6 +224,51 @@ async function seed() {
 
     console.log(`Using owner ID: ${ownerId}`);
 
+    // ── Destructive pre-flight ────────────────────────────────────────────────
+    // The four DELETEs below wipe this owner's venues, slots, bookings AND the
+    // transaction rows attached to those bookings — i.e. real ledger history, on
+    // the live database. Show exactly what is about to go, then give a human five
+    // seconds to hit Ctrl-C. This is cheap insurance against pasting the command
+    // out of the deploy guide on the wrong day.
+    const counts = await client.query(
+      `SELECT
+         (SELECT COUNT(*) FROM venues WHERE owner_id = $1) AS venues,
+         (SELECT COUNT(*) FROM slots  WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1)) AS slots,
+         (SELECT COUNT(*) FROM bookings WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1)) AS bookings,
+         (SELECT COUNT(*) FROM bookings WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1)
+            AND status IN ('confirmed','completed')) AS live_bookings,
+         (SELECT COUNT(*) FROM transactions WHERE booking_id IN
+            (SELECT id FROM bookings WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1))) AS txns`,
+      [ownerId]
+    );
+    const c = counts.rows[0];
+    const total =
+      Number(c.venues) + Number(c.slots) + Number(c.bookings) + Number(c.txns);
+
+    if (total > 0) {
+      console.log("");
+      console.log("⚠️  THIS WILL DELETE, for that owner only:");
+      console.log(`      ${c.venues} venue(s)`);
+      console.log(`      ${c.slots} slot(s)`);
+      console.log(`      ${c.bookings} booking(s)  — ${c.live_bookings} confirmed/completed`);
+      console.log(`      ${c.txns} transaction row(s) (ledger history)`);
+      console.log("    Users, wallets and wallet balances are NOT touched.");
+      if (Number(c.live_bookings) > 0) {
+        console.log("");
+        console.log("    ⛔ Some of those bookings are confirmed/completed. Deleting them");
+        console.log("       destroys the escrow trail your acceptance tests check.");
+      }
+      if (!SKIP_CONFIRM) {
+        console.log("");
+        for (let s = 5; s > 0; s--) {
+          process.stdout.write(`\r    Starting in ${s}s — Ctrl-C to abort... `);
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        console.log("\r    Starting.                              ");
+      }
+      console.log("");
+    }
+
     // Only delete venues (and cascade slots/bookings) — NOT users or wallets
     await client.query("DELETE FROM transactions WHERE booking_id IN (SELECT id FROM bookings WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1))", [ownerId]);
     await client.query("DELETE FROM bookings WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1)", [ownerId]);
@@ -267,7 +312,7 @@ async function seed() {
       const startHr = v.hours[0];
       const endHr = v.hours[1];
 
-      // Seed 14 days of slots
+      // Seed 15 days of slots (today + 14)
       for (let day = 0; day <= 14; day++) {
         for (let hour = startHr; hour < endHr; hour++) {
           const isPeak = hour >= 17 && hour <= 21;
@@ -287,13 +332,14 @@ async function seed() {
           );
         }
       }
-      console.log(`  ✓ ${v.name} — ${14 * (endHr - startHr)} slots created`);
+      console.log(`  ✓ ${v.name} — ${15 * (endHr - startHr)} slots created`);
     }
 
     console.log("\n✅ Successfully seeded venues and slots with working photo URLs.");
     console.log("   Player/Owner accounts preserved.");
   } catch (e) {
     console.error("Seeding error:", e.message);
+    process.exitCode = 1; // so a failed seed cannot look like a successful one
   } finally {
     client.release();
     pool.end();

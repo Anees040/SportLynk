@@ -6,7 +6,11 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/num_util.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/frozen_balance_sheet.dart';
+import '../../widgets/transaction_detail_sheet.dart';
+import '../../widgets/withdraw_sheet.dart';
 import 'wallet_history_screen.dart';
 
 class WalletScreen extends StatefulWidget {
@@ -43,12 +47,6 @@ class _WalletScreenState extends State<WalletScreen> {
         });
       }
     } catch (_) { if (mounted) setState(() => _loading = false); }
-  }
-
-  double _parseDouble(dynamic val) {
-    if (val == null) return 0.0;
-    if (val is num) return val.toDouble();
-    return double.tryParse(val.toString()) ?? 0.0;
   }
 
   Future<void> _topUp(double amount) async {
@@ -90,6 +88,28 @@ class _WalletScreenState extends State<WalletScreen> {
         Navigator.pop(context);
         _topUp(amt);
       }));
+  }
+
+  // ── FR7.4 / ER1.6 — withdraw ───────────────────────────────
+  // Replaces the "available after launch" stub. The sheet decides for itself
+  // whether to show the request form or the pending withdrawal, because that
+  // depends on server state this screen does not load.
+  Future<void> _showWithdrawSheet() async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) return;
+    final changed = await WithdrawSheet.show(
+      context,
+      token: token,
+      available: asNum(_wallet?['balance']),
+    );
+    if (changed && mounted) _load();
+  }
+
+  // ── FR7.2 — itemised escrow breakdown ──────────────────────
+  void _showFrozenSheet() {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) return;
+    FrozenBalanceSheet.show(context, token);
   }
 
   void _snack(String msg, Color c) {
@@ -137,7 +157,7 @@ class _WalletScreenState extends State<WalletScreen> {
                     Text('TOTAL BALANCE', style: GoogleFonts.poppins(
                       color: Colors.white60, fontSize: 11, letterSpacing: 1)),
                     const SizedBox(height: 6),
-                    Text('PKR ${_parseDouble(_wallet?['balance']).toStringAsFixed(0)}',
+                    Text('PKR ${asNum(_wallet?['balance']).toStringAsFixed(0)}',
                       style: GoogleFonts.poppins(color: Colors.white,
                         fontSize: 36, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 20),
@@ -156,13 +176,18 @@ class _WalletScreenState extends State<WalletScreen> {
                               color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
                           ]),
                           const SizedBox(height: 4),
-                          Text('PKR ${_parseDouble(_wallet?['balance']).toStringAsFixed(0)}',
+                          Text('PKR ${asNum(_wallet?['balance']).toStringAsFixed(0)}',
                             style: GoogleFonts.poppins(color: AppColors.accent,
                               fontSize: 16, fontWeight: FontWeight.bold)),
                         ])),
                       ),
                       const SizedBox(width: 12),
-                      Expanded(child: Container(
+                      // Tappable: FR7.2's breakdown. A bare number here is the
+                      // single most-asked-about figure in the app.
+                      Expanded(child: InkWell(
+                        onTap: _showFrozenSheet,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.1),
@@ -174,13 +199,16 @@ class _WalletScreenState extends State<WalletScreen> {
                             const SizedBox(width: 6),
                             Text('FROZEN', style: GoogleFonts.poppins(
                               color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.chevron_right,
+                              color: Colors.white38, size: 13),
                           ]),
                           const SizedBox(height: 4),
-                          Text('PKR ${_parseDouble(_wallet?['frozen_balance']).toStringAsFixed(0)}',
+                          Text('PKR ${asNum(_wallet?['frozen_balance']).toStringAsFixed(0)}',
                             style: GoogleFonts.poppins(color: Colors.white70,
                               fontSize: 16, fontWeight: FontWeight.bold)),
                         ])),
-                      ),
+                      )),
                     ]),
                   ]),
                 ),
@@ -211,8 +239,7 @@ class _WalletScreenState extends State<WalletScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28)),
                       padding: const EdgeInsets.symmetric(vertical: 13)),
-                    onPressed: () => _snack(
-                      'Withdrawals will be available after launch.', AppColors.primary),
+                    onPressed: _showWithdrawSheet,
                   )),
                 ]),
                 const SizedBox(height: 24),
@@ -245,15 +272,20 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Widget _txnTile(Map<String, dynamic> t) {
     final type = t['type'] as String;
-    final amount = _parseDouble(t['amount']);
-    final isCredit = ['topup', 'refund', 'escrow_received'].contains(type);
+    final amount = asNum(t['amount']);
+    final isCredit = isCreditTxn(type);
     final isFrozen = type == 'booking_payment';
 
-    final icon = isFrozen ? Icons.lock_outline : _txnIcon(type);
+    final icon = isFrozen ? Icons.lock_outline : txnIcon(type);
     final color = isFrozen ? Colors.orange : (isCredit ? AppColors.success : AppColors.error);
-    final label = isFrozen ? 'Security Deposit' : _txnLabel(type);
-    
-    return Container(
+    final label = isFrozen ? 'Security Deposit' : txnLabel(type);
+
+    // FR7.9 — tap for the full receipt. No extra request: GET
+    // /wallet/transactions already returns every field the sheet shows.
+    return InkWell(
+      onTap: () => TransactionDetailSheet.show(context, t),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(color: Colors.white,
@@ -268,45 +300,17 @@ class _WalletScreenState extends State<WalletScreen> {
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary)),
-          Text(_fmtDate(t['created_at']),
+          Text(fmtTxnDate(t['created_at'] as String?),
             style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
         ])),
         Text(isFrozen ? 'Frozen ${amount.abs().toStringAsFixed(0)}' : '${isCredit ? '+' : ''}PKR ${amount.abs().toStringAsFixed(0)}',
           style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
             color: color)),
+        const SizedBox(width: 4),
+        const Icon(Icons.chevron_right, size: 16, color: AppColors.textSecondary),
       ]),
+      ),
     );
-  }
-
-  IconData _txnIcon(String t) => switch (t) {
-    'topup' => Icons.south_west,
-    'booking_payment' => Icons.north_east,
-    'security_deposit' => Icons.lock_outline,
-    'refund' => Icons.replay,
-    'no_show_penalty' => Icons.cancel_outlined,
-    _ => Icons.swap_horiz,
-  };
-
-
-  String _txnLabel(String t) => switch (t) {
-    'topup' => 'Wallet Top-up',
-    'booking_payment' => 'Booking Payment',
-    'security_deposit' => 'Security Deposit',
-    'refund' => 'Booking Refund',
-    'no_show_penalty' => 'No-Show Penalty',
-    'owner_payout' => 'Owner Payout',
-    'withdrawal' => 'Withdrawal',
-    _ => 'Transaction',
-  };
-
-  String _fmtDate(String? iso) {
-    if (iso == null) return '';
-    final dt = DateTime.tryParse(iso);
-    if (dt == null) return '';
-    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    final h = dt.hour.toString().padLeft(2,'0');
-    final min = dt.minute.toString().padLeft(2,'0');
-    return '${dt.day} ${m[dt.month-1]}, ${dt.year} • $h:$min';
   }
 }
 
