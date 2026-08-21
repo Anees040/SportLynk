@@ -55,6 +55,18 @@ trained ML models — never replace them with external AI API calls.
     logging, envelope closed on unknown routes (was HTML) + malformed JSON (was
     500), migration 012 indexes (only bookings(venue_id,slot_id) was missing),
     .env.example committed.
+  - D done — FYP-2 foundation schema, migration 013 (spec said 010; 010 is taken).
+    12 new tables for S.2-S.7 (team_invites/join_requests, matches/match_results/
+    disputes/elo_history, tournaments/tournament_teams/fixtures, chat_channels/
+    chat_messages, global_settings) + columns on teams/reviews/player_profiles/
+    venues/users/notifications, 14 indexes. Spec's int/serial keys rewritten to
+    UUID (all PKs here are UUID — it would have failed on the first CREATE TABLE);
+    notifications ALTERed not recreated (CREATE IF NOT EXISTS would have silently
+    skipped 010's table). NOT added: users.suspended (is_active is the flag,
+    enforced auth.js:164) and notifications.read (is_read is the flag) — see
+    PROGRESS.md "Wave D schema notes". global_settings seeded but wired to
+    nothing; escrow.js stays the money source of truth. Also deleted the dead
+    src/controllers/ directory (4 files, zero references, held a USE-3 leak).
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave. API.md / DATABASE.md =

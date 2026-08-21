@@ -65,3 +65,5 @@ lib/constants/app_config.dart
 .agents/
 skills-lock.json
 
+# Node modules
+node_modules/
