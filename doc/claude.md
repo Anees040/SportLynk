@@ -45,6 +45,11 @@ trained ML models — never replace them with external AI API calls.
   - S1-A done — escrow ledger unified (20% deposit / 24h window / 30-min no-show),
     src/utils/escrow.js + notify.js, migration 010, noShowJob rewritten +
     autoApproveJob added, ledger table in ARCHITECTURE.md, UI copy fixed.
+  - B done — checkout slot locks revived (ER1.5/FR3.7): migration 011 adds
+    slots.locked_by/locked_until, POST+DELETE /api/slots/:id/lock (5-min TTL,
+    refresh on re-tap, 409 to others), LAZY expiry so no sweep job, derived
+    effective_status paints Blue "held" in the player grid + owner calendar,
+    player grid auto-refreshes every 30s.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave. API.md / DATABASE.md =

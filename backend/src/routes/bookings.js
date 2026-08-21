@@ -35,17 +35,28 @@ router.post(
     try {
       await client.query("BEGIN");
 
-      // 1. Lock the slot row atomically — only proceed if slot is available (handles race conditions at DB level)
+      // 1. Lock the slot row atomically — the row lock is what actually settles
+      //    simultaneous bookings; the checkout hold below is only a courtesy so
+      //    two players don't both fill in the same form (SRS ER1.5).
       const slotRes = await client.query(
-        `SELECT s.*, v.name as venue_name, v.price_per_hour, v.owner_id
+        `SELECT s.*, v.name as venue_name, v.price_per_hour, v.owner_id,
+              (s.locked_until IS NOT NULL AND s.locked_until > NOW()) AS is_held
        FROM slots s JOIN venues v ON v.id = s.venue_id
        WHERE s.id=$1 AND s.venue_id=$2
-         AND s.status = 'available'
-       FOR UPDATE`,
+       FOR UPDATE OF s`,
         [slotId, venueId],
       );
 
       if (!slotRes.rows.length) {
+        await client.query("ROLLBACK");
+        return res
+          .status(404)
+          .json({ success: false, message: "Slot not found" });
+      }
+
+      const slot = slotRes.rows[0];
+
+      if (slot.status !== "available") {
         await client.query("ROLLBACK");
         return res
           .status(409)
@@ -55,7 +66,17 @@ router.post(
           });
       }
 
-      const slot = slotRes.rows[0];
+      // Held by somebody else — they are mid-checkout, so this is a 409 even
+      // though the slot still reads 'available'.
+      if (slot.is_held && slot.locked_by !== req.user.id) {
+        await client.query("ROLLBACK");
+        return res
+          .status(409)
+          .json({
+            success: false,
+            message: "Another player is checking out this slot. Try again in a few minutes.",
+          });
+      }
 
       // Escrow = FULL slot price. Deposit = 20% of it (server-side only).
       const basePrice = round2(slot.price);
@@ -104,9 +125,9 @@ router.post(
         ],
       );
 
-      // 5. Mark slot as booked
+      // 5. Mark slot as booked and drop the checkout hold
       await client.query(
-        `UPDATE slots SET status='booked', locked_by=null WHERE id=$1`,
+        `UPDATE slots SET status='booked', locked_by=null, locked_until=null WHERE id=$1`,
         [slotId],
       );
 
@@ -297,7 +318,7 @@ router.patch("/:id/cancel", authMiddleware, async (req, res, next) => {
     );
 
     await client.query(
-      `UPDATE slots SET status='available', locked_at=null, locked_by=null WHERE id=$1`,
+      `UPDATE slots SET status='available', locked_by=null, locked_until=null WHERE id=$1`,
       [booking.slot_id],
     );
 

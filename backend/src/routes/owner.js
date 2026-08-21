@@ -406,11 +406,19 @@ router.post("/slots/generate", async (req, res, next) => {
 });
 
 // GET /api/owner/slots?date=YYYY-MM-DD&venueId=123
+// `effective_status` folds a live checkout hold (slots.locked_until, see
+// routes/slotLock.js) into the status the calendar paints Blue. The hold is
+// never stored as a status, so an expired one reads as available with no sweep.
 router.get("/slots", async (req, res, next) => {
   try {
     const date = req.query.date || new Date().toLocaleDateString("en-CA");
     const venueId = req.query.venueId;
-    let query = `SELECT s.*, v.name AS venue_name FROM slots s JOIN venues v ON s.venue_id=v.id
+    const holdIsLive = `(s.locked_until IS NOT NULL AND s.locked_until > NOW())`;
+    let query = `SELECT s.*, v.name AS venue_name,
+                        (s.status = 'available' AND ${holdIsLive}) AS is_locked,
+                        CASE WHEN s.status = 'available' AND ${holdIsLive} THEN 'locked'
+                             ELSE s.status::text END AS effective_status
+                 FROM slots s JOIN venues v ON s.venue_id=v.id
                  WHERE v.owner_id=$1 AND s.slot_date=$2::DATE`;
     const params = [req.user.id, date];
     if (venueId) {

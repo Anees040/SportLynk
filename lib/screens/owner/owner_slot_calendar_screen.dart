@@ -326,15 +326,19 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
   }
 
   Widget _slotRow(Map<String, dynamic> slot) {
-    final status = slot['status'] as String? ?? 'available';
+    // `effective_status` is derived server-side: a slot with a live checkout
+    // hold on it reads as 'locked' even though its stored status is 'available'.
+    final status = (slot['effective_status'] ?? slot['status'] ?? 'available').toString();
     final isAvailable = status == 'available';
     final isBooked = status == 'booked';
     final isBlocked = status == 'blocked';
+    final isHeld = status == 'locked';
     final isPast = _isSlotPast(slot);
 
     final Color statusColor;
     final String statusLabel;
 
+    // SRS colour code: Green free · Amber booked · Red blocked · Blue held.
     if (isPast && !isBooked) {
       statusColor = AppColors.disabled;
       statusLabel = 'PAST';
@@ -347,6 +351,9 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
     } else if (isBlocked) {
       statusColor = AppColors.error;
       statusLabel = 'BLOCKED';
+    } else if (isHeld) {
+      statusColor = const Color(0xFF3B82F6);
+      statusLabel = 'HELD';
     } else {
       statusColor = AppColors.textSecondary;
       statusLabel = status.toUpperCase();
@@ -367,8 +374,12 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(
-              'TIME SLOT',
-              style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textSecondary, letterSpacing: 0.5),
+              isHeld ? 'PLAYER IN CHECKOUT' : 'TIME SLOT',
+              style: GoogleFonts.poppins(
+                fontSize: 9,
+                color: isHeld ? statusColor : AppColors.textSecondary,
+                fontWeight: isHeld ? FontWeight.w600 : FontWeight.normal,
+                letterSpacing: 0.5),
             ),
             const SizedBox(height: 2),
             Text(
@@ -394,7 +405,9 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
               style: GoogleFonts.poppins(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
             ),
           ),
-          // Block/unblock for available or blocked, non-past
+          // Block/unblock for available or blocked, non-past. A held slot has a
+          // player mid-checkout on it, so it is deliberately not blockable until
+          // the hold expires or they finish.
           if ((isAvailable || isBlocked) && !isPast) ...[
             const SizedBox(width: 8),
             GestureDetector(

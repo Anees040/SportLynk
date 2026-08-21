@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,13 +28,42 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   int _galleryPage = 0;
   final PageController _galleryCtrl = PageController();
 
+  /// FR3.7 — the grid re-reads itself while it is open, so another player's
+  /// hold or booking shows up here without the player touching anything.
+  static const Duration _refreshEvery = Duration(seconds: 30);
+  Timer? _refreshTimer;
+
+  /// Cached at init so the checkout hold can still be released from dispose(),
+  /// where reading a provider off `context` is no longer safe.
+  String? _token;
+
+  /// Slot id with a lock request in flight (one at a time).
+  String? _lockingSlotId;
+
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _token = Provider.of<AuthProvider>(context, listen: false).token;
+    _load();
+    _startAutoRefresh();
+  }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
+    // Leaving checkout hands the slot straight back instead of making the next
+    // player wait out the 5-minute expiry.
+    final held = _selectedSlotId;
+    if (held != null) _releaseLock(held);
     _galleryCtrl.dispose();
     super.dispose();
+  }
+
+  void _startAutoRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(_refreshEvery, (_) {
+      if (mounted) _load();
+    });
   }
 
   String _dateStr(DateTime d) =>
@@ -51,6 +81,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
       final data = jsonDecode(resp.body);
       if (mounted && data['success'] == true) {
         final prevSelectedId = _selectedSlotId;
+        var lostSelection = false;
         setState(() {
           _venue = data['data'];
           _slots = List<Map<String,dynamic>>.from(data['data']['slots'] ?? []);
@@ -62,24 +93,89 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           } else if (prevSelectedId != null) {
             // Re-find the slot in refreshed data to keep selection alive
             final found = _slots.where((s) => s['id'] == prevSelectedId).toList();
-            if (found.isNotEmpty) {
+            if (found.isNotEmpty && _isSelectable(found.first)) {
               _selectedSlot = found.first;
+            } else {
+              // Someone else booked it, or our hold expired and they took it.
+              // Drop the selection now rather than let checkout fail with a 409.
+              _selectedSlotId = null;
+              _selectedSlot = null;
+              lostSelection = true;
             }
           }
         });
+        if (lostSelection) {
+          _snack('That slot was just taken by another player. Pick another one.');
+        }
       } else { if (mounted) setState(() => _loading = false); }
     } catch (_) { if (mounted) setState(() => _loading = false); }
   }
 
-  void _handleSlotSelection(Map<String, dynamic> slot, bool isCurrentlySelected) {
+  /// Green (free) or a hold this player owns — anything else belongs to somebody
+  /// else. `effective_status` is derived server-side from `slots.locked_until`.
+  bool _isSelectable(Map<String, dynamic> slot) {
+    final status = (slot['effective_status'] ?? slot['status'] ?? 'available').toString();
+    return status == 'available' || slot['locked_by_me'] == true;
+  }
+
+  Future<void> _onSlotTap(Map<String, dynamic> slot, bool isCurrentlySelected) async {
+    final slotId = slot['id'].toString();
+
+    // Tapping the selected slot again clears it and hands the hold back.
     if (isCurrentlySelected) {
       setState(() { _selectedSlotId = null; _selectedSlot = null; });
+      _releaseLock(slotId);
       return;
     }
+    if (_lockingSlotId != null) return;
+
+    setState(() => _lockingSlotId = slotId);
+    final failure = await _lockSlot(slotId);
+    if (!mounted) return;
     setState(() {
-      _selectedSlotId = slot['id'] as String?;
-      _selectedSlot = slot;
+      _lockingSlotId = null;
+      if (failure == null) {
+        _selectedSlotId = slotId;
+        _selectedSlot = slot;
+      }
     });
+    if (failure != null) {
+      _snack(failure);
+      _load(); // repaint so the Blue hold that blocked us is visible
+    }
+  }
+
+  /// Holds the slot for 5 minutes. Returns null on success, otherwise the
+  /// server's reason (409 = another player is already in checkout on it).
+  Future<String?> _lockSlot(String slotId) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/slots/$slotId/lock'),
+        headers: {'Authorization': 'Bearer $_token'});
+      final data = jsonDecode(resp.body);
+      if (data['success'] == true) return null;
+      return (data['message'] ?? 'Could not hold this slot').toString();
+    } catch (_) {
+      return 'Network error. Please try again.';
+    }
+  }
+
+  /// Best-effort by design — the hold also expires on its own after 5 minutes,
+  /// so a failed release is never worth interrupting the player over.
+  void _releaseLock(String slotId) {
+    final token = _token;
+    if (token == null) return;
+    http.delete(
+      Uri.parse('${ApiConstants.baseUrl}/slots/$slotId/lock'),
+      headers: {'Authorization': 'Bearer $token'}).ignore();
+  }
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: GoogleFonts.poppins(color: Colors.white, fontSize: 13)),
+      backgroundColor: AppColors.primary,
+      behavior: SnackBarBehavior.floating));
   }
 
   double _parseDouble(dynamic val) {
@@ -432,7 +528,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                   _legend(const Color(0xFF22C55E), 'Available'),
                   _legend(const Color(0xFFF59E0B), 'Booked'),
                   _legend(const Color(0xFFEF4444), 'Blocked'),
-                  _legend(const Color(0xFF3B82F6), 'Temp Locked'),
+                  _legend(const Color(0xFF3B82F6), 'Held'),
                 ]),
               ]),
             ),
@@ -446,15 +542,19 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                 delegate: SliverChildBuilderDelegate(
                   (_, i) {
                     final slot = _slots[i];
-                    final status = (slot['status'] ?? 'available').toString();
-                    final isAvailable = status == 'available';
+                    // Server-derived: folds a live checkout hold into 'locked'.
+                    final status = (slot['effective_status'] ?? slot['status'] ?? 'available').toString();
+                    final selectable = _isSelectable(slot);
                     final selected = _selectedSlotId == slot['id'];
+                    final locking = _lockingSlotId == slot['id'];
                     final time12 = _to12Hour(slot['start_time']);
                     final slotPrice = _parseDouble(slot['price']);
                     final statusColor = _slotStatusColor(status);
 
                     return GestureDetector(
-                      onTap: (isAvailable || selected) ? () => _handleSlotSelection(slot, selected) : null,
+                      onTap: (locking || !(selectable || selected))
+                        ? null
+                        : () => _onSlotTap(slot, selected),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         decoration: BoxDecoration(
@@ -462,12 +562,12 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                             colors: [Color(0xFF0A1F13), Color(0xFF166534)],
                             begin: Alignment.topLeft, end: Alignment.bottomRight) : null,
                           color: selected ? null
-                            : isAvailable ? Colors.white
+                            : selectable ? Colors.white
                             : statusColor.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: selected ? AppColors.primary
-                              : isAvailable ? AppColors.border
+                              : selectable ? AppColors.border
                               : statusColor.withValues(alpha: 0.3),
                             width: selected ? 2 : 1),
                           boxShadow: selected ? [BoxShadow(
@@ -479,11 +579,14 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                             style: GoogleFonts.poppins(
                               fontSize: 12, fontWeight: FontWeight.bold,
                               color: selected ? Colors.white
-                                : isAvailable ? AppColors.textPrimary
+                                : selectable ? AppColors.textPrimary
                                 : statusColor,
-                              decoration: !isAvailable ? TextDecoration.lineThrough : null)),
+                              decoration: !selectable ? TextDecoration.lineThrough : null)),
                           const SizedBox(height: 2),
-                          if (isAvailable) Text('PKR ${slotPrice.toStringAsFixed(0)}',
+                          if (locking) const SizedBox(width: 10, height: 10,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5, color: AppColors.accent))
+                          else if (selectable) Text('PKR ${slotPrice.toStringAsFixed(0)}',
                             style: GoogleFonts.poppins(fontSize: 9,
                               color: selected ? Colors.white70 : AppColors.textSecondary))
                           else Text(
@@ -575,14 +678,20 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     );
   }
 
-  void _goToConfirm() {
+  Future<void> _goToConfirm() async {
     if (_selectedSlot == null || _venue == null) return;
-    Navigator.push(context, MaterialPageRoute(
+    // Hold the refresh while checkout is on top — nothing there reacts to a
+    // repaint, and a snackbar would land over the confirm screen.
+    _refreshTimer?.cancel();
+    await Navigator.push(context, MaterialPageRoute(
       builder: (_) => ConfirmBookingScreen(
         venue: _venue!,
         slot: _selectedSlot!,
         selectedDate: _selectedDate,
       )));
+    if (!mounted) return;
+    _startAutoRefresh();
+    _load();
   }
 
   Widget _infoRow(IconData icon, String text) => Row(children: [
@@ -600,16 +709,19 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     Text(label, style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
   ]);
 
+  // SRS colour code: Green free · Amber booked · Red blocked · Blue held.
   Color _slotStatusColor(String status) => switch (status) {
     'available' => const Color(0xFF22C55E),
     'booked' => const Color(0xFFF59E0B),
     'blocked' => const Color(0xFFEF4444),
+    'locked' => const Color(0xFF3B82F6),
     _ => AppColors.disabled,
   };
 
   String _slotStatusLabel(String status) => switch (status) {
     'booked' => 'BOOKED',
     'blocked' => 'BLOCKED',
+    'locked' => 'HELD',
     _ => status.toUpperCase(),
   };
 

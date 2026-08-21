@@ -3,6 +3,24 @@ const router = express.Router();
 const pool = require('../db/pool');
 const authMiddleware = require('../middleware/authMiddleware');
 
+/**
+ * Checkout holds (see routes/slotLock.js) live in slots.locked_until only —
+ * `status` stays 'available' while a slot is held. So the state the UI paints is
+ * DERIVED per request, never stored, and an expired hold reads as free with no
+ * sweep job involved.
+ *
+ * SRS colour code: Green available · Amber booked · Red blocked · Blue locked.
+ *
+ * `userParam` is the SQL placeholder ($3, $4, …) carrying the caller's id, so a
+ * player can still select the slot they are holding themselves.
+ */
+const HOLD_IS_LIVE = `(s.locked_until IS NOT NULL AND s.locked_until > NOW())`;
+const slotColumns = (userParam) => `s.*,
+        (s.status = 'available' AND ${HOLD_IS_LIVE}) AS is_locked,
+        (${HOLD_IS_LIVE} AND s.locked_by = ${userParam}) AS locked_by_me,
+        CASE WHEN s.status = 'available' AND ${HOLD_IS_LIVE} THEN 'locked'
+             ELSE s.status::text END AS effective_status`;
+
 // GET /api/venues — list with filters
 router.get('/', authMiddleware, async (req, res, next) => {
   try {
@@ -86,30 +104,24 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
        WHERE v.id = $1 AND v.is_active = true`, [id]);
     if (!venue.rows.length)
       return res.status(404).json({ success:false, message:'Venue not found' });
-      
-    // Auto-release expired locks (2 minute TTL)
-    await pool.query(
-      `UPDATE slots 
-       SET status='available', locked_at=null, locked_by=null
-       WHERE venue_id=$1 AND slot_date=$2 AND status='temporarily_locked' 
-       AND locked_at < NOW() - INTERVAL '2 minutes'`,
-      [id, slotDate]);
-      
+
     // Calculate current PKT time for dynamic filtering
     const now = new Date();
     const pktNow = new Date(now.getTime() + (5 * 60 * 60 * 1000));
     const todayLocalStr = pktNow.toISOString().split('T')[0];
     const nowTimeStr = pktNow.toISOString().split('T')[1].split('.')[0]; // HH:mm:ss
-    
+
     let slots = { rows: [] };
     if (slotDate > todayLocalStr) {
       slots = await pool.query(
-        `SELECT * FROM slots WHERE venue_id=$1 AND slot_date=$2 ORDER BY start_time`,
-        [id, slotDate]);
+        `SELECT ${slotColumns('$3')} FROM slots s
+          WHERE s.venue_id=$1 AND s.slot_date=$2 ORDER BY s.start_time`,
+        [id, slotDate, req.user.id]);
     } else if (slotDate === todayLocalStr) {
       slots = await pool.query(
-        `SELECT * FROM slots WHERE venue_id=$1 AND slot_date=$2 AND start_time > $3 ORDER BY start_time`,
-        [id, slotDate, nowTimeStr]);
+        `SELECT ${slotColumns('$4')} FROM slots s
+          WHERE s.venue_id=$1 AND s.slot_date=$2 AND s.start_time > $3 ORDER BY s.start_time`,
+        [id, slotDate, nowTimeStr, req.user.id]);
     } // If slotDate < todayLocalStr, returns empty slots array
 
     res.json({ success:true, data: { ...venue.rows[0], slots: slots.rows } });

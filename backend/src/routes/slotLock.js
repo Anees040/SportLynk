@@ -4,72 +4,93 @@ const pool = require('../db/pool');
 const authMiddleware = require('../middleware/authMiddleware');
 const checkRole = require('../middleware/roleMiddleware');
 
-// ── Constants ────────────────────────────────────────────────
-const LOCK_TTL_MINUTES = 2; // Industry standard: 2 minutes
+/**
+ * Checkout slot locks (SRS ER1.5, FR3.7).
+ *
+ * A lock is a short hold one player takes on a free slot while they walk
+ * through checkout, so two players cannot spend two minutes each filling in the
+ * same booking. It is NOT a slot_status value:
+ *
+ *   `slots.status` stays 'available' for the whole hold — only `locked_until`
+ *   and `locked_by` change. That makes expiry LAZY: a lock whose `locked_until`
+ *   has passed reads as free everywhere, so no sweep job is needed and a client
+ *   that dies mid-checkout can never strand a slot.
+ *
+ * A hold ends when: the booking is created (bookings.js clears it), the player
+ * leaves checkout (DELETE below), or `locked_until` simply passes.
+ */
+const LOCK_TTL_MINUTES = 5;
 
-// POST /api/slots/:id/lock — Temporarily lock a slot (1 per player per venue)
+/** True while a hold is still live. Expired holds are indistinguishable from free. */
+const HOLD_IS_LIVE = `(locked_until IS NOT NULL AND locked_until > NOW())`;
+
+// POST /api/slots/:id/lock — hold a free slot for LOCK_TTL_MINUTES.
+// Re-tapping a slot you already hold refreshes the hold; a slot held by
+// somebody else is a 409.
 router.post('/:id/lock', authMiddleware, checkRole('player'), async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const slotId = req.params.id;
-    const userId = req.user.id;
     await client.query('BEGIN');
-    
-    // 1. Get the target slot (with row lock)
-    const slotCheck = await client.query(
-      `SELECT s.*, s.venue_id FROM slots s WHERE s.id=$1 FOR UPDATE`, [slotId]);
-    
-    if (!slotCheck.rows.length) {
+
+    const found = await client.query(
+      `SELECT id, venue_id, status, locked_by, ${HOLD_IS_LIVE} AS is_held
+         FROM slots
+        WHERE id = $1
+        FOR UPDATE`,
+      [req.params.id],
+    );
+
+    if (!found.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Slot not found' });
     }
-    
-    const slot = slotCheck.rows[0];
-    const venueId = slot.venue_id;
-    
-    // 2. Auto-release ANY existing lock this player has on THIS venue
-    await client.query(
-      `UPDATE slots 
-       SET status='available', locked_at=null, locked_by=null
-       WHERE venue_id=$1 AND locked_by=$2 AND status='temporarily_locked'`,
-      [venueId, userId]);
-    
-    // 3. Check if slot is available or has an expired lock
-    if (slot.status === 'temporarily_locked') {
-      if (slot.locked_by === userId) {
-        // Player re-selecting their own slot — allow
-      } else {
-        const lockedAt = new Date(slot.locked_at);
-        const now = new Date();
-        const diffMinutes = (now - lockedAt) / (1000 * 60);
-        
-        if (diffMinutes < LOCK_TTL_MINUTES) {
-          await client.query('ROLLBACK');
-          return res.status(409).json({ 
-            success: false, 
-            message: 'Slot is being held by another player. Try again in a moment.' 
-          });
-        }
-        // Expired lock — we can take it
-      }
-    } else if (slot.status !== 'available') {
+
+    const slot = found.rows[0];
+
+    if (slot.status !== 'available') {
       await client.query('ROLLBACK');
-      return res.status(409).json({ success: false, message: `Slot is already ${slot.status}` });
+      return res.status(409).json({
+        success: false,
+        message: slot.status === 'booked'
+          ? 'This slot has just been booked by another player.'
+          : 'This slot is not available.',
+      });
     }
-    
-    // 4. Lock it with ownership tracking
+
+    if (slot.is_held && slot.locked_by !== req.user.id) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: 'Another player is checking out this slot. Try again in a few minutes.',
+      });
+    }
+
+    // One hold per player per venue — moving to a different slot drops the old
+    // hold instead of letting one player sit on the whole grid.
+    await client.query(
+      `UPDATE slots
+          SET locked_by = NULL, locked_until = NULL
+        WHERE venue_id = $1 AND locked_by = $2 AND id <> $3`,
+      [slot.venue_id, req.user.id, slot.id],
+    );
+
     const updated = await client.query(
-      `UPDATE slots 
-       SET status='temporarily_locked', locked_at=NOW(), locked_by=$1 
-       WHERE id=$2 RETURNING *`, 
-      [userId, slotId]);
-    
+      `UPDATE slots
+          SET locked_by = $1, locked_until = NOW() + make_interval(mins => $2)
+        WHERE id = $3
+        RETURNING id, locked_until`,
+      [req.user.id, LOCK_TTL_MINUTES, slot.id],
+    );
+
     await client.query('COMMIT');
-    res.json({ 
-      success: true, 
-      message: 'Slot locked successfully', 
-      data: updated.rows[0],
-      expiresInSeconds: LOCK_TTL_MINUTES * 60
+    res.json({
+      success: true,
+      message: `Slot held for you for ${LOCK_TTL_MINUTES} minutes`,
+      data: {
+        slotId: updated.rows[0].id,
+        lockedUntil: updated.rows[0].locked_until,
+        expiresInSeconds: LOCK_TTL_MINUTES * 60,
+      },
     });
   } catch (e) {
     await client.query('ROLLBACK');
@@ -80,25 +101,27 @@ router.post('/:id/lock', authMiddleware, checkRole('player'), async (req, res, n
   }
 });
 
-// DELETE /api/slots/:id/lock — Unlock a slot (only by the player who locked it)
+// DELETE /api/slots/:id/lock — release your own hold.
+// Best-effort by design: the client fires this while walking away from
+// checkout, so "there was nothing to release" is a success, not an error.
 router.delete('/:id/lock', authMiddleware, checkRole('player'), async (req, res, next) => {
   try {
-    const slotId = req.params.id;
-    const userId = req.user.id;
-    
     const result = await pool.query(
-      `UPDATE slots 
-       SET status='available', locked_at=null, locked_by=null
-       WHERE id=$1 AND status='temporarily_locked' AND locked_by=$2
-       RETURNING *`, 
-      [slotId, userId]);
-    
-    if (!result.rows.length) {
-      return res.status(404).json({ success: false, message: 'Slot is not locked by you' });
-    }
-    
-    res.json({ success: true, message: 'Slot unlocked' });
+      `UPDATE slots
+          SET locked_by = NULL, locked_until = NULL
+        WHERE id = $1 AND locked_by = $2
+        RETURNING id`,
+      [req.params.id, req.user.id],
+    );
+
+    const released = result.rows.length > 0;
+    res.json({
+      success: true,
+      message: released ? 'Hold released' : 'No hold to release',
+      data: { released },
+    });
   } catch (e) {
+    console.error('Slot unlock error:', e);
     next(e);
   }
 });
