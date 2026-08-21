@@ -2,16 +2,24 @@
 
 ## Connection
 **Supabase is the only database** — the same instance serves local development
-and the deployed Render API. There is no local PostgreSQL and no second copy to
-keep in sync.
+and the deployed Render API. A `localhost:5432/sportlynk` line is still commented
+out at the top of `backend/.env`, but that copy is **stale** (last written before
+Wave A) and is neither a backup nor a fallback. There is one live database.
 
-Use the **session pooler** URI from Supabase → Project Settings → Database, with
-`?sslmode=require`, in `backend/.env` as `DATABASE_URL`. The direct
-`db.<ref>.supabase.co` host is IPv6-only on the free tier and does not resolve
-from every network (including Render's outbound IPv4). `src/db/pool.js` derives
-TLS from `sslmode=` in the URL, from `NODE_ENV`, or from the host simply not being
-localhost — three independent signals, because a missing TLS flag produces one of
-the most confusing errors in this stack.
+Use the **session pooler** URI from Supabase → Project Settings → Database in
+`backend/.env` as `DATABASE_URL`. The direct `db.<ref>.supabase.co` host is
+IPv6-only on the free tier and does not resolve from every network (including
+Render's outbound IPv4).
+
+`?sslmode=require` is **optional — the URL works with or without it.** TLS is
+decided by `src/db/pool.js` from three independent signals: `sslmode=` in the URL,
+`NODE_ENV`, or the host simply not being localhost. But pool.js then *strips*
+`sslmode=` before handing the URL to pg, and it has to: in pg 8.20
+`pg-connection-string` parses `sslmode=require` as an alias for `verify-full`, and
+that parsed value **overrides** the `ssl: {rejectUnauthorized:false}` the pool
+passes, so the connection dies on `self-signed certificate in certificate chain`.
+Measured on this database: `sslmode=require` fails, no `sslmode` connects,
+`sslmode=no-verify` connects.
 
 > ⛔ **Never run `backend/schema.sql` against this database.** It is a
 > from-scratch script and the live data — real accounts, wallets, venues, booking
@@ -22,16 +30,54 @@ the most confusing errors in this stack.
 | # | File | Wave | What it added |
 |---|---|---|---|
 | 001–009 | `001_fix_schema` … `009_no_show_job_and_admin` | pre-sprint | Base schema corrections, venue media/amenities, slot-lock columns, payment rules, wallets, owner booking updates, admin + venues, no-show groundwork |
-| 010 | `010_escrow_policy_alignment` | S1-A | `escrow_policy` table (20% deposit / 24 h window), `notifications`, no-show idempotency columns |
+| 010 | `010_escrow_policy_alignment` | S1-A | `notifications`, escrow columns on `bookings` (`security_deposit`, `deposit_amount`, `upfront_percent` default 20, no-show idempotency), `venues.upfront_percent`. Despite the filename it creates **no `escrow_policy` table** — the 20% / 24 h policy lives in `src/utils/escrow.js` → `POLICY`, not in a settings row. |
 | 011 | `011_slot_locks` | S1-B | `slots.locked_by` / `locked_until` — 5-minute checkout holds (ER1.5 / FR3.7) |
 | 012 | `012_hardening_indexes` | S1-C | Performance indexes; only `bookings(venue_id, slot_id)` was genuinely missing |
-| 013 | `013_fyp2_foundation` | S1-D | 12 tables for milestones S.2–S.7 (teams/matches/tournaments/chat/settings) + columns + 14 indexes. **27 tables total.** Nothing reads them yet, by design. |
+| 013 | `013_fyp2_foundation` | S1-D | 12 tables for milestones S.2–S.7 (teams/matches/tournaments/chat/settings) + columns + 14 indexes. Nothing reads them yet, by design. |
 | 014 | `014_withdrawals` | S1-F | `withdrawals` + the partial unique index that enforces one pending request per user |
+
+**28 tables in `public` after 014** (27 after 013, plus `withdrawals`). Verified
+against Supabase on 2026-08-21: all 12 of 013's tables present, 010's 5 escrow
+columns present, `uq_withdrawals_one_pending` present as a partial unique index on
+`status='pending'`, and all 31 key columns typed `uuid`.
 
 Each has a `backend/run_migration_0XX.js` runner with machine-checked assertions.
 013 and 014 were each verified **idempotent** — run twice, the second run creates
 nothing — because a migration you are afraid to re-run is a migration that
 silently diverges between environments.
+
+> One caveat learned the hard way: **a green assertion report does not say which
+> database it ran against.** Migration 013's runner was reported twice as "applied
+> to Supabase" when `DATABASE_URL` was still pointing at localhost. Check the host
+> before trusting the ticks.
+
+## Maintenance scripts
+
+All run from `backend/`, all against whatever `DATABASE_URL` points at.
+
+| Script | Destructive? | What it is for |
+|---|---|---|
+| `src/scripts/add_future_slots.js` | **No** — only inserts | Keeps every active venue supplied with bookable slots. Without future slots nothing can be booked and no acceptance script can run. Idempotent via `NOT EXISTS (venue_id, slot_date, start_time)` — `slots` has **no unique constraint** on that triple, so the guard is the only thing preventing duplicates. `--days N` `--venue <uuid>` `--from H --to H` `--dry`. |
+| `src/scripts/reconcile_wallets.js` | Yes, with `--apply` (dry-run by default) | Repairs drift between `wallets.frozen_balance` and `SUM(bookings.security_deposit)` over `pending`/`confirmed` bookings. Releases over-frozen escrow with a `refund` ledger row; **reports but never fixes** under-frozen. |
+| `src/scripts/seed_venues.js` | **Yes** — deletes the first owner's venues, slots, bookings and their transactions | Rebuilds the 10 demo grounds. Releases any escrow those bookings held *before* deleting them, prints a delete summary, and waits 5 s for `Ctrl-C` (`--yes` skips). |
+
+### The escrow invariant
+
+```
+wallets.frozen_balance  ==  SUM(bookings.security_deposit)
+                            WHERE player_id = user AND status IN ('pending','confirmed')
+```
+
+`security_deposit` — **not** `total_amount` — is the authority on what is in
+escrow for a booking. Both cancel paths, check-in and the no-show job all release
+exactly that column, and `GET /api/wallet/frozen` itemises it. The two are equal
+for any booking made under Wave A's rules (escrow = full slot price) and differ on
+rows created under the old 30% rule.
+
+`GET /api/wallet/frozen` returns `delta` as a live check on this invariant; it
+should read 0. It did not for a long time: `seed_venues.js` deleted bookings
+without unwinding the escrow they held, stranding PKR 11,100 across two wallets.
+Both the cause and the damage are fixed — see PROGRESS.md, "Post-wave fixes".
 
 ## Tables
 

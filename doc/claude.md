@@ -10,7 +10,9 @@ trained ML models — never replace them with external AI API calls.
 - Backend: cd backend && npm install && node src/server.js → GET /api/health.
   Env in backend/.env (see .env.example).
 - DB: Supabase is the ONLY database (dev + demo). DATABASE_URL = session-pooler
-  URI + sslmode=require.
+  URI; `?sslmode=require` is optional — pool.js strips `sslmode` before pg parses
+  it, because pg 8.20 reads `require` as `verify-full` and that OVERRIDES
+  rejectUnauthorized:false → "self-signed certificate in certificate chain".
 - App: flutter pub get → adb reverse tcp:3000 tcp:3000 →
   flutter run --dart-define=API_BASE_URL=http://127.0.0.1:3000/api
   (emulator: http://10.0.2.2:3000/api).
@@ -104,6 +106,25 @@ trained ML models — never replace them with external AI API calls.
     troubleshooting table) and S1_ACCEPTANCE.md (checklist audited row by row +
     manual test scripts). Render free tier sleeps: cold start ~30-50s AND all
     three setInterval sweeps stop while asleep — demo timed features locally.
+  - post-E/F fixes (2026-08-21), against the REAL Supabase for the first time —
+    .env had still been on localhost. pool.js: `?sslmode=require` BROKE the
+    connection (pg-connection-string reads it as verify-full and that overrides
+    ssl:{rejectUnauthorized:false}); stripSslMode() removes it after needsSsl()
+    reads it, and the old hint "add ?sslmode=require" — which caused the error —
+    is gone. This was a latent Render deploy blocker, since the guide told you to
+    paste that flag into the dashboard. seed_venues.js deleted bookings without
+    unwinding the escrow they held, stranding PKR 11,100 across 2 wallets and
+    making /wallet/frozen's `delta` permanently non-zero; it now releases escrow
+    with a `refund` row (booking_id NULL so the txn delete can't take it) BEFORE
+    deleting, and reconcile_wallets.js repairs damage already done (dry-run
+    default, recomputes drift INSIDE the txn under FOR UPDATE, never auto-fixes
+    under-frozen). /wallet/frozen now itemises security_deposit as `escrow_held`
+    (+ `slot_price`), not total_amount — total_amount showed 3,000 frozen when 900
+    was. add_future_slots.js (new): all 1,725 slots were PAST so nothing was
+    bookable and no acceptance script could run; set-based generate_series insert,
+    idempotent via NOT EXISTS (slots has no unique key on venue/date/start),
+    PKT-aware, non-destructive — 2,100 created, 1,990 bookable. Ledger now reads
+    frozen 0.00 / owed 0.00 / delta 0.00. flutter analyze: 0 issues.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave. API.md / DATABASE.md =

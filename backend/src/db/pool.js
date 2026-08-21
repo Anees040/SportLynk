@@ -27,10 +27,44 @@ function needsSsl(url) {
   return !/@(?:localhost|127\.0\.0\.1)[:/]/i.test(url);
 }
 
+/**
+ * Remove `sslmode=` from the URL before pg ever sees it.
+ *
+ * This is not tidying — it fixes a connection failure. In pg 8.20,
+ * pg-connection-string parses `sslmode=require` and treats it as an alias for
+ * `verify-full`, and that parsed value OVERRIDES the `ssl` option passed to the
+ * Pool constructor. Supabase's pooler presents a chain Node has no root for, so
+ * the result is a hard failure:
+ *
+ *   ❌ Database connection failed: self-signed certificate in certificate chain
+ *
+ * Measured on this project's exact URL and pg version:
+ *   sslmode=require   + ssl:{rejectUnauthorized:false}  → FAILS
+ *   (no sslmode)      + ssl:{rejectUnauthorized:false}  → connects
+ *   sslmode=no-verify + ssl:{rejectUnauthorized:false}  → connects
+ *
+ * That made the documented setup self-defeating: doc/claude.md and
+ * DEPLOY_GUIDE.md both say to append `?sslmode=require`, and the old error hint
+ * below told you to add it too — so following our own instructions broke Render.
+ *
+ * Stripping it means `sslmode` stays a *signal* that needsSsl() reads, but never
+ * a *directive* pg acts on. TLS is then decided in exactly one place: the `ssl`
+ * option. Whatever anyone pastes into the Render dashboard now works, with or
+ * without the flag, on any pg version.
+ */
+function stripSslMode(url) {
+  if (!url) return url;
+  return url
+    .replace(/([?&])sslmode=[a-z-]+/i, '$1')  // drop the pair, keep the separator
+    .replace(/&&+/g, '&')                     // collapse a gap left mid-query
+    .replace(/[?&]$/, '')                     // drop a now-empty trailing ? or &
+    .replace(/\?&/, '?');                     // fix "?&next=..."
+}
+
 const useSsl = needsSsl(connectionString);
 
 const pool = new Pool({
-  connectionString,
+  connectionString: stripSslMode(connectionString),
   // rejectUnauthorized:false — Supabase's pooler presents a chain Node does not
   // have a root for by default. The connection is still encrypted; we simply do
   // not verify the certificate, which is the accepted trade-off for this project.
@@ -53,8 +87,13 @@ pool.query('SELECT NOW()')
   .catch((err) => {
     console.error('❌ Database connection failed:', err.message);
     const m = (err.message || '').toLowerCase();
-    if (m.includes('ssl') || m.includes('tls') || m.includes('secure')) {
-      console.error('   → Add ?sslmode=require to the end of DATABASE_URL.');
+    if (m.includes('self-signed') || m.includes('self signed') || m.includes('certificate')) {
+      console.error('   → Certificate rejected. This should be impossible now that');
+      console.error('     pool.js strips sslmode= from the URL. If you see this, some');
+      console.error('     other code built its own Pool without rejectUnauthorized:false.');
+    } else if (m.includes('ssl') || m.includes('tls') || m.includes('secure')) {
+      console.error('   → The server wants TLS but this connection did not offer it.');
+      console.error('     Check NODE_ENV, or that the host is not localhost.');
     } else if (m.includes('password') || m.includes('authentication')) {
       console.error('   → Wrong password, or the URL still contains [YOUR-PASSWORD].');
     } else if (m.includes('enotfound') || m.includes('eai_again')) {

@@ -59,6 +59,18 @@ Build a release APK pointed at Render (step 9 below), install it, unplug, switch
 to mobile data. Then work through **[`S1_ACCEPTANCE.md`](S1_ACCEPTANCE.md)** —
 it has the per-feature scripts, including the ones that need two accounts.
 
+> **"Scripts A / B / C / D" are not code.** The word is used there in the QA
+> sense — a *procedure you act out*, like a script for a play. There is nothing to
+> implement and no file to create; each one is a table of steps and expected
+> results in `S1_ACCEPTANCE.md`. **A** = book → approve → QR check-in (+ **A2**,
+> the two cancels), **B** = slot locking across two accounts, **C** = the three
+> one-minute `SL_TEST_*` timing tests, **D** = the withdrawal endpoint contract.
+>
+> The `.js` files under `backend/src/scripts/` — `add_future_slots.js`,
+> `reconcile_wallets.js`, `seed_venues.js` — *are* real scripts you run, and they
+> appear in steps 8a/8b/8c below. Same word, different thing. Nothing else in this
+> guide asks you to write one.
+
 ---
 
 ## Step 1 — Pre-flight checks (5 min, all local)
@@ -218,7 +230,7 @@ Variable** for each row below.
 
 | Key | Value | Where it comes from |
 |---|---|---|
-| `DATABASE_URL` | `postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require` | Supabase → your project → **Connect** → **Session pooler**. See the three rules below. |
+| `DATABASE_URL` | The exact value already in your local `backend/.env` — shape: `postgresql://postgres.<ref>:<password>@aws-<n>-<region>.pooler.supabase.com:<port>/postgres` | **Easiest and safest: copy the line out of `backend/.env`.** It is the one string already proven to connect to this database. Otherwise: Supabase → your project → **Connect** → **Session pooler**. See the three rules below. |
 | `JWT_SECRET` | your existing long random string | Copy from your local `backend/.env`. **Use the same value** — a different secret invalidates every existing login, including the test accounts you need for the demo. |
 | `NODE_ENV` | `production` | Typed by hand. |
 
@@ -232,14 +244,32 @@ money timings.
 
 ### Three rules for the `DATABASE_URL`
 
-1. **Session pooler, not direct.** The host must contain `pooler.supabase.com`.
+1. **Pooler, not direct.** The host must contain `pooler.supabase.com`.
    The direct `db.<ref>.supabase.co` host is IPv6-only on the free tier and
    Render's outbound IPv4 cannot reach it — you get a hanging connection that
-   eventually times out, with no useful error.
-2. **Keep `?sslmode=require` on the end.** `src/db/pool.js` derives TLS from this
-   (and from `NODE_ENV=production`, and from the host not being localhost — three
-   independent belts, because a missing TLS flag produces one of the most confusing
-   errors in this stack).
+   eventually times out, with no useful error. Don't worry about which pooler port
+   Supabase gave you (`5432` session / `6543` transaction) — whatever is in your
+   local `.env` already works, and this app only issues plain queries and explicit
+   `BEGIN`/`COMMIT` transactions on a single checked-out client, which both poolers
+   support. Copy the working value rather than rebuilding it by hand.
+2. **`?sslmode=require` is optional — paste it or don't, both work.** This used to
+   matter and it used to be a trap. `pg` 8.20 parses `sslmode=require` as an alias
+   for `verify-full` and that parsed value **overrode** the pool's own
+   `rejectUnauthorized: false`, so Supabase's certificate chain was rejected and
+   the service died at boot with:
+
+   ```
+   ❌ Database connection failed: self-signed certificate in certificate chain
+   ```
+
+   Measured on this project's real URL: `sslmode=require` **failed**, no `sslmode`
+   **connected**, `sslmode=no-verify` **connected**. Worse, the old error hint told
+   you to *add* `?sslmode=require` — the very thing breaking it.
+
+   `src/db/pool.js` now **strips `sslmode` from the URL before `pg` sees it** and
+   decides TLS in one place (the `ssl` option), reading `sslmode` only as a signal.
+   So whatever you paste into the Render dashboard works. Leave the flag on if
+   Supabase gave it to you; it is harmless now.
 3. **Replace `[YOUR-PASSWORD]`.** Supabase hands you the URI with that literal
    placeholder in it. If you paste it unedited, the connection fails with
    *"password authentication failed"*. If you have forgotten the password:
@@ -278,7 +308,11 @@ cause.
 > sentence twice. Supabase has been your *only* database since the start of this
 > project — your real user accounts, wallets, venues and booking history are in
 > there. `schema.sql` is a from-scratch script; running it against a populated
-> database is how you lose all of it. There is no local PostgreSQL to fall back on.
+> database is how you lose all of it. A `postgresql://…@localhost:5432/sportlynk`
+> line still sits commented out at the top of `backend/.env`, but that local
+> database is **stale** — it was last written to before Wave A and has none of
+> your current accounts, wallets or bookings. It is not a backup and it is not a
+> fallback.
 >
 > The original Wave E spec said *"run schema.sql + migrations 001–010 in the SQL
 > editor."* That instruction was written before Supabase became the single
@@ -288,7 +322,7 @@ cause.
 Open Supabase → your project → **SQL Editor** → **New query**, and run:
 
 ```sql
--- Should return 27 or more.
+-- Should return 28 (27 after migration 013, plus withdrawals from 014).
 SELECT COUNT(*) AS table_count
   FROM information_schema.tables
  WHERE table_schema = 'public';
@@ -303,9 +337,18 @@ SELECT table_name
 SELECT indexname FROM pg_indexes
  WHERE tablename = 'withdrawals' AND indexname = 'uq_withdrawals_one_pending';
 
--- Wave A's escrow policy columns. Should return 20.00 and 24.
-SELECT deposit_percent, cancellation_window_hours
-  FROM escrow_policy LIMIT 1;
+-- Wave A's escrow columns. Should return 5 rows.
+--
+-- Note there is no `escrow_policy` TABLE, despite migration 010 being named
+-- 010_escrow_policy_alignment.sql. The 20% / 24h policy lives in JavaScript
+-- (backend/src/utils/escrow.js → POLICY), not in a settings row; what 010
+-- actually created was `notifications` plus these columns on `bookings`.
+-- An earlier version of this guide asked you to SELECT from escrow_policy,
+-- which fails with `relation "escrow_policy" does not exist`.
+SELECT column_name FROM information_schema.columns
+ WHERE table_name = 'bookings'
+   AND column_name IN ('security_deposit','deposit_amount','upfront_percent',
+                       'no_show_processed','no_show_processed_at');
 ```
 
 **If `withdrawals` comes back empty**, migration 014 has not been applied. Apply
@@ -369,7 +412,32 @@ your local one — or you are hitting a different database than you think.
 
 ---
 
-## Step 8 — Seed demo venues (optional, 2 min)
+## Step 8 — Slots and demo venues (2 min)
+
+### 8a. Top up the slot window — do this one, it is safe
+
+Your venues need **future** slots or nothing is bookable, and a venue with no
+bookable slot fails every acceptance script in `S1_ACCEPTANCE.md`, because all of
+them start with "player books a slot". On 2026-08-21 all 1,725 slots on Supabase
+were in the past and the suite could not be run at all.
+
+```bash
+cd D:\sportlynk\backend
+node src/scripts/add_future_slots.js --days 14
+```
+
+This **never deletes anything** and never touches wallets. It is idempotent — the
+insert is guarded by `NOT EXISTS` on `(venue_id, slot_date, start_time)`, so a
+second run creates nothing and an already-booked slot is left exactly as it is.
+Re-run it whenever the rolling window runs short. Options: `--days N` (1–60),
+`--venue <uuid>`, `--from 8 --to 23` for the hour window, `--dry` to report only.
+
+**What you should see:** a line per venue, then `Created N slot(s)` and
+`Bookable right now (what the app will show): N` followed by
+`✅ Booking tests can run.` If that number is 0, check `venues.is_active` and that
+each venue has a price.
+
+### 8b. Reseed the 10 demo grounds — only if you need to
 
 Only if your Supabase venues are thin and you want the 10 demo grounds for the
 presentation.
@@ -377,7 +445,11 @@ presentation.
 > ⚠️ **This deletes data.** `seed_venues.js` finds the **first owner account** in
 > `users` and removes *that owner's* venues, every slot under them, every booking
 > against them, and the transaction rows for those bookings — before inserting the
-> demo set. User accounts, wallet balances and other owners are untouched.
+> demo set. User accounts and other owners are untouched, and any escrow those
+> bookings were holding is **released back to the players' spendable balance first,
+> with a ledger row**, so no frozen money is stranded. (That release is a fix: it
+> used not to happen, and PKR 11,100 of unreachable escrow had accumulated across
+> two wallets as a result.)
 >
 > It prints exactly what it is about to delete, warns you specifically if any of
 > those bookings are `confirmed` or `completed` (that is your escrow audit trail —
@@ -392,11 +464,29 @@ npm run seed:venues
 It needs at least one owner account to exist; if none does, it exits telling you
 so. To skip the countdown in a script: `npm run seed:venues -- --yes`.
 
-**What you should see:** the delete summary, the countdown, `Using owner ID: …`,
-then 10 venues and 15 days × 14 slots each inserted.
+**What you should see:** the delete summary, any escrow releases, the countdown,
+`Using owner ID: …`, then 10 venues and 15 days of slots each inserted.
 
 Run this **before** any acceptance test you care about, never after — it would
 delete the very bookings you just made to prove the escrow works.
+
+### 8c. If the wallet numbers ever look wrong
+
+`GET /api/wallet/frozen` returns a `delta` — the gap between what the wallet says
+is frozen and what its active bookings actually hold. It should be **0**. If the
+frozen-balance sheet in the app warns about money "not linked to any active
+booking", this is the repair:
+
+```bash
+node src/scripts/reconcile_wallets.js            # report only — changes nothing
+node src/scripts/reconcile_wallets.js --apply    # release the over-frozen amounts
+```
+
+Dry run is the default because this moves real balances. It releases over-frozen
+escrow back to spendable balance with a `refund` ledger row per wallet, and
+**deliberately refuses to auto-fix the opposite case** (a booking claiming escrow
+the wallet never froze) — that would debit someone's balance without consent and
+means a different bug worth looking at.
 
 ---
 
@@ -516,7 +606,8 @@ Ordered roughly by how likely you are to hit them.
 | Build: `ENOENT: no such file or directory … package.json` | **Root Directory** is blank | Settings → set it to `backend` → Manual Deploy. |
 | Build: `bcrypt` / `node-gyp` / `prebuild-install` failure | Render picked a Node version with no prebuilt binary for `bcrypt ^6` | `backend/package.json` already pins `"engines": {"node": ">=20"}`. If it still fails, add env var `NODE_VERSION=20` and redeploy. |
 | Deploy: `❌ DATABASE_URL is not set` | Variable missing or misspelled on Render | Environment tab → add it exactly as `DATABASE_URL`. |
-| Deploy: `no pg_hba.conf entry … no encryption` or `SSL required` | `?sslmode=require` missing from the URL | Add it. `NODE_ENV=production` also forces TLS — set both. |
+| Deploy: `no pg_hba.conf entry … no encryption` or `SSL required` | The server wants TLS but the connection did not offer it | Set `NODE_ENV=production` on Render. `src/db/pool.js` also turns TLS on for any non-localhost host, so this should not be reachable — if it is, check the host in `DATABASE_URL`. |
+| Deploy: `self-signed certificate in certificate chain` | `?sslmode=require` in the URL. `pg-connection-string` treats it as an alias for `verify-full`, and that **overrides** the `rejectUnauthorized:false` the pool passes — Supabase's chain then fails to verify | Already fixed: `pool.js` strips `sslmode=` before pg parses the URL, so the flag is now harmless either way. If you somehow still see this, you are running an old `pool.js` — pull and redeploy. |
 | Deploy: `password authentication failed for user "postgres…"` | `[YOUR-PASSWORD]` placeholder still in the URL, or wrong password | Recopy from Supabase → Connect, substitute the real password. Reset it in Supabase if unknown. |
 | Deploy: `getaddrinfo ENOTFOUND` / connection hangs then times out | Using the **direct** `db.<ref>.supabase.co` host, which is IPv6-only | Switch to the **Session pooler** URI (`…pooler.supabase.com:5432`). |
 | Health check never turns green, service marked failed | Health Check Path wrong, or `PORT` was set manually | Path must be `/api/health`. Delete any `PORT` variable you added. |

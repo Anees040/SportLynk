@@ -34,7 +34,7 @@
 | GET | `/wallet/me` | — | `{balance, frozen_balance}` |
 | GET | `/wallet/transactions` | `limit?, type?` | `[{id, type, amount, balance_after, description, counterparty_name, reference_id, created_at, venue_name, slot_date, start_time, end_time}]` |
 | POST | `/wallet/topup` | — | Body: `{amount}` → `{newBalance}` |
-| GET | `/wallet/frozen` | — | `{items: [{id, total_amount, slot_date, start_time, end_time, status, venue_name}], itemsTotal, walletFrozen, delta}` |
+| GET | `/wallet/frozen` | — | `{items: [{id, escrow_held, slot_price, slot_date, start_time, end_time, status, venue_name}], itemsTotal, walletFrozen, delta}` |
 | GET | `/wallet/withdrawals` | `limit?` | `{items: [{id, amount, status, method, account_name, account_number, requested_at, completed_at, failure_reason}], pending}` |
 | POST | `/wallet/withdraw` | — | Body: `{amount, method?, accountName?, accountNumber?}` → `{withdrawal, newBalance}` |
 | DELETE | `/wallet/withdraw/:id` | — | `{withdrawal, newBalance}` — cancels a pending request and refunds it |
@@ -43,12 +43,28 @@
 
 One row per booking that is currently holding escrow — i.e. `status IN
 ('pending','confirmed')`, since escrow is released on check-in, cancel, reject and
-no-show. `total_amount` is the frozen amount for that booking.
+no-show.
+
+**`escrow_held` is `bookings.security_deposit`, and it is the authoritative
+figure** — that is the column the money code releases on every path
+(`routes/bookings.js`: *"security_deposit holds what is ACTUALLY in escrow for this
+booking"*). `slot_price` is `bookings.total_amount`, returned alongside so the UI
+can show what the booking costs. For a Wave-A booking the two are equal, because
+booking freezes the full slot price; for a legacy row created under the old 30%
+rule they differ, and a row where they disagree is visibly a legacy row.
+
+> This changed on 2026-08-21. `items[].total_amount` was replaced by
+> `escrow_held` + `slot_price`. Summing `total_amount` reported "PKR 3,000 frozen
+> for this booking" when 900 was actually frozen, and it made `delta` permanently
+> non-zero on any database holding a legacy row.
 
 `delta = walletFrozen - itemsTotal` and should be **0**. It is returned rather
-than hidden so a mismatch is visible: a non-zero delta means legacy rows escrowed
-under the pre-Wave-A 30% rule. Computed server-side rather than filtered in the
-client precisely so the comparison can be made against `wallets.frozen_balance`.
+than hidden so a mismatch is visible. Now that items itemise the real escrow
+figure, a non-zero delta means **genuine drift** — frozen money that no active
+booking accounts for — not a unit mismatch. Repair it with
+`node src/scripts/reconcile_wallets.js --apply`. Computed server-side rather than
+filtered in the client precisely so the comparison can be made against
+`wallets.frozen_balance`.
 
 ### `POST /wallet/withdraw` (FR7.4 / ER1.6)
 

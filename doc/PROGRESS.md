@@ -239,7 +239,8 @@ Completed:
 - [x] Backend: Restored the two foreign keys the spec omitted — `matches.winner_team` and `match_results.winner_team` now carry `REFERENCES teams(id)`. `fixtures.winner` does carry it three lines later in the same spec, so the omission was an oversight, not a design choice. Both stay nullable, so a draw is still expressible.
 - [x] Backend: **14 indexes** on the new tables — the spec shipped none, and six of the new tables use `ON DELETE CASCADE`, where Postgres does *not* auto-index the referencing column, so deleting one team or tournament would sequentially scan every child table. Four candidate indexes were deliberately **skipped** because an existing `UNIQUE` constraint already provides a leading-column index (`team_join_requests`, `match_results`, `tournament_teams`, `team_invites(token)`), and `notifications` is already covered by `010:55`. Those skips are documented in the migration so the next reader doesn't "fix" the gap with a duplicate — the same trap migration 012 was written to avoid.
 - [x] Backend: `global_settings` created and seeded (`elo`, `commission_pct`, `deposit_pct`, `sports_enabled`) but **wired to nothing**. Its `deposit_pct: 20` duplicates `POLICY.DEPOSIT_PERCENT` in `src/utils/escrow.js`, which per golden rule 3 (SRS) is the source of truth for money. Seeding the row is harmless; silently making it authoritative would be a money bug. Nothing should read it until a wave explicitly moves that authority across.
-- [x] Verification, **run twice** (9/9 assertions green both times, applied to Supabase): 12 tables created (**27 total** in `public`), all **40** key columns confirmed `uuid`, added columns on `teams`/`reviews`/`player_profiles`/`venues`/`users`/`notifications` all correct, `users.suspended` and `notifications.read` confirmed **absent**, both `winner_team` FKs present, all 4 `global_settings` seed keys, all 14 indexes present. `teams` is empty (0 rows), so the `elo`/`visibility` backfills had nothing to convert — the guards are in place but are untested against real rows, which matters only if a team row is ever created directly in SQL before S.2 ships.
+- [x] Verification, **run twice** (9/9 assertions green both times): 12 tables created (**27 total** in `public` at that time), all **40** key columns confirmed `uuid`, added columns on `teams`/`reviews`/`player_profiles`/`venues`/`users`/`notifications` all correct, `users.suspended` and `notifications.read` confirmed **absent**, both `winner_team` FKs present, all 4 `global_settings` seed keys, all 14 indexes present. `teams` is empty (0 rows), so the `elo`/`visibility` backfills had nothing to convert — the guards are in place but are untested against real rows, which matters only if a team row is ever created directly in SQL before S.2 ships.
+- [x] **Correction (2026-08-21).** Both of those runs went to the **local** database, not Supabase — `backend/.env` still had the localhost `DATABASE_URL` active at the time, so the "applied to Supabase" claim originally recorded here was wrong. Supabase was brought up to date separately: migrations 010–014 were run by hand in the Supabase SQL editor and then verified directly against it — **28 tables** in `public`, all 12 of 013's tables, 010's 5 escrow columns, 011's `locked_by`/`locked_until`, `notifications.payload`, `teams.elo`/`visibility`, all 4 `global_settings` keys, `withdrawals` with its 12 columns and `uq_withdrawals_one_pending` as a partial unique index, and all 31 key columns typed `uuid`. `.env` now points at Supabase only. The lesson worth keeping: a green assertion report says nothing about *which* database it ran against — print the host, or verify the host separately.
 - [x] **Idempotent.** The second run reported `27 tables present` at pre-flight, re-applied the whole file, and printed `Created this run: none (idempotent re-run)` with all 9 assertions still green — so every `CREATE TABLE`/`ADD COLUMN`/`CREATE INDEX` is a true no-op and the two `teams` backfills correctly declined to fire again. Re-running 013 on a database that already has it is safe.
 - [x] Server boots clean after the migration — both jobs start, `Database connected`, and **no** `[notify] notifications table missing` warning.
 
@@ -287,18 +288,110 @@ Completed:
 ## Wave E (Cloud demo deploy — Render + Supabase)
 Completed:
 - [x] Flutter: `lib/constants/api_constants.dart` — `baseUrl` is now `bool.hasEnvironment('API_BASE_URL') ? String.fromEnvironment('API_BASE_URL') : (kIsWeb ? 'http://localhost:3000/api' : 'http://10.0.2.2:3000/api')`. `bool.hasEnvironment` rather than `String.fromEnvironment(...).isEmpty`, because `.isEmpty` is not const-evaluable and this has to stay `const`. **Behaviour change worth knowing:** the default flipped from the hard-coded LAN IP `192.170.0.110` to the emulator alias, so a physical phone now *always* needs `--dart-define`. That is what the spec asked for, and a LAN IP baked into a release APK is a demo that dies the moment the laptop sleeps.
-- [x] Backend: **`src/db/pool.js` rewritten — blocker 3.** SSL was gated on `NODE_ENV === 'production'` alone, so one forgotten dashboard variable produced `no pg_hba.conf entry … no encryption`, which reads like a Supabase problem and is not. TLS is now derived from **three independent signals**: an explicit `sslmode=` in the URL (honoured including `disable`), `NODE_ENV`, or the host simply not being `localhost`. Also: `ssl: false` must be passed explicitly for local Postgres, because setting it to `false` **overrides** `pg`'s own parsing of `sslmode` from the connection string. Boot now prints `✅ Database connected (TLS on/off)`, and a connection failure is mapped to one of four specific hints (add `?sslmode=require` / wrong password or the `[YOUR-PASSWORD]` placeholder still in the URI / host not found → recopy from Supabase Connect / timeout → use the Session pooler, not the IPv6-only direct host).
+- [x] Backend: **`src/db/pool.js` rewritten — blocker 3.** SSL was gated on `NODE_ENV === 'production'` alone, so one forgotten dashboard variable produced `no pg_hba.conf entry … no encryption`, which reads like a Supabase problem and is not. TLS is now derived from **three independent signals**: an explicit `sslmode=` in the URL (honoured including `disable`), `NODE_ENV`, or the host simply not being `localhost`. Also: `ssl: false` must be passed explicitly for local Postgres, because setting it to `false` **overrides** `pg`'s own parsing of `sslmode` from the connection string. Boot now prints `✅ Database connected (TLS on/off)`, and a connection failure is mapped to one of four specific hints (add `?sslmode=require` / wrong password or the `[YOUR-PASSWORD]` placeholder still in the URI / host not found → recopy from Supabase Connect / timeout → use the Session pooler, not the IPv6-only direct host). **⚠️ Partly superseded — see "Post-wave fixes" below: the `?sslmode=require` hint was actively wrong and `pool.js` now strips `sslmode` before pg sees it.**
 - [x] Backend: **`src/scripts/seed_venues.js` — blocker 2.** It loaded `.env` from `D:\sportlynk\.env` (**wrong directory** — the file is in `backend/`) and built its **own** `Pool` from `DB_USER`/`DB_HOST`/`DB_NAME` defaulting to **localhost postgres with no SSL**. It could never have reached Supabase, which is the only database this project has. Now `require('../db/pool')`. Seeding logic untouched, except the log line that said `14 * (endHr - startHr)` slots when the loop runs `day = 0; day <= 14` (15 days), and a missing `process.exitCode = 1` on failure.
 - [x] Backend: **`seed_venues.js` destructive pre-flight.** The script `DELETE`s that owner's venues, slots, bookings *and* the transaction rows for those bookings. It now counts all four first and prints them, warns specifically when any of those bookings are `confirmed`/`completed` (*"Deleting them destroys the escrow trail your acceptance tests check"*), and waits 5 seconds for `Ctrl-C` — skippable with `--yes`/`SL_SEED_YES=1` for scripted use. Wave E's spec said "seed Supabase" as if it were additive; it is not.
 - [x] Backend: `package.json` — `"engines": {"node": ">=20"}` so Render doesn't select a Node version with no prebuilt `bcrypt ^6` binary and fall through to a `node-gyp` source build. Also `main` pointed at a nonexistent `index.js` (now `src/server.js`), `description` was empty, and `seed:venues` was not a script.
 - [x] Backend: `.env.example` — documented all four `SL_TEST_*` overrides with their real POLICY keys and defaults, a PowerShell usage line, and *"never set these on Render"*. `PORT` now warns that Render injects its own. The legacy `DB_*` note now correctly says only `run_migration_009.js` still reads them.
 - [x] Docs: `README.md` — a **run-modes table** (emulator / phone on Wi-Fi / phone over `adb reverse` / cloud) with the exact command for each, the release-APK line, and the `--dart-define` warning. Also fixed the stale Tech Stack row that still claimed "PostgreSQL 16 (local) + Supabase (cloud)", added a Hosting row, and replaced the Documentation table's dangling `RUN_GUIDE.md` link with the files that actually exist.
 - [x] Docs: **`doc/DEPLOY_GUIDE.md`** — 11 numbered steps, every one with a "what you should see", written for copy-paste: pre-flight (lockfile tracked, no `.env` staged), the git commands, the Render service form field-by-field (root dir `backend`, `npm ci`, `npm start`, health path `/api/health`, Singapore region for latency from Pakistan), the three env vars with where each value comes from, Supabase **verify-don't-re-run**, seeding, the phone build, the warm-up ritual, and a 15-row troubleshooting table. Also answers "will the backend still work when I disconnect my phone?" with the four cases.
-- [x] Docs: **`doc/S1_ACCEPTANCE.md`** — the pasted S1 checklist audited row by row (status / where it lives / who verifies / how), plus the manual scripts: escrow spine, both cancels, two-account slot lock, the three 1-minute override tests, and the withdrawal 400→201→409→refund→settle contract. Records three stale wordings in the original checklist: there is no local database (migrations are 001–014 on Supabase), the "1-min override constant" is an env var not an edited constant, and the `s1-done` tag does not exist yet.
+- [x] Docs: **`doc/S1_ACCEPTANCE.md`** — the pasted S1 checklist audited row by row (status / where it lives / who verifies / how), plus the manual scripts: escrow spine, both cancels, two-account slot lock, the three 1-minute override tests, and the withdrawal 400→201→409→refund→settle contract. Records three stale wordings in the original checklist: there is only one live database (migrations are 001–014 on Supabase; the commented-out localhost line in `.env` is a stale pre-Wave-A copy, not a second environment), the "1-min override constant" is an env var not an edited constant, and the `s1-done` tag does not exist yet.
 
 ### Wave E deployment notes (read before the demo)
 - **Render free tier sleeps after ~15 min of no traffic** (Pitfall 3). Two consequences, and the second is the one people miss. (1) The first request takes 30–50 s — absorbed by `ApiClient`'s 45 s cold-start timeout, but still 45 s of spinner, so warm `/api/health` twice before presenting. (2) **A sleeping process runs no `setInterval`, so all three sweeps stop.** The money math stays correct (the jobs compare real timestamps, so they do the right thing for the right rows whenever they *do* run) but the moment of firing drifts: a pending booking auto-approves at the first sweep after the container next wakes, not on the stroke of 2 h. For a live demo of a timed feature, run the backend locally with `SL_TEST_*` instead of relying on Render.
 - **One database, not two.** A local backend and the Render backend both point at the same Supabase instance. Never paste `schema.sql` into the Supabase SQL editor — the spec's step 2 ("run schema.sql + migrations 001–010") predates Supabase becoming the only database, and following it would drop the real accounts. Migration 014 is applied by running its runner locally; that *is* applying it to Supabase.
 - **`lib/constants/app_config.dart` is gitignored**, so a fresh clone cannot build the Flutter app. Harmless for Render (which only builds `backend/`), but back that file up outside the repo.
 - **Release APK signs with the debug keystore** (`android/app/build.gradle.kts`), which is why `flutter build apk --release` needs no keystore setup and why Firebase phone OTP keeps working (same SHA-1). Fine for the FYP; a real keystore is only needed to publish.
+
+## Post-wave fixes (2026-08-21) — pointing at Supabase for real
+
+Not a new wave. Everything here came out of actually switching `backend/.env` from
+localhost to Supabase and then running the acceptance suite against it. Four things
+were broken that no amount of code review would have found, because each only
+appears against the real database.
+
+- [x] **`?sslmode=require` in `DATABASE_URL` broke the connection — and Wave E's own
+  guide told you to add it.** Symptom: `self-signed certificate in certificate
+  chain`, on a URL that Supabase itself hands you. Cause: in `pg` 8.20,
+  `pg-connection-string` parses `sslmode=require` and treats it as an alias for
+  `verify-full`, and that **parsed value overrides** the
+  `ssl: {rejectUnauthorized:false}` passed to the `Pool` constructor — so the
+  option that was supposed to accept Supabase's chain was silently discarded.
+  Measured, three cases, same database: `sslmode=require` **fails**, no `sslmode`
+  **connects**, `sslmode=no-verify` **connects**. Fix: `stripSslMode()` in
+  `src/db/pool.js` removes `sslmode=` from the URL *after* `needsSsl()` has read it
+  and *before* `pg` parses it, so the flag still selects TLS but can no longer
+  override the verification mode. The URL now works with or without it. The old
+  failure hint — *"→ Add `?sslmode=require` to the end of DATABASE_URL"* — was
+  advice to do the exact thing that caused the error; it is gone. **This was a
+  latent Render deploy blocker:** step 4 of the guide had you paste that flag into
+  the dashboard, so the first deploy would have failed on the database connection.
+- [x] **PKR 11,100 of phantom escrow found, root-caused, and repaired.**
+  `wallets.frozen_balance` must equal `SUM(bookings.security_deposit)` over
+  `pending`/`confirmed` bookings. It didn't: total frozen was 12,000 against 900
+  genuinely owed. One wallet held 5,200 frozen with **zero** bookings. Cause:
+  `seed_venues.js` deleted a venue's bookings and their transactions but never
+  unwound the escrow those bookings held — the booking rows vanished, the frozen
+  money did not, and every past re-seed stranded more. That money was unreachable
+  by its owner and made `GET /api/wallet/frozen` report a permanent non-zero
+  `delta`, so the acceptance check "delta = 0" could never pass honestly.
+- [x] **`seed_venues.js` fixed at the root**, so it cannot recur: before the four
+  `DELETE`s it now selects every player holding escrow on that owner's
+  pending/confirmed bookings, releases it back to spendable balance, and writes a
+  `refund` ledger row per player with `booking_id NULL` — deliberately null so the
+  `transactions` delete two lines later cannot take the audit row with it. Its
+  pre-flight text also used to claim *"Users, wallets and wallet balances are NOT
+  touched"*, which was true and was exactly the problem; it now says escrow is
+  released first, with a ledger row.
+- [x] **`backend/src/scripts/reconcile_wallets.js` (new)** — repairs drift already
+  done. Dry-run by default, `--apply` commits. Per wallet: `BEGIN` → re-read
+  `FOR UPDATE` → **recompute the drift inside the transaction** (the audit pass is
+  only a candidate scan; a booking may have been made or cancelled since) →
+  `applyWallet` → one `refund` ledger row → `COMMIT`. Over-frozen is fixed;
+  **under-frozen is reported and never auto-fixed**, because that would debit
+  someone's spendable balance without consent and it points at a different bug a
+  script should not paper over. Ends by re-running the audit query to *prove* the
+  result rather than asserting it. Applied: 15 wallets scanned, 13 consistent, 2
+  over-frozen, 11,100 released. Re-audit: no wallet over-frozen.
+- [x] **`GET /api/wallet/frozen` now itemises `security_deposit`, not
+  `total_amount`** — a contract change, see API.md. `security_deposit` is what the
+  money code treats as authoritative (`routes/bookings.js`: *"security_deposit
+  holds what is ACTUALLY in escrow for this booking"*, and both cancel paths,
+  check-in and no-show all release exactly it). For a Wave-A booking the two are
+  equal; for a legacy row created under the old 30% rule they are not, and the live
+  database had one — base 3,000, `security_deposit` 900. The sheet was therefore
+  telling the player "PKR 3,000 frozen for this booking" when 900 was frozen, *and*
+  it made `delta` permanently non-zero, so the honest diagnostic beside it could
+  never read 0. Response items now carry `escrow_held` **and** `slot_price`, so
+  `frozen_balance_sheet.dart` shows the escrow figure with an *"of PKR 3,000"*
+  sub-line only when the two genuinely differ — a legacy row now explains itself
+  instead of looking like the wrong number. Its `delta` warning was also rewritten:
+  it used to blame the old deposit rule, which is no longer what a non-zero delta
+  means.
+- [x] **`backend/src/scripts/add_future_slots.js` (new)** — this unblocked the whole
+  acceptance suite. All 1,725 slots on Supabase were in the **past**, so there was
+  nothing bookable and *every* manual script in `S1_ACCEPTANCE.md` starts with
+  "player books a slot". `seed_venues.js` would have produced slots but only by
+  first deleting the 10 hand-built venues, so this is the additive alternative: it
+  never deletes anything and never touches wallets. Idempotent by an explicit
+  `NOT EXISTS` on `(venue_id, slot_date, start_time)` — `slots` has **no unique
+  constraint** on that triple, so re-running would otherwise double every slot; run
+  it daily to keep a rolling window. "Today" is `(NOW() AT TIME ZONE
+  'Asia/Karachi')::date`, not `CURRENT_DATE`, because the database runs UTC and
+  between midnight and 05:00 PKT those are different days — the first day of slots
+  would land in the past. The first version issued one `SELECT` per candidate slot
+  and **timed out** (2,100 round trips to a remote pooler); rewritten set-based with
+  `generate_series`, it is one statement per venue and finishes in seconds. Run:
+  2,100 slots created across 10 venues × 14 days × 15 hours, **1,990 bookable right
+  now**; re-run created 0.
+- [x] `autoApproveJob` then did real work on its first boot against Supabase — it
+  auto-rejected the stale legacy booking (its slot was in the past) and refunded the
+  900. Final ledger state: **total frozen 0.00, owed 0.00, delta 0.00.**
+- [x] Migration **008's `venues.is_verified` / `venues.verification_status` are absent
+  from Supabase** and that is harmless: every consumer — `routes/admin.js`,
+  `auth.js`, `owner.js`, `venues.js` and both admin Dart screens — reads
+  `owner_profiles.verification_status`. Nothing anywhere reads the `venues` columns.
+  Left alone rather than "fixed", per golden rule 1.
+- [x] `flutter analyze --no-pub` → **No issues found!** after the Dart changes.
+
 

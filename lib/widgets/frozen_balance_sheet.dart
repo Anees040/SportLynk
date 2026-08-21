@@ -187,14 +187,17 @@ class _FrozenBalanceSheetState extends State<FrozenBalanceSheet> {
                 ),
               ),
               // Only appears when the itemised rows do not add up to the wallet's
-              // own figure — i.e. legacy escrow from the pre-Wave-A 30% rule.
+              // own figure. Now that rows itemise security_deposit — the amount
+              // actually in escrow — this means genuine drift: frozen money no
+              // active booking accounts for. Backend fix:
+              // node src/scripts/reconcile_wallets.js --apply
               if (_delta.abs() >= 0.01) ...[
                 const SizedBox(height: 12),
                 _message(
                   Icons.info_outline,
                   'PKR ${_delta.abs().toStringAsFixed(0)} of your frozen balance '
-                      '${_delta > 0 ? 'is not linked to an active booking' : 'exceeds what the wallet reports'}. '
-                      'This is escrow from a booking made before the deposit rules changed.',
+                      '${_delta > 0 ? 'is not linked to any active booking' : 'is less than your bookings are holding'}. '
+                      'Contact support so it can be released — no money has been lost.',
                   AppColors.warning,
                 ),
               ],
@@ -254,13 +257,24 @@ class _FrozenBalanceSheetState extends State<FrozenBalanceSheet> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                'PKR ${asNum(b['total_amount']).toStringAsFixed(0)}',
+                'PKR ${asNum(b['escrow_held']).toStringAsFixed(0)}',
                 style: GoogleFonts.poppins(
                   fontSize: 13.5,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
               ),
+              // A booking made before the deposit rules changed froze only part of
+              // the slot price. Show the price too, struck through, so the row
+              // explains itself instead of looking like the wrong number.
+              if ((asNum(b['slot_price']) - asNum(b['escrow_held'])).abs() >= 0.01)
+                Text(
+                  'of PKR ${asNum(b['slot_price']).toStringAsFixed(0)}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
               const SizedBox(height: 3),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),

@@ -252,7 +252,9 @@ async function seed() {
       console.log(`      ${c.slots} slot(s)`);
       console.log(`      ${c.bookings} booking(s)  — ${c.live_bookings} confirmed/completed`);
       console.log(`      ${c.txns} transaction row(s) (ledger history)`);
-      console.log("    Users, wallets and wallet balances are NOT touched.");
+      console.log("    Users and wallets are NOT deleted. Any escrow those bookings");
+      console.log("    were holding is RELEASED back to the players' spendable balance");
+      console.log("    first, with a ledger row — so no frozen money is left stranded.");
       if (Number(c.live_bookings) > 0) {
         console.log("");
         console.log("    ⛔ Some of those bookings are confirmed/completed. Deleting them");
@@ -265,6 +267,67 @@ async function seed() {
           await new Promise((r) => setTimeout(r, 1000));
         }
         console.log("\r    Starting.                              ");
+      }
+      console.log("");
+    }
+
+    // ── Unwind escrow BEFORE deleting the bookings that hold it ───────────────
+    // This is the fix for a real bug. The DELETEs below remove booking rows, but
+    // the escrow those bookings were holding lives in wallets.frozen_balance — a
+    // different table this script never touched. So every past run left frozen
+    // money with nothing to account for it: by the time this was found, 11,100 PKR
+    // was stranded across two wallets, unreachable by their owners, and
+    // GET /api/wallet/frozen reported a permanent non-zero `delta`.
+    //
+    // Releasing it back to spendable balance first keeps the invariant
+    // (frozen_balance == SUM of security_deposit over pending/confirmed bookings)
+    // true on both sides of the delete. security_deposit is the authority on what
+    // is actually in escrow — see routes/bookings.js.
+    //
+    // A `refund` ledger row is written per player, because money moving into
+    // spendable balance without a ledger entry is exactly the kind of silent gap
+    // this whole script caused. The row is written BEFORE the transactions DELETE
+    // below, so scope it to booking_id IS NULL work — these rows carry no
+    // booking_id precisely so the delete cannot take them with it.
+    const holders = await client.query(
+      `SELECT b.player_id,
+              w.id                      AS wallet_id,
+              SUM(b.security_deposit)   AS escrow
+         FROM bookings b
+         JOIN wallets w ON w.user_id = b.player_id
+        WHERE b.venue_id IN (SELECT id FROM venues WHERE owner_id = $1)
+          AND b.status IN ('pending','confirmed')
+        GROUP BY b.player_id, w.id
+       HAVING SUM(b.security_deposit) > 0`,
+      [ownerId]
+    );
+
+    if (holders.rows.length) {
+      console.log(`Releasing escrow held by ${holders.rows.length} player(s) before deleting their bookings:`);
+      for (const h of holders.rows) {
+        const amount = Math.round(Number(h.escrow) * 100) / 100;
+        const upd = await client.query(
+          `UPDATE wallets
+              SET balance        = GREATEST(balance + $1, 0),
+                  frozen_balance = GREATEST(frozen_balance - $1, 0)
+            WHERE id = $2
+          RETURNING balance`,
+          [amount, h.wallet_id]
+        );
+        await client.query(
+          `INSERT INTO transactions
+             (wallet_id, user_id, booking_id, type, amount, balance_after,
+              description, counterparty_name)
+           VALUES ($1, $2, NULL, 'refund', $3, $4, $5, 'SportLynk')`,
+          [
+            h.wallet_id,
+            h.player_id,
+            amount,
+            upd.rows[0] ? upd.rows[0].balance : 0,
+            `Escrow released — the venue and its bookings were removed by a data reseed.`,
+          ]
+        );
+        console.log(`      released PKR ${amount.toFixed(2)} to player ${h.player_id}`);
       }
       console.log("");
     }

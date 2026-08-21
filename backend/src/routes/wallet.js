@@ -87,21 +87,35 @@ router.post('/topup', authMiddleware, async (req, res, next) => {
 // GET /api/wallet/frozen
 //
 // Answers "where exactly is my PKR 4,800?" with one row per booking that is
-// currently holding escrow. bookings.total_amount is the frozen amount per
-// booking (routes/bookings.js freezes exactly that at creation), and escrow is
-// held while the booking is pending or confirmed — it is released on check-in,
-// cancel, reject and no-show.
+// currently holding escrow, which is while the booking is pending or confirmed —
+// escrow is released on check-in, cancel, reject and no-show.
+//
+// The itemised figure is `security_deposit`, NOT `total_amount`. That is the
+// column the money code treats as authoritative (routes/bookings.js: "security_
+// deposit holds what is ACTUALLY in escrow for this booking", and both cancel
+// paths release exactly it). For a Wave-A booking the two are equal, because
+// booking freezes the full slot price. For a legacy row created under the old 30%
+// rule they differ — one live booking here has total_amount 3000 against
+// security_deposit 900 — and summing total_amount then reported "PKR 3,000 frozen
+// for this booking" when 900 was frozen. That is a wrong number in the user's
+// wallet AND it made `delta` permanently non-zero, so the honest diagnostic below
+// could never read 0 and stopped meaning anything.
+//
+// `slot_price` is returned alongside so the sheet can still show what the booking
+// costs, and a row where the two disagree is visibly a legacy row.
 //
 // Computed server-side rather than filtered in Flutter so the sum can be compared
-// against wallets.frozen_balance and any `delta` surfaced. A non-zero delta means
-// legacy rows escrowed under the pre-Wave-A 30% rule; showing it beats a
-// breakdown that quietly disagrees with the headline number.
+// against wallets.frozen_balance and any `delta` surfaced. A non-zero delta now
+// means genuine drift — escrow the wallet holds that no booking accounts for
+// (see backend/src/scripts/reconcile_wallets.js) — rather than a unit mismatch.
 router.get('/frozen', authMiddleware, async (req, res, next) => {
   try {
     const [walletRes, itemsRes] = await Promise.all([
       pool.query('SELECT frozen_balance FROM wallets WHERE user_id=$1', [req.user.id]),
       pool.query(
-        `SELECT b.id, b.total_amount, b.slot_date, b.start_time, b.end_time,
+        `SELECT b.id, b.security_deposit AS escrow_held,
+                b.total_amount AS slot_price,
+                b.slot_date, b.start_time, b.end_time,
                 b.status, v.name AS venue_name
            FROM bookings b
            JOIN venues v ON v.id = b.venue_id
@@ -114,7 +128,7 @@ router.get('/frozen', authMiddleware, async (req, res, next) => {
 
     const items = itemsRes.rows;
     const itemsTotal = round2(
-      items.reduce((sum, r) => sum + asNum(r.total_amount), 0),
+      items.reduce((sum, r) => sum + asNum(r.escrow_held), 0),
     );
     const walletFrozen = walletRes.rows.length
       ? round2(walletRes.rows[0].frozen_balance)
