@@ -185,3 +185,21 @@ Completed:
 - [x] Deleted 13 useless files (debug scripts, old migrations, one-time prompt files, agent notes).
 - [x] Updated all 7 MD documentation files.
 - [x] `flutter analyze`: 0 issues.
+
+## Wave S1-A (Money & policy alignment — escrow ledger unified)
+Completed:
+- [x] Backend: New `src/utils/escrow.js` — the single source of truth for money policy (`DEPOSIT_PERCENT=20`, `CANCELLATION_WINDOW_HOURS=24`, `NO_SHOW_GRACE_MINUTES=30`, `NO_SHOW_TRUST_PENALTY=10`, `AUTO_DECIDE_AFTER_HOURS=2`) plus `asNum`/`round2`/`depositFor`/`penaltySplit`/`hoursUntilSlot`/`isLateCancellation` and the shared `lockWallet`/`applyWallet`/`logTxn` primitives.
+- [x] Backend: New `src/utils/notify.js` — writes `notifications` rows inside a `SAVEPOINT`, so a notification failure can never abort a money transaction.
+- [x] Backend: Migration `010_escrow_policy_alignment.sql` + `run_migration_010.js` — adds `bookings.deposit_amount` (backfilled to 20% of price), `no_show_processed`, `no_show_at`, `approved_at`, `auto_decided_at`; adds the `rejected` value to the `booking_status` enum; creates the `notifications` table; sets `venues.upfront_percent` to 20; adds two sweep indexes. The runner splits on `-- @@SPLIT@@` because `ALTER TYPE ... ADD VALUE` cannot share a multi-command string.
+- [x] Backend: Deposit is now 20% of price **everywhere** and is computed server-side only — `PATCH /api/owner/venues/:id` no longer accepts `upfront_percent` from the client.
+- [x] Backend: `bookings.js` — `POST /` escrows the full slot price (no more `paymentType`/discount branches); `PATCH /:id/cancel` uses the 24h window (≥24h full refund, <24h 80/20 split with an owner credit + notification); `POST /:id/resolve` no longer double-pays an already-checked-in booking.
+- [x] Backend: `owner.js` — approve/reject/scan-qr/no-show all run in one transaction with `FOR UPDATE OF b` and locked wallets; reject sets the new `rejected` status with a full refund; the rejected tab lists `rejected` + `cancelled`; analytics counts a no-show as the 20% deposit only.
+- [x] Backend: `noShowJob.js` rewritten — 5-minute sweep for `confirmed` bookings whose slot started >30 min ago with no check-in → 80/20 ledger + `trust_score -10` + notifications for both parties, guarded by `no_show_processed`. The owner's manual button remains an early trigger for the identical move.
+- [x] Backend: New `autoApproveJob.js` (FR4.10) — 5-minute sweep: pending >2h with the slot still >2h away → auto-confirm (no money moves); slot starting within 2h and still unapproved → auto-reject + full refund. Registered in `server.js`; both jobs log every sweep.
+- [x] Flutter: `confirm_booking_screen` — removed the 30%-upfront payment selector (it disagreed with the server), replaced with a "Payment (held in escrow)" breakdown (slot price / amount escrowed / 20% at-risk deposit) and 24h cancellation copy.
+- [x] Flutter: `player_booking_detail_screen` — 24h + 80/20 cancel dialog copy, `rejected` status colour/icon/title/subtitle, "Amount Held in Escrow" label.
+- [x] Flutter: `bookings_screen` — `rejected` bookings now land in the Past tab and get a status colour.
+- [x] Flutter: `help_support_screen` — escrow + 24h cancellation FAQ rewritten.
+- [x] Flutter: `owner_venue_management_screen` — the editable "Upfront Booking Percentage" field is replaced by a read-only escrow-policy note (deposit is platform policy, not owner-configurable).
+- [x] Docs: `ARCHITECTURE.md` now carries the authoritative 7-row escrow ledger table + the policy-constant table; `DATABASE.md` escrow flow refreshed to 20%/24h/30-min; `README.md` cancellation wording fixed.
+- [x] `flutter analyze`: 0 issues.

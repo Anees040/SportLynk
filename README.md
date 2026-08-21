@@ -10,10 +10,10 @@ SportLynk is a comprehensive sports venue booking and team management platform f
 
 ### Player Side ✅
 - **Smart Venue Discovery** — Search, filter by sport/price/rating, AI-powered sport recommendations
-- **Secure Escrow Booking** — Full deposit frozen at booking, released to owner only on check-in
-- **Booking Approvals** — Owner approves/rejects before slot is confirmed; auto-approve after 2 hours
+- **Secure Escrow Booking** — Full slot price frozen at booking, released to owner only on check-in
+- **Booking Approvals** — Owner approves/rejects before slot is confirmed; auto-approve after 2 hours, auto-reject if the slot is under 2 hours away and still unapproved
 - **QR Code Check-in** — Player shows QR to owner; scan instantly transfers payment
-- **Cancellation Policy** — >12 hours: full refund | <12 hours: deposit forfeited
+- **Cancellation Policy** — ≥24 hours: full refund | <24 hours: 80% refunded, 20% deposit to owner
 - **Wallet** — Top-up, real-time balance, frozen balance display, full transaction history
 - **Teams & Matchmaking** — Create teams, find opponents, view city rankings
 

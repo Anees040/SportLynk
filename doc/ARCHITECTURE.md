@@ -15,21 +15,75 @@ Node.js → Cloudinary API (image uploads)
 Flutter → Firebase Auth API (OTP requests)
 
 ## Booking & Escrow Flow
+
+### The escrow ledger (single source of truth)
+
+Every money movement in SportLynk is one of the seven events below. `P` is the
+full slot price. The whole of `P` is frozen at booking; the **deposit** is the
+at-risk 20% slice (`deposit_amount = 0.20 × P`) that the player forfeits on a
+late cancellation or a no-show.
+
+| Event | Player balance | Player frozen | Owner balance | Booking status |
+| --- | --- | --- | --- | --- |
+| Book slot (price P) | −P | +P | — | `pending` |
+| Owner approves (or auto) | — | — | — | `confirmed` |
+| Owner rejects | +P | −P | — | `rejected` |
+| Cancel more than 24h before slot | +P | −P | — | `cancelled` |
+| Cancel within 24h | +0.8P | −P | +0.2P | `cancelled` |
+| QR check-in | — | −P | +P | `checked_in` |
+| No-show (auto, 30 min after start) | +0.8P | −P | +0.2P | `no_show` |
+
+Policy constants live in exactly one place — `backend/src/utils/escrow.js`
+(`POLICY`) — so routes, jobs and docs cannot drift:
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `DEPOSIT_PERCENT` | 20 | at-risk slice of the price |
+| `CANCELLATION_WINDOW_HOURS` | 24 | free-cancellation cut-off |
+| `NO_SHOW_GRACE_MINUTES` | 30 | grace after slot start before forfeit |
+| `NO_SHOW_TRUST_PENALTY` | 10 | `player_profiles.trust_score` deduction |
+| `AUTO_DECIDE_AFTER_HOURS` | 2 | pending age that triggers auto-confirm (FR4.10) |
+| `AUTO_DECIDE_MIN_LEAD_HOURS` | 2 | lead time under which pending is auto-rejected |
+
+Column semantics (see `migrations/010_escrow_policy_alignment.sql`):
+- `bookings.security_deposit` — the amount **actually held** in escrow for that
+  booking (new rows = full price `P`; legacy rows may hold 30% of `P`).
+- `bookings.deposit_amount` — the 20% at-risk deposit.
+- The penalty on a late cancel / no-show is `min(deposit_amount, security_deposit)`,
+  so legacy rows can never refund more money than was ever frozen.
+
+### Request lifecycle
+
 1. Player selects slot and taps 'Book Now' (no slot locking — instant DB-atomic claim)
 2. Backend uses `SELECT ... FOR UPDATE` to claim the slot — handles simultaneous bookings at microsecond level
-3. Full deposit deducted from Player's `balance` → added to Player's `frozen_balance`
+3. Full slot price moves from Player's `balance` → Player's `frozen_balance`;
+   `deposit_amount` is computed server-side (clients never send an amount)
 4. Booking created with status: `pending`
 5. Owner reviews booking (sees trust score) → Approve or Reject
-   - Approve → status: `confirmed`; money stays frozen
-   - Reject → player `frozen_balance` refunded to `balance`; slot freed
-   - Auto-approve after 2 hours (shown to both parties)
+   - Approve → status: `confirmed`, `approved_at` set; money stays frozen
+   - Reject → status: `rejected`; full escrow returned to `balance`; slot freed
+   - `autoApproveJob` sweeps every 5 min (FR4.10): pending for >2h with the slot
+     still >2h away → auto-confirm; slot starting within 2h and still unapproved
+     → auto-reject + full refund. Both write `auto_decided_at` + notifications.
 6. Owner scans Player's QR code at venue (`POST /owner/scan-qr`)
-   - `player.frozen_balance -= deposit` → `owner.balance += deposit`
+   - `player.frozen_balance -= P` → `owner.balance += P`
    - Booking status → `checked_in`
-7. No-show: Owner marks `POST /owner/no-show/:id`
-   - Same escrow transfer as check-in
-   - Player `trust_score -= 10`
-   - Booking status → `no_show`
+7. Cancellation (`PATCH /bookings/:id/cancel`)
+   - ≥24h before slot start → full refund, status `cancelled`
+   - <24h before slot start → 80% refunded, 20% credited to the owner,
+     `cancellation_reason = 'late_cancellation'`
+8. No-show — `noShowJob` sweeps every 5 min for `confirmed` bookings whose slot
+   started >30 min ago with no check-in (the owner's `POST /owner/no-show/:id`
+   button is an early trigger for the identical ledger move)
+   - Player `balance += 0.8P`, `frozen_balance -= P`, owner `balance += 0.2P`
+   - Player `trust_score -= 10` + a `notifications` row for both parties
+   - Booking status → `no_show`, `no_show_processed = true` (idempotency guard)
+
+Every one of these writes runs inside a single transaction that locks the booking
+row (`FOR UPDATE OF b`) and then the wallets, always in the order
+booking → player wallet → owner wallet to keep the lock order deadlock-free.
+Notification inserts are wrapped in a `SAVEPOINT` so a missing/failed
+notification can never roll back a money transfer.
 
 ## Race Condition Prevention (Slot Booking)
 The app does NOT use temporary slot locking (removed in Phase 5).

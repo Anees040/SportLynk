@@ -53,7 +53,8 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Cancel Booking?', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
         content: Text(
-          'Cancellations within 12 hours of slot time forfeit your deposit. Early cancellations get a full refund.',
+          'Cancel at least 24 hours before slot time for a full refund. Within 24 hours '
+          'you get 80% back and the 20% deposit goes to the venue.',
           style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
         ),
         actions: [
@@ -271,7 +272,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
                 const Divider(color: AppColors.border),
                 _detRow(
                   Icons.currency_rupee,
-                  'Amount Paid (Deposit)',
+                  'Amount Held in Escrow',
                   'PKR ${_parseNum(_booking!['security_deposit'], _parseNum(_booking!['total_amount'], 0)).toStringAsFixed(0)}',
                   valueColor: AppColors.accent,
                 ),
@@ -316,6 +317,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
         'checked_in' => AppColors.success,
         'pending' => AppColors.warning,
         'cancelled' => AppColors.error,
+        'rejected' => AppColors.error,
         'no_show' => AppColors.error,
         _ => AppColors.textSecondary,
       };
@@ -325,6 +327,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
         'checked_in' => Icons.verified,
         'pending' => Icons.hourglass_top,
         'cancelled' => Icons.cancel_outlined,
+        'rejected' => Icons.block_outlined,
         'no_show' => Icons.person_off_outlined,
         _ => Icons.info_outline,
       };
@@ -334,6 +337,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
         'checked_in' => 'Checked In — Enjoy!',
         'pending' => 'Pending Approval',
         'cancelled' => 'Booking Cancelled',
+        'rejected' => 'Request Rejected',
         'no_show' => 'Marked as No-Show',
         _ => s.toUpperCase(),
       };
@@ -343,7 +347,8 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
         'checked_in' => 'Payment transferred to venue owner',
         'pending' => 'Owner will approve within 2 hours',
         'cancelled' => 'Refund has been added to your wallet',
-        'no_show' => 'Deposit was forfeited',
+        'rejected' => 'Full amount refunded to your wallet',
+        'no_show' => '20% deposit forfeited, 80% refunded',
         _ => '',
       };
 }

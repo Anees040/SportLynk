@@ -26,7 +26,12 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   bool _loading = false;
   double _walletBalance = 0;
   bool _walletLoaded = false;
-  String _paymentType = 'upfront'; // 'upfront' or 'full'
+
+  /// Policy (server is the source of truth — these constants are display only):
+  /// the FULL slot price is escrowed at booking; 20% of it is the at-risk
+  /// deposit and the free-cancellation window is 24h before slot start.
+  static const int _depositPercent = 20;
+  static const int _cancellationWindowHours = 24;
 
   @override
   void initState() { super.initState(); _loadWallet(); }
@@ -60,12 +65,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   }
 
   Future<void> _confirmBooking() async {
-    final price = _parseDouble(widget.slot['price']);
-    final upfrontPct = _parseDouble(widget.venue['upfront_percent'] ?? 30);
-    final discountPct = _parseDouble(widget.venue['discount_percent'] ?? 0);
-    final upfrontAmount = price * (upfrontPct / 100);
-    final fullAmount = price * (1 - (discountPct / 100));
-    final amountToPay = _paymentType == 'upfront' ? upfrontAmount : fullAmount;
+    final amountToPay = _parseDouble(widget.slot['price']);
 
     if (_walletBalance < amountToPay) {
       SnackbarUtil.showError(context, 'Insufficient wallet balance. Please top up your wallet.');
@@ -79,7 +79,6 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
         body: jsonEncode({
           'slotId': widget.slot['id'],
           'venueId': widget.venue['id'],
-          'paymentType': _paymentType,
         }));
       final data = jsonDecode(resp.body);
       if (mounted) {
@@ -121,11 +120,10 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   @override
   Widget build(BuildContext context) {
     final price = _parseDouble(widget.slot['price']);
-    final upfrontPct = _parseDouble(widget.venue['upfront_percent'] ?? 30);
-    final discountPct = _parseDouble(widget.venue['discount_percent'] ?? 0);
-    final upfrontAmount = double.parse((price * (upfrontPct / 100)).toStringAsFixed(2));
-    final fullAmount = double.parse((price * (1 - (discountPct / 100))).toStringAsFixed(2));
-    final amountToPay = _paymentType == 'upfront' ? upfrontAmount : fullAmount;
+    // Full slot price is escrowed at booking; 20% of it is the at-risk deposit.
+    final amountToPay = double.parse(price.toStringAsFixed(2));
+    final depositAtRisk =
+        double.parse((price * (_depositPercent / 100)).toStringAsFixed(2));
     final remainingWallet = _walletBalance - amountToPay;
 
     return Scaffold(
@@ -199,67 +197,28 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           ),
           const SizedBox(height: 16),
 
-          // ── PAYMENT OPTIONS ───────────────────────────────
-          _section('Payment Options', [
-            // Upfront option
-            GestureDetector(
-              onTap: () => setState(() => _paymentType = 'upfront'),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _paymentType == 'upfront' ? AppColors.accentLight : Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _paymentType == 'upfront' ? AppColors.accent : AppColors.border),
-                ),
-                child: Row(children: [
-                  Container(
-                    margin: const EdgeInsets.only(right: 12),
-                    width: 20, height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _paymentType == 'upfront' ? AppColors.accent : AppColors.textSecondary, width: 2),
-                    ),
-                    child: _paymentType == 'upfront' ? Center(child: Container(width: 10, height: 10, decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.accent))) : null,
-                  ),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Pay Upfront (${upfrontPct.toStringAsFixed(0)}%)', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                    Text('Pay remaining PKR ${(price - upfrontAmount).toStringAsFixed(0)} at venue', style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
-                  ])),
-                  Text('PKR ${upfrontAmount.toStringAsFixed(0)}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.accent)),
-                ]),
-              ),
-            ),
+          // ── ESCROW BREAKDOWN ──────────────────────────────
+          _section('Payment (held in escrow)', [
+            _moneyRow('Slot price', 'PKR ${price.toStringAsFixed(0)}'),
+            const SizedBox(height: 8),
+            _moneyRow('Paid now, held in escrow', 'PKR ${amountToPay.toStringAsFixed(0)}',
+              highlight: true),
+            const SizedBox(height: 8),
+            _moneyRow('At-risk deposit ($_depositPercent%)',
+              'PKR ${depositAtRisk.toStringAsFixed(0)}'),
             const SizedBox(height: 12),
-            // Full Advance option
-            GestureDetector(
-              onTap: () => setState(() => _paymentType = 'full'),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _paymentType == 'full' ? AppColors.accentLight : Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _paymentType == 'full' ? AppColors.accent : AppColors.border),
-                ),
-                child: Row(children: [
-                  Container(
-                    margin: const EdgeInsets.only(right: 12),
-                    width: 20, height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _paymentType == 'full' ? AppColors.accent : AppColors.textSecondary, width: 2),
-                    ),
-                    child: _paymentType == 'full' ? Center(child: Container(width: 10, height: 10, decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.accent))) : null,
-                  ),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Pay Full Advance', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                    if (discountPct > 0)
-                      Text('Get ${discountPct.toStringAsFixed(0)}% OFF!', style: GoogleFonts.poppins(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold))
-                    else
-                      Text('Skip the payment at venue', style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
-                  ])),
-                  Text('PKR ${fullAmount.toStringAsFixed(0)}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.accent)),
-                ]),
-              ),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: AppColors.accentLight,
+                borderRadius: BorderRadius.circular(10)),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Icon(Icons.lock_outline, color: AppColors.accent, size: 16),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  'The full amount stays frozen in your wallet and is released to '
+                  'the venue only when you check in with your QR code.',
+                  style: GoogleFonts.poppins(fontSize: 11, color: AppColors.primary))),
+              ]),
             ),
           ]),
           const SizedBox(height: 16),
@@ -334,8 +293,9 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
               const Icon(Icons.info_outline, color: AppColors.warning, size: 16),
               const SizedBox(width: 8),
               Expanded(child: Text(
-                'Cancel at least 2 hours before your slot for a full refund. '
-                'No-shows may affect your trust score.',
+                'Cancel at least $_cancellationWindowHours hours before your slot for a full '
+                'refund. Cancelling later (or not showing up) forfeits the '
+                '$_depositPercent% deposit and lowers your trust score.',
                 style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF92400E)))),
             ]),
           ),
@@ -357,7 +317,19 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     ]),
   );
 
-
+  Widget _moneyRow(String label, String value, {bool highlight = false}) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: GoogleFonts.poppins(
+        fontSize: 12,
+        color: highlight ? AppColors.textPrimary : AppColors.textSecondary,
+        fontWeight: highlight ? FontWeight.w600 : FontWeight.normal)),
+      Text(value, style: GoogleFonts.poppins(
+        fontSize: highlight ? 15 : 12,
+        fontWeight: highlight ? FontWeight.bold : FontWeight.w600,
+        color: highlight ? AppColors.accent : AppColors.textPrimary)),
+    ],
+  );
 
   String _fmtDate(DateTime d) {
     const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -469,7 +441,9 @@ class _BookingSuccessScreen extends StatelessWidget {
                     const Icon(Icons.lock_outline, color: AppColors.accent, size: 16),
                     const SizedBox(width: 8),
                     Expanded(child: Text(
-                      'Your deposit is frozen safely. If the owner rejects or doesn\'t approve within 2 hours, you get a full automatic refund.',
+                      'Your payment is frozen safely. If the owner rejects the request — '
+                      'or never approves it before the slot gets close — you get a full '
+                      'automatic refund.',
                       style: GoogleFonts.poppins(fontSize: 11, color: AppColors.primary))),
                   ]),
                 ),

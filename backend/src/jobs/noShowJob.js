@@ -1,128 +1,201 @@
 /**
- * No-Show Auto Job
- * Runs every 60 seconds. Marks confirmed bookings as no_show
- * if the slot start time has passed by more than 30 minutes.
- * Transfers security_deposit from player frozen → owner balance.
- * Penalises trust_score by -10.
+ * No-Show sweep (FR: 30-minute forfeit rule)
+ *
+ * Every 5 minutes: find `confirmed` bookings whose slot started more than
+ * 30 minutes ago with no check-in, then apply the no-show ledger:
+ *
+ *   player balance +0.8P | player frozen -P | owner balance +0.2P | status no_show
+ *   trust_score -10 + a notification row for the player
+ *
+ * The owner's manual button (POST /api/owner/no-show/:id) is an early trigger
+ * for exactly the same ledger move.
+ *
+ * Slot date/time are PKT wall-clock values, so the overdue test compares them
+ * against NOW() converted to Asia/Karachi.
  */
 
 const pool = require('../db/pool');
+const {
+  POLICY,
+  penaltySplit,
+  lockWallet,
+  applyWallet,
+  logTxn,
+} = require('../utils/escrow');
+const { notify } = require('../utils/notify');
+
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 let _running = false;
 
 async function processNoShows() {
   if (_running) return;
   _running = true;
-  const client = await pool.connect();
   try {
-    // Find all confirmed bookings where start time + 30 min has passed
-    const overdueRes = await client.query(`
-      SELECT
-        b.id, b.security_deposit, b.player_id, b.slot_id,
-        v.owner_id, u.name AS player_name, v.name AS venue_name
-      FROM bookings b
-      JOIN venues v ON b.venue_id = v.id
-      JOIN users u ON b.player_id = u.id
-      WHERE b.status = 'confirmed'
-        AND (b.slot_date::DATE + b.start_time::TIME) < (NOW() AT TIME ZONE 'Asia/Karachi') - INTERVAL '30 minutes'
-        AND b.no_show_processed IS NOT TRUE
-    `);
+    // Candidate scan runs outside the money transaction; each booking is then
+    // re-read with FOR UPDATE so a concurrent check-in can never be overwritten.
+    const overdueRes = await pool.query(
+      `SELECT b.id
+         FROM bookings b
+        WHERE b.status = 'confirmed'
+          AND b.checked_in_at IS NULL
+          AND b.no_show_processed IS NOT TRUE
+          AND (b.slot_date::DATE + b.start_time::TIME)
+              < (NOW() AT TIME ZONE $1) - ($2 || ' minutes')::INTERVAL`,
+      [POLICY.TIMEZONE, String(POLICY.NO_SHOW_GRACE_MINUTES)],
+    );
 
     if (overdueRes.rows.length === 0) {
+      console.log('[NoShowJob] sweep: 0 overdue booking(s).');
       return;
     }
 
-    console.log(`[NoShowJob] Processing ${overdueRes.rows.length} overdue booking(s)...`);
+    console.log(`[NoShowJob] sweep: ${overdueRes.rows.length} overdue booking(s)...`);
 
-    for (const b of overdueRes.rows) {
-      const innerClient = await pool.connect();
-      try {
-        const deposit = parseFloat(b.security_deposit || 0);
-        await innerClient.query('BEGIN');
-
-        // Mark booking as no_show
-        await innerClient.query(
-          `UPDATE bookings
-           SET status = 'no_show', no_show_at = NOW(), no_show_processed = true
-           WHERE id = $1`,
-          [b.id]
-        );
-
-        // Release slot back to available
-        if (b.slot_id) {
-          await innerClient.query(
-            "UPDATE slots SET status = 'available' WHERE id = $1",
-            [b.slot_id]
-          );
-        }
-
-        if (deposit > 0) {
-          // Deduct from player frozen balance
-          const pw = await innerClient.query(
-            `UPDATE wallets
-             SET frozen_balance = GREATEST(frozen_balance - $1, 0)
-             WHERE user_id = $2
-             RETURNING id, balance`,
-            [deposit, b.player_id]
-          );
-
-          // Add to owner balance
-          const ow = await innerClient.query(
-            `UPDATE wallets
-             SET balance = balance + $1
-             WHERE user_id = $2
-             RETURNING id, balance`,
-            [deposit, b.owner_id]
-          );
-
-          if (pw.rows.length > 0) {
-            await innerClient.query(
-              `INSERT INTO transactions (wallet_id, user_id, booking_id, type, amount, balance_after, description)
-               VALUES ($1, $2, $3, 'no_show_penalty', $4, $5, 'Auto no-show: deposit forfeited (30 min rule)')`,
-              [pw.rows[0].id, b.player_id, b.id, -deposit, pw.rows[0].balance]
-            );
-          }
-
-          if (ow.rows.length > 0) {
-            await innerClient.query(
-              `INSERT INTO transactions (wallet_id, user_id, booking_id, type, amount, balance_after, description, counterparty_name)
-               VALUES ($1, $2, $3, 'escrow_received', $4, $5, 'Auto no-show deposit received', $6)`,
-              [ow.rows[0].id, b.owner_id, b.id, deposit, ow.rows[0].balance, b.player_name]
-            );
-          }
-        }
-
-        // Penalise player trust score
-        await innerClient.query(
-          `UPDATE player_profiles
-           SET trust_score = GREATEST(trust_score - 10, 0)
-           WHERE user_id = $1`,
-          [b.player_id]
-        );
-
-        await innerClient.query('COMMIT');
-        console.log(`[NoShowJob] ✓ Booking ${b.id} (${b.player_name} @ ${b.venue_name}) marked no_show. PKR ${deposit} transferred.`);
-      } catch (err) {
-        await innerClient.query('ROLLBACK');
-        console.error(`[NoShowJob] ✗ Failed booking ${b.id}:`, err.message);
-      } finally {
-        innerClient.release();
-      }
+    let done = 0;
+    for (const row of overdueRes.rows) {
+      const settled = await settleNoShow(row.id);
+      if (settled) done++;
     }
+    console.log(`[NoShowJob] sweep complete: ${done}/${overdueRes.rows.length} settled.`);
   } catch (err) {
-    console.error('[NoShowJob] Query error:', err.message);
+    console.error('[NoShowJob] sweep error:', err.message);
   } finally {
     _running = false;
+  }
+}
+
+/** One booking, one transaction: booking row + both wallets locked FOR UPDATE. */
+async function settleNoShow(bookingId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const res = await client.query(
+      `SELECT b.id, b.status, b.security_deposit, b.deposit_amount, b.player_id,
+              b.slot_id, v.owner_id, v.name AS venue_name, u.name AS player_name
+         FROM bookings b
+         JOIN venues v ON v.id = b.venue_id
+         JOIN users u ON u.id = b.player_id
+        WHERE b.id = $1
+          AND b.status = 'confirmed'
+          AND b.checked_in_at IS NULL
+          AND b.no_show_processed IS NOT TRUE
+        FOR UPDATE OF b`,
+      [bookingId],
+    );
+
+    if (!res.rows.length) {
+      // Player checked in (or another sweep won the race) between scan and lock.
+      await client.query('ROLLBACK');
+      return false;
+    }
+
+    const b = res.rows[0];
+    const { refund, penalty } = penaltySplit(b.security_deposit, b.deposit_amount);
+
+    await client.query(
+      `UPDATE bookings
+          SET status = 'no_show', no_show_at = NOW(), no_show_processed = true
+        WHERE id = $1`,
+      [b.id],
+    );
+
+    if (b.slot_id) {
+      await client.query("UPDATE slots SET status = 'available' WHERE id = $1", [b.slot_id]);
+    }
+
+    const playerWallet = await lockWallet(client, b.player_id);
+    const ownerWallet = await lockWallet(client, b.owner_id);
+
+    const playerAfter = await applyWallet(client, playerWallet.id, {
+      balance: refund,
+      frozen: -(refund + penalty),
+    });
+    const ownerAfter = ownerWallet
+      ? await applyWallet(client, ownerWallet.id, { balance: penalty })
+      : null;
+
+    if (refund > 0) {
+      await logTxn(client, {
+        walletId: playerWallet.id,
+        userId: b.player_id,
+        bookingId: b.id,
+        type: 'refund',
+        amount: refund,
+        balanceAfter: playerAfter.balance,
+        description: `Auto no-show — ${100 - POLICY.DEPOSIT_PERCENT}% returned (${POLICY.NO_SHOW_GRACE_MINUTES} min rule)`,
+        counterparty: b.venue_name,
+      });
+    }
+
+    await logTxn(client, {
+      walletId: playerWallet.id,
+      userId: b.player_id,
+      bookingId: b.id,
+      type: 'no_show_penalty',
+      amount: -penalty,
+      balanceAfter: playerAfter.balance,
+      description: `Auto no-show — ${POLICY.DEPOSIT_PERCENT}% deposit forfeited (${POLICY.NO_SHOW_GRACE_MINUTES} min rule)`,
+      counterparty: b.venue_name,
+    });
+
+    if (ownerAfter) {
+      await logTxn(client, {
+        walletId: ownerWallet.id,
+        userId: b.owner_id,
+        bookingId: b.id,
+        type: 'escrow_received',
+        amount: penalty,
+        balanceAfter: ownerAfter.balance,
+        description: 'Auto no-show deposit received',
+        counterparty: b.player_name,
+      });
+    }
+
+    await client.query(
+      `UPDATE player_profiles
+          SET trust_score = GREATEST(trust_score - $1, 0)
+        WHERE user_id = $2`,
+      [POLICY.NO_SHOW_TRUST_PENALTY, b.player_id],
+    );
+
+    await notify(client, {
+      userId: b.player_id,
+      bookingId: b.id,
+      type: 'booking_no_show',
+      title: 'Marked as no-show',
+      body: `You did not check in at ${b.venue_name} within ${POLICY.NO_SHOW_GRACE_MINUTES} minutes. PKR ${refund} returned, PKR ${penalty} deposit forfeited, trust score -${POLICY.NO_SHOW_TRUST_PENALTY}.`,
+    });
+
+    await notify(client, {
+      userId: b.owner_id,
+      bookingId: b.id,
+      type: 'booking_no_show_owner',
+      title: 'Player did not show up',
+      body: `${b.player_name} missed their slot. PKR ${penalty} deposit credited to your wallet.`,
+    });
+
+    await client.query('COMMIT');
+    console.log(
+      `[NoShowJob] ✓ ${b.id} (${b.player_name} @ ${b.venue_name}) → no_show. Player +${refund}, owner +${penalty}.`,
+    );
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(`[NoShowJob] ✗ booking ${bookingId}:`, err.message);
+    return false;
+  } finally {
     client.release();
   }
 }
 
 function startNoShowJob() {
-  console.log('[NoShowJob] Started — checks every 60 seconds.');
-  // Run once on startup after a short delay
+  console.log(
+    `[NoShowJob] Started — sweeps every ${SWEEP_INTERVAL_MS / 60000} min, ${POLICY.NO_SHOW_GRACE_MINUTES} min grace after slot start.`,
+  );
   setTimeout(processNoShows, 5000);
-  // Then every 60 seconds
-  setInterval(processNoShows, 60 * 1000);
+  setInterval(processNoShows, SWEEP_INTERVAL_MS);
 }
 
-module.exports = { startNoShowJob };
+module.exports = { startNoShowJob, processNoShows };

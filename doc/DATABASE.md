@@ -127,15 +127,18 @@ Both have IDENTICAL schema.
 | Type | Meaning |
 |------|--------|
 | `topup` | Player added money to wallet |
-| `booking_payment` | Full deposit frozen at booking time |
-| `refund` | Full refund (early cancellation or owner rejection) |
-| `escrow_release` | Deposit deducted from player frozen balance |
-| `escrow_received` | Owner receives deposit (check-in, no-show, late cancel) |
-| `no_show_penalty` | Player's deposit forfeited for no-show |
+| `booking_payment` | Full slot price frozen at booking time |
+| `refund` | Refund to player (early cancel, rejection, auto-reject, 80% of a late cancel/no-show) |
+| `escrow_release` | Escrow deducted from player frozen balance |
+| `escrow_received` | Owner receives money (check-in = full price, no-show / late cancel = 20% deposit) |
+| `no_show_penalty` | Player's 20% deposit forfeited for no-show |
 | `owner_payout` | Owner withdrew balance |
 | `withdrawal` | User withdrew wallet balance |
 
 ## Escrow & Booking Flow (Phase 5)
+
+> The authoritative event → ledger table lives in `ARCHITECTURE.md`
+> ("The escrow ledger"). Constants come from `backend/src/utils/escrow.js`.
 
 ### 1. Slot Selection (No Locking — Atomic)
 - Player selects a slot in the UI. No lock API is called.
@@ -145,37 +148,50 @@ Both have IDENTICAL schema.
 
 ### 2. Booking Creation (Escrow Freeze)
 1. Backend verifies slot is `available` under row-level lock.
-2. Full amount deducted from player's `wallets.balance`.
-3. Full amount added to player's `wallets.frozen_balance` (escrow).
-4. Booking created with status: `pending`, `owner_id` populated.
-5. Slot status changes to `booked`.
-6. `booking_payment` transaction recorded.
+2. Full slot price `P` deducted from player's `wallets.balance`.
+3. Same amount added to player's `wallets.frozen_balance` (escrow) → `bookings.security_deposit`.
+4. `bookings.deposit_amount = 0.20 × P` is computed server-side (clients never send an amount).
+5. Booking created with status: `pending`, `owner_id` populated.
+6. Slot status changes to `booked`.
+7. `booking_payment` transaction recorded.
 
 ### 3. Owner Approval
 - Owner sees booking in Pending tab with player trust score.
-- **Approve** → booking status: `confirmed`; money stays frozen.
-- **Reject** → player `frozen_balance` refunded to `balance`; slot freed; `refund` transaction.
-- **Auto-approve** after 2 hours (displayed as notice in UI).
+- **Approve** → booking status: `confirmed`, `approved_at` set; money stays frozen.
+- **Reject** → booking status `rejected`; full escrow refunded to `balance`; slot freed; `refund` transaction.
+- **`autoApproveJob`** (every 5 min, FR4.10): pending >2h with the slot still >2h
+  away → auto-confirm; slot starting within 2h and still unapproved → `rejected`
+  + full refund. Both stamp `auto_decided_at`.
 
 ### 4. QR Check-in (Settlement)
 When player arrives and owner scans QR (`POST /owner/scan-qr`):
-1. `player.frozen_balance -= deposit` → `owner.balance += deposit`.
+1. `player.frozen_balance -= P` → `owner.balance += P`.
 2. `escrow_release` (player) + `escrow_received` (owner) transactions created.
 3. Booking status → `checked_in`.
 
-### 5. No-Show
-`POST /owner/no-show/:id`:
-1. Same financial transfer as check-in.
-2. `player.trust_score -= 10` (via `player_profiles`).
-3. `no_show_penalty` (player) + `escrow_received` (owner) transactions.
-4. Booking status → `no_show`.
+### 5. No-Show (30-minute rule)
+`noShowJob` sweeps every 5 min for `confirmed` bookings whose slot started more
+than 30 minutes ago with no check-in. `POST /owner/no-show/:id` is the owner's
+early trigger for the same ledger move.
+1. Player `balance += 0.8P`, `frozen_balance -= P`; owner `balance += 0.2P`.
+2. `player_profiles.trust_score -= 10`.
+3. `refund` + `no_show_penalty` (player) + `escrow_received` (owner) transactions.
+4. Booking status → `no_show`, `no_show_at` set, `no_show_processed = true`
+   (idempotency guard so the sweep and the button can never double-settle).
+5. A `notifications` row is written for the player and the owner.
 
-### 6. Cancellation (12-Hour Policy)
-**Early** (>= 12 hours before slot):
-- Full `frozen_balance` refunded to player `balance`. `refund` transaction. Slot freed.
+### 6. Cancellation (24-Hour Policy)
+**Early** (>= 24 hours before slot):
+- Full escrow refunded to player `balance`. `refund` transaction. Slot freed.
 
-**Late** (< 12 hours before slot):
-- Deposit transferred to owner. `escrow_release` + `escrow_received` transactions. Slot freed.
+**Late** (< 24 hours before slot):
+- Player gets 80% back, the 20% `deposit_amount` goes to the owner.
+  `refund` + `escrow_release` (player) + `escrow_received` (owner) transactions.
+  `cancellation_reason = 'late_cancellation'`. Slot freed.
+
+Legacy rows that only froze 30% of the price are safe: the penalty is always
+`min(deposit_amount, security_deposit)`, so a refund can never exceed what was
+actually frozen.
 
 ### 7. Dynamic Slot Filtering
 - Past time slots never shown (filtered at API level using PKT time).

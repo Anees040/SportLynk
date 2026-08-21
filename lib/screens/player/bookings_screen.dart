@@ -75,7 +75,7 @@ class BookingsScreenState extends State<BookingsScreen>
           _past = all.where((b) {
             final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
             return d == null || d.isBefore(DateTime(now.year, now.month, now.day))
-              || ['cancelled','no_show','checked_in','completed','refunded'].contains(b['status']);
+              || ['cancelled','rejected','no_show','checked_in','completed','refunded'].contains(b['status']);
           }).toList();
           _loading = false;
         });
@@ -268,6 +268,7 @@ class BookingsScreenState extends State<BookingsScreen>
   Color _statusColor(String s) => switch(s) {
     'confirmed' => AppColors.accent, 'pending' => AppColors.warning,
     'cancelled' => AppColors.error, 'checked_in' => AppColors.success,
+    'rejected' => AppColors.error,
     'no_show' => AppColors.error, _ => AppColors.textSecondary,
   };
 }

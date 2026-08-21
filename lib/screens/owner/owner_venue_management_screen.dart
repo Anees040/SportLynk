@@ -20,7 +20,6 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _descCtrl;
   late TextEditingController _priceCtrl;
-  late TextEditingController _upfrontCtrl;
   bool _isSaving = false;
 
   @override
@@ -28,14 +27,12 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
     super.initState();
     _descCtrl = TextEditingController(text: widget.venue['description']?.toString() ?? '');
     _priceCtrl = TextEditingController(text: _parseNum(widget.venue['price_per_hour']).toStringAsFixed(0));
-    _upfrontCtrl = TextEditingController(text: _parseNum(widget.venue['upfront_percent']).toStringAsFixed(0));
   }
 
   @override
   void dispose() {
     _descCtrl.dispose();
     _priceCtrl.dispose();
-    _upfrontCtrl.dispose();
     super.dispose();
   }
 
@@ -60,7 +57,6 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
         body: jsonEncode({
           'description': _descCtrl.text.trim(),
           'price_per_hour': double.parse(_priceCtrl.text.trim()),
-          'upfront_percent': double.parse(_upfrontCtrl.text.trim()),
         }),
       );
 
@@ -133,7 +129,26 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
             children: [
               _buildField('Venue Description & Amenities', _descCtrl, maxLines: 4),
               _buildField('Price Per Hour', _priceCtrl, isNumber: true, suffixText: 'PKR'),
-              _buildField('Upfront Booking Percentage', _upfrontCtrl, isNumber: true, suffixText: '%'),
+              // Deposit policy is platform-wide and computed server-side — read only.
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.accentLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.lock_outline, color: AppColors.accent, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Escrow policy (set by SportLynk): the full slot price is held when a '
+                      'player books and released to you at QR check-in. On a late '
+                      'cancellation or no-show you keep the 20% deposit.',
+                      style: GoogleFonts.poppins(fontSize: 11, color: AppColors.primary),
+                    ),
+                  ),
+                ]),
+              ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,

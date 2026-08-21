@@ -3,6 +3,15 @@ const router = express.Router();
 const pool = require("../db/pool");
 const auth = require("../middleware/authMiddleware");
 const checkRole = require("../middleware/roleMiddleware");
+const {
+  POLICY,
+  round2,
+  penaltySplit,
+  lockWallet,
+  applyWallet,
+  logTxn,
+} = require("../utils/escrow");
+const { notify } = require("../utils/notify");
 
 router.use(auth, checkRole("owner"));
 
@@ -16,7 +25,7 @@ async function autoGenerateVenueIfMissing(ownerId) {
       const venueName = op.ground_name || op.business_name || 'My Venue';
       const vRes = await pool.query(
         `INSERT INTO venues (owner_id, name, description, sport_type, city, address, base_price, price_per_hour, upfront_percent, venue_photos, operating_hours_from, operating_hours_to, is_active, rating, total_reviews)
-         VALUES ($1, $2, 'Venue auto-generated', $3, $4, $5, 2000, 2000, 30, $6, '08:00:00', '23:00:00', true, 0, 0)
+         VALUES ($1, $2, 'Venue auto-generated', $3, $4, $5, 2000, 2000, 20, $6, '08:00:00', '23:00:00', true, 0, 0)
          RETURNING id`,
         [ownerId, venueName, sportType, op.city || 'Unknown', op.full_address || 'Unknown', op.ground_photos || []]
       );
@@ -141,7 +150,7 @@ router.post("/venues", async (req, res, next) => {
     // Set is_active = false so it requires admin approval
     const vRes = await pool.query(
       `INSERT INTO venues (owner_id, name, description, sport_type, city, address, base_price, price_per_hour, upfront_percent, venue_photos, operating_hours_from, operating_hours_to, is_active, rating, total_reviews)
-       VALUES ($1, $2, 'Venue added via owner dashboard', $3, $4, $5, $6, $6, 30, $7, $8, $9, false, 0, 0)
+       VALUES ($1, $2, 'Venue added via owner dashboard', $3, $4, $5, $6, $6, 20, $7, $8, $9, false, 0, 0)
        RETURNING id`,
       [ownerId, groundName, sportType, city, fullAddress, pricePerHour, groundPhotos || [], operatingHoursFrom, operatingHoursTo]
     );
@@ -174,7 +183,7 @@ router.patch("/venues/:id", async (req, res, next) => {
   try {
     const ownerId = req.user.id;
     const { id } = req.params;
-    const { description, upfront_percent, price_per_hour, venue_photos } = req.body;
+    const { description, price_per_hour, venue_photos } = req.body;
 
     const vCheck = await pool.query('SELECT id FROM venues WHERE id=$1 AND owner_id=$2', [id, ownerId]);
     if (!vCheck.rows.length) {
@@ -189,10 +198,8 @@ router.patch("/venues/:id", async (req, res, next) => {
       updates.push(`description=$${i++}`);
       values.push(description);
     }
-    if (upfront_percent !== undefined) {
-      updates.push(`upfront_percent=$${i++}`);
-      values.push(upfront_percent);
-    }
+    // upfront_percent is deliberately NOT accepted from the client: the deposit is
+    // a platform policy (POLICY.DEPOSIT_PERCENT) computed server-side only.
     if (price_per_hour !== undefined) {
       updates.push(`price_per_hour=$${i++}`);
       values.push(price_per_hour);
@@ -224,12 +231,15 @@ router.get("/bookings", async (req, res, next) => {
   try {
     const ownerId = req.user.id;
     const status = req.query.status || "pending";
-    const dbStatus = status === "rejected" ? "cancelled" : status;
+    // The Rejected tab doubles as the "didn't happen" archive: owner rejections
+    // land on 'rejected', player cancellations on 'cancelled'.
+    const statuses =
+      status === "rejected" ? ["rejected", "cancelled"] : [status];
 
     const result = await pool.query(
       `
-      SELECT b.id, b.status, b.total_amount, b.security_deposit, b.slot_date,
-             b.start_time, b.end_time, b.created_at, b.notes,
+      SELECT b.id, b.status, b.total_amount, b.security_deposit, b.deposit_amount,
+             b.slot_date, b.start_time, b.end_time, b.created_at, b.notes,
              u.name AS player_name, u.phone AS player_phone,
              COALESCE(pp.trust_score,100) AS trust_score,
              COALESCE(pp.sport_preferences,'{}') AS sport_preferences,
@@ -238,10 +248,10 @@ router.get("/bookings", async (req, res, next) => {
       JOIN venues v ON b.venue_id=v.id
       JOIN users u ON b.player_id=u.id
       LEFT JOIN player_profiles pp ON pp.user_id=u.id
-      WHERE v.owner_id=$1 AND b.status=$2
+      WHERE v.owner_id=$1 AND b.status = ANY($2::booking_status[])
       ORDER BY b.slot_date ASC, b.start_time ASC
     `,
-      [ownerId, dbStatus],
+      [ownerId, statuses],
     );
 
     res.json({ success: true, data: result.rows });
@@ -250,71 +260,100 @@ router.get("/bookings", async (req, res, next) => {
   }
 });
 
-// PATCH /api/owner/bookings/:id/approve
+// PATCH /api/owner/bookings/:id/approve — no money moves, escrow stays frozen
 router.patch("/bookings/:id/approve", async (req, res, next) => {
+  const client = await pool.connect();
   try {
-    const check = await pool.query(
-      `SELECT b.id FROM bookings b JOIN venues v ON b.venue_id=v.id
-       WHERE b.id=$1 AND v.owner_id=$2 AND b.status='pending'`,
+    await client.query("BEGIN");
+    const check = await client.query(
+      `SELECT b.id, b.player_id, v.name AS venue_name
+         FROM bookings b JOIN venues v ON b.venue_id=v.id
+        WHERE b.id=$1 AND v.owner_id=$2 AND b.status='pending'
+        FOR UPDATE OF b`,
       [req.params.id, req.user.id],
     );
-    if (!check.rows.length)
+    if (!check.rows.length) {
+      await client.query("ROLLBACK");
       return res
         .status(404)
         .json({ success: false, message: "Booking not found or not pending" });
-    await pool.query("UPDATE bookings SET status='confirmed' WHERE id=$1", [
-      req.params.id,
-    ]);
+    }
+    await client.query(
+      "UPDATE bookings SET status='confirmed', approved_at=NOW() WHERE id=$1",
+      [req.params.id],
+    );
+    await notify(client, {
+      userId: check.rows[0].player_id,
+      bookingId: check.rows[0].id,
+      type: "booking_confirmed",
+      title: "Booking confirmed",
+      body: `${check.rows[0].venue_name} approved your booking. Show your QR code at the venue to check in.`,
+    });
+    await client.query("COMMIT");
     res.json({ success: true, message: "Booking approved" });
   } catch (e) {
+    await client.query("ROLLBACK");
     next(e);
+  } finally {
+    client.release();
   }
 });
 
-// PATCH /api/owner/bookings/:id/reject
+// PATCH /api/owner/bookings/:id/reject — full refund: player balance +P, frozen -P
 router.patch("/bookings/:id/reject", async (req, res, next) => {
   const client = await pool.connect();
   try {
+    await client.query("BEGIN");
     const bookingRes = await client.query(
-      `SELECT b.id, b.security_deposit, b.player_id, b.slot_id
+      `SELECT b.id, b.security_deposit, b.player_id, b.slot_id, v.name AS venue_name
        FROM bookings b JOIN venues v ON b.venue_id=v.id
-       WHERE b.id=$1 AND v.owner_id=$2 AND b.status='pending'`,
+       WHERE b.id=$1 AND v.owner_id=$2 AND b.status='pending'
+       FOR UPDATE OF b`,
       [req.params.id, req.user.id],
     );
     if (!bookingRes.rows.length) {
-      client.release();
+      await client.query("ROLLBACK");
       return res
         .status(404)
         .json({ success: false, message: "Booking not found or not pending" });
     }
     const b = bookingRes.rows[0];
-    const deposit = parseFloat(b.security_deposit || 0);
-    await client.query("BEGIN");
-    await client.query("UPDATE bookings SET status='cancelled' WHERE id=$1", [
-      req.params.id,
-    ]);
+    const escrow = round2(b.security_deposit);
+
+    await client.query(
+      "UPDATE bookings SET status='rejected', cancelled_at=NOW(), cancellation_reason='owner_rejected' WHERE id=$1",
+      [b.id],
+    );
     await client.query("UPDATE slots SET status='available' WHERE id=$1", [
       b.slot_id,
     ]);
-    if (deposit > 0) {
-      const w = await client.query(
-        "UPDATE wallets SET balance=balance+$1, frozen_balance=GREATEST(frozen_balance-$1,0) WHERE user_id=$2 RETURNING id, balance",
-        [deposit, b.player_id],
-      );
-      if (w.rows.length > 0) {
-        await client.query(
-          `INSERT INTO transactions (wallet_id,user_id,booking_id,type,amount,balance_after,description)
-           VALUES ($1,$2,$3,'refund',$4,$5,'Booking rejected by venue owner - full refund')`,
-          [
-            w.rows[0].id,
-            b.player_id,
-            req.params.id,
-            deposit,
-            w.rows[0].balance,
-          ],
-        );
-      }
+
+    const wallet = await lockWallet(client, b.player_id);
+    if (wallet && escrow > 0) {
+      const after = await applyWallet(client, wallet.id, {
+        balance: escrow,
+        frozen: -escrow,
+      });
+      await logTxn(client, {
+        walletId: wallet.id,
+        userId: b.player_id,
+        bookingId: b.id,
+        type: "refund",
+        amount: escrow,
+        balanceAfter: after.balance,
+        description: "Booking rejected by venue owner — full refund",
+        counterparty: b.venue_name,
+      });
     }
+
+    await notify(client, {
+      userId: b.player_id,
+      bookingId: b.id,
+      type: "booking_rejected",
+      title: "Booking rejected",
+      body: `${b.venue_name} could not take your booking. PKR ${escrow} has been refunded to your wallet.`,
+    });
+
     await client.query("COMMIT");
     res.json({ success: true, message: "Booking rejected. Player refunded." });
   } catch (e) {
@@ -432,15 +471,19 @@ router.patch("/slots/:id/unblock", async (req, res, next) => {
   }
 });
 
-// POST /api/owner/scan-qr — check in player, transfer security deposit from player frozen to owner balance
+// POST /api/owner/scan-qr — check in player: escrow (full price) player frozen → owner balance
 router.post("/scan-qr", async (req, res, next) => {
   const client = await pool.connect();
   try {
     const { qrCode } = req.body;
-    if (!qrCode)
+    if (!qrCode) {
+      client.release();
       return res
         .status(400)
         .json({ success: false, message: "qrCode required" });
+    }
+
+    await client.query("BEGIN");
 
     const bookingRes = await client.query(
       `
@@ -449,13 +492,13 @@ router.post("/scan-qr", async (req, res, next) => {
       FROM bookings b
       JOIN users u ON b.player_id=u.id
       JOIN venues v ON b.venue_id=v.id
-      WHERE b.qr_code=$1 FOR UPDATE
+      WHERE b.qr_code=$1 FOR UPDATE OF b
     `,
       [qrCode],
     );
 
     if (!bookingRes.rows.length) {
-      client.release();
+      await client.query("ROLLBACK");
       return res
         .status(404)
         .json({
@@ -466,7 +509,7 @@ router.post("/scan-qr", async (req, res, next) => {
     const booking = bookingRes.rows[0];
 
     if (booking.owner_id !== req.user.id) {
-      client.release();
+      await client.query("ROLLBACK");
       return res
         .status(403)
         .json({
@@ -475,13 +518,13 @@ router.post("/scan-qr", async (req, res, next) => {
         });
     }
     if (booking.status === "checked_in") {
-      client.release();
+      await client.query("ROLLBACK");
       return res
         .status(409)
         .json({ success: false, message: "Player already checked in." });
     }
     if (booking.status !== "confirmed") {
-      client.release();
+      await client.query("ROLLBACK");
       return res
         .status(409)
         .json({
@@ -490,52 +533,43 @@ router.post("/scan-qr", async (req, res, next) => {
         });
     }
 
-    const deposit = parseFloat(booking.security_deposit || 0);
-    await client.query("BEGIN");
+    const escrow = round2(booking.security_deposit);
 
     await client.query(
       "UPDATE bookings SET status='checked_in', checked_in_at=NOW() WHERE id=$1",
       [booking.id],
     );
 
-    const pw = await client.query(
-      "UPDATE wallets SET frozen_balance=GREATEST(frozen_balance-$1,0) WHERE user_id=$2 RETURNING id, balance",
-      [deposit, booking.player_id],
-    );
+    const playerWallet = await lockWallet(client, booking.player_id);
+    const ownerWallet = await lockWallet(client, req.user.id);
 
-    const ow = await client.query(
-      "UPDATE wallets SET balance=balance+$1 WHERE user_id=$2 RETURNING id, balance",
-      [deposit, req.user.id],
-    );
+    const playerAfter = await applyWallet(client, playerWallet.id, {
+      frozen: -escrow,
+    });
+    const ownerAfter = await applyWallet(client, ownerWallet.id, {
+      balance: escrow,
+    });
 
-    if (pw.rows.length > 0) {
-      await client.query(
-        `INSERT INTO transactions (wallet_id,user_id,booking_id,type,amount,balance_after,description,counterparty_name)
-         VALUES ($1,$2,$3,'escrow_release',$4,$5,'Payment released to venue on check-in',$6)`,
-        [
-          pw.rows[0].id,
-          booking.player_id,
-          booking.id,
-          -deposit,
-          pw.rows[0].balance,
-          booking.venue_name,
-        ],
-      );
-    }
-    if (ow.rows.length > 0) {
-      await client.query(
-        `INSERT INTO transactions (wallet_id,user_id,booking_id,type,amount,balance_after,description,counterparty_name)
-         VALUES ($1,$2,$3,'escrow_received',$4,$5,'Received booking payment - player checked in',$6)`,
-        [
-          ow.rows[0].id,
-          req.user.id,
-          booking.id,
-          deposit,
-          ow.rows[0].balance,
-          booking.player_name,
-        ],
-      );
-    }
+    await logTxn(client, {
+      walletId: playerWallet.id,
+      userId: booking.player_id,
+      bookingId: booking.id,
+      type: "escrow_release",
+      amount: -escrow,
+      balanceAfter: playerAfter.balance,
+      description: "Payment released to venue on check-in",
+      counterparty: booking.venue_name,
+    });
+    await logTxn(client, {
+      walletId: ownerWallet.id,
+      userId: req.user.id,
+      bookingId: booking.id,
+      type: "escrow_received",
+      amount: escrow,
+      balanceAfter: ownerAfter.balance,
+      description: "Received booking payment — player checked in",
+      counterparty: booking.player_name,
+    });
 
     await client.query("COMMIT");
     res.json({
@@ -546,8 +580,8 @@ router.post("/scan-qr", async (req, res, next) => {
         slotDate: booking.slot_date,
         startTime: booking.start_time,
         endTime: booking.end_time,
-        amount: deposit,
-        newOwnerBalance: ow.rows[0]?.balance || 0,
+        amount: escrow,
+        newOwnerBalance: ownerAfter?.balance || 0,
       },
       message: "Check-in successful!",
     });
@@ -559,28 +593,34 @@ router.post("/scan-qr", async (req, res, next) => {
   }
 });
 
-// POST /api/owner/no-show/:id — forfeit deposit, mark no_show, penalise trust_score by -10
+// POST /api/owner/no-show/:id — early trigger for the 30-minute rule.
+// Ledger: player balance +0.8P, frozen -P, owner +0.2P, trust_score -10.
 router.post("/no-show/:id", async (req, res, next) => {
   const client = await pool.connect();
   try {
+    await client.query("BEGIN");
+
     const bookingRes = await client.query(
       `
-      SELECT b.id, b.status, b.security_deposit, b.player_id
-      FROM bookings b JOIN venues v ON b.venue_id=v.id
-      WHERE b.id=$1 AND v.owner_id=$2 FOR UPDATE
+      SELECT b.id, b.status, b.security_deposit, b.deposit_amount, b.player_id,
+             u.name AS player_name, v.name AS venue_name
+      FROM bookings b
+      JOIN venues v ON b.venue_id=v.id
+      JOIN users u ON b.player_id=u.id
+      WHERE b.id=$1 AND v.owner_id=$2 FOR UPDATE OF b
     `,
       [req.params.id, req.user.id],
     );
 
     if (!bookingRes.rows.length) {
-      client.release();
+      await client.query("ROLLBACK");
       return res
         .status(404)
         .json({ success: false, message: "Booking not found." });
     }
     const b = bookingRes.rows[0];
     if (b.status !== "confirmed") {
-      client.release();
+      await client.query("ROLLBACK");
       return res
         .status(409)
         .json({
@@ -589,48 +629,74 @@ router.post("/no-show/:id", async (req, res, next) => {
         });
     }
 
-    const deposit = parseFloat(b.security_deposit || 0);
-    await client.query("BEGIN");
+    const { refund, penalty } = penaltySplit(b.security_deposit, b.deposit_amount);
 
     await client.query(
-      "UPDATE bookings SET status='no_show', no_show_at=NOW() WHERE id=$1",
+      `UPDATE bookings SET status='no_show', no_show_at=NOW(), no_show_processed=true WHERE id=$1`,
       [b.id],
     );
 
-    const pw = await client.query(
-      "UPDATE wallets SET frozen_balance=GREATEST(frozen_balance-$1,0) WHERE user_id=$2 RETURNING id, balance",
-      [deposit, b.player_id],
-    );
+    const playerWallet = await lockWallet(client, b.player_id);
+    const ownerWallet = await lockWallet(client, req.user.id);
 
-    const ow = await client.query(
-      "UPDATE wallets SET balance=balance+$1 WHERE user_id=$2 RETURNING id, balance",
-      [deposit, req.user.id],
-    );
+    const playerAfter = await applyWallet(client, playerWallet.id, {
+      balance: refund,
+      frozen: -(refund + penalty),
+    });
+    const ownerAfter = await applyWallet(client, ownerWallet.id, {
+      balance: penalty,
+    });
 
     await client.query(
-      "UPDATE player_profiles SET trust_score=GREATEST(trust_score-10,0) WHERE user_id=$1",
-      [b.player_id],
+      "UPDATE player_profiles SET trust_score=GREATEST(trust_score-$1,0) WHERE user_id=$2",
+      [POLICY.NO_SHOW_TRUST_PENALTY, b.player_id],
     );
 
-    if (pw.rows.length > 0) {
-      await client.query(
-        `INSERT INTO transactions (wallet_id,user_id,booking_id,type,amount,balance_after,description)
-         VALUES ($1,$2,$3,'no_show_penalty',$4,$5,'No-show: deposit forfeited to venue owner')`,
-        [pw.rows[0].id, b.player_id, b.id, -deposit, pw.rows[0].balance],
-      );
+    if (refund > 0) {
+      await logTxn(client, {
+        walletId: playerWallet.id,
+        userId: b.player_id,
+        bookingId: b.id,
+        type: "refund",
+        amount: refund,
+        balanceAfter: playerAfter.balance,
+        description: `No-show — ${100 - POLICY.DEPOSIT_PERCENT}% returned`,
+        counterparty: b.venue_name,
+      });
     }
-    if (ow.rows.length > 0) {
-      await client.query(
-        `INSERT INTO transactions (wallet_id,user_id,booking_id,type,amount,balance_after,description)
-         VALUES ($1,$2,$3,'escrow_received',$4,$5,'No-show deposit received')`,
-        [ow.rows[0].id, req.user.id, b.id, deposit, ow.rows[0].balance],
-      );
-    }
+    await logTxn(client, {
+      walletId: playerWallet.id,
+      userId: b.player_id,
+      bookingId: b.id,
+      type: "no_show_penalty",
+      amount: -penalty,
+      balanceAfter: playerAfter.balance,
+      description: `No-show — ${POLICY.DEPOSIT_PERCENT}% deposit forfeited to venue`,
+      counterparty: b.venue_name,
+    });
+    await logTxn(client, {
+      walletId: ownerWallet.id,
+      userId: req.user.id,
+      bookingId: b.id,
+      type: "escrow_received",
+      amount: penalty,
+      balanceAfter: ownerAfter.balance,
+      description: "No-show deposit received",
+      counterparty: b.player_name,
+    });
+
+    await notify(client, {
+      userId: b.player_id,
+      bookingId: b.id,
+      type: "booking_no_show",
+      title: "Marked as no-show",
+      body: `You missed your slot at ${b.venue_name}. PKR ${refund} returned, PKR ${penalty} deposit forfeited, trust score -${POLICY.NO_SHOW_TRUST_PENALTY}.`,
+    });
 
     await client.query("COMMIT");
     res.json({
       success: true,
-      message: "Booking marked as no-show. Deposit forfeited.",
+      message: `Marked as no-show. PKR ${penalty} deposit credited to you, PKR ${refund} returned to the player.`,
     });
   } catch (e) {
     await client.query("ROLLBACK");
@@ -663,7 +729,9 @@ router.get("/analytics", async (req, res, next) => {
 
     const monthRes = await pool.query(
       `
-      SELECT COALESCE(SUM(b.security_deposit),0) AS "monthTotal"
+      SELECT COALESCE(SUM(
+               CASE WHEN b.status='no_show' THEN b.deposit_amount
+                    ELSE b.security_deposit END),0) AS "monthTotal"
       FROM bookings b JOIN venues v ON b.venue_id=v.id
       WHERE v.owner_id=$1 AND b.status IN ('checked_in','no_show') AND b.slot_date>=$2::DATE
     `,
