@@ -395,3 +395,120 @@ appears against the real database.
 - [x] `flutter analyze --no-pub` → **No issues found!** after the Dart changes.
 
 
+## Wave S2-A (Teams: create/roster/invites/roles + WhatsApp-style group chat)
+Completed:
+- [x] Backend: `migrations/015_teams_chat.sql` — adds only what 013 was missing once
+  the endpoints and chat UI were actually written; nothing here duplicates 013. **(1)**
+  FR2.1 team-name uniqueness (`ux_teams_name_sport` on `lower(btrim(name)), sport` —
+  schema.sql had no unique key, so two "Lahore Lions" football teams could both
+  exist); the route maps 23505 → 409, the same pattern as `uq_withdrawals_one_pending`.
+  **(2)** `idx_team_members_user` — `GET /teams/mine` filtered `team_members` by
+  `user_id` and the only index led on `team_id`, so "my teams" was a sequential scan
+  of every membership in the system. **(3)** `chat_channel_members` (roles, mute, and
+  the two tick watermarks). **(4)** `chat_messages` gained media/reply/edit/delete/
+  idempotency columns and lost its `body NOT NULL` (an image has no body). Plus a
+  `CHECK` on `team_members.role`, a `CHECK` on `chat_messages.kind`/payload, and a
+  backfill giving every pre-existing team its channel + members.
+- [x] Backend: **`team_members.role` is now the authoritative source of captaincy,
+  not `teams.captain_id`** — FR2.10 allows more than one captain, which a single
+  column cannot represent (the same call 013 made for `elo_rating → elo`).
+  `captain_id` is kept in sync but never read for authority. The migration also
+  writes the founder into the roster as `captain` where the old UI had set
+  `captain_id` but created no `team_members` row — without it the "≥1 captain"
+  invariant reads as violated and nobody can administer the team.
+- [x] Backend: **Invite tokens are hashed at rest.** 013 stored the token in
+  plaintext, so a DB dump let anyone join any team with a live invite. Now
+  `sha256(token)` is stored (never the token), a `token_prefix` (first 8 chars)
+  labels the pending list, and the raw token crosses the wire exactly once in the
+  `POST /invites` response — the same handling a password-reset token gets.
+  Single-use is enforced by `used_at` set inside `FOR UPDATE OF i`, so two
+  simultaneous joins on one link cannot both succeed.
+- [x] Backend: **`src/routes/teams.js` — 16 endpoints, one transaction shape.**
+  Create / mine / rankings / discover / invite-preview / detail / edit / invites
+  (create·list·revoke) / join-by-token / join-request / requests (list·decide) /
+  member role change / leave. Every mutating handler is `connect → BEGIN → work →
+  COMMIT` with a `finally` that **always** releases, and every early exit rolls back
+  first via `bail()` — a client released mid-transaction is handed to the next caller
+  still inside a `BEGIN`, a cross-request corruption bug. **Authority is membership,
+  re-read from `team_members` inside the locked transaction** (`access.requireRole →
+  lockTeam FOR UPDATE`), so a forged `{"role":…}` body is never trusted and two
+  writers can't race the ≥1-captain rule. Route auth: create = any (cap
+  `MAX_TEAMS_PER_USER`, 429); edit = **captain**; invites + requests = **admin**
+  (captain or vice); role change + removal = **captain**; leave = any member.
+- [x] Backend: **`src/utils/teamAccess.js`** — the shared authority + validation
+  layer. `requireRole/lockTeam/loadMembership/countCaptains/countMembers/fetchRoster`,
+  the role tables, and the input validators (`validateTeamName/Sport/Bio/Visibility/
+  MediaUrl`, `squash/squashMultiline`). **`validateMediaUrl` pins every media URL to
+  `res.cloudinary.com` over https and caps it at 500 chars** — a team logo or chat
+  image can only ever be one of ours, so a caller cannot make the app render a
+  request to a host of their choosing (tracking pixel / IP harvest). `squash` strips
+  C0/C1 controls and invisible/bidi characters from every stored string.
+- [x] Backend: **`src/utils/chatCore.js`** — every chat write goes through here so
+  the denormalised last-message columns and the socket fan-out stay in one place and
+  cannot drift from the row that landed. `ensureTeamChannel` (idempotent, protected
+  by `ux_chat_channels_type_ref` so a race can't make two chats for one team),
+  `syncTeamMember/removeTeamMember`, `insertMessage` (idempotent by `clientId`),
+  `postSystemMessage`, and `emitPersistedMessage` (re-reads the row with sender +
+  aggregated reactions and emits `chat:message` — so a message looks identical whether
+  it arrived live or in history).
+- [x] Backend: **`src/utils/chatSystemMessages.js`** — builds the grey system lines
+  (`group_created`, `member_joined_link/_request`, `member_left`, `member_removed`,
+  `role_promoted/_demoted`, `visibility_changed`, `icon_changed`) as structured
+  `system_meta` (`{event, actor, target, …}`), not frozen English, so the client
+  renders "Ali added Sara" with real names and tappable avatars and it stays
+  localisable.
+- [x] Backend: **`src/routes/chat.js` — 7 endpoints.** channel-lookup / history
+  (paged, oldest-first, reactions aggregated) / send (text + image, idempotent) /
+  read-mark / members (the tick watermarks) / react (closed palette, toggle-replace)
+  / delete-for-everyone. Every handler proves live membership via `member()` before
+  acting. **Delete strips the payload** (`body/media_url/media_mime/waveform → NULL`)
+  rather than hiding it behind a client-trusted flag; the DB payload `CHECK` permits
+  an empty row only when `deleted_at` is set. Voice (`kind:'audio'`) returns a clean
+  400 "coming soon", not a constraint 500.
+- [x] Backend: **`src/realtime/`** — Socket.IO attached to the existing Express HTTP
+  server (no second port). JWT-authenticated on connect, auto-joins `u:<userId>`;
+  opening a chat joins `c:<channelId>`. Emits `team:update` / `team:request` to user
+  rooms and `chat:message` / `receipt` to channel rooms; consumes `typing` and
+  `message:read`. Presence is in-memory (worthless after a restart); `users.last_seen_at`
+  is persisted on disconnect so last-seen survives a deploy. `bus.js` is the thin
+  emit surface the routes call after COMMIT.
+- [x] **Tick model — marks, not receipt rows.** Two timestamps per member
+  (`last_read_at`, `last_delivered_at`, defaulted to epoch so "read nothing" and "read
+  up to X" compare with one operator) are the whole system: ✓ = row exists, ✓✓ =
+  every **other** member delivered, blue = every other member read. The group tick is
+  `MIN(other members' mark)` vs the message time — one aggregate. A 20-person team
+  sending 1,000 messages needs 20 marks, not 20,000 receipt rows.
+- [x] Flutter: `models/team.dart` + `services/team_service.dart` — typed `Team`/
+  `TeamMember` (all DECIMAL via `asNum`, golden rule 6) and a never-throwing service
+  wrapper returning typed lists for reads and the raw `{success, message, data}` map
+  for mutations, so a screen surfaces the backend's own sentence on failure.
+- [x] Flutter: the five team screens wired to the real backend, replacing the
+  Day-6 UI-only mocks. `teams_screen` (WhatsApp "Chats" tab — each row opens the
+  group chat; join-by-link in the AppBar), `create_team_screen` (Cloudinary logo
+  upload), `team_roster_screen` (group info + role management, captain-gated),
+  `team_rankings_screen` and `find_opponents_screen` (real ELO/W/L/city).
+  `find_opponents`' Challenge button is deliberately **honest** — an info snackbar
+  ("arrives with the matchmaking update"), not a faked success, since matchmaking is
+  a later S2 wave.
+- [x] Flutter: **the WhatsApp-vibe chat** — `chat_screen` + `chat_controller` +
+  `widgets/chat/` (message bubble, typing indicator). Day separators, single/double/
+  blue ticks driven by the members watermarks, live typing, reactions, image send via
+  Cloudinary (folder `chat`), optimistic bubbles reconciled by `clientId`, and
+  group-info reached one tap deeper (into `team_roster_screen`, which pops `'left'`
+  back to the chat) exactly like WhatsApp — no chat button on the roster, so there's
+  no nav loop. `auth_provider` opens the socket on login and closes it on logout.
+- [x] **Acceptance (two accounts, live against Supabase — the server log is the
+  proof):** A & B register → A creates a team (`POST /teams 200`; the duplicate is
+  `409`) → B (non-captain) is blocked from managing (`PATCH …/members 403`) → A mints
+  an invite (`POST /invites 200`) → B previews it (`GET /invites/<token> 200`) → B
+  joins (`POST /join/<token> 200`; the replay is `410`, single-use) → A promotes B
+  (`PATCH …/members/<B> 200`) → B leaves (`DELETE …/members/me 200`; the sole-captain
+  guard rejects an invalid leave with `400` first) → chat history loads
+  (`GET /chat/<channel>/messages 200`). Every state renders; the system messages for
+  each transition post to the group.
+- [x] **Deferred as clean follow-ups (reported, not hidden):** voice notes
+  (`kind:'audio'` returns "coming soon"; the schema — `duration_ms`, `waveform` — is
+  already in place) and reply-to (`reply_to_id` exists; no UI yet).
+- [x] `flutter analyze`: **No issues found!** Server boots clean — `🔌 Realtime
+  (Socket.IO) attached`, `✅ Database connected (TLS on)`, all three sweep jobs start.
+

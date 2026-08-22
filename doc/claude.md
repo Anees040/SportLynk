@@ -38,7 +38,9 @@ trained ML models — never replace them with external AI API calls.
 ## Status
 - DONE pre-sprint: OTP auth + profiles, venue search/detail/booking, QR check-in
   escrow, wallet + top-up, owner dashboard/slot calendar/scanner/analytics,
-  admin approvals. NOTE: teams screens exist but are UI-ONLY (zero backend).
+  admin approvals. Teams: create/roster/invites/roles/join + WhatsApp-style group
+  chat are LIVE as of S2-A (real backend, was UI-only). ELO + matchmaking are the
+  remaining S.2 waves — teams do not yet play matches.
 - REMAINING in order: S.1 stabilize+deploy → S.2 teams/ELO/matchmaking →
   S.3 ml-service + pricing model → S.4 sentiment + trust → S.5 recommender →
   S.6 NLU assistant → S.7 tournaments/chat/admin/demo pack.
@@ -125,6 +127,39 @@ trained ML models — never replace them with external AI API calls.
     idempotent via NOT EXISTS (slots has no unique key on venue/date/start),
     PKT-aware, non-destructive — 2,100 created, 1,990 bookable. Ledger now reads
     frozen 0.00 / owed 0.00 / delta 0.00. flutter analyze: 0 issues.
+  - S2-A done — teams (create/roster/invites/roles/join) + WhatsApp-style group
+    chat. migration 015 adds ONLY what 013 missed: ux_teams_name_sport (FR2.1,
+    23505→409), idx_team_members_user (/mine was a seq scan), chat_channel_members
+    (roles + the two tick watermarks), chat_messages media/reply/edit/delete/
+    client_id columns, chat_reactions, users.last_seen_at, + a backfill giving every
+    old team its channel. team_members.role is now authoritative for captaincy (NOT
+    teams.captain_id — FR2.10 allows >1 captain; same call as elo_rating→elo).
+    Invite tokens HASHED at rest (sha256, raw returned once), single-use under
+    FOR UPDATE. routes/teams.js (16 eps) + routes/chat.js (7 eps): every mutating
+    handler connect→BEGIN→work→COMMIT, finally-release, early exits ROLLBACK via
+    bail(); authority re-read from team_members inside the locked txn
+    (requireRole→lockTeam FOR UPDATE) so a forged {role} body is never trusted and
+    the ≥1-captain rule can't be raced. Auth: create=any (cap MAX_TEAMS, 429),
+    edit=captain, invites+requests=admin(captain|vice), role/remove=CAPTAIN, leave=
+    any member. New utils: teamAccess.js (validateMediaUrl pins media to
+    res.cloudinary.com+https ≤500 chars; squash strips control/bidi chars),
+    chatCore.js (all writes go through it so denormalised last-message cols + socket
+    fan-out can't drift; ensureTeamChannel idempotent under ux_chat_channels_type_ref),
+    chatSystemMessages.js (structured system_meta, not frozen English). realtime/
+    = Socket.IO on the existing HTTP server, rooms u:<id>/c:<id>, emits team:update/
+    team:request/chat:message/receipt, consumes typing/message:read. Ticks = two
+    per-member watermarks (last_read/delivered_at), group tick = MIN across OTHER
+    members — marks, not O(msgs×members) receipt rows. delete-for-everyone STRIPS
+    payload (body/media_url/media_mime/waveform→NULL), not a client-trusted hide.
+    Flutter: models/team.dart + services/team_service.dart (asNum), 5 team screens
+    wired to real backend, full chat (chat_screen/chat_controller/widgets/chat/ —
+    day separators, ticks, typing, reactions, image via Cloudinary, optimistic
+    reconcile by clientId, group-info one tap deeper like WhatsApp). find_opponents
+    Challenge is an HONEST "arrives with matchmaking" snackbar, not a fake success.
+    Acceptance passed live (2 accounts, full A-creates→invites→B-joins→promote→leave
+    loop in the server log). DEFERRED as clean follow-ups: voice notes (kind:'audio'
+    → "coming soon"; duration_ms/waveform already in schema) and reply-to
+    (reply_to_id exists, no UI). flutter analyze: 0 issues; server boots clean.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave. API.md / DATABASE.md =

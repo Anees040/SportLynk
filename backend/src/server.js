@@ -1,10 +1,12 @@
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+const http = require("http");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const { apiRateLimit } = require("./middleware/rateLimit");
+const { initRealtime } = require("./realtime");
 
 const app = express();
 
@@ -46,6 +48,8 @@ const walletRoutes = require("./routes/wallet");
 const playerRoutes = require("./routes/player");
 const userRoutes = require("./routes/users");
 const slotRoutes = require("./routes/slotLock");
+const teamRoutes = require("./routes/teams");
+const chatRoutes = require("./routes/chat");
 const { startNoShowJob } = require("./jobs/noShowJob");
 const { startAutoApproveJob } = require("./jobs/autoApproveJob");
 const { startWithdrawalJob } = require("./jobs/withdrawalJob");
@@ -60,6 +64,8 @@ app.use("/api/wallet", walletRoutes);
 app.use("/api/player", playerRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/slots", slotRoutes);
+app.use("/api/teams", teamRoutes);
+app.use("/api/chat", chatRoutes);
 
 // ─── Health check ────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
@@ -103,7 +109,17 @@ app.use((err, req, res, next) => {
 
 // ─── Start server ────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+
+// Socket.IO needs the raw HTTP server, not the Express `app`, so the WebSocket
+// upgrade and the REST API share one port. initRealtime() builds the io server,
+// authenticates every handshake with the same JWT as the REST middleware, and
+// registers io with the realtime bus that the chat and team routes emit through.
+// Requests to /socket.io are handled by engine.io before Express sees them, so
+// they never reach the routes or the 404 handler below.
+const server = http.createServer(app);
+initRealtime(server);
+
+server.listen(PORT, () => {
   console.log(`🚀 SportLynk API running on port ${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
 

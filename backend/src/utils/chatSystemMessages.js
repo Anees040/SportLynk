@@ -1,0 +1,101 @@
+/**
+ * The grey pills in the middle of a group chat.
+ *
+ * "Ali added Sara", "Sara left", "Ali is now an admin" — WhatsApp writes these
+ * into the thread itself rather than hiding them in a settings log, and that is
+ * the single biggest reason a group chat feels trustworthy: every membership
+ * change is visible to everyone, in order, forever. A team where the captain can
+ * quietly remove someone is a team that argues about what happened.
+ *
+ * WHY A SEPARATE FILE
+ * Two different callers need these: routes/teams.js (roster changes) and
+ * routes/chat.js (group name/icon changes). Keeping the sentences here means
+ * "removed" is worded identically no matter which endpoint caused it.
+ *
+ * WHY THE SENTENCE IS STORED, NOT JUST THE EVENT
+ * `body` holds a complete third-person sentence, so anything that only knows how
+ * to show text — a push notification, the chat-list preview, an older build of
+ * the app — renders something correct with zero logic. `system_meta` carries the
+ * same facts structured, so the app can bold the names and substitute "You" for
+ * the viewer, the way WhatsApp does. Neither is derivable from the other cheaply,
+ * and the duplication is a few dozen bytes on a row that is written once.
+ */
+
+const ROLE_TEXT = {
+  captain: 'captain',
+  vice_captain: 'vice captain',
+  member: 'member',
+};
+
+/**
+ * event → sentence. `a` is the actor's name, `t` the target's, `v` a free value
+ * (a new group name, a visibility). Every branch must produce a non-empty
+ * string: chk_chat_messages_payload requires a body for kind='system'.
+ */
+function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = null } = {}) {
+  switch (event) {
+    case 'group_created':
+      return `${a} created the group`;
+    case 'member_added':
+      return `${a} added ${t}`;
+    case 'member_joined_link':
+      return `${t} joined using an invite link`;
+    case 'member_joined_request':
+      return `${a} approved ${t}'s request to join`;
+    case 'member_removed':
+      return `${a} removed ${t}`;
+    case 'member_left':
+      return `${t} left the team`;
+    case 'role_promoted':
+      return `${a} made ${t} ${ROLE_TEXT[role] || 'an admin'}`;
+    case 'role_demoted':
+      return `${a} removed ${t} as ${ROLE_TEXT[role] || 'admin'}`;
+    case 'captain_transferred':
+      return `${a} handed the captaincy to ${t}`;
+    case 'title_changed':
+      return v ? `${a} changed the team name to "${v}"` : `${a} changed the team name`;
+    case 'icon_changed':
+      return `${a} changed the team photo`;
+    case 'bio_changed':
+      return `${a} changed the team description`;
+    case 'visibility_changed':
+      return `${a} made the team ${v === 'private' ? 'private' : 'public'}`;
+    default:
+      // Never throw on an unknown event — a missing case must not be able to
+      // roll back the membership change that is the real work of the request.
+      return `${a} updated the team`;
+  }
+}
+
+/**
+ * Build the row payload for a system message. Deliberately does NOT touch the
+ * database: chatCore.postSystemMessage does the insert, so there is exactly one
+ * code path that writes to chat_messages and bumps the channel's last-message
+ * columns.
+ */
+function buildSystemMessage(event, {
+  actorId = null, actorName = null,
+  targetId = null, targetName = null,
+  value = null, role = null,
+} = {}) {
+  const body = sentenceFor(event, {
+    a: actorName || 'Someone',
+    t: targetName || 'someone',
+    v: value,
+    role,
+  });
+  return {
+    body,
+    meta: {
+      event,
+      actorId,
+      actorName: actorName || null,
+      targetId,
+      targetName: targetName || null,
+      value: value === undefined ? null : value,
+      role: role || null,
+    },
+  };
+}
+
+module.exports = { sentenceFor, buildSystemMessage, ROLE_TEXT };

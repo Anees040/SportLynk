@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../constants/colors.dart';
 import '../../utils/snackbar_util.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/cloudinary_service.dart';
+import '../../services/team_service.dart';
 
 class CreateTeamScreen extends StatefulWidget {
   const CreateTeamScreen({super.key});
@@ -10,6 +15,11 @@ class CreateTeamScreen extends StatefulWidget {
 }
 
 class _CreateTeamScreenState extends State<CreateTeamScreen> {
+  final _service = TeamService();
+  final _picker = ImagePicker();
+  bool _saving = false;
+  bool _uploadingLogo = false;
+  String? _logoUrl;
   final _nameCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
   String _sport = 'football';
@@ -17,6 +27,22 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
 
   @override
   void dispose() { _nameCtrl.dispose(); _bioCtrl.dispose(); super.dispose(); }
+
+  /// Pick a logo from the gallery and upload it to Cloudinary's `teams` folder.
+  /// We store only the returned https URL — the raw file never touches our API.
+  Future<void> _pickLogo() async {
+    final picked = await _picker.pickImage(
+        source: ImageSource.gallery, maxWidth: 800, imageQuality: 85);
+    if (picked == null) return;
+    setState(() => _uploadingLogo = true);
+    final url = await CloudinaryService().uploadImage(picked.path, folder: 'teams');
+    if (!mounted) return;
+    setState(() {
+      _uploadingLogo = false;
+      _logoUrl = url;
+    });
+    if (url == null) SnackbarUtil.showError(context, 'Could not upload the logo. Try again.');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,18 +62,28 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
 
           // ── LOGO PICKER ─────────────────────────────────
           Center(child: GestureDetector(
-            onTap: () {},
+            onTap: _uploadingLogo ? null : _pickLogo,
             child: Container(width: 100, height: 100,
               decoration: BoxDecoration(
                 color: AppColors.inputFill, shape: BoxShape.circle,
+                image: _logoUrl != null
+                  ? DecorationImage(image: NetworkImage(_logoUrl!), fit: BoxFit.cover)
+                  : null,
                 border: Border.all(color: AppColors.border, width: 2,
                   style: BorderStyle.solid)),
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const Icon(Icons.camera_alt_outlined, color: AppColors.textSecondary, size: 28),
-                const SizedBox(height: 4),
-                Text('Upload Team\nLogo', textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary)),
-              ])),
+              child: _uploadingLogo
+                ? const Center(child: SizedBox(width: 22, height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2)))
+                : _logoUrl != null
+                  ? const Align(alignment: Alignment.bottomRight,
+                      child: CircleAvatar(radius: 14, backgroundColor: AppColors.accent,
+                        child: Icon(Icons.edit, size: 14, color: Colors.white)))
+                  : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      const Icon(Icons.camera_alt_outlined, color: AppColors.textSecondary, size: 28),
+                      const SizedBox(height: 4),
+                      Text('Upload Team\nLogo', textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary)),
+                    ])),
           )),
           const SizedBox(height: 28),
 
@@ -162,8 +198,19 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                 padding: const EdgeInsets.symmetric(vertical: 15)),
-              onPressed: () {
-                SnackbarUtil.showSuccess(context, 'Teams feature coming soon!');
+              onPressed: _saving ? null : () async {
+                if (_nameCtrl.text.trim().length < 3) { SnackbarUtil.showError(context, 'Enter a team name.'); return; }
+                setState(() => _saving = true);
+                final response = await _service.create(context.read<AuthProvider>().token ?? '', name: _nameCtrl.text.trim(), sport: _sport, isPublic: _isPublic, bio: _bioCtrl.text.trim().isEmpty ? null : _bioCtrl.text.trim(), logo: _logoUrl);
+                if (!context.mounted) return;
+                setState(() => _saving = false);
+                if (response['success'] == true) {
+                  SnackbarUtil.showSuccess(context, 'Team created.');
+                  Navigator.pop(context, true);
+                } else {
+                  SnackbarUtil.showError(context,
+                      response['message']?.toString() ?? 'Could not create team.');
+                }
               })),
           const SizedBox(height: 10),
           Center(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [

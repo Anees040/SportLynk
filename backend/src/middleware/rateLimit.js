@@ -64,9 +64,11 @@ const apiRateLimit = rateLimit({
     return userId ? `user:${userId}` : `ip:${ipKeyGenerator(req.ip)}`;
   },
 
-  // Uptime probes and the S.7 admin health panel poll this; throttling it would
-  // make the API look down exactly when someone is checking whether it is.
-  skip: (req) => req.path === '/api/health',
+  // Uptime probes and the S.7 admin health panel poll /api/health; the realtime
+  // handshake and its polling fallback live under /socket.io and carry their own
+  // per-socket flood limiter. Throttling either here would make the API look
+  // down (health) or silently break live chat under load (socket.io).
+  skip: (req) => req.path === '/api/health' || req.path.startsWith('/socket.io'),
 
   standardHeaders: 'draft-7', // RateLimit / RateLimit-Policy
   legacyHeaders: false,

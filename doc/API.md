@@ -135,6 +135,129 @@ escrow* and `GET /wallet/frozen` itemises it per booking.
 
 ---
 
+## Teams (Token required) — S2 Wave A
+Mounted at `/api/teams`. Every route requires a token. **Authority is membership,
+never the request body:** the caller's role is re-read from `team_members` inside
+the same locked transaction as the write it authorises, so a forged `{"role":…}`
+is never trusted and two writers cannot race the "≥1 captain" invariant (FR2.10).
+
+| Method | Endpoint | Auth | Body / Query | Response |
+|--------|----------|------|--------------|----------|
+| POST | `/teams` | any | `{name, sport, visibility?, bio?, logo?}` | `{…team, role:'captain', channelId}` — creates the team, its captain row, and the group chat |
+| GET | `/teams/mine` | member | — | `[{…team, role, channel_id}]` — my teams, newest first |
+| GET | `/teams/rankings` | any | `?sport=` | `[{…team, member_count}]` — public only, ELO desc, top 100 |
+| GET | `/teams/discover` | any | `?sport=&q=` | `[{…team, member_count}]` — public teams I'm not in, top 60 |
+| GET | `/teams/invites/:token` | any | — | `{id, name, sport, logo_url, visibility, member_count}` — preview before joining |
+| GET | `/teams/:id` | any¹ | — | `{…team, role, channelId, roster:[{user_id, name, avatar_url, role, elo, trust_score, joined_at, last_seen_at}]}` |
+| PATCH | `/teams/:id` | **captain** | `{bio?, visibility?, logo?}` | `{…team}` — logo re-syncs the chat channel's photo |
+| POST | `/teams/:id/invites` | **admin** | `{note?}` | `{id, expires_at, token_prefix, token, link}` — raw `token` returned **once** |
+| GET | `/teams/:id/invites` | **admin** | — | `[{id, token_prefix, note, created_at, expires_at, created_by_name}]` |
+| DELETE | `/teams/:id/invites/:iid` | **admin** | — | `{revoked:true}` |
+| POST | `/teams/join/:token` | any | — | `{teamId, channelId}` or `{teamId, alreadyMember:true}` |
+| POST | `/teams/:id/join-request` | any | `{message?}` | `{success, message}` — public teams only |
+| GET | `/teams/:id/requests` | **admin** | — | `[{id, user_id, status, message, created_at, name, avatar_url, player_elo}]` |
+| PATCH | `/teams/:id/requests/:rid` | **admin** | `{action:'approve'\|'reject'}` | `{status}` |
+| PATCH | `/teams/:id/members/:uid` | **captain** | `{action:'remove'\|'captain'\|'vice_captain'\|'member'}` | `{updated:true}` |
+| DELETE | `/teams/:id/members/me` | member | — | `{left:true}` |
+
+¹ `GET /teams/:id` returns 403 for a **private** team the caller is not a member of;
+a public team's profile is readable by anyone. "admin" = captain **or** vice-captain;
+role changes and removal are **captain-only**.
+
+**Guard rails worth knowing (all return `{success:false, message}`):**
+
+| Condition | Status | Message |
+|---|---|---|
+| duplicate name for the same sport | 409 | A team with that name already exists for this sport. (`ux_teams_name_sport` on `lower(btrim(name)), sport` → 23505; a JS pre-check can't catch two simultaneous POSTs) |
+| caller already in `MAX_TEAMS_PER_USER` teams | 429 | You can be in at most N teams. |
+| invite token expired / used / revoked | 410 | This invite link has expired or already been used. |
+| team at `MAX_TEAM_SIZE` on join/approve | 409 | This team is already full. |
+| removing / demoting the **last** captain | 400 | Promote another captain first. (FR2.10 — the team is never left headless) |
+| non-admin hits an admin route | 403 | (role re-read inside the locked txn) |
+
+**Invite tokens are hashed at rest.** The server stores `sha256(token)` and a
+`token_prefix` (first 8 chars, for labelling the pending-invites list) — never the
+token itself, exactly as a password-reset token is handled. The raw token crosses
+the wire once, in the `POST /invites` response. `link` is a
+`sportlynk://team/join/<token>` deep link the client shares; the join screen also
+accepts a bare token pasted in.
+
+**Membership changes fan out three ways, all after COMMIT:** a grey system message
+into the team chat ("Ali added Sara"), a `notifications` row + `team:update` socket
+ping to the affected user, and a `chat:message` socket event carrying the system
+line. A client that re-fetches on `team:update` always sees the committed row.
+
+---
+
+## Chat (Token required) — S2 Wave A
+Mounted at `/api/chat`. The REST half of the WhatsApp-style team group chat; the
+live half (typing, receipts, presence, message push) is Socket.IO — see **Realtime**
+below. **Every handler proves live channel membership before acting** (`left_at IS
+NULL`), and every image URL is pinned to Cloudinary by `validateMediaUrl` so a
+caller can never make the app fetch an arbitrary host.
+
+| Method | Endpoint | Body / Query | Response |
+|--------|----------|--------------|----------|
+| GET | `/chat/team/:teamId` | — | `{channelId}` — the entry point the chat screen opens with; 404 to non-members |
+| GET | `/chat/:channelId/messages` | `?before=<createdAt>&limit=≤100` | `[{…message, sender_name, sender_avatar, reactions:[{emoji, userId}]}]` — oldest-first; `before` pages backwards |
+| POST | `/chat/:channelId/messages` | text: `{kind:'text', body, clientId}` · image: `{kind:'image', mediaUrl, mediaMime?, mediaW?, mediaH?, body?, clientId}` | persisted message — **201** new, **200** if `clientId` already seen (idempotent) |
+| POST | `/chat/:channelId/read` | `{at?}` | `{read:true}` — advances the blue-tick watermark (`GREATEST`, never backwards) |
+| GET | `/chat/:channelId/members` | — | `[{user_id, role, last_read_at, last_delivered_at, name, avatar_url, last_seen_at}]` |
+| POST | `/chat/:channelId/messages/:messageId/reactions` | `{emoji}` | re-hydrated message — same emoji again clears it, a different one replaces it |
+| DELETE | `/chat/:channelId/messages/:messageId` | — | tombstone — own message, or **any** message if you're a channel admin |
+
+**Idempotent send.** `clientId` is a client-generated string: the optimistic bubble
+the sender already drew is matched to the server row when it echoes back, and a
+retry after a dropped response cannot post twice (`ux_chat_messages_client` rejects
+it; the route answers 200 with the original). Voice (`kind:'audio'`) is a planned
+follow-up and returns **400 "Voice messages are coming soon."** rather than a
+constraint 500.
+
+**Reactions** are a closed palette (`👍 ❤️ 😂 😮 😢 🙏 🔥 🎉`) — an arbitrary
+string is validated away, because whatever lands here renders on every device that
+loads the message.
+
+**Delete-for-everyone strips the payload.** A tombstone keeps the row (so replies
+and history stay coherent) but nulls `body`, `media_url`, `media_mime` and
+`waveform` — the delete is a real removal, not a client-trusted hide. The client
+renders "This message was deleted" from `deleted_at` alone. System messages cannot
+be deleted; a repeat delete is an idempotent 200.
+
+### Ticks (single ✓ / double ✓✓ / blue ✓✓)
+Two watermarks per member drive the receipts — no per-message × per-member rows:
+
+| Tick | Meaning |
+|---|---|
+| ✓ sent | the row exists in `chat_messages` (server accepted it) |
+| ✓✓ delivered | every **other** member's `last_delivered_at` ≥ the message's `created_at` |
+| ✓✓ blue read | every **other** member's `last_read_at` ≥ the message's `created_at` |
+
+The group tick for one of my messages is `MIN(other members' mark)` vs its time —
+one aggregate over `chat_channel_members`, computed client-side from the members
+list kept current by live `receipt` events.
+
+---
+
+## Realtime (Socket.IO) — S2 Wave A
+Attached to the same Express HTTP server (`🔌 Realtime (Socket.IO) attached` at
+boot). The client authenticates with its JWT on connect and is auto-joined to a
+personal room `u:<userId>`; opening a chat joins `c:<channelId>`.
+
+| Direction | Event | Payload | Purpose |
+|---|---|---|---|
+| server → user room | `team:update` | `{teamId, left?}` | membership/role changed — re-fetch |
+| server → user room | `team:request` | `{teamId}` | a new join request landed (admins) |
+| server → channel | `chat:message` | hydrated message | a new/edited/deleted/reacted message |
+| server → channel | `receipt` | `{userId, lastReadAt, lastDeliveredAt}` | move a member's tick watermarks |
+| client → server | `typing` | `{channelId, typing}` | drives the "typing…" subtitle |
+| client → server | `message:read` | `{channelId, at?}` | socket counterpart of `POST /read` |
+
+Presence ("online" / "last seen") is in-memory in the realtime layer because it is
+worthless after a restart; `users.last_seen_at` is persisted on disconnect so a
+last-seen survives a deploy.
+
+---
+
 ## Escrow & Payment Flow
 ```
 1. Player books slot → Full amount deducted from player.balance → added to player.frozen_balance

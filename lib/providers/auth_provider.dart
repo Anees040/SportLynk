@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
+import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/realtime_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -24,6 +26,17 @@ class AuthProvider extends ChangeNotifier {
   bool get isPendingOwner => _isPendingOwner;
   String? get ownerRejectionReason => _ownerRejectionReason;
 
+  /// Bind the just-established session to the two singletons that outlive any
+  /// one screen: the REST client (so calls carry the JWT without threading it)
+  /// and the realtime socket (so team + chat events start flowing immediately,
+  /// even before a chat screen is opened). Safe to call with a null/empty token.
+  void _bindSession() {
+    ApiClient.authToken = _token;
+    if (_token != null && _token!.isNotEmpty) {
+      RealtimeService().ensureConnected(_token!);
+    }
+  }
+
   void setLoading(bool val) {
     _isLoading = val;
     notifyListeners();
@@ -43,6 +56,7 @@ class AuthProvider extends ChangeNotifier {
         _token = data['token'] as String;
         _currentUser = User.fromJson(data['user'] as Map<String, dynamic>);
         await _authService.saveToken(_token!);
+        _bindSession();
         _isLoading = false;
         notifyListeners();
         return true;
@@ -89,6 +103,7 @@ class AuthProvider extends ChangeNotifier {
         _token = data['token'] as String;
         _currentUser = User.fromJson(data['user'] as Map<String, dynamic>);
         await _authService.saveToken(_token!);
+        _bindSession();
         _isLoading = false;
         notifyListeners();
         return true;
@@ -121,6 +136,7 @@ class AuthProvider extends ChangeNotifier {
           if (d['token'] != null) {
             _token = d['token'] as String;
             await _authService.saveToken(_token!);
+            _bindSession();
           }
           if (d['user'] != null) {
             _currentUser = User.fromJson(d['user'] as Map<String, dynamic>);
@@ -182,6 +198,7 @@ class AuthProvider extends ChangeNotifier {
       await _authService.clearToken();
     }
 
+    _bindSession();
     _isLoading = false;
     notifyListeners();
   }
@@ -228,6 +245,7 @@ class AuthProvider extends ChangeNotifier {
       }
     }
 
+    _bindSession();
     _isLoading = false;
     notifyListeners();
   }
@@ -239,6 +257,8 @@ class AuthProvider extends ChangeNotifier {
     _isPendingOwner = false;
     _ownerRejectionReason = null;
     _authService.clearToken();
+    ApiClient.authToken = null;
+    RealtimeService().disconnect();
     notifyListeners();
   }
   void updateLocalUser(Map<String, dynamic> data) {

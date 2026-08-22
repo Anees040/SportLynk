@@ -48,4 +48,38 @@ class ApiConstants {
   static String rejectBooking(String id) => '/owner/bookings/$id/reject';
   static const String checkin = '/owner/checkin';
   static const String checkinDecide = '/owner/checkin/decide';
+
+  // ── Realtime (Socket.IO) ────────────────────────────────────
+  /// The Socket.IO origin. The server mounts engine.io at the ROOT (`/socket.io`),
+  /// not under `/api`, so the socket must connect to the bare origin — [baseUrl]
+  /// with its trailing `/api` stripped. Getting this wrong is the classic "chat
+  /// won't connect but REST works" bug, so it is derived here once.
+  static String get socketUrl {
+    const b = baseUrl;
+    return b.endsWith('/api') ? b.substring(0, b.length - 4) : b;
+  }
+
+  // ── Teams (S2) ──────────────────────────────────────────────
+  static const String teams = '/teams';
+  static const String myTeams = '/teams/mine';
+  static const String teamRankings = '/teams/rankings';
+  static const String teamDiscover = '/teams/discover';
+  static String team(String id) => '/teams/$id';
+  static String teamInvites(String id) => '/teams/$id/invites';
+  static String teamInvite(String id, String inviteId) => '/teams/$id/invites/$inviteId';
+  static String teamInvitePreview(String token) => '/teams/invites/$token';
+  static String teamJoin(String token) => '/teams/join/$token';
+  static String teamJoinRequest(String id) => '/teams/$id/join-request';
+  static String teamRequests(String id) => '/teams/$id/requests';
+  static String teamRequest(String id, String requestId) => '/teams/$id/requests/$requestId';
+  static String teamMember(String id, String userId) => '/teams/$id/members/$userId';
+  static String leaveTeam(String id) => '/teams/$id/members/me';
+
+  // ── Chat (S2) ───────────────────────────────────────────────
+  static String chatForTeam(String teamId) => '/chat/team/$teamId';
+  static String chatMessages(String channelId) => '/chat/$channelId/messages';
+  static String chatRead(String channelId) => '/chat/$channelId/read';
+  static String chatMembers(String channelId) => '/chat/$channelId/members';
+  static String chatReactions(String channelId, String messageId) => '/chat/$channelId/messages/$messageId/reactions';
+  static String chatMessage(String channelId, String messageId) => '/chat/$channelId/messages/$messageId';
 }

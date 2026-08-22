@@ -75,7 +75,7 @@ it has the per-feature scripts, including the ones that need two accounts.
 
 ## Step 1 — Pre-flight checks (5 min, all local)
 
-Run these four before touching any dashboard. Each one prevents a specific
+Run these five before touching any dashboard. Each one prevents a specific
 failure you would otherwise hit ten minutes later.
 
 ```bash
@@ -90,7 +90,11 @@ git ls-files | Select-String "\.env$"
 # 1c. Does the template exist for a fresh clone?
 git ls-files backend/.env.example
 
-# 1d. Does the server still boot locally?
+# 1d. Is everything Render will run actually PUSHED? Both must print nothing.
+git status --short -- backend/
+git log origin/main..HEAD --oneline
+
+# 1e. Does the server still boot locally?
 cd backend
 node src/server.js
 ```
@@ -104,7 +108,16 @@ node src/server.js
   `JWT_SECRET` are in the repo. Fix that before pushing (`git rm --cached
   backend/.env`, then rotate both secrets).
 - 1c → `backend/.env.example`.
-- 1d → this, and no red text:
+- 1d → **nothing from either command.** This is the check that is easiest to skip
+  and most expensive to skip. Render clones a *commit*, not your working
+  directory — it cannot see a fix you have not committed, and it cannot see a
+  commit you have not pushed. If `git status --short` lists a modified file under
+  `backend/`, the code Render runs is **not** the code you have been testing, and
+  the failure it produces will look like a Render or Supabase problem. This
+  happened on the first deploy of this project: `src/db/pool.js` was fixed on disk
+  and uncommitted, so Render ran the old file and died on
+  `self-signed certificate in certificate chain`.
+- 1e → this, and no red text:
 
 ```
 ✅ Database connected (TLS on)
@@ -374,41 +387,94 @@ stale.
 
 ## Step 7 — Verify the deployed API (3 min)
 
+Four calls, in this order. Each one proves something the previous one cannot.
+
+**7a. The process is up.**
+
 ```bash
 curl https://sportlynk-api.onrender.com/api/health
 ```
-
-**What you should see:**
 
 ```json
 {"success":true,"data":{"status":"running"},"message":"SportLynk API is healthy"}
 ```
 
 The **first** call after a period of inactivity may take 30–50 seconds. That is
-Render's free tier waking the container, not a bug. Wait it out; do not assume it
-is broken. See Step 10.
+Render's free tier waking the container, not a bug. Wait it out. See Step 10.
 
-Then prove the database is genuinely attached, not just the process running:
+> ⚠️ **This proves almost nothing.** `/api/health` never touches Postgres, so it
+> returns exactly this JSON while the database is completely dead — and Render
+> will mark the service **live 🎉** on the strength of it. A deploy has been seen
+> logging `❌ Database connection failed` and passing its health check in the same
+> second. Never stop here.
 
-```bash
-curl https://sportlynk-api.onrender.com/api/venues
-```
-
-You should get your real venues back as JSON. `/api/health` only proves Node is
-alive — it does not touch the database, so a healthy health check with a broken
-`DATABASE_URL` is entirely possible. This second call is the one that matters.
-
-Finally, log in with a real account to prove `JWT_SECRET` matches:
+**7b. The database is genuinely attached.** `/api/venues` requires a token, so it
+cannot be your smoke test. `verify-phone` is the one public route that queries a
+real table:
 
 ```bash
-curl -X POST https://sportlynk-api.onrender.com/api/auth/login `
-  -H "Content-Type: application/json" `
-  -d '{"email":"<your test player>","password":"<password>"}'
+curl -X POST https://sportlynk-api.onrender.com/api/auth/verify-phone \
+  -H "Content-Type: application/json" \
+  --data-raw '{"phone":"03000000000"}'
 ```
 
-A token back means all three environment variables are correct. `"Invalid
-credentials"` for a password you know is right means `JWT_SECRET` differs from
-your local one — or you are hitting a different database than you think.
+```json
+{"success":true,"exists":true}
+```
+
+Either `true` or `false` is a pass — the point is that a `SELECT` against `users`
+ran and answered. A `500` here means `DATABASE_URL` is wrong; go back to Step 5
+and read the service log for the `❌ Database connection failed:` line.
+
+**7c. `bcrypt` actually loaded.** This is the one that catches a bad native build
+on whatever Node version Render picked. Log in with a **deliberately wrong**
+password:
+
+```bash
+curl -X POST https://sportlynk-api.onrender.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  --data-raw '{"identifier":"03000000000","password":"deliberately-wrong"}'
+```
+
+```json
+{"success":false,"message":"Incorrect password"}
+```
+
+**HTTP 401 with that exact message is a pass**, and a strong one. To produce it the
+request had to find the user in Postgres *and* run `bcrypt.compare()` — so the
+native module compiled and loaded. A `500` here with `bcrypt` in the log is a
+build failure; see Step 11.
+
+Note the field is **`identifier`**, not `email` — it accepts a phone
+(`/^0[0-9]{10}$/`) or an email, and `auth.js` destructures `{identifier, password}`.
+Send `email` and you get a 400 about the missing field, which looks like a server
+problem and isn't.
+
+**7d. A real login, then a real authenticated read.**
+
+```bash
+curl -X POST https://sportlynk-api.onrender.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  --data-raw '{"identifier":"<your phone>","password":"<your password>"}'
+```
+
+A token comes back inside `{success:true, data:{token, user}}`. Paste it into the
+call that finally reads your venues:
+
+```bash
+curl https://sportlynk-api.onrender.com/api/venues \
+  -H "Authorization: Bearer <paste the token>"
+```
+
+Your 10 real venues as JSON. **Now** the deploy is verified.
+
+> **`JWT_SECRET` — what a mismatch actually does.** It is only used to *sign* the
+> token after bcrypt has already succeeded, so a secret that differs from your
+> local one does **not** break login. It breaks everything *after* login: a token
+> the local backend issued is rejected by Render, and vice versa. So if the app
+> starts returning "session expired" the moment you point it at Render, the cached
+> token is the cause — **log out and log back in**, and it clears. If `JWT_SECRET`
+> is missing entirely, `jwt.sign` throws and login returns **500**, not 401.
 
 ---
 

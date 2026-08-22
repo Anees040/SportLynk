@@ -45,6 +45,7 @@ dependencies:
   firebase_auth: ^5.3.1
   image_picker: ^1.0.7
   cloudinary_public: ^0.23.1
+  socket_io_client: ^2.0.3
 
 dev_dependencies:
   flutter_test:
