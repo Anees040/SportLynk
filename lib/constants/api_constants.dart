@@ -82,4 +82,21 @@ class ApiConstants {
   static String chatMembers(String channelId) => '/chat/$channelId/members';
   static String chatReactions(String channelId, String messageId) => '/chat/$channelId/messages/$messageId/reactions';
   static String chatMessage(String channelId, String messageId) => '/chat/$channelId/messages/$messageId';
+
+  // ── Matches (S2 Wave C) ─────────────────────────────────────
+  /// The match list is `?team_id=` (snake) because it mirrors the SQL column,
+  /// while the pairing reads take `teamId`/`challengerTeam` — the backend is the
+  /// authority on each name, so they are spelled out here once rather than
+  /// guessed at three call sites.
+  static const String matches = '/matches';
+  static const String matchOpponents = '/matches/opponents';
+  static const String matchPreview = '/matches/preview';
+  static const String matchLinkableBookings = '/matches/linkable-bookings';
+  static const String matchOwnerPending = '/matches/owner/pending';
+  static const String matchChallenge = '/matches/challenge';
+  static String match(String id) => '/matches/$id';
+  static String matchRespond(String id) => '/matches/$id/respond';
+  static String matchResult(String id) => '/matches/$id/result';
+  static String matchVerify(String id) => '/matches/$id/verify';
+  static String matchDispute(String id) => '/matches/$id/dispute';
 }

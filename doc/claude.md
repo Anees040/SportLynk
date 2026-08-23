@@ -39,11 +39,13 @@ trained ML models — never replace them with external AI API calls.
 - DONE pre-sprint: OTP auth + profiles, venue search/detail/booking, QR check-in
   escrow, wallet + top-up, owner dashboard/slot calendar/scanner/analytics,
   admin approvals. Teams: create/roster/invites/roles/join + WhatsApp-style group
-  chat are LIVE as of S2-A (real backend, was UI-only). ELO + matchmaking are the
-  remaining S.2 waves — teams do not yet play matches.
-- REMAINING in order: S.1 stabilize+deploy → S.2 teams/ELO/matchmaking →
-  S.3 ml-service + pricing model → S.4 sentiment + trust → S.5 recommender →
-  S.6 NLU assistant → S.7 tournaments/chat/admin/demo pack.
+  chat are LIVE as of S2-A (real backend, was UI-only). ELO + matchmaking are LIVE
+  as of S2-B/S2-C — teams challenge each other on a confirmed booking, both
+  captains report, the venue owner verifies, ratings move. **S.2 is complete.**
+- REMAINING in order: S.3 ml-service + pricing model → S.4 sentiment + trust →
+  S.5 recommender → S.6 NLU assistant → S.7 tournaments/chat/admin/demo pack.
+  (S.7 owns the admin dispute-resolution UI; the backend rule blocking ELO on a
+  disputed match is already in place.)
 - Wave log (append one line per completed wave):
   - (example: S1-A done — ledger unified 20%/24h, noShowJob + autoApproveJob)
   - S1-A done — escrow ledger unified (20% deposit / 24h window / 30-min no-show),
@@ -160,6 +162,81 @@ trained ML models — never replace them with external AI API calls.
     loop in the server log). DEFERRED as clean follow-ups: voice notes (kind:'audio'
     → "coming soon"; duration_ms/waveform already in schema) and reply-to
     (reply_to_id exists, no UI). flutter analyze: 0 issues; server boots clean.
+  - S2-B done — ELO engine + global settings. src/utils/elo.js has NO database
+    import on purpose: expected() / newRating() / rate() / competitiveness() are
+    provable without a connection, and applyResult() takes a client instead of
+    opening one so the exchange runs INSIDE the caller's transaction. A verified
+    result writes both teams' elo (+ legacy elo_rating in lockstep), W/L/D, and
+    exactly two elo_history rows netting to zero — same commit as the status change.
+    A team is Unranked until ≥1 verified match (FR2.6): the API sends ranked:false
+    and displayElo:null and the UI prints "Unranked", never the seed 1000 — on a
+    fresh install that is EVERY team, so it is the common path, not an edge case.
+    globalSettings.js is the first reader of the global_settings table 013 created
+    and nothing used: cached, never throws, falls back to DEFAULTS (base 1000,
+    k 32, 48h TTL, 24h dispute window, 30%/min-3 freeze) so policy is a row you
+    edit, while a malformed row can never take matches offline. test/elo.test.js =
+    10 tests via `npm test` (node --test, no new dep): symmetric exchange, upset
+    pays more, draw moves toward the lower-rated side, K respected, 400 = 10:1,
+    outcomeFor THROWS on a team not in the match (a silent 0.5 there would rate the
+    wrong pairing). Writing the tests found a real bug: applyResult shared one
+    placeholder between elo and elo_rating → 42P08, every verification would have
+    failed. 10/10 pass.
+  - S2-C done — matchmaking end to end. migration 016 (applied, 25/25 verify
+    checks): the invariants a JS pre-check cannot hold live in the DB —
+    ux_matches_booking_live is a PARTIAL unique index (one live match per booking,
+    so two simultaneous challenges on one slot can't both win),
+    match_results_match_id_submitted_by_team_key (013's inline UNIQUE, so Postgres
+    named it) enforces one submission per team (ER2.1), chk_matches_
+    status is the state machine's third copy (doc/API.md is authoritative,
+    matchCore.STATUS is the code's — all three must agree). routes/matches.js = 11
+    endpoints under four rules: the body is never authority (the team you may act
+    for is re-read from team_members inside the locked txn — a forged
+    challengerTeam gets 403); lock then decide (without lockMatch, two captains
+    submitting in the same instant both conclude they are not the second and leave
+    the match stuck in `accepted` with two results and nobody to advance it); a
+    return never leaves an open transaction (finally releases, early exits bail());
+    emit after COMMIT (a socket fired inside the txn tells the client to re-read a
+    row that isn't durable, and it reads the old one). matchCore.js holds the shared
+    view/lock/shape/fan-out layer so the route reads as the state machine only.
+    Competitiveness = round(100 − (min(|Δ|,400)/400)×95), snapshotted at challenge
+    time, and NULL — not 50, not 0 — when either side is unranked. matchPreview.js
+    is template NLG over real features (gap, last-5 form, streak, win rates), pure,
+    and the honest label ships from the SERVER (previewLabel:'Preview') so a future
+    screen can't quietly upgrade it to "AI prediction". matchExpiryJob is the 4th
+    sweep; expiry is ALSO enforced on read, because a late job must never decide
+    whether a transition is valid. Conflicting submissions → disputed + a SYSTEM
+    dispute row with raised_by_team NULL so it counts against neither team's ratio;
+    >30% over ≥3 matches freezes a rating platform-wide (ER2.3) — the match still
+    completes and records W/L, but no points move and the response says so. The
+    venue owner has NO score field: ownership is checked in SQL (v.owner_id=$1) and
+    verify only confirms what two captains already agreed; adjudication is S.7's,
+    and an override here would make the agreement gate decorative. match:update
+    carries only ids — one emit reaches both rosters AND the owner, whose read
+    permissions differ, so every client re-reads through the gated endpoint and the
+    socket can't become a way around a read gate. Flutter: models/match.dart +
+    services/match_service.dart, widgets/match_widgets.dart (one home for every
+    match visual so a competitiveness bar can't read green on one screen and amber
+    on the next — gauge is real CustomPaint, a zero ELO delta reads "Frozen"/"No
+    change" never "+0"), find_opponents rewritten to the real endpoint (sport chips
+    gone because the endpoint is pairing-relative and the backend refuses
+    cross-sport — WHICH of my teams plays now picks the sport; defaults to a team I
+    captain, since canChallenge is captain-only and a screen of disabled buttons
+    reads as broken), match_challenge_screen (VS + gauge + comparison + preview +
+    the booking picker, which is the RULE not a convenience), match_center_screen
+    (Challenges/Upcoming/History with countdowns, ±ELO and the 24h dispute flag —
+    reached from a team row and the chat header, not a global tab that would have to
+    ask "which team?"), match_result_dialog (scores held challenger-first in the
+    match's own orientation even though drawn viewer-first, so the two submissions
+    are comparable in the DB), owner_match_verify_screen + a "Match results to
+    verify" card on the owner dashboard that appears live and hides when empty.
+    Gap found while wiring Upcoming: the list shipped resultsIn (a count) but
+    nothing viewer-scoped, so at resultsIn==1 the app offered a Submit button that
+    could only 409 — matchCore now aggregates submitted_teams and shapeMatch
+    derives iSubmitted, which answers ONLY whether my side is still owed one, so it
+    never leaks the opponent's submission. run_match_flow_check.js = 69/69 over real
+    HTTP (happy path, conflict, dispute, authority, idempotency, 48h sweep releasing
+    the booking) and it SEEDS the two-phone fixture. flutter analyze 0 issues;
+    npm test 10/10; server boots clean with all four jobs.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave. API.md / DATABASE.md =

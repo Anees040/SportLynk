@@ -247,6 +247,7 @@ personal room `u:<userId>`; opening a chat joins `c:<channelId>`.
 |---|---|---|---|
 | server → user room | `team:update` | `{teamId, left?}` | membership/role changed — re-fetch |
 | server → user room | `team:request` | `{teamId}` | a new join request landed (admins) |
+| server → user room | `match:update` | `{matchId, status, …}` | a match this user is party to moved — re-fetch (S2 Wave C) |
 | server → channel | `chat:message` | hydrated message | a new/edited/deleted/reacted message |
 | server → channel | `receipt` | `{userId, lastReadAt, lastDeliveredAt}` | move a member's tick watermarks |
 | client → server | `typing` | `{channelId, typing}` | drives the "typing…" subtitle |
@@ -255,6 +256,104 @@ personal room `u:<userId>`; opening a chat joins `c:<channelId>`.
 Presence ("online" / "last seen") is in-memory in the realtime layer because it is
 worthless after a restart; `users.last_seen_at` is persisted on disconnect so a
 last-seen survives a deploy.
+
+**`match:update` deliberately never carries the match itself.** One emit goes to
+both rosters *and* to the venue owner, and those three audiences have different read
+permissions — a team may not see the opponent's submission until both are in, while
+the owner may see both. Shipping the row would have to either over-share or ship a
+different payload per recipient; instead every client re-reads through the gated
+endpoint, so the socket can never become a way around a read gate.
+
+---
+
+## Matches & ELO (Token required) — S2 Waves B + C
+Mounted at `/api/matches`. Challenge → play → both captains report → the venue owner
+verifies → ratings move. Migration 016 adds `matches`, `match_results`, `disputes`,
+`elo_history` and the `teams.elo` counters.
+
+### The state machine — SINGLE SOURCE OF TRUTH
+Three copies of this exist and **all three must agree**: this table, the
+`chk_matches_status` CHECK constraint in `migrations/016_matches_elo.sql`, and
+`matchCore.STATUS` in code.
+
+```
+  challenge_sent ─(opponent captain accepts)──→ accepted
+        │                                          │
+        │(reject, or 48h expiry — FR5.12)          │(both captains submit,
+        ↓                                          │ submissions agree)
+  rejected | expired                                ↓
+                                             awaiting_owner
+        ┌────────────────────────────────────────┐  │
+        │(submissions conflict — ER2.1)          │  │(venue owner verifies:
+        ↓                                        │  │ ELO exchange runs — ER2.2)
+     disputed ←──(either captain, within 24h)────────completed
+        │                                            FR5.17
+        └─(admin resolves — S.7)──→ completed
+```
+
+| Status | Meaning | Who can move it |
+|---|---|---|
+| `challenge_sent` | waiting on the opponent captain; dies at 48h | opponent captain, or `matchExpiryJob` |
+| `accepted` | on. Results open once the slot's start time passes | either captain (one submission each) |
+| `awaiting_owner` | both captains reported the **same** score | the venue owner of the linked booking |
+| `completed` | verified; ELO exchanged, `elo_history` written | terminal (a dispute can reopen it) |
+| `rejected` / `expired` | never played; the booking is released for reuse | terminal |
+| `disputed` | reports conflicted, or a captain flagged inside 24h | admin only (S.7) — **ELO is blocked meanwhile** |
+
+### Endpoints
+| Method | Endpoint | Auth | Body / Query | Response |
+|--------|----------|------|--------------|----------|
+| GET | `/matches/opponents` | member | `?teamId=&q=` | `{myTeam, myRole, canChallenge, preferredBand, opponents:[{team, eloGap, withinBand, competitiveness}]}` — same sport, public, **±400 ELO first** (FR5.3) |
+| GET | `/matches/preview` | member | `?challengerTeam=&opponentTeam=` | `{challenger, opponent, competitiveness, previewText, previewLabel:'Preview', eloGap, withinPreferredBand}` (FR5.4/FR5.10) |
+| GET | `/matches/linkable-bookings` | **captain** | `?teamId=` | `[{id, slotDate, startTime, endTime, venueName, sportType, totalAmount}]` — my **confirmed, future** bookings with no live match (FR5.11) |
+| POST | `/matches/challenge` | **captain** | `{challengerTeam, opponentTeam, bookingId}` | the match — expires in 48h, competitiveness + preview snapshotted onto the row |
+| GET | `/matches` | member | `?team_id=` | `{teamId, myRole, challenges:{incoming, outgoing}, upcoming, history, disputeWindowHours}` (FR5.16) |
+| GET | `/matches/:id` | party¹ | — | `{…match, myRole, submissions, iSubmitted, disputeWindowHours}` |
+| PATCH | `/matches/:id/respond` | **opponent captain** | `{action:'accept'\|'reject'}` | the match — accept notifies both rosters (FE-4) |
+| POST | `/matches/:id/result` | **captain** | `{scoreChallenger, scoreOpponent, winnerTeam?}` | the match — **one submission per team, ever** (ER2.1) |
+| PATCH | `/matches/:id/verify` | **venue owner** | — | `{…match, elo:{frozen, reason, kFactor, challenger, opponent}}` (ER2.2) |
+| POST | `/matches/:id/dispute` | **captain** | `{reason}` (≥10 chars) | the match, now `disputed` — within 24h of completion (FR5.17) |
+| GET | `/matches/owner/pending` | **owner** | — | `[{…match, submissions:[{teamId, teamName, winnerTeam, scoreChallenger, scoreOpponent, submittedAt}]}]` — `awaiting_owner` on **my** venues |
+
+¹ a member of either team, **or** the owner of the linked venue.
+
+**Guard rails (all `{success:false, message}`):**
+
+| Condition | Status | Why |
+|---|---|---|
+| booking not `confirmed`, not mine, or in the past | 400 | FR5.11 — a match must be pinned to a real, paid, future slot |
+| booking already has a live match | 409 | `ux_matches_booking_live` partial unique index — a JS pre-check can't stop two simultaneous POSTs |
+| the two teams play different sports | 400 | cross-sport ratings would be meaningless |
+| challenging yourself, or >10 challenges out | 400 / 429 | a challenge pins a booking and pings a captain; uncapped it is a spam vector |
+| accepting after `challenge_expires_at` | 409 | the sweep may not have run yet — expiry is enforced on read, not only by the job |
+| second submission from the same team | 409 | `match_results_match_id_submitted_by_team_key` — the one-shot rule (ER2.1). Declared as an inline `UNIQUE (match_id, submitted_by_team)` in 013, so Postgres named it; that generated name is what the 409 keys on |
+| submitting before the slot's start time | 400 | you cannot report a match that has not begun |
+| owner verifying a match on someone else's venue | 403 | ownership is checked **in SQL** (`v.owner_id = $1`), not from the body |
+| verifying a `disputed` match | 409 | the S.7 backstop — a contested result never moves ratings |
+| a `winnerTeam` that disagrees with the scores | 400 | the server derives the winner; the field is a cross-check, not an input |
+
+**The ELO exchange is one transaction** (Wave B). On verify, inside the same commit
+as the status change: both teams' `elo` (+ legacy `elo_rating` in lockstep),
+`wins/losses/draws`, and **exactly two `elo_history` rows** whose deltas net to zero.
+`utils/elo.js` is pure — no database import — so the arithmetic is unit-tested
+without a connection (`npm test`, 10 tests).
+
+**A team is "Unranked" until it has ≥1 verified match** (FR2.6). The API sends
+`ranked:false` and the UI prints *Unranked* rather than the seed 1000, because a
+number nobody has earned reads as a claim. Competitiveness is
+`round(100 − (min(|eloA − eloB|, 400) / 400) × 95)` → 5–100, and is `null` (not 50,
+not 0) when either side is unranked.
+
+**Ratings can be frozen.** A team whose dispute ratio exceeds 30% over ≥3 matches has
+its rating frozen platform-wide (ER2.3): the match still completes and still records
+W/L, but no points move and the response says so in plain words. `global_settings`
+holds `elo.base`, `elo.k_factor`, and the match TTL / dispute-window / freeze
+thresholds — policy is a row, not a constant in the bundle.
+
+**The venue owner has no pen.** Verify confirms what two captains already agreed;
+there is no score-override field. Adjudicating a disagreement is the admin's job
+(S.7), and giving the owner an override here would make the "both captains agree"
+gate decorative.
 
 ---
 

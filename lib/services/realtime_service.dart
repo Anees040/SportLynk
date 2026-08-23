@@ -32,6 +32,7 @@ class RealtimeService {
   final _presence = StreamController<Map<String, dynamic>>.broadcast();
   final _teamUpdates = StreamController<Map<String, dynamic>>.broadcast();
   final _teamRequests = StreamController<Map<String, dynamic>>.broadcast();
+  final _matchUpdates = StreamController<Map<String, dynamic>>.broadcast();
   final _connection = StreamController<bool>.broadcast();
 
   /// A newly persisted (or re-emitted) message — the client upserts by id, so
@@ -52,6 +53,15 @@ class RealtimeService {
 
   /// A pending join request landed for a team the user administers: `{teamId}`.
   Stream<Map<String, dynamic>> get teamRequests => _teamRequests.stream;
+
+  /// A match the user has a stake in moved: `{matchId, status?, ...}`.
+  ///
+  /// Deliberately carries an id and not the match itself. The payload is emitted
+  /// to both rosters and to the venue owner, and what each of them is allowed to
+  /// see differs — a team may not read the opponent's submission until both are
+  /// in. Sending only the id means every screen re-reads through the endpoint
+  /// that enforces that, so the socket can never become a way around a read gate.
+  Stream<Map<String, dynamic>> get matchUpdates => _matchUpdates.stream;
 
   /// Connected / disconnected transitions — the chat screen re-joins its channel
   /// on every `true` so a reconnect silently restores live delivery.
@@ -104,6 +114,7 @@ class RealtimeService {
     s.on('presence', (d) => _push(_presence, d));
     s.on('team:update', (d) => _push(_teamUpdates, d));
     s.on('team:request', (d) => _push(_teamRequests, d));
+    s.on('match:update', (d) => _push(_matchUpdates, d));
   }
 
   void _push(StreamController<Map<String, dynamic>> c, dynamic data) {

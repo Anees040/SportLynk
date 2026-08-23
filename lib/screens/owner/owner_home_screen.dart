@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,8 +6,12 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
+import '../../models/match.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/match_service.dart';
+import '../../services/realtime_service.dart';
 import 'owner_booking_requests_screen.dart';
+import 'owner_match_verify_screen.dart';
 import 'owner_slot_calendar_screen.dart';
 import 'owner_my_venues_screen.dart';
 import 'owner_profile_screen.dart';
@@ -24,10 +29,47 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
   bool _loading = true;
   static String get _base => ApiConstants.baseUrl;
 
+  // ── Match results awaiting this owner's verification (ER2.2) ──
+  // Kept out of /owner/dashboard on purpose: a failure fetching matches must not
+  // be able to blank the revenue and bookings the owner actually opened the app for.
+  final _matchService = MatchService();
+  List<MatchModel> _toVerify = const [];
+  StreamSubscription? _matchSub;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadToVerify();
+    // The card should appear the moment the second captain submits, without the
+    // owner having to pull to refresh. The socket is already connected for every
+    // signed-in role, so this costs nothing when there is nothing to say.
+    _matchSub = RealtimeService().matchUpdates.listen((_) {
+      if (mounted) _loadToVerify();
+    });
+  }
+
+  @override
+  void dispose() {
+    _matchSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshAll() => Future.wait([_load(), _loadToVerify()]);
+
+  Future<void> _loadToVerify() async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null || token.isEmpty) return;
+    final list = await _matchService.ownerPending(token);
+    if (mounted) setState(() => _toVerify = list);
+  }
+
+  Future<void> _openVerify() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const OwnerMatchVerifyScreen()),
+    );
+    await _loadToVerify();
   }
 
   Future<void> _load() async {
@@ -140,7 +182,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
 
     return RefreshIndicator(
       color: AppColors.accent,
-      onRefresh: _load,
+      onRefresh: _refreshAll,
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         slivers: [
@@ -212,6 +254,12 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
               ),
             ),
           ),
+
+          // ── MATCH RESULTS TO VERIFY (ER2.2) ──────────────
+          // Only rendered when the queue is non-empty: it is a task, not a
+          // statistic, so an empty version of it would be noise every other day.
+          if (_toVerify.isNotEmpty)
+            SliverToBoxAdapter(child: _verifyCard()),
 
           // ── QUICK ACTIONS ─────────────────────────────────
           SliverToBoxAdapter(
@@ -485,6 +533,79 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
 
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
+      ),
+    );
+  }
+
+  /// The verification queue entry point. Deliberately loud — an unverified result
+  /// is two teams waiting on this owner, and their ratings do not move until they
+  /// get it. The count is the whole message, so it leads.
+  Widget _verifyCard() {
+    final n = _toVerify.length;
+    final first = _toVerify.first;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _openVerify,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.warning.withValues(alpha: 0.45)),
+              color: AppColors.warning.withValues(alpha: 0.06),
+            ),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.fact_check_outlined,
+                    color: Color(0xFFB45309), size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(
+                    n == 1 ? 'Match result to verify' : '$n match results to verify',
+                    style: GoogleFonts.poppins(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    n == 1
+                        ? '${first.challenger.name} vs ${first.opponent.name} — both captains agreed on the score.'
+                        : 'Both captains have agreed on the score. Ratings move once you confirm.',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                        fontSize: 11, height: 1.35, color: AppColors.textSecondary),
+                  ),
+                ]),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.warning,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('$n',
+                    style: GoogleFonts.poppins(
+                        color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 20),
+            ]),
+          ),
+        ),
       ),
     );
   }

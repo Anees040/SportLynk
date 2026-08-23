@@ -12,6 +12,7 @@ import '../../services/team_service.dart';
 import '../../utils/snackbar_util.dart';
 import 'chat_screen.dart';
 import 'create_team_screen.dart';
+import 'match_center_screen.dart';
 import 'team_rankings_screen.dart';
 
 /// The user's teams — the WhatsApp "Chats" tab of SportLynk. Each row opens the
@@ -293,6 +294,23 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   ),
                 ),
                 Icon(Icons.chat_bubble_outline, color: AppColors.accent.withValues(alpha: 0.8)),
+                // Matches are per-team, so the way in is from a team — not a
+                // global tab that would have to ask which one every time.
+                IconButton(
+                  tooltip: 'Match Center',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.sports_kabaddi, color: AppColors.primary),
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            MatchCenterScreen(teamId: t.id, teamName: t.name),
+                      ),
+                    );
+                    _reload();
+                  },
+                ),
               ],
             ),
           ),

@@ -18,6 +18,7 @@ import '../../widgets/chat/date_separator.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/system_message_pill.dart';
 import '../../widgets/chat/typing_indicator.dart';
+import 'match_center_screen.dart';
 import 'team_roster_screen.dart';
 
 /// The team group chat — WhatsApp in feel: day separators, sender-labelled
@@ -370,6 +371,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       ),
       actions: [
+        IconButton(
+          tooltip: 'Matches',
+          icon: const Icon(Icons.sports_kabaddi),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MatchCenterScreen(
+                teamId: widget.teamId,
+                teamName: widget.teamName,
+              ),
+            ),
+          ),
+        ),
         IconButton(
           tooltip: 'Group info',
           icon: const Icon(Icons.info_outline),

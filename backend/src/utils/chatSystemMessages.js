@@ -32,7 +32,7 @@ const ROLE_TEXT = {
  * (a new group name, a visibility). Every branch must produce a non-empty
  * string: chk_chat_messages_payload requires a body for kind='system'.
  */
-function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = null } = {}) {
+function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = null, d = null } = {}) {
   switch (event) {
     case 'group_created':
       return `${a} created the group`;
@@ -60,6 +60,34 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
       return `${a} changed the team description`;
     case 'visibility_changed':
       return `${a} made the team ${v === 'private' ? 'private' : 'public'}`;
+
+    // ── Match lifecycle (S.2 Wave C) ────────────────────────────────────────
+    // These pills are posted into BOTH teams' chats, so `v` is always THE OTHER
+    // TEAM from the perspective of the channel being written to. The two
+    // asymmetric moments (who sent, who received) get their own event rather
+    // than one sentence bent to fit both, because "you challenged them" and
+    // "they challenged you" are genuinely different facts to the reader.
+    case 'match_challenge_sent':
+      return `${a} challenged ${v || 'another team'} to a match`;
+    case 'match_challenge_received':
+      return `${v || 'Another team'} challenged your team to a match`;
+    case 'match_accepted':
+      return `The match against ${v || 'the other team'} is confirmed`;
+    case 'match_rejected':
+      return `The match against ${v || 'the other team'} was declined`;
+    case 'match_expired':
+      return `The challenge against ${v || 'the other team'} expired`;
+    case 'match_result_submitted':
+      return `${a} submitted the result for the match against ${v || 'the other team'}`;
+    case 'match_awaiting_owner':
+      return `Both results are in for the match against ${v || 'the other team'} — the venue owner will verify it`;
+    case 'match_verified':
+      return d
+        ? `Match against ${v || 'the other team'} verified — ${d}`
+        : `The match against ${v || 'the other team'} has been verified`;
+    case 'match_disputed':
+      return `The result against ${v || 'the other team'} is disputed and under review`;
+
     default:
       // Never throw on an unknown event — a missing case must not be able to
       // roll back the membership change that is the real work of the request.
@@ -77,12 +105,14 @@ function buildSystemMessage(event, {
   actorId = null, actorName = null,
   targetId = null, targetName = null,
   value = null, role = null,
+  matchId = null, detail = null,
 } = {}) {
   const body = sentenceFor(event, {
     a: actorName || 'Someone',
     t: targetName || 'someone',
     v: value,
     role,
+    d: detail,
   });
   return {
     body,
@@ -94,6 +124,9 @@ function buildSystemMessage(event, {
       targetName: targetName || null,
       value: value === undefined ? null : value,
       role: role || null,
+      // Present only on match pills, so tapping one can open the match itself.
+      matchId: matchId || null,
+      detail: detail || null,
     },
   };
 }

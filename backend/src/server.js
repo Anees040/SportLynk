@@ -50,9 +50,11 @@ const userRoutes = require("./routes/users");
 const slotRoutes = require("./routes/slotLock");
 const teamRoutes = require("./routes/teams");
 const chatRoutes = require("./routes/chat");
+const matchRoutes = require("./routes/matches");
 const { startNoShowJob } = require("./jobs/noShowJob");
 const { startAutoApproveJob } = require("./jobs/autoApproveJob");
 const { startWithdrawalJob } = require("./jobs/withdrawalJob");
+const { startMatchExpiryJob } = require("./jobs/matchExpiryJob");
 const { ACTIVE_TEST_OVERRIDES } = require("./utils/escrow");
 
 app.use("/api/auth", authRoutes);
@@ -66,6 +68,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/slots", slotRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/matches", matchRoutes);
 
 // ─── Health check ────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
@@ -138,4 +141,5 @@ server.listen(PORT, () => {
   startNoShowJob();
   startAutoApproveJob();
   startWithdrawalJob();
+  startMatchExpiryJob();
 });

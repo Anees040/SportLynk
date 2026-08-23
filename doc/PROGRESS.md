@@ -512,3 +512,179 @@ Completed:
 - [x] `flutter analyze`: **No issues found!** Server boots clean — `🔌 Realtime
   (Socket.IO) attached`, `✅ Database connected (TLS on)`, all three sweep jobs start.
 
+## Wave S2-B (ELO engine + global settings)
+Completed:
+- [x] Backend: **`src/utils/elo.js` — and it deliberately does not import the
+  database.** The whole point of the file is that the arithmetic every team's rating
+  depends on can be proven without a connection, a fixture, or a running server.
+  `expected(ra, rb) = 1 / (1 + 10^((rb − ra)/400))`, `newRating(r, s, e, k) =
+  round(r + k(s − e))`, plus `rate` (both sides of one exchange), `outcomeFor`,
+  `isRanked`, `displayElo`, `competitiveness`, and `applyResult` — the last being the
+  only function that touches SQL, and it takes a client rather than opening one, so
+  it runs inside the caller's transaction instead of alongside it.
+- [x] Backend: **a team is Unranked until it has ≥1 verified match (FR2.6).**
+  `playedCount = wins + losses + draws`; below `RANKED_MIN_MATCHES` the API sends
+  `ranked:false` and `displayElo:null` and every screen prints *Unranked*. Showing
+  the seed 1000 instead would be presenting a number nobody has earned as if it were
+  a measurement — and on a fresh install that is the state of every team, so this is
+  the common path, not an edge case.
+- [x] Backend: **`src/utils/globalSettings.js`** — a cached reader over the
+  `global_settings` table that 013 created and nothing had ever read. Never throws
+  and never blocks a request: a missing row, a malformed row, or a dead connection
+  falls back to `DEFAULTS` (`elo.base` 1000, `elo.k_factor` 32, 48h challenge TTL, 24h
+  dispute window, 30%/min-3 freeze thresholds) so tuning policy is a row you edit,
+  not a redeploy — while a broken row can never take matches offline.
+- [x] Backend: **the exchange is one transaction.** On a verified result: both teams'
+  `elo`, `wins/losses/draws`, and **exactly two `elo_history` rows**, all in the same
+  commit as the status change. A crash halfway cannot leave one team rated and the
+  other not, and it cannot leave a `completed` match with no ledger.
+- [x] Backend: `elo` and the legacy `elo_rating` column are written **in lockstep**.
+  013 renamed the concept but pre-sprint screens still read the old column; keeping
+  both correct is two lines, and letting them drift would make the rankings screen
+  disagree with the match history for reasons no one would find quickly.
+- [x] **`test/elo.test.js` — 10 tests, `npm test` (`node --test`, no new dependency).**
+  Symmetric exchange (what the winner gains the loser loses, exactly); an upset pays
+  more than an expected win; a draw moves points *toward* the lower-rated team; the
+  K-factor is respected; `expected()` is 0.5 at parity and monotonic; a 400-point gap
+  is the classic 10:1 odds; ratings never go negative; `competitiveness` hits 100 at
+  parity and floors at 5; `outcomeFor` maps a winner id to S and `null` to a draw and
+  **throws on a team that isn't in the match** — a silent 0.5 there would quietly
+  rate a match between the wrong teams. **10 pass / 0 fail.**
+- [x] Bug found by writing the tests, not by running the app: `applyResult` used a
+  single placeholder for both `elo` and `elo_rating` in one UPDATE, which Postgres
+  answers with `42P08 could not determine data type of parameter` — every verification
+  would have failed. Fixed with two placeholders.
+
+## Wave S2-C (Matchmaking: challenge → result → owner verify → dispute)
+Completed:
+- [x] Backend: **`migrations/016_matches_elo.sql`** — `matches`, `match_results`,
+  `disputes`, `elo_history` brought up to what the flow actually needs, plus the
+  invariants that a JS pre-check cannot hold: `ux_matches_booking_live` (a **partial**
+  unique index — one live match per booking, so two simultaneous challenges on one
+  slot cannot both win), `match_results_match_id_submitted_by_team_key` (the
+  one-submission-per-team rule, ER2.1, enforced by the database rather than by a
+  read-then-write — 013 declares it as an inline `UNIQUE (match_id,
+  submitted_by_team)`, so the name is Postgres's and `friendlyDbError` keys its 409
+  on that exact string), and
+  `chk_matches_status` (the state machine's third copy). Applied to Supabase; all 25
+  post-migration verification checks pass.
+- [x] Backend: **`src/routes/matches.js` — 11 endpoints, one transaction shape.**
+  preview / linkable-bookings / owner-pending / opponents / list / challenge / detail /
+  respond / result / verify / dispute. Four rules shape every handler: **the body is
+  never authority** (which team you may act for is re-read from `team_members` inside
+  the locked transaction — `{"challengerTeam": someoneElsesTeam}` gets a 403, not a
+  match); **lock then decide** (`lockMatch` first, or two captains submitting in the
+  same instant both conclude they are not the second and leave the match stuck in
+  `accepted` with two results and nobody to advance it); **a return never leaves an
+  open transaction** (`finally` always releases, early exits `bail()` → ROLLBACK);
+  and **emit after commit** (a socket fired inside the transaction tells the client to
+  re-read a row that isn't durable yet, and it reads the old one).
+- [x] Backend: **`src/utils/matchCore.js`** — the shared match layer, kept out of the
+  route file so the route reads as the state machine and nothing else. The view
+  columns, `lockMatch`/`fetchMatchView`/`shapeMatch`, roster + captain lookups,
+  `deriveCompAndPreview`, the chat/socket/notification fan-out (`announceToTeam`,
+  `fanOut`, `emitAfterCommit`) and `applyDisputeFreeze`.
+- [x] Backend: **competitiveness is deterministic and honest.**
+  `round(100 − (min(|eloA − eloB|, 400) / 400) × 95)` → 5–100, snapshotted onto the
+  match row at challenge time so the number the user agreed to is the number stored.
+  It is `null` — not 50, not 0 — when either team is unranked, and every widget that
+  draws it handles null explicitly rather than painting an empty bar that reads as
+  "0% competitive".
+- [x] Backend: **`src/utils/matchPreview.js` (FR5.10)** — template NLG over **real**
+  features: the rating gap, each side's last-5 form and streak, and win rates. Pure,
+  no database, no external API. The label the client must show is returned by the
+  server (`previewLabel: 'Preview'`) rather than hard-coded in the app, because the
+  honest label is part of the contract — not a string a future screen can quietly
+  upgrade to "AI prediction".
+- [x] Backend: **`src/jobs/matchExpiryJob.js`** — the fourth sweep. A 48h challenge
+  (FR5.12) settles to `expired` and **releases the booking for reuse**. Expiry is also
+  enforced on read, so accepting a lapsed challenge is refused even when the sweep
+  hasn't run yet — a job that is late must never be the difference between a valid and
+  an invalid transition. Per-row transactions with a `_running` guard, so one bad row
+  cannot stall the queue and a slow sweep cannot overlap itself.
+- [x] Backend: **ER2.1 freeze / ER2.3 platform freeze.** Conflicting submissions send
+  the match to `disputed` and log a **SYSTEM** dispute row with `raised_by_team NULL`,
+  so the conflict counts against neither team's ratio. A team whose dispute ratio
+  exceeds 30% over ≥3 matches has its rating frozen platform-wide: the match still
+  completes and still records W/L, but no points move and the response says so in
+  plain words instead of silently doing nothing.
+- [x] Backend: **the venue owner has no pen.** `PATCH /verify` confirms what two
+  captains already agreed on; there is no score field. Ownership of the specific venue
+  is checked in SQL (`v.owner_id = $1`), not from the body. Adjudicating a disagreement
+  is the admin's job (S.7) — giving the owner an override here would make the "both
+  captains agree" gate decorative.
+- [x] Backend: **`match:update` deliberately carries only ids, never the match.** One
+  emit reaches both rosters *and* the venue owner, and those audiences have different
+  read permissions (a team may not see the opponent's submission until both are in).
+  Every client re-reads through the gated endpoint, so the socket can never become a
+  way around a read gate.
+- [x] Flutter: `models/match.dart` + `services/match_service.dart` — typed
+  `MatchModel`/`MatchSide`/`MatchSubmission`/`OpponentCandidate`/`MatchPreview`/
+  `LinkableBooking`/`MatchCenterData`, all DECIMAL via `asNum`, and a never-throwing
+  service returning typed objects for reads and the raw envelope for mutations so a
+  screen can surface the backend's own sentence.
+- [x] Flutter: **`widgets/match_widgets.dart`** — one home for every match visual, so
+  a competitiveness bar cannot read "well matched" in green on one screen and amber on
+  the next. `CompetitivenessTone` (four wide bands — the score is a gap transform, not
+  a measurement, and ten narrow bands would overstate what it knows),
+  `CompetitivenessBar`, `CompetitivenessGauge` (a real semi-circular `CustomPaint` that
+  sweeps in from zero), `TrustBadgeChip`, `EloPill`, `EloDeltaChip` (a zero delta reads
+  "Frozen"/"No change", never "+0"), `MatchStatusChip`, `ChallengeCountdown` (ticks per
+  second under an hour, per minute above, and turns red under six), `TeamCrest`,
+  `MatchPreviewBlock` and `MatchEmptyState`.
+- [x] Flutter: **`find_opponents_screen` rewritten** to the real endpoint (FR5.3–5.5).
+  The sport chips are gone and that is not a lost feature: the endpoint is
+  pairing-relative and the backend refuses cross-sport challenges, so *which of my
+  teams is playing* is what picks the sport now — and it does so honestly. The picker
+  defaults to a team the user **captains**, because `canChallenge` is captain-only and
+  landing on a screen of disabled buttons reads as broken. A divider marks where the
+  ±400 band ends rather than hiding the rest.
+- [x] Flutter: **`match_challenge_screen`** (FR5.8–5.12) — VS header, the gauge, a
+  side-by-side rating/record/win-rate comparison, the generated preview under its
+  server-supplied *Preview* label, and the linked-venue picker. The picker is not a
+  convenience, it is the rule: no booking, no challenge.
+- [x] Flutter: **`match_center_screen`** — a tab strip on the teams area (reached from
+  the teams list row and the chat header, not a global tab that would have to ask
+  "which team?"). Challenges in/out with live countdowns and accept/reject, Upcoming
+  with the result action once the slot has started, and History with the scoreline,
+  the ±ELO delta, and the dispute flag while the 24h window is open (FR5.16/FR5.17).
+  Re-reads on `match:update`.
+- [x] Flutter: **`widgets/match_result_dialog.dart`** — the submission sheet (winner
+  picker + score steppers) and the dispute sheet. Scores are held **challenger-first
+  in the match's own orientation** even though the rows are drawn viewer-first, so the
+  two captains' submissions are directly comparable in the database. The sheet branches
+  on the returned status, so a captain learns immediately that their number opened a
+  dispute rather than finding out later.
+- [x] Flutter: **owner side** — `owner_match_verify_screen` lists `awaiting_owner`
+  matches on the owner's own venues with **both** submissions printed identically
+  (their agreement is visible, not asserted), a confirm-then-verify action, and no
+  score field. Plus the "Match results to verify" card on the owner dashboard, which
+  appears live on `match:update` and is hidden when the queue is empty — it is a task,
+  not a statistic.
+- [x] **Gap found and closed while wiring the Upcoming tab:** the list payload shipped
+  `resultsIn` (a count) but nothing viewer-scoped, so at `resultsIn == 1` the app could
+  not tell "you already used your one shot" from "you still owe a result" — and would
+  offer a Submit button that could only ever 409. `matchCore` now aggregates
+  `submitted_teams` and `shapeMatch` derives `iSubmitted`, which answers only whether
+  **my** side is still owed one and so never leaks the opponent's submission through
+  the read gate that hides it.
+- [x] **`run_match_flow_check.js` — 69/69 checks, over real HTTP against the live
+  database.** `npm test` proves the arithmetic; this proves the seams the unit tests
+  cannot reach. Happy path (challenge → accept → two agreeing results → owner verifies
+  → ratings move, two `elo_history` rows netting to zero, W/L recorded, both teams now
+  ranked); conflict path (disagreeing submissions → `disputed`, a SYSTEM dispute with
+  `raised_by_team NULL`, verification refused afterwards); dispute inside the 24h
+  window; authority (non-captains blocked, a stranger owner cannot verify, the body
+  cannot override who you are); idempotency (no double submission, no double
+  verification, no second challenge on a booking that already has a live match); and
+  the 48h expiry sweep releasing the booking for reuse. It also **seeds** — two real
+  public teams with captains, chat channels and confirmed bookings, which is exactly
+  the fixture the two-phone manual test needs.
+- [x] `flutter analyze`: **No issues found!** `npm test`: **10/10.** Server boots clean
+  with all four sweep jobs (`[MatchExpiryJob] Started — sweeps every 5 min, challenge
+  TTL 48h.`).
+- [x] **Deferred, reported not hidden:** admin dispute resolution UI is S.7's (the
+  backend rule that a `disputed` match can never have ELO applied is already in place
+  and covered by the harness); Wave A's voice notes and reply-to still stand as clean
+  follow-ups.
+

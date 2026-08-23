@@ -1,0 +1,181 @@
+/**
+ * global_settings reader  —  S.2 Wave B
+ *
+ * Migration 013 created `global_settings (key text PRIMARY KEY, value jsonb)` and
+ * seeded four rows, but until now NOTHING read them. This module is the single
+ * place that does, so a value like the ELO K-factor is tunable from the database
+ * instead of being a literal buried in a route.
+ *
+ * Three things this has to get right, none of which are obvious:
+ *
+ *   1. NEVER THROW. Settings are read on the hot path of verifying a match. If
+ *      the settings table is missing, empty, or the connection blips, an ELO
+ *      calculation must still happen with the documented defaults rather than
+ *      500-ing a match the players already played. Every failure here degrades
+ *      to DEFAULTS and logs once.
+ *
+ *   2. SCALARS AND OBJECTS BOTH. The seeded rows are a mix: `elo` is a jsonb
+ *      OBJECT (`{"base":1000,"k_factor":32}`) while `commission_pct` is a jsonb
+ *      STRING (`'0'`). node-postgres parses jsonb for us, so `value` arrives as
+ *      an object, a string, or a number depending on the row. Callers get a
+ *      typed accessor per setting rather than having to know which.
+ *
+ *   3. CLAMP, DON'T TRUST. `global_settings` is admin-writable. A typo like
+ *      `{"base":"abc"}` must not propagate NaN into a team's rating column,
+ *      where it would poison every future match. Anything non-finite or out of
+ *      a sane band falls back to the default for that field alone.
+ *
+ * Cached for TTL_MS because a match verification reads it once per request and
+ * these values change roughly never. `invalidate()` exists so an admin settings
+ * endpoint (S.7) can drop the cache the moment it writes.
+ */
+
+const pool = require('../db/pool');
+
+/**
+ * The values that ship in migration 013. Duplicated here deliberately: this is
+ * the contract the code guarantees even with an empty table, so it must be
+ * readable without opening the .sql file.
+ */
+const DEFAULTS = Object.freeze({
+  elo: Object.freeze({ base: 1000, k_factor: 32 }),
+  commission_pct: 0,
+  deposit_pct: 20,
+  sports_enabled: Object.freeze({ football: true, cricket: true }),
+  match: Object.freeze({
+    challenge_ttl_hours: 48,   // FR5.12
+    dispute_window_hours: 24,  // FR5.17
+    dispute_freeze_ratio: 0.30, // ER2.3
+    dispute_freeze_min: 3,     // ER2.3
+  }),
+});
+
+const TTL_MS = 60_000;
+
+/** key -> { value, at } */
+const cache = new Map();
+
+/** One log line per bad key, not one per request. */
+const warned = new Set();
+
+function warnOnce(key, message) {
+  if (warned.has(key)) return;
+  warned.add(key);
+  console.warn(`[settings] ${key}: ${message}`);
+}
+
+/**
+ * Read one row. Accepts an optional `client` so a caller already inside a
+ * transaction reads through the same connection instead of grabbing a second one
+ * from the pool (which, under load, is how you deadlock yourself).
+ */
+async function readRow(key, client) {
+  const q = 'SELECT value FROM global_settings WHERE key = $1';
+  const runner = client || pool;
+  const res = await runner.query(q, [key]);
+  return res.rows.length ? res.rows[0].value : undefined;
+}
+
+/**
+ * Raw setting value, cached. Returns DEFAULTS[key] when the row is absent or
+ * unreadable. Never throws.
+ */
+async function get(key, { client = null, fresh = false } = {}) {
+  const fallback = Object.prototype.hasOwnProperty.call(DEFAULTS, key)
+    ? DEFAULTS[key]
+    : undefined;
+
+  if (!fresh) {
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
+  }
+
+  try {
+    const value = await readRow(key, client);
+    if (value === undefined || value === null) {
+      // Absent row is not an error — it means "use the documented default".
+      cache.set(key, { value: fallback, at: Date.now() });
+      return fallback;
+    }
+    cache.set(key, { value, at: Date.now() });
+    return value;
+  } catch (e) {
+    // A settings read must never be the reason a match cannot be verified.
+    warnOnce(key, `read failed (${e.message}); using default`);
+    return fallback;
+  }
+}
+
+/** Coerce to a finite number inside [min, max], else `fallback`. */
+function clampNum(raw, fallback, min, max) {
+  const n = typeof raw === 'number' ? raw : Number.parseFloat(String(raw));
+  if (!Number.isFinite(n)) return fallback;
+  if (n < min || n > max) return fallback;
+  return n;
+}
+
+/**
+ * ELO parameters, already validated and camelCased for JS callers.
+ *
+ *   base     starting rating for a brand-new team  (teams.elo DEFAULT 1000)
+ *   kFactor  how violently one match can move a rating
+ *
+ * Bands are deliberately generous but finite: a K of 0 would freeze the whole
+ * ladder silently, and a K of 10_000 would make one match meaningless-by-noise.
+ * Either is far more likely to be a typo than an intention.
+ */
+async function elo({ client = null, fresh = false } = {}) {
+  const raw = await get('elo', { client, fresh });
+  const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+
+  return {
+    base: Math.round(clampNum(obj.base, DEFAULTS.elo.base, 100, 5000)),
+    kFactor: clampNum(obj.k_factor ?? obj.kFactor, DEFAULTS.elo.k_factor, 1, 200),
+  };
+}
+
+/** Drop cached values so the next read hits the database. */
+function invalidate(key) {
+  if (key) cache.delete(key);
+  else cache.clear();
+}
+
+/**
+ * Match lifecycle timings (FR5.12, FR5.17, ER2.3), validated and camelCased.
+ *
+ *   challengeTtlHours   how long an unanswered challenge lives            (48)
+ *   disputeWindowHours  how long after verification a result can be
+ *                       disputed                                          (24)
+ *   disputeFreezeRatio  fraction of a team's matches disputed BY that team
+ *                       that triggers a platform-wide ELO freeze         (0.30)
+ *   disputeFreezeMin    minimum disputes before the ratio is even
+ *                       considered, so a team that disputes its first and
+ *                       only match is not frozen at 100%                    (3)
+ *
+ * The upper clamps matter more than they look. A TTL of 10_000 hours makes
+ * challenges effectively immortal and the booking they pin unusable (the live
+ * match per booking is UNIQUE); a freeze ratio of 0 would freeze every team that
+ * ever raised one dispute. Both are typo shapes, not intentions.
+ */
+async function match({ client = null, fresh = false } = {}) {
+  const raw = await get('match', { client, fresh });
+  const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const d = DEFAULTS.match;
+
+  return {
+    challengeTtlHours: clampNum(
+      obj.challenge_ttl_hours ?? obj.challengeTtlHours, d.challenge_ttl_hours, 1, 720,
+    ),
+    disputeWindowHours: clampNum(
+      obj.dispute_window_hours ?? obj.disputeWindowHours, d.dispute_window_hours, 1, 720,
+    ),
+    disputeFreezeRatio: clampNum(
+      obj.dispute_freeze_ratio ?? obj.disputeFreezeRatio, d.dispute_freeze_ratio, 0.01, 1,
+    ),
+    disputeFreezeMin: Math.round(clampNum(
+      obj.dispute_freeze_min ?? obj.disputeFreezeMin, d.dispute_freeze_min, 1, 1000,
+    )),
+  };
+}
+
+module.exports = { DEFAULTS, get, elo, match, invalidate, clampNum };
