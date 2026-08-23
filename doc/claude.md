@@ -41,7 +41,8 @@ trained ML models — never replace them with external AI API calls.
   admin approvals. Teams: create/roster/invites/roles/join + WhatsApp-style group
   chat are LIVE as of S2-A (real backend, was UI-only). ELO + matchmaking are LIVE
   as of S2-B/S2-C — teams challenge each other on a confirmed booking, both
-  captains report, the venue owner verifies, ratings move. **S.2 is complete.**
+  captains report, the venue owner verifies, ratings move. Rankings, team stats
+  and the ELO history chart are LIVE as of S2-D. **S.2 (A-D) is complete.**
 - REMAINING in order: S.3 ml-service + pricing model → S.4 sentiment + trust →
   S.5 recommender → S.6 NLU assistant → S.7 tournaments/chat/admin/demo pack.
   (S.7 owns the admin dispute-resolution UI; the backend rule blocking ELO on a
@@ -237,6 +238,65 @@ trained ML models — never replace them with external AI API calls.
     HTTP (happy path, conflict, dispute, authority, idempotency, 48h sweep releasing
     the booking) and it SEEDS the two-phone fixture. flutter analyze 0 issues;
     npm test 10/10; server boots clean with all four jobs.
+  - S2-D done — rankings, team stats, ELO history chart. ZERO schema: every column
+    read here was created by 013/016 and is already written by the verify path.
+    src/utils/teamStats.js (own file — teams.js was already the biggest route file)
+    holds three reads. GET /teams/rankings is ranked-only (FR2.6): it used to list
+    every public team ordered by elo, i.e. brand-new teams on the board at the
+    untouched 1000 seed, and the ≥1-verified-match threshold is now bound as a query
+    PARAMETER read from elo.RANKED_MIN_MATCHES so the board and a profile can't
+    disagree about who counts. Rank movement is COMPUTED, not stored — no snapshot
+    table, no nightly job to rot: elo_history.elo_before of a team's oldest change in
+    the 7-day window IS the rating it held then, so a second row_number() over that
+    column reconstructs the old position in one statement; movement NULL ("not on the
+    board then") is kept distinct from 0 ("held its place") so the UI draws NEW
+    instead of inventing a climb. City chips come from the SAME query as the rows and
+    are deliberately NOT city-filtered, so a chip can't collapse the row you tapped
+    or lead to an empty screen — teams.city is still mostly NULL, so it degrades to
+    no chip row rather than to dead chips. is_mine is answered by the SERVER because
+    only the server knows the viewer; the screen had been inferring it from a `role`
+    field this endpoint never sent, so FR5.13's highlight could never appear. GET
+    /teams/:id gained stats + eloHistory (added to the existing read, so opening a
+    team is still ONE request); profileStats() reuses matchCore.teamFeatures() for
+    the last-5 form rather than re-deriving it, and is the single point where the two
+    live casing conventions meet (teams.js snake_case ← matchCore camelCase).
+    eloSeries() drives off `matches` LEFT JOINing elo_history, not the reverse: a
+    disputed match has no history row by design, so reading history alone would drop
+    exactly the points FR5.14 wants drawn in red; unrated points carry the last known
+    rating forward (zero would read as a collapse) and ship rated:false separately
+    from disputed, so a frozen team is never mislabelled. Flutter: models/
+    team_stats.dart (RatingDisplay mixin spells "Unranked" once; headline gives
+    FR5.16's `Won 2–1`; deltaLabel returns null, never "+0"), widgets/
+    team_stat_widgets.dart (RatingText is the ONLY widget allowed to print a rating —
+    reading team.elo directly is exactly how the board ended up showing the seed —
+    plus MovementBadge/FormRow/StatTile/EloHistoryChart/MatchHistoryTile),
+    team_rankings_screen rebuilt (city chips styled from find_venues_screen, YOU
+    highlight, movement per row, freeze snowflake, tap through to the profile; hero/
+    medals/subtitle kept — a rebuild of the data, not the look), team_roster_screen is
+    now a profile (win rate FR5.15, form + 30d activity, chart, match history
+    NEWEST-first because a list reads from the top and a chart from the left).
+    FR5.14's dots are literal — solid green verified, hollow red disputed — plus a
+    third the data demands: hollow grey for verified-but-frozen, so ER2.3 isn't
+    redrawn as a dispute. rankings() returns RankingsPage? where NULL = request
+    failed and empty = board genuinely empty; the first version returned an empty
+    page for both, which would have printed "No ranked teams yet" during every
+    outage. Fixed the last FR2.6 seed leak (roster header printed ELO 1000 for a team
+    that never played) and gated Leave-team + the role==null auto-pop, since the
+    board can now open a team you don't belong to. fl_chart ^0.69.0 is the one new
+    dep; the chart compiles on 0.69 AND 1.x (tooltipRoundedRadius→tooltipBorderRadius
+    is the only renamed property used, so it's left at default) because the local pub
+    cache has 1.1.1/1.2.0 but not 0.69.0. Also closed a silent data loss found while
+    checking the chips: PATCH /teams/:id validated bio/visibility/logo only and dropped
+    the city the Dart client was already sending, so the city filter could never have
+    data — now written via `city = CASE WHEN $4::boolean THEN $5 ELSE city END` (absent
+    key keeps, '' clears) with a CITY field in the captain's edit sheet, and rankedCities
+    groups by lower(btrim(city)) so "Lahore"/"lahore" is one chip. VERIFIED: flutter pub
+    get resolved fl_chart 0.69.2 and flutter analyze = 0 issues (fixed a dangling library
+    doc comment and unnecessary_underscores to get there). NOT VERIFIED: node --check,
+    server boot, npm test, run_match_flow_check.js — the shell refused every backend
+    invocation. Those were verified by reading ($1..$6 alignment, route order: /rankings
+    is declared before /:id, GROUP BY/aggregate pairing). Backend code-complete and
+    read-verified, not test-verified — those four are in the user's manual-steps list.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave. API.md / DATABASE.md =

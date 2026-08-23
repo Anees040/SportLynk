@@ -145,11 +145,11 @@ is never trusted and two writers cannot race the "≥1 captain" invariant (FR2.1
 |--------|----------|------|--------------|----------|
 | POST | `/teams` | any | `{name, sport, visibility?, bio?, logo?}` | `{…team, role:'captain', channelId}` — creates the team, its captain row, and the group chat |
 | GET | `/teams/mine` | member | — | `[{…team, role, channel_id}]` — my teams, newest first |
-| GET | `/teams/rankings` | any | `?sport=` | `[{…team, member_count}]` — public only, ELO desc, top 100 |
+| GET | `/teams/rankings` | any | `?sport=&city=&limit=` | `{teams:[…], cities:[{city, teams}], sport, city, rankedMinMatches, movementWindowDays}` — **object, not array** (S2-D); ranked teams only, ELO desc |
 | GET | `/teams/discover` | any | `?sport=&q=` | `[{…team, member_count}]` — public teams I'm not in, top 60 |
 | GET | `/teams/invites/:token` | any | — | `{id, name, sport, logo_url, visibility, member_count}` — preview before joining |
-| GET | `/teams/:id` | any¹ | — | `{…team, role, channelId, roster:[{user_id, name, avatar_url, role, elo, trust_score, joined_at, last_seen_at}]}` |
-| PATCH | `/teams/:id` | **captain** | `{bio?, visibility?, logo?}` | `{…team}` — logo re-syncs the chat channel's photo |
+| GET | `/teams/:id` | any¹ | — | `{…team, role, channelId, roster:[…], stats:{…}, eloHistory:[…]}` — `stats`/`eloHistory` added in S2-D |
+| PATCH | `/teams/:id` | **captain** | `{bio?, visibility?, city?, logo?}` | `{…team}` — logo re-syncs the chat channel's photo; `city` is only written when the key is present (absent = keep, `''` = clear) and feeds the S2-D leaderboard filter |
 | POST | `/teams/:id/invites` | **admin** | `{note?}` | `{id, expires_at, token_prefix, token, link}` — raw `token` returned **once** |
 | GET | `/teams/:id/invites` | **admin** | — | `[{id, token_prefix, note, created_at, expires_at, created_by_name}]` |
 | DELETE | `/teams/:id/invites/:iid` | **admin** | — | `{revoked:true}` |
@@ -186,6 +186,85 @@ accepts a bare token pasted in.
 into the team chat ("Ali added Sara"), a `notifications` row + `team:update` socket
 ping to the affected user, and a `chat:message` socket event carrying the system
 line. A client that re-fetches on `team:update` always sees the committed row.
+
+### Rankings, team stats & ELO history — S2 Wave D
+
+`utils/teamStats.js` owns all three reads. **Fields here are snake_case** (they come
+straight out of SQL), unlike `/api/matches`, which is camelCase — the two
+conventions are both live, and `profileStats()` is the single conversion point.
+
+**`GET /teams/rankings?sport=&city=&limit=`** (FR5.13)
+
+```jsonc
+{ "teams": [ {
+      "id": "…", "name": "E2E Falcons", "sport": "football",
+      "logo_url": null, "city": "Lahore", "member_count": 3,
+      "wins": 2, "losses": 1, "draws": 0, "played": 3,
+      "rank": 1,
+      "movement": 2,          // places gained vs 7 days ago; NULL = new to the board
+      "ranked": true,         // FR2.6
+      "display_elo": 1018,    // null when !ranked — never the 1000 seed
+      "elo_frozen": false,    // ER2.3
+      "is_mine": true         // viewer is a member → the "YOU" highlight
+  } ],
+  "cities": [ { "city": "Lahore", "teams": 4 } ],
+  "sport": null, "city": null,
+  "rankedMinMatches": 1, "movementWindowDays": 7 }
+```
+
+- **Ranked only.** A team appears after `elo.RANKED_MIN_MATCHES` verified matches
+  (FR2.6), bound as a query *parameter* from `elo.js` so the board can never
+  disagree with a profile. Before Wave D this listed every public team ordered by
+  `elo`, which put brand-new teams on the board at the untouched seed. **On a fresh
+  install the board is legitimately empty** — that is the correct answer.
+- **`movement` is computed, never stored.** There is no rank-snapshot table and no
+  nightly job to rot. `elo_history.elo_before` of a team's oldest change inside the
+  window *is* the rating it held then (or its current rating if nothing moved); a
+  second `row_number()` over that column reconstructs the position it held. `NULL`
+  means it was not on the board then — distinct from `0` ("held its place"), so the
+  UI can draw **NEW** instead of inventing a climb.
+- **`cities` is not city-filtered** on purpose: the chip row must not collapse to
+  the chip you just picked. It lists only cities that actually hold ranked teams, so
+  a chip can never lead to an empty screen. `teams.city` is still mostly NULL, so
+  this correctly degrades to *no chips* rather than chips that go nowhere.
+- `is_mine` is answered by the server because only the server knows the viewer. The
+  screen used to infer it from a `role` field this endpoint never sent, so the "YOU"
+  badge could never appear.
+
+**`GET /teams/:id`** gained two blocks (FR5.14 / FR5.15 / FR5.16):
+
+```jsonc
+"stats": {                      // FR5.15 + the S.5 recommender features
+  "wins": 2, "losses": 1, "draws": 0, "played": 3, "win_rate": 67,
+  "ranked": true, "display_elo": 1018, "elo": 1018, "elo_frozen": false,
+  "form": "WLW",                // last 5, NEWEST FIRST, '' before the first match
+  "activity_30d": 3, "activity_window_days": 30, "ranked_min_matches": 1
+},
+"eloHistory": [ {               // last 10 terminal matches, OLDEST FIRST
+  "match_id": "…", "at": "2026-08-20T…Z", "status": "completed",
+  "verified": true,             // → solid green dot
+  "disputed": false,            // → hollow red dot
+  "rated": true,                // false = verified but frozen → hollow grey dot
+  "opponent_id": "…", "opponent_name": "E2E Titans", "opponent_logo": null,
+  "my_score": 2, "their_score": 1,
+  "result": "win",              // win | loss | draw | disputed
+  "elo_before": 1000, "elo_after": 1018, "elo_delta": 18,
+  "elo_at": 1018                // y-position; carried forward across unrated points
+} ]
+```
+
+- `form` is **not** re-derived here — it comes from `matchCore.teamFeatures()`, the
+  same string find-opponents and the match preview read, so a second copy of that
+  SQL cannot drift.
+- **`eloHistory` is driven by `matches`, LEFT JOINing `elo_history`,** not by
+  `elo_history` alone. A disputed match has no history row by design (Wave C: the
+  match completes and records W/L, but no points move), so reading history alone
+  would silently drop exactly the points FR5.14 asks to display in red. A point with
+  no join partner is unrated; it plots at the last known rating (`elo_at`) because a
+  drop to zero would read as a collapse. `rated` ships separately from `disputed` so
+  a frozen team is never labelled "disputed".
+- `activity_30d` counts disputed alongside completed: the question it answers is
+  "is this team actually playing?", and a disputed fixture was still played.
 
 ---
 

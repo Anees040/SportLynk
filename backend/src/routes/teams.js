@@ -29,6 +29,7 @@ const crypto = require('crypto');
 const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const access = require('../utils/teamAccess');
+const stats = require('../utils/teamStats');
 const chat = require('../utils/chatCore');
 const { buildSystemMessage } = require('../utils/chatSystemMessages');
 const { notify } = require('../utils/notify');
@@ -146,25 +147,54 @@ router.get('/mine', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-/** Public leaderboard for a sport (FR2.7). Sport optional → both sports. */
+/**
+ * Public leaderboard (FR2.7 / FR5.13) — S2 Wave D.
+ *
+ * Three things changed here in Wave D, and each one closed a real hole:
+ *
+ *   • RANKED ONLY. This used to list every public team ordered by elo, which put
+ *     brand-new teams on the board at the seed 1000 — the exact thing FR2.6 says
+ *     never to display as a rating. utils/teamStats.js applies the same
+ *     elo.isRanked() threshold the match screens use, so a fresh install now
+ *     returns an EMPTY board, which is the honest answer.
+ *   • ?city=. Free text, so it goes through normaliseCity() first.
+ *   • MOVEMENT + is_mine. Rank change vs 7 days ago, and whether the viewer is a
+ *     member. is_mine has to be computed server-side: the screen was inferring
+ *     it from a `role` field this endpoint never sent, so the "YOU" highlight
+ *     could never appear.
+ *
+ * Returns an OBJECT, not an array, because the screen needs the city chips in
+ * the same round trip and the chips must be derived from the same filtered data
+ * (a chip that leads to an empty list reads as a broken feature). The Dart
+ * caller was updated with it.
+ */
 router.get('/rankings', async (req, res, next) => {
   try {
-    const params = [];
-    let where = "t.visibility = 'public'";
+    let sport = null;
     if (req.query.sport) {
-      const sport = access.validateSport(req.query.sport);
-      if (!sport.ok) return fail(res, 400, sport.message);
-      params.push(sport.value);
-      where += ` AND t.sport = $${params.length}`;
+      const v = access.validateSport(req.query.sport);
+      if (!v.ok) return fail(res, 400, v.message);
+      sport = v.value;
     }
-    const { rows } = await pool.query(
-      `SELECT ${access.TEAM_COLUMNS},
-              (SELECT count(*)::int FROM team_members m WHERE m.team_id = t.id) AS member_count
-         FROM teams t WHERE ${where}
-        ORDER BY t.elo DESC, lower(t.name) LIMIT 100`,
-      params,
-    );
-    return ok(res, rows);
+    const city = stats.normaliseCity(req.query.city);
+
+    const [teams, cities] = await Promise.all([
+      stats.rankings(pool, { sport, city, viewerId: req.user.id, limit: req.query.limit }),
+      // Unfiltered by city on purpose — the chip row must not collapse to the
+      // one chip you already picked.
+      stats.rankedCities(pool, { sport }),
+    ]);
+
+    return ok(res, {
+      teams,
+      cities,
+      sport,
+      city,
+      // Shipped so the empty state can say "≥1 verified match" and the movement
+      // legend can say "7 days" without Dart hard-coding either number.
+      rankedMinMatches: stats.RANKED_MIN,
+      movementWindowDays: stats.MOVEMENT_WINDOW_DAYS,
+    });
   } catch (e) { next(e); }
 });
 
@@ -238,15 +268,26 @@ router.get('/:id', async (req, res, next) => {
     // A private team's roster and bio are members-only.
     if (team.visibility === 'private' && !me) return fail(res, 403, 'This team is private.');
 
-    const [roster, channel] = await Promise.all([
+    const [roster, channel, snapshot, eloHistory] = await Promise.all([
       access.fetchRoster(pool, team.id),
       pool.query(`SELECT id FROM chat_channels WHERE type='team' AND ref_id=$1`, [team.id]),
+      // Wave D item 5 — W/L/D, win rate (FR5.15), the last-5 form string and the
+      // 30-day activity count that S.5's recommender will consume as features.
+      // Read here rather than from a second endpoint because the profile screen
+      // needs all of it on first paint, and a second round trip would let the
+      // header render a win rate before the chart knows the team is unranked.
+      stats.profileStats(pool, team.id),
+      // FR5.14/FR5.16 — the last 10 terminal matches, oldest first, each point
+      // carrying its own verified/disputed flag and signed ELO delta.
+      stats.eloSeries(pool, team.id),
     ]);
     return ok(res, {
       ...team,
       role: me?.role || null,
       channelId: channel.rows[0]?.id || null,
       roster,
+      stats: snapshot,
+      eloHistory,
     });
   } catch (e) { next(e); }
 });
@@ -264,17 +305,24 @@ router.patch('/:id', async (req, res, next) => {
     const bio = access.validateBio(req.body.bio);
     const vis = access.validateVisibility(req.body.visibility, g.team.visibility);
     const logo = access.validateMediaUrl(req.body.logo ?? req.body.logoUrl, { label: 'Logo' });
-    const invalid = [bio, vis, logo].find((x) => !x.ok);
+    const city = access.validateCity(req.body.city);
+    const invalid = [bio, vis, logo, city].find((x) => !x.ok);
     if (invalid) return bail(client, res, 400, invalid.message);
+
+    // City is only written when the key is actually present. A bio-only patch
+    // must not wipe a city set earlier, but sending city:'' must still clear it —
+    // which is why this is a CASE and not the COALESCE the logo uses.
+    const citySent = req.body.city !== undefined;
 
     const { rows } = await client.query(
       `UPDATE teams
           SET bio = $1,
               visibility = $2,
-              logo_url = COALESCE($3, logo_url)
-        WHERE id = $4
+              logo_url = COALESCE($3, logo_url),
+              city = CASE WHEN $4::boolean THEN $5 ELSE city END
+        WHERE id = $6
         RETURNING ${access.TEAM_COLUMNS.replace(/t\./g, '')}`,
-      [bio.value, vis.value, logo.value, req.params.id],
+      [bio.value, vis.value, logo.value, citySent, city.value, req.params.id],
     );
     const team = rows[0];
     // Keep the chat channel's title/photo in step with the team's.

@@ -46,6 +46,8 @@ dependencies:
   image_picker: ^1.0.7
   cloudinary_public: ^0.23.1
   socket_io_client: ^2.0.3
+  # S2 Wave D — the team profile's ELO history line chart (FR5.14).
+  fl_chart: ^0.69.0
 
 dev_dependencies:
   flutter_test:

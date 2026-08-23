@@ -1,5 +1,6 @@
 import '../constants/api_constants.dart';
 import '../models/team.dart';
+import '../models/team_stats.dart';
 import 'api_service.dart';
 
 /// Thin, never-throwing wrapper over the teams API. Reads that feed a list return
@@ -19,8 +20,26 @@ class TeamService {
   Future<List<Team>> mine(String token) async =>
       _teams(await _api.get(ApiConstants.myTeams, token: token));
 
-  Future<List<Team>> rankings(String token) async =>
-      _teams(await _api.get(ApiConstants.teamRankings, token: token));
+  /// The leaderboard (FR5.13).
+  ///
+  /// Wave D changed this endpoint's shape from a bare array to an object, because
+  /// the city chips have to come from the same query as the rows — a second call
+  /// would let the two disagree, and chips that lead to empty screens read as a
+  /// broken feature. So this returns [RankingsPage], not `List<Team>`.
+  ///
+  /// **null means the request failed**, and an empty [RankingsPage] means the
+  /// board is genuinely empty. Those need different sentences on screen: "could
+  /// not load" invites a retry, "no ranked teams yet" invites a challenge. An
+  /// empty page for both would show the wrong one every time the server is down.
+  Future<RankingsPage?> rankings(String token, {String? sport, String? city}) async {
+    final params = <String, String>{};
+    if (sport != null && sport.isNotEmpty) params['sport'] = sport;
+    if (city != null && city.trim().isNotEmpty) params['city'] = city.trim();
+    final r = await _api.get(ApiConstants.teamRankings, token: token, queryParams: params);
+    if (r['success'] != true) return null;
+    final data = r['data'];
+    return RankingsPage.fromJson(data is Map ? Map<String, dynamic>.from(data) : const {});
+  }
 
   Future<List<Team>> discover(String token, {String? q, String? sport}) async {
     final params = <String, String>{};
@@ -29,8 +48,10 @@ class TeamService {
     return _teams(await _api.get(ApiConstants.teamDiscover, token: token, queryParams: params));
   }
 
-  /// Full profile: `{...team, role, channelId, roster}`. Returned raw so the
-  /// screen can distinguish a 403 (private, not a member) from a network error.
+  /// Full profile: `{...team, role, channelId, roster, stats, eloHistory}`.
+  /// Returned raw so the screen can distinguish a 403 (private, not a member)
+  /// from a network error, and so Wave D's `stats`/`eloHistory` blocks can be
+  /// parsed by their own models rather than squeezed into [Team].
   Future<Map<String, dynamic>> detail(String token, String id) =>
       _api.get(ApiConstants.team(id), token: token);
 

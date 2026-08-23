@@ -688,3 +688,127 @@ Completed:
   and covered by the harness); Wave A's voice notes and reply-to still stand as clean
   follow-ups.
 
+## Wave S2-D (Rankings, team stats & ELO chart)
+Completed:
+- [x] Backend: **`src/utils/teamStats.js`** — the three reads Wave D needs, in their own
+  file rather than bolted onto `routes/teams.js`, which was already the largest route
+  file in the project. No migration: every column this wave reads was created by 013/016
+  and is already written by the verify path. Wave D adds **zero schema**.
+- [x] Backend: **`GET /api/teams/rankings?sport=&city=&limit=`** — ranked teams only,
+  ELO descending. Before this it listed *every* public team ordered by `elo`, which put
+  brand-new teams on the leaderboard sitting at the untouched 1000 seed and directly
+  contradicted FR2.6. The `≥ 1 verified match` threshold is bound as a **query parameter
+  read from `elo.RANKED_MIN_MATCHES`**, not typed into the SQL, so the board and a team
+  profile can never disagree about who counts as ranked. On a fresh install the board is
+  legitimately empty and says so — that is the correct answer, not a bug.
+- [x] Backend: **rank movement vs 7 days ago is computed, never stored.** There is no
+  rank-snapshot table and no nightly job that can silently rot. `elo_history.elo_before`
+  of a team's *oldest* change inside the window **is** the rating it held then (and a
+  team with no change in the window still holds its current one), so a second
+  `row_number()` over that column reconstructs the position it occupied — one statement,
+  two CTEs, no second round-trip. `movement` is **NULL when the team was not on the board
+  then**, which is a different fact from `0` ("held its place"): the UI draws **NEW** for
+  the first and a dash for the second, instead of inventing a climb from nothing.
+- [x] Backend: **the city chips come from the same query as the rows.** `rankedCities()`
+  groups ranked teams by `btrim(city)` and is deliberately **not** city-filtered, so
+  picking a chip cannot collapse the row you just tapped, and a chip can never lead to an
+  empty screen. Known and by design: `teams.city` is still mostly NULL (nothing in the
+  create/edit path writes it yet), so this correctly degrades to *no chip row at all*
+  rather than to chips that go nowhere.
+- [x] Backend: **`is_mine` is answered by the server**, because only the server knows who
+  is asking. The screen had been inferring "your team" from a `role` field this endpoint
+  never sent, so FR5.13's highlight could never appear on any device.
+- [x] Backend: **`GET /teams/:id` gained `stats` + `eloHistory`** (FR5.15/FR5.16) — added
+  to the existing profile read rather than as new endpoints, so opening a team is still
+  one request. `profileStats()` reuses `matchCore.teamFeatures()` for the last-5 form
+  string instead of re-deriving it, so the form on the profile is character-for-character
+  the form find-opponents and the match preview already show; a second copy of that SQL
+  would eventually drift from the first. It is also **the single point where the two live
+  casing conventions meet** — `teams.js` speaks snake_case, `matchCore` returns camelCase —
+  and doing the rename in exactly one function is why nothing downstream has to guess.
+- [x] Backend: **`stats` carries the S.5 recommender features now, while the writes are
+  fresh**: `form` (last 5, newest first), `activity_30d`, `win_rate`, `elo_frozen`, and the
+  window sizes themselves so a client never hard-codes "30 days". `activity_30d` counts
+  disputed matches alongside completed ones on purpose — the question it answers is *is
+  this team actually playing*, and a disputed fixture was still played.
+- [x] Backend: **`eloSeries()` drives off `matches` and LEFT JOINs `elo_history`, not the
+  other way round.** A disputed match has no history row by design (Wave C: the match
+  completes and records W/L, but no points move), so reading history alone would silently
+  drop exactly the points FR5.14 asks to draw in red. A point with no join partner plots
+  at the last known rating carried forward — dropping it to zero would read as a collapse
+  — and ships `rated:false` separately from `disputed`, so a **frozen** team's flat line is
+  never mislabelled as a disputed one.
+- [x] Flutter: **`models/team_stats.dart`** — `RankedTeam` / `CityCount` / `RankingsPage` /
+  `TeamStats` / `EloPoint`, plus a `RatingDisplay` mixin so "Unranked" is spelled once.
+  `EloPoint.headline` produces FR5.16's `Won 2–1` (with a real en dash), and `deltaLabel`
+  returns **null** rather than `+0` when a match moved no points.
+- [x] Flutter: **`widgets/team_stat_widgets.dart`** — the same discipline as
+  `match_widgets.dart`: one home for every rating/form/history visual so a rank arrow
+  cannot be green on one screen and grey on the next. `RatingText` (the only widget
+  allowed to print a rating — reading `team.elo` directly is precisely how the leaderboard
+  ended up showing the 1000 seed), `MovementBadge` (four states: NEW / – / ▲n / ▼n),
+  `FormRow`, `StatTile`, `EloHistoryChart`, `MatchHistoryTile`.
+- [x] Flutter: **`EloHistoryChart` implements FR5.14's dot rule literally** — solid green
+  for verified, **hollow red for disputed**, and a third style the spec did not ask for but
+  the data demands: hollow grey for *verified but frozen*, so ER2.3 is not silently
+  redrawn as a dispute. Last 10 matches, oldest left. The Y band is padded from the actual
+  span (`(hi−lo).clamp(20, …)`), because a two-point swing drawn to fit would look like a
+  two-hundred-point collapse. Fewer than two points draws a worded explanation instead of
+  an empty axis, and the legend only lists the dot styles actually on screen.
+- [x] Flutter: **`team_rankings_screen` rebuilt on the real endpoint** (FR5.13) — city
+  filter chips styled from `find_venues_screen` so the two filter rows feel like one app,
+  your teams highlighted (`accentLight` fill + a `YOU` badge + `YOUR TEAM` on the hero),
+  movement under every rank, a freeze snowflake where a rating is frozen, and every row
+  tappable through to the profile. The gradient hero, medals and W/L/D subtitle are kept
+  from the original — this is a rebuild of the data, not of the look.
+- [x] Flutter: **a real failure is not an empty list.** `TeamService.rankings` returns
+  `RankingsPage?` where **null means the request failed** and an empty page means the board
+  is genuinely empty, because those need opposite sentences: "Could not load" invites a
+  retry, "No ranked teams yet" invites a challenge. Returning an empty page for both — the
+  first version of this method did — would have shown *"No ranked teams yet"* every time
+  the server was down. A failed refresh over an existing board keeps the board and adds a
+  stale banner rather than blanking it.
+- [x] Flutter: **`team_roster_screen` is now a team profile** — W/L/D **plus win rate**
+  (FR5.15), the last-5 form pills and 30-day activity, the rating chart, and the FR5.16
+  match history (opponent crest, `Won 2–1`, date, `+18 ELO`) read **newest-first**, because
+  a list is read from the top while a chart is read from the left. This also fixed the
+  third and last FR2.6 seed leak in the app: the header printed `ELO 1000` for a team that
+  had never played.
+- [x] Flutter: **a latent bug the new navigation would have introduced, closed with it.**
+  The leaderboard can now open a team the viewer does not belong to; the roster screen had
+  been rendering *Leave team* unconditionally and popping itself with "You are no longer in
+  this team" on any `team:update` carrying `role == null`. Both are gated on membership now.
+- [x] `fl_chart: ^0.69.0` added to `pubspec.yaml` — the one new dependency this wave, and
+  the version the spec named. **The chart is written to compile against both the 0.69 and
+  1.x API lines**: `tooltipRoundedRadius` (0.69, `double`) was renamed to
+  `tooltipBorderRadius` (1.x, `BorderRadius`), so that single property is left at the
+  package default. Every other symbol used was checked against the cached 1.2.0 source and
+  is identical in both. This matters because the local pub cache holds 1.1.1/1.2.0 but not
+  0.69.0, so resolving `^0.69.0` needs network — and if it has to be `flutter pub add
+  fl_chart` instead, nothing in the file has to change.
+- [x] **City became writable, because the chips were a dead control without it.**
+  `validateCity` + `CITY_MAX` already existed in `teamAccess.js`, exported and called
+  from nowhere; `TEAM_COLUMNS` already returned `t.city`; `team_service.update()`
+  already sent `city`. Only `PATCH /teams/:id` was missing it, so the server answered
+  "Team updated." and dropped the field — silent data loss on the one path Wave D's
+  city filter depends on. Wired: validator + `city = CASE WHEN $4::boolean THEN $5 ELSE
+  city END`, so an absent key preserves the city (a bio-only patch must not wipe it)
+  while `city:''` still clears it. A CITY input was added to the captain's edit sheet.
+- [x] **Chips group case-folded now that a human types the value.** `?city=` always
+  compared `lower(btrim(...))`, but `rankedCities` grouped by `btrim(city)` — so
+  "Lahore" and "lahore" would have drawn two chips returning identical rows. Grouped
+  by `lower(btrim(city))` with `min(btrim(city))` as the display representative.
+- [x] **Gates run and green (app side):** `flutter pub get` resolved **fl_chart 0.69.2**
+  — the `^0.69.0` the spec asked for — and `flutter analyze` reports **No issues found**.
+  Two real lints in the new widget file were fixed to get there: a dangling library doc
+  comment (added `library;`) and `unnecessary_underscores` on the dot-painter callback
+  (`(spot, _, __, index)` → `(spot, _, _, index)`). That the chart compiles unchanged on
+  the 0.69 line is what the deliberately-omitted `tooltipRoundedRadius` line bought.
+- [x] **Still not run, flagged rather than buried:** the backend gates (`node --check`,
+  server boot, `npm test`, `run_match_flow_check.js`) — the shell stayed intermittent and
+  refused every backend invocation. Those edits were verified by reading instead: route
+  order (`/rankings` is declared before `/:id`, so it cannot be swallowed as an `:id`),
+  `$1..$6` placeholder-to-value alignment in the new UPDATE, and the GROUP BY / aggregate
+  pairing in `rankedCities`. **Backend is code-complete and read-verified, not
+  test-verified** — those four commands are in the manual-steps list handed to the user.
+

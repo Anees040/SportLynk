@@ -9,11 +9,13 @@ import 'package:provider/provider.dart';
 
 import '../../constants/colors.dart';
 import '../../models/team.dart';
+import '../../models/team_stats.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/realtime_service.dart';
 import '../../services/team_service.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/team_stat_widgets.dart';
 
 /// The team's "Group info" — the WhatsApp screen you reach by tapping the chat
 /// header. It is both a profile (logo, record, roster) and the admin console
@@ -43,6 +45,14 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
   Team? _team;
   List<Map<String, dynamic>> _requests = [];
   List<Map<String, dynamic>> _invites = [];
+
+  /// S2 Wave D. These arrive inside the same `GET /teams/:id` payload as the
+  /// team, but they cannot live on [Team]: `elo` there is a `num` defaulting to
+  /// the 1000 seed, which has no way to say "Unranked" (FR2.6). [TeamStats]
+  /// carries `ranked` + `displayElo` so the profile can say it.
+  TeamStats? _stats;
+  List<EloPoint> _history = const [];
+
   bool _loading = true;
   String? _error;
   bool _busy = false; // guards a write in flight
@@ -81,9 +91,11 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     final r = await _service.detail(_token, id);
     if (!mounted) return;
     if (r['success'] == true && r['data'] is Map) {
-      final team = Team.fromJson(Map<String, dynamic>.from(r['data'] as Map));
+      final data = Map<String, dynamic>.from(r['data'] as Map);
+      final team = Team.fromJson(data);
       setState(() {
         _team = team;
+        _absorbStats(data);
         _loading = false;
         _error = null;
       });
@@ -96,6 +108,16 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     }
   }
 
+  /// Wave D's two extra blocks. Parsed in one place so `_load` and `_refresh`
+  /// cannot end up reading different keys — a live `team:update` refresh that
+  /// silently dropped the chart would be a hard bug to spot.
+  /// Call inside setState.
+  void _absorbStats(Map<String, dynamic> data) {
+    final s = data['stats'];
+    if (s is Map) _stats = TeamStats.fromJson(Map<String, dynamic>.from(s));
+    _history = EloPoint.listFrom(data['eloHistory']);
+  }
+
   /// Re-fetch after a change. When triggered by a live event, a role of `null`
   /// means I was removed — leave the screen the same way a self-leave does.
   Future<void> _refresh({bool fromEvent = false}) async {
@@ -104,13 +126,17 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     final r = await _service.detail(_token, id);
     if (!mounted) return;
     if (r['success'] == true && r['data'] is Map) {
-      final team = Team.fromJson(Map<String, dynamic>.from(r['data'] as Map));
-      if (fromEvent && team.role == null) {
+      final data = Map<String, dynamic>.from(r['data'] as Map);
+      final team = Team.fromJson(data);
+      if (fromEvent && team.role == null && _team?.role != null) {
         SnackbarUtil.showError(context, 'You are no longer in this team.');
         Navigator.pop(context, 'left');
         return;
       }
-      setState(() => _team = team);
+      setState(() {
+        _team = team;
+        _absorbStats(data);
+      });
       if (team.amAdmin) _loadAdminExtras();
     } else if (fromEvent && r['statusCode'] == 403) {
       // A private team I was removed from now refuses me entirely.
@@ -257,6 +283,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
   // ── Edit team (captain) ────────────────────────────────────
   Future<void> _editTeam() async {
     final bioCtrl = TextEditingController(text: _team!.bio ?? '');
+    final cityCtrl = TextEditingController(text: _team!.city ?? '');
     var isPublic = _team!.isPublic;
     String? newLogo;
     final saved = await showModalBottomSheet<bool>(
@@ -325,6 +352,31 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                 ),
               ),
               const SizedBox(height: 6),
+              const Text('CITY',
+                  style: TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w600,
+                      letterSpacing: 1, color: AppColors.textSecondary)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: cityCtrl,
+                maxLength: 60,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  hintText: 'Lahore',
+                  counterText: '',
+                  helperText: 'Groups your team under a city on the leaderboard',
+                  helperStyle: const TextStyle(
+                      fontSize: 11, color: AppColors.textSecondary),
+                  prefixIcon: const Icon(Icons.location_city_outlined,
+                      size: 20, color: AppColors.textSecondary),
+                  filled: true,
+                  fillColor: AppColors.inputFill,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 6),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 activeThumbColor: AppColors.accent,
@@ -352,7 +404,10 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     if (saved != true) return;
     await _run(
       () => _service.update(_token, _team!.id,
-          bio: bioCtrl.text.trim(), isPublic: isPublic, logo: newLogo),
+          bio: bioCtrl.text.trim(),
+          isPublic: isPublic,
+          city: cityCtrl.text.trim(),
+          logo: newLogo),
       success: 'Team updated.',
     );
   }
@@ -407,10 +462,28 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                         _sectionTitle('Requests to join (${_requests.length})'),
                         ..._requests.map(_requestTile),
                       ],
+                      // ── S2 Wave D ──────────────────────────────
+                      // Placed below the admin console so a captain's actions stay
+                      // where they were, and above Members because a visitor
+                      // arriving from the leaderboard came for the record, not the
+                      // roster.
+                      if (_stats != null) ...[
+                        _sectionTitle('Form'),
+                        _formCard(_stats!),
+                      ],
+                      _sectionTitle('Rating history'),
+                      _chartCard(),
+                      if (_history.isNotEmpty) ...[
+                        _sectionTitle('Recent matches (${_history.length})'),
+                        _historyCard(),
+                      ],
                       _sectionTitle('Members (${_team!.roster.length})'),
                       _membersCard(),
                       const SizedBox(height: 20),
-                      _leaveButton(),
+                      // Only a member can leave. This screen is now reachable from
+                      // the leaderboard, so a visitor would otherwise be offered a
+                      // button that can only fail.
+                      if (_team!.role != null) _leaveButton(),
                     ],
                   ),
                 ),
@@ -436,6 +509,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
 
   Widget _header() {
     final t = _team!;
+    final s = _stats;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -470,19 +544,136 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
             ],
           ),
           const SizedBox(height: 16),
+          // FR5.15. The rating comes from `_stats` (which knows whether the team
+          // is ranked) and falls back to the team's own record only for the
+          // counts, never for the rating: printing `t.elo` here showed every new
+          // team a confident "1000" it had not earned.
           Row(
             children: [
-              _stat('ELO', '${t.elo}'),
-              _stat('Won', '${t.wins}'),
-              _stat('Lost', '${t.losses}'),
-              _stat('Drew', '${t.draws}'),
-              _stat('Win %', '${t.winRate}%'),
+              StatTile(
+                label: s != null && !s.ranked ? 'Rating' : 'ELO',
+                valueWidget: s != null
+                    ? RatingText(s, size: 15)
+                    : const Text('—',
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary)),
+              ),
+              StatTile(label: 'Won', value: '${s?.wins ?? t.wins}'),
+              StatTile(label: 'Lost', value: '${s?.losses ?? t.losses}'),
+              StatTile(label: 'Drew', value: '${s?.draws ?? t.draws}'),
+              StatTile(label: 'Win %', value: '${s?.winRate ?? t.winRate}%'),
             ],
           ),
+          if (s != null && s.eloFrozen) ...[
+            const SizedBox(height: 12),
+            _frozenNotice(),
+          ],
         ],
       ),
     );
   }
+
+  /// ER2.3 — a team over the dispute ratio keeps playing but stops moving. Saying
+  /// so on the profile is the difference between a rule and a mystery.
+  Widget _frozenNotice() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: AppColors.warning.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.ac_unit, size: 15, color: AppColors.warning),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Rating frozen — too many disputed results. Matches still count; '
+                'points resume once disputes are resolved.',
+                style: TextStyle(fontSize: 11.5, height: 1.35, color: AppColors.textSecondary),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  // ── S2 Wave D cards ────────────────────────────────────────
+
+  /// Last-5 form + 30-day activity — the two features S.5's recommender will read,
+  /// shown here so they are visibly real rather than only present in JSON.
+  Widget _formCard(TeamStats s) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('Last 5',
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                const Spacer(),
+                FormRow(s.form, size: 24),
+              ],
+            ),
+            const Divider(height: 20, color: AppColors.border),
+            Row(
+              children: [
+                const Icon(Icons.local_fire_department_outlined,
+                    size: 16, color: AppColors.textSecondary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    s.activity30d == 0
+                        ? 'No matches in the last ${s.activityWindowDays} days'
+                        : '${s.activity30d} ${s.activity30d == 1 ? 'match' : 'matches'} in the last ${s.activityWindowDays} days',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                ),
+                Text('${s.played} total',
+                    style: const TextStyle(
+                        fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.primary)),
+              ],
+            ),
+          ],
+        ),
+      );
+
+  /// FR5.14 — the ELO line chart over the last 10 terminal matches.
+  Widget _chartCard() => Container(
+        padding: const EdgeInsets.fromLTRB(8, 16, 14, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: EloHistoryChart(_history),
+      );
+
+  /// FR5.16 — opponent, "Won 2–1", date, "+18 ELO".
+  Widget _historyCard() => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          children: [
+            // Newest first here, the opposite of the chart's left-to-right axis —
+            // a list is read from the top, a chart from the left.
+            for (var i = _history.length - 1; i >= 0; i--) ...[
+              if (i < _history.length - 1)
+                const Divider(height: 1, indent: 12, endIndent: 12, color: AppColors.border),
+              MatchHistoryTile(_history[i]),
+            ],
+          ],
+        ),
+      );
 
   Widget _bioCard() => Container(
         margin: const EdgeInsets.only(top: 12),
@@ -801,18 +992,6 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
         ),
         child: Text(text,
             style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
-      );
-
-  Widget _stat(String label, String value) => Expanded(
-        child: Column(
-          children: [
-            Text(value,
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.primary)),
-            const SizedBox(height: 2),
-            Text(label, style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary)),
-          ],
-        ),
       );
 
   Widget _roleBadge(String role) {
