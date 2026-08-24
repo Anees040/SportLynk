@@ -43,10 +43,17 @@ trained ML models — never replace them with external AI API calls.
   as of S2-B/S2-C — teams challenge each other on a confirmed booking, both
   captains report, the venue owner verifies, ratings move. Rankings, team stats
   and the ELO history chart are LIVE as of S2-D. **S.2 (A-D) is complete.**
-- REMAINING in order: S.3 ml-service + pricing model → S.4 sentiment + trust →
-  S.5 recommender → S.6 NLU assistant → S.7 tournaments/chat/admin/demo pack.
-  (S.7 owns the admin dispute-resolution UI; the backend rule blocking ELO on a
-  disputed match is already in place.)
+- IN PROGRESS S.3 — the ML tier. **S3-A is complete**: `ml-service/` exists as a
+  third process (FastAPI, port 8000), authenticates on `X-API-Key`, reports its own
+  model inventory on `/health`, and `backend/src/services/mlClient.js` already calls
+  it with a heuristic fallback so nothing breaks when it is down. **No model is
+  trained yet** — `/predict/*` answers 503 `model_not_loaded` and every price the
+  backend returns is labelled `source:'heuristic'`. Wave B trains model #1.
+- REMAINING in order: S.3 B-E (simulator → train → serve real predictions → owner
+  dashboard chart) → S.4 sentiment + trust → S.5 recommender → S.6 NLU assistant →
+  S.7 tournaments/chat/admin/demo pack + deploy ml-service as a second Render
+  service. (S.7 owns the admin dispute-resolution UI; the backend rule blocking ELO
+  on a disputed match is already in place.)
 - Wave log (append one line per completed wave):
   - (example: S1-A done — ledger unified 20%/24h, noShowJob + autoApproveJob)
   - S1-A done — escrow ledger unified (20% deposit / 24h window / 30-min no-show),
@@ -297,9 +304,129 @@ trained ML models — never replace them with external AI API calls.
     invocation. Those were verified by reading ($1..$6 alignment, route order: /rankings
     is declared before /:id, GROUP BY/aggregate pairing). Backend code-complete and
     read-verified, not test-verified — those four are in the user's manual-steps list.
+  - S3-A done — ML tier scaffold: ml-service/ (FastAPI, port 8000) + the Node client.
+    NO MODEL THIS WAVE — it ships the contract, the trust boundary and the degradation
+    path so Wave B's model drops into a service that already boots, authenticates and
+    reports its inventory. The decision the whole milestone rests on, written down here
+    because features.py can't be authored without it: model #1 is a BINARY CLASSIFIER
+    over slots, P(booked | features, price), not a bookings-per-day regression — price
+    is an INPUT feature (price_ratio), so one model gives both the 72h forecast (hold
+    ratio at 1.0, sweep hours) and the price suggestion (sweep a grid, take
+    argmax(price × P(book)) = EXPECTED REVENUE, never argmax of probability, since the
+    cheapest price always wins on probability and an engine optimising that recommends
+    zero). Two DB measurements decided Wave B before any code: 22 bookings exist and
+    slots.status='booked' is 0 across 3,825 slots, and count(DISTINCT price) per venue
+    = 1 — the real data has ZERO elasticity signal, no slot was ever offered at two
+    prices. So the synthetic simulator is the only honest option and the model card must
+    say so in those words (recorded in generate_bookings.py + data/README.md).
+    app/core/features.py is THE deliverable: 11 features, order frozen, imported by BOTH
+    training and serving so they cannot skew, with FEATURE_SPEC_VERSION stamped into the
+    joblib and re-checked at load — mismatch = status 'incompatible' = 503, never a
+    silent prediction on misaligned columns. Encoding/imputation live INSIDE the sklearn
+    Pipeline so they ship with the artifact. venue_rating is nullable → NaN NEVER 0
+    ("unrated" isn't "rated zero", and collapsing them teaches the model new venues are
+    bad venues); venue_id is EXCLUDED with the reason recorded (a model keyed on it
+    can't price a venue that signed up this morning — for us cold start is the common
+    case). All date math is naive PKT: slot_date/start_time store PKT wall-clock
+    (routes/venues.js:110 proves it), so golden rule 4's "store UTC" governs timestamptz
+    columns, not these two. main.py refuses to start without ML_API_KEY (SystemExit 78)
+    at IMPORT time, not in lifespan — a listening process looks healthy to anything
+    watching the port; hmac.compare_digest not == (== short-circuits at the first
+    differing byte, so timing leaks the key one byte at a time); missing and wrong key
+    return the SAME 401 with the SAME body; binds 127.0.0.1, no CORS; PUBLIC_PATHS is an
+    exact-match frozenset, not startswith('/health'), which would also exempt a future
+    /health/secrets. /health is public and truthful (per-model status + reason,
+    modelsReady/Total, the running sklearn/numpy/pandas versions — joblib pickles aren't
+    version-portable) and reports an apiKeyFingerprint (sha256[:8], never the key) whose
+    only job is proving backend/.env and ml-service/.env hold the same secret; two 401s
+    can't tell you that, and the difference is usually a trailing space no editor shows.
+    registry.py NEVER raises — six ordered checks, any failure becomes a status with a
+    reason; lazy load so a corrupt artifact is a 503 on one endpoint, not a dead process.
+    THE ML SERVICE HAS NO HEURISTIC OF ITS OWN, deliberately: /predict/* answers 503
+    model_not_loaded, because if Python invented base×1.15 every response would arrive
+    labelled source:'model' and that label would be a lie for the rest of the project —
+    same principle as matchPreview.js's server-shipped previewLabel. The rule lives in
+    mlClient.js instead, on the far side of a failed call. mlClient.js never throws and
+    never leaks (ER2.6): source:'model'|'heuristic' on every response as CONTRACT not
+    diagnostics; confidence and demand are NULL on the heuristic path (a 15% uplift has
+    no confidence, and a fabricated 0.5 is indistinguishable on screen from a real one);
+    guardrails on BOTH paths clamp to [base×0.70, base×1.50] — the same band the model
+    is TRAINED on, so a suggestion is interpolation not extrapolation — round to PKR 50,
+    and set clamped:true only when the BAND bit, not for rounding, or the flag would
+    mean nothing. Found and fixed a guardrail its own rounding could violate: base 1,010
+    → min 707 → round to 700, below the floor just enforced; it now re-clamps onto the
+    50-grid. Number.isFinite gates every model value because Number(undefined) is NaN
+    and NaN serialises to null, which would look exactly like the heuristic path's
+    honest null while being a bug. Circuit breaker (3 fails → 30s) because otherwise
+    every dashboard load pays the full 2s while the service is off, which in dev is most
+    of the time; logs on TRANSITIONS only (globalSettings.warnOnce spirit); health()
+    deliberately BYPASSES it, or the breaker hides the thing you opened the health check
+    to find. ML_TIMEOUT_MS is CLAMPED 100–10000, not trusted. forecastDemand has NO
+    fallback and that asymmetry is the point — a peak-hour price rule is a real business
+    rule, a 72-point probability curve is not, and any fake one becomes a chart nobody
+    can distinguish from a real forecast; it returns available:false, points:[].
+    fetch not axios (Node v22, AbortSignal.timeout gives the exact 2s ceiling and covers
+    DNS+connect+response; run_match_flow_check.js:62 is the precedent; the specified
+    contract is implemented exactly). training/*.py are documented placeholders that
+    SystemExit — golden rule 1 — with the full simulator/pipeline/split/metric/release-
+    gate design in their docstrings. TWO EXTRA app/core/ files the tree didn't name
+    (config.py, registry.py) because "/health returns loaded model versions" needs a
+    registry. TWO THINGS BEYOND THE WAVE TEXT, both closing real gaps: GET /features/spec
+    exists because mlClient.js MUST duplicate PEAK_START/END_HOUR and the price band
+    (Node can't import Python) and this lets check_ml_service.js ASSERT the copies agree
+    — silent drift between two definitions of "peak" is the obvious future bug, since
+    both sides keep returning plausible numbers; and check_ml_service.js STANDS UP ITS
+    OWN failure conditions (a closed port for ECONNREFUSED, a black-hole socket that
+    accepts and never replies to force the real timeout) rather than asking a human to
+    stop uvicorn — a test needing another terminal is a test that gets skipped, and this
+    is the path protecting the owner dashboard. It's also what keeps mlClient.js from
+    being unreferenced code until Wave C wires a route. Two bugs fixed while
+    read-verifying: model_version sits in pydantic's protected model_ namespace and would
+    warn at import (warnings in a boot log teach people to ignore the boot log) →
+    protected_namespaces=() set explicitly, since fastapi is pinned but pydantic arrives
+    transitively; and both predict handlers ended in AssertionError "unreachable until
+    Wave C", which becomes REACHABLE the moment Wave B writes pricing_latest.joblib and
+    would have surfaced as a bare 500 "Internal server error" — the wrong answer to "I
+    just trained a model and the endpoint broke" → now 501 not_implemented, distinct in a
+    log from the 503 that means no-model-yet. requirements.txt is 8 EXACT pins (a joblib
+    artifact is version-sensitive and the model card must name the versions that made
+    it), all with cp314 wheels for the installed Python 3.14.4. .gitignore Python block
+    keeps *_latest.joblib (a fresh clone must serve without training first) and does NOT
+    ignore reports/ (metrics.json + plots + model card are the AI evidence trail).
+    NOT touched: lib/, no migration, no route, no DB connection anywhere in the wave.
+    VERIFIED (user ran every command, all green): pip install resolved the 8 exact pins
+    with no build error; the features import prints pricing-features-v1 11; run_dev.ps1
+    boots reporting pricing=not_loaded; check_ml_service.js 37/37 with 0 failed AND 0
+    skipped — 0 skipped is the load-bearing number, because a skip is what an unreachable
+    service produces, so the up path, the key gate, the cross-language /features/spec
+    assertion and the self-created degradation path (closed port → heuristic, black-hole
+    socket → abort at the 2s ceiling, breaker opening then short-circuiting) all really
+    ran; the two .env key FINGERPRINTS MATCHED, so byte-identical is proven not assumed;
+    node --check and node src/server.js clean; baseline untouched — npm test 10/10,
+    verify_schema 113/113, flutter analyze 0. run_match_flow_check (69/69) was NOT re-run:
+    it needs the server plus its seeded two-team fixture, and this wave touches no match,
+    no ELO, no schema and no route — noted rather than dropped from the baseline, run it
+    when the Wave C/D owner route lands. Read-verified first, and still worth having on
+    record: the guardrail arithmetic on the odd base, spec() publishing exactly the four
+    keys the harness asserts, key_fingerprint == the JS fingerprint (same sha256[:8]),
+    inventory() keys matching /health and the banner, pricing.features resolving via
+    `from ..core import features`, every mlClient payload field matched against
+    extra="forbid", and the 401 body identical for missing vs wrong key. Both read-fixes
+    are confirmed by the boot itself: no pydantic warning on import, and /predict/*
+    answering 503 model_not_loaded rather than the 501 (correct while models/ is empty —
+    the 501 branch is Wave B's to meet first).
+    SECURITY: the dev ML_API_KEY was pasted in cleartext into a chat transcript during
+    this wave. It gates nothing user-facing and ml-service binds 127.0.0.1, so today's
+    exposure is inert — but ROTATE IT in both .env files before S.7 puts ml-service on a
+    public Render URL. Compare the two files by fingerprint, never by printing the key.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave. API.md / DATABASE.md =
   refresh at milestone end.
+- TESTING.md = the QA guide: preflight gates, per-wave feature steps, the
+  adversarial/security suite, data-integrity SQL, and the Definition of Done.
+  Add this wave's feature steps + any new security case when a wave lands, and
+  keep the green-numbers baseline (analyze 0 · npm test · verify_schema ·
+  run_match_flow_check) in the commit message.
 - Known-stale docs, fix only when touched: README deposit wording
   ("full deposit"), any 12h-cancellation references.

@@ -67,3 +67,35 @@ skills-lock.json
 
 # Node modules
 node_modules/
+
+# ─── Python / ml-service (S.3) ──────────────────────────────────────────
+# ml-service/.env is already covered by `**/*.env` above; .env.example is not,
+# and is committed on purpose as the configuration contract.
+__pycache__/
+*.py[cod]
+.venv/
+ml-service/.venv/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Model artifacts. `<key>_latest.joblib` IS COMMITTED — a fresh clone has to be
+# able to serve a real model without first running a training pipeline, which is
+# what makes the demo reliable and lets a supervisor check out the repo and see the
+# feature work. Timestamped runs are the provenance trail on the training machine
+# and are reproducible from train_pricing.py plus its recorded seed, so keeping
+# every one of them in git would bloat the repo for no benefit.
+ml-service/models/*.joblib
+!ml-service/models/*_latest.joblib
+
+# Generated training data. The GENERATOR plus its seed is the reproducibility
+# story, not the CSV — `python training/generate_bookings.py --seed 42` rebuilds it
+# byte for byte. bookings_meta.json is small and stays in git, so the exact
+# parameters behind a model are versioned even though the rows are not.
+ml-service/data/*.csv
+ml-service/data/*.parquet
+
+# ml-service/reports/ is deliberately NOT ignored. metrics.json, the calibration
+# plots and model_card.md are the AI evidence trail this milestone exists to
+# produce — they are the only inspectable record of what the model claims, and they
+# belong in version control next to the code that generated them.

@@ -1,0 +1,50 @@
+# SportLynk ML service — Python dependencies
+#
+# EXACT PINS, NOT RANGES.
+#
+# A joblib artifact is a pickle of live scikit-learn objects. It is NOT portable
+# across sklearn versions: loading a model trained on a different version either
+# warns and behaves subtly differently, or fails outright. `scikit-learn>=1.9`
+# would therefore mean "this model may or may not reproduce", which is not
+# something a model card can claim. reports/model_card.md names the versions that
+# produced each artifact, and /health reports the versions of the running process,
+# so a mismatch is visible rather than mysterious.
+#
+# Every pin below was verified to have a cp314 wheel for the installed Python
+# (3.14.4) — no C compiler is needed to install this file on Windows.
+#
+# Install:
+#   cd ml-service
+#   python -m venv .venv
+#   .\.venv\Scripts\Activate.ps1
+#   pip install -r requirements.txt
+#
+# TRANSITIVE dependencies (scipy, pydantic, starlette, threadpoolctl, ...) are not
+# pinned here; this is a requirements file, not a lock file. scipy in particular
+# affects sklearn's numerics, so Wave B's training run records the FULL resolved
+# environment — `pip freeze > reports/requirements.lock.txt` — alongside the
+# metrics. That is the artifact that makes a training run reproducible, and it
+# belongs with the evidence rather than in the install contract.
+
+# ── Serving ─────────────────────────────────────────────────────────────
+fastapi==0.141.1
+uvicorn==0.52.4
+# NOTE: plain uvicorn, not uvicorn[standard]. The extras are uvloop (no Windows
+# support), httptools, websockets and watchfiles — none of which this service
+# uses. If you want `uvicorn --reload` during development, `pip install watchfiles`
+# separately; run_dev.ps1 deliberately runs without --reload so the documented
+# command has no optional dependency.
+
+# ── Modelling ───────────────────────────────────────────────────────────
+scikit-learn==1.9.0
+pandas==3.0.5
+numpy==2.5.2
+joblib==1.5.3
+
+# ── Config & reporting ──────────────────────────────────────────────────
+python-dotenv==1.2.3
+matplotlib==3.11.1
+# matplotlib is a TRAINING dependency only (calibration curve, forecast plots for
+# reports/). Nothing under app/ imports it, so the serving path stays light — worth
+# knowing when ml-service is deployed to Render's free tier in S.7, where build
+# time and slug size are the constraints.

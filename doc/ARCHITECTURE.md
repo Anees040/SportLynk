@@ -7,12 +7,139 @@ Layer 3 — Data & Services:
           - PostgreSQL (local dev / Supabase cloud)
           - Firebase Authentication (SMS/OTP validation)
           - Cloudinary (Image storage for avatars and venues)
+Layer 3b — ML: Python FastAPI microservice (`ml-service/`, SRS CON-5) serving
+          trained scikit-learn models. Added in S.3. **Optional by design** —
+          see "ML Tier" below.
 
 ## Communication
 Flutter → HTTPS REST + JWT Bearer → Node.js
 Node.js → pg pool (parameterized SQL) → PostgreSQL
 Node.js → Cloudinary API (image uploads)
+Node.js → HTTP + X-API-Key → ml-service (2s timeout, heuristic fallback)
 Flutter → Firebase Auth API (OTP requests)
+
+## ML Tier (`ml-service/`, S.3 onward)
+
+A fourth process. Flutter talks only to Node; Node talks to Postgres and, for
+model-backed features, to this. It owns no database connection, holds no session,
+and stores nothing — given features, it returns a prediction.
+
+```
+Flutter  ──JWT──▶  Node/Express  ──X-API-Key──▶  ml-service (FastAPI, :8000)
+                        │                              │
+                        ▼                              ▼
+                    Postgres                    models/*.joblib
+                                                (scikit-learn Pipelines)
+```
+
+### Why a separate Python process, and not ONNX inference inside Node
+
+The alternative removes a process, and was still rejected:
+
+- **The training story has to be defensible.** The FYP requires a reproducible
+  training script, metrics and a model card. Training is Python (scikit-learn,
+  pandas). Keeping training and serving in one language means the **same**
+  feature-engineering code runs in both — `ml-service/app/core/features.py` is
+  imported by `training/train_pricing.py` and by the request path. An ONNX export
+  would re-implement feature building in JavaScript, and that second implementation
+  is precisely where train/serve skew would live.
+- **A joblib artifact carries its own preprocessing.** The saved object is an
+  sklearn `Pipeline`, so imputation and one-hot encoding ship inside it. An ONNX
+  graph of the estimator alone does not, so the encoders would have to be
+  reproduced by hand in Node.
+- **The failure mode is already handled.** `mlClient.js` degrades to a heuristic
+  when the service is unreachable, so "an extra moving part" costs a label change
+  on the dashboard, not an outage.
+
+### Trust boundary
+
+ml-service has no user model, no JWT and no roles. Its only legitimate caller is
+the Node backend, and the whole of its authentication is one shared secret:
+
+| control | why |
+|---|---|
+| `X-API-Key` on every route except `/health` | the single caller is a server, so a shared secret is the right primitive; a JWT would imply a user |
+| `hmac.compare_digest`, never `==` | Python's `==` on strings short-circuits at the first differing byte, so response timing leaks the key one byte at a time |
+| refuses to START without `ML_API_KEY` | an unauthenticated pricing engine is not a degraded service, it is an open one |
+| binds `127.0.0.1` | in development nothing off the machine has any business reaching it |
+| no CORS middleware | a browser calling it directly would mean the shared secret had been shipped to a client |
+| missing key and wrong key → the same 401 | distinguishing them confirms a key exists and the caller merely has the wrong one — free information, and no help to a developer, who has `/health` |
+| `/health` is public, and reports a sha256 **fingerprint** of the key | "is it up" and "is my key right" must be separately answerable, or a 401 means both and you debug the wrong one. The fingerprint proves `backend/.env` and `ml-service/.env` match without either process printing a secret |
+
+`ML_API_KEY` must be **byte-identical** in `backend/.env` and `ml-service/.env`.
+`node src/scripts/check_ml_service.js` compares the two fingerprints and says so
+when they differ — a trailing space no editor shows is otherwise an hour lost.
+
+### Degradation path (ER2.6)
+
+The backend must never fail because a Python process is down. It is down most of
+the time in development.
+
+```
+owner dashboard request
+   └── mlClient.suggestPrice(ctx)
+         ├── breaker open?           ── yes ─▶ heuristic  (no network call at all)
+         ├── ML_* env unset?         ── yes ─▶ heuristic
+         ├── POST /predict/price  (2s ceiling via AbortSignal.timeout)
+         │     ├── 200 + usable body ──────▶ source:'model'
+         │     ├── 503 model_not_loaded ───▶ heuristic   (the Wave A/B state)
+         │     ├── 401 / 422 / 500 ────────▶ heuristic
+         │     └── timeout / ECONNREFUSED ─▶ heuristic
+         └── 3 consecutive failures ─▶ breaker opens for 30s
+```
+
+Four properties of that path are load-bearing:
+
+1. **`source` is part of the response contract, not diagnostics.** `'model'` means a
+   trained model produced the number; `'heuristic'` means a hard-coded rule did. A
+   supervisor is entitled to ask which, and an owner setting a real price is
+   entitled to know. The dashboard is required to render it.
+2. **The heuristic lives in Node, never in ml-service.** It would be three lines to
+   have the Python service answer `base × 1.15` when it has no model — and then
+   every response would arrive labelled `source:'model'` and the label would be a
+   lie. Same principle as `utils/matchPreview.js`'s `PREVIEW_LABEL`.
+3. **`confidence` and `demand` are `null` on the heuristic path.** A 15% uplift has
+   no confidence; emitting `0.5` so the UI always has something to draw would be
+   inventing a statistic indistinguishable on screen from a real one. For the same
+   reason `forecastDemand()` has **no** heuristic at all — a 72-point probability
+   curve cannot be faked into a chart, so it returns `available:false` and the
+   dashboard says "forecast unavailable".
+4. **Guardrails apply to both paths.** Every suggestion is clamped to
+   `[base × 0.70, base × 1.50]` and rounded to the nearest PKR 50. The band is not
+   arbitrary: it is the same range the model is *trained* on, so a suggestion is
+   always interpolation inside the trained band rather than extrapolation beyond it.
+   A model must never be able to suggest PKR 47 or PKR 190,000 to a real owner.
+
+### Train/serve skew, and the two mechanisms against it
+
+Skew — the model being fed columns in a different order, or an `is_peak` computed
+with a different peak window — is the most common way a working ML service silently
+starts returning confident nonsense. It does not raise; it just gets worse.
+
+- **One feature builder.** `app/core/features.py` owns the feature list, its order,
+  its dtypes and every derivation. Training imports it; serving imports it. Neither
+  is allowed a private copy of any derivation, "not even just for training".
+- **A version stamp that is mechanically checked.** `FEATURE_SPEC_VERSION` is
+  written into every joblib at train time and re-compared at load. Mismatch → the
+  model is marked `incompatible` and **never served** (503). Discipline plus a
+  check, because discipline alone has a known failure rate.
+
+Where the boundary genuinely forces duplication — `PEAK_START_HOUR`,
+`PEAK_END_HOUR` and the price band exist in both `features.py` and `mlClient.js`,
+because Node cannot import Python — `GET /features/spec` publishes the Python
+values and `check_ml_service.js` **asserts** the JavaScript copies match. A comment
+saying "keep these in sync" is a hope; that is a check.
+
+### Time is naive PKT inside the ML tier
+
+`slots.slot_date` (DATE) and `slots.start_time` (TIME) are local wall-clock
+columns — `routes/venues.js` builds `pktNow` by adding 5h to UTC and compares it
+straight against them. Golden rule 4's "store UTC" governs `timestamptz` columns;
+these two are not that. So every date and hour computation in `features.py` is
+naive PKT. Getting it wrong would shift `hour` by 5, move the entire peak window,
+and the model would happily learn it — invisible in testing, and wrong in a way
+nobody notices until someone asks why 1pm is the most valuable slot of the day.
+
 
 ## Booking & Escrow Flow
 

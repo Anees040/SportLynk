@@ -1,0 +1,368 @@
+"""
+Model registry  —  S.3 Wave A
+
+WHAT IT IS FOR
+`/health` has to answer "which models are loaded, and at what version" — the wave's
+requirement #1. That question needs somewhere that knows what is on disk, what
+loaded, what refused to load and why. This is that place.
+
+It is also the component that makes train/serve skew impossible rather than
+unlikely. Every artifact carries the `FEATURE_SPEC_VERSION` that was in effect
+when it was trained. On load, that string is compared against the one currently in
+core/features.py. If they differ, the model is marked `incompatible` and is never
+served. The alternative — feeding a model trained on 10 features an 11-feature
+frame — does not crash; sklearn happily predicts, and the prediction is garbage
+wearing a confidence score. A pricing engine that is confidently wrong is worse
+than one that is honestly unavailable, because a venue owner acts on it.
+
+THE FILENAME CONVENTION
+    models/<key>_latest.joblib      the artifact this service will serve
+    models/<key>_<timestamp>.joblib every trained run, kept for provenance
+
+`<key>_latest.joblib` is what gets loaded; `pricing_latest.joblib` therefore
+registers under the key `pricing`. Timestamped siblings are the audit trail — they
+are what lets you answer "which exact model produced the screenshot in the report"
+three months from now, which for an FYP is the difference between evidence and a
+claim. .gitignore keeps `*_latest.joblib` and ignores the timestamped ones, so a
+fresh clone can serve without carrying every historical artifact in git.
+
+THE ARTIFACT CONTRACT (written by training/train_pricing.py in Wave B)
+A dict, not a bare estimator, because a bare estimator cannot tell you what it was
+trained on:
+
+    {
+      "model":              sklearn Pipeline (preprocessing INSIDE it),
+      "featureSpecVersion": features.FEATURE_SPEC_VERSION at train time,
+      "featureOrder":       list(features.FEATURE_ORDER) at train time,
+      "modelVersion":       e.g. "pricing-v1-20260824-1830",
+      "trainedAt":          ISO-8601 UTC,
+      "metrics":            {"rocAuc": ..., "brier": ..., "logLoss": ..., ...},
+      "libraries":          {"sklearn": ..., "numpy": ..., "pandas": ..., "python": ...},
+      "dataset":            {"rows": ..., "source": "synthetic", "seed": ...},
+    }
+
+`dataset.source` is in the contract on purpose. This model is trained on simulated
+data (the live database has 22 bookings and not one instance of the same slot
+offered at two prices, so it contains no elasticity signal at all). That fact must
+travel with the artifact and surface in /health, so nothing downstream can present
+a synthetic model as if it had learned from real Pakistani market demand.
+
+WHY NOTHING HERE RAISES
+A corrupt or stale .joblib must degrade the pricing feature, not take down the
+process. Every failure is captured as a status string and a reason; the router
+turns a non-ready model into a 503, the Node client turns a 503 into its heuristic,
+and the owner still sees a dashboard. Same principle as
+backend/src/utils/globalSettings.js: "a bad row must not be able to take out a
+booking", so `get()` there never throws either.
+"""
+
+from __future__ import annotations
+
+import logging
+import platform
+import sys
+import threading
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from . import config, features
+
+log = logging.getLogger("sportlynk.ml.registry")
+
+#: Suffix that marks the artifact to serve.
+LATEST_SUFFIX = "_latest.joblib"
+
+#: Model keys this service knows about. Listed explicitly rather than discovered
+#: purely from disk, so /health can report `not_loaded` for a model that is
+#: EXPECTED but absent. Discovery alone cannot distinguish "no pricing model yet"
+#: from "no pricing model was ever supposed to exist" — and in Wave A the correct
+#: answer is the first one, which is the whole point of the health endpoint.
+KNOWN_MODELS: tuple[str, ...] = ("pricing",)
+
+#: Status values, exhaustive. Exported as constants because the router branches on
+#: them and the Node client's tests assert on them — a typo'd string literal in
+#: either place would silently mean "not ready".
+STATUS_READY = "ready"
+STATUS_NOT_LOADED = "not_loaded"
+STATUS_INCOMPATIBLE = "incompatible"
+STATUS_ERROR = "error"
+
+
+class LoadedModel:
+    """One artifact, plus everything /health and the model card need to say about it."""
+
+    __slots__ = ("key", "path", "status", "reason", "estimator", "meta", "loaded_at")
+
+    def __init__(
+        self,
+        key: str,
+        *,
+        path: Path | None = None,
+        status: str = STATUS_NOT_LOADED,
+        reason: str | None = None,
+        estimator: Any = None,
+        meta: dict[str, Any] | None = None,
+    ) -> None:
+        self.key = key
+        self.path = path
+        self.status = status
+        self.reason = reason
+        self.estimator = estimator
+        self.meta = meta or {}
+        self.loaded_at = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+
+    @property
+    def is_ready(self) -> bool:
+        return self.status == STATUS_READY and self.estimator is not None
+
+    @property
+    def version(self) -> str | None:
+        value = self.meta.get("modelVersion")
+        return str(value) if value else None
+
+    def describe(self) -> dict[str, Any]:
+        """
+        The /health view. camelCase, because it goes on the wire.
+
+        `reason` is present on every non-ready status. A health endpoint that says
+        `"status": "error"` and nothing else sends whoever is on call to read logs
+        on a box they may not have; the reason string is the whole value of the
+        endpoint at 2am.
+        """
+        return {
+            "key": self.key,
+            "status": self.status,
+            "reason": self.reason,
+            "modelVersion": self.version,
+            "featureSpecVersion": self.meta.get("featureSpecVersion"),
+            "trainedAt": self.meta.get("trainedAt"),
+            "datasetSource": (self.meta.get("dataset") or {}).get("source"),
+            "metrics": self.meta.get("metrics"),
+            "artifact": self.path.name if self.path else None,
+            "checkedAt": self.loaded_at,
+        }
+
+
+class ModelRegistry:
+    """
+    Loads artifacts once, answers questions about them cheaply.
+
+    Loading is lazy and cached: `uvicorn --reload` restarts the process constantly
+    in development, and a joblib load is hundreds of milliseconds. It is also
+    lock-guarded — uvicorn serves requests on a thread pool, and two concurrent
+    /health calls on a cold process would otherwise both unpickle the same file.
+    """
+
+    def __init__(self, model_dir: Path | None = None) -> None:
+        self._dir = model_dir or config.MODEL_DIR
+        self._lock = threading.Lock()
+        self._cache: dict[str, LoadedModel] = {}
+
+    # ── loading ─────────────────────────────────────────────────────────────
+
+    def path_for(self, key: str) -> Path:
+        return self._dir / f"{key}{LATEST_SUFFIX}"
+
+    def get(self, key: str) -> LoadedModel:
+        """The model for `key`, loading it on first use. Never raises."""
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        with self._lock:
+            cached = self._cache.get(key)  # another thread may have won the race
+            if cached is not None:
+                return cached
+            loaded = self._load(key)
+            self._cache[key] = loaded
+            return loaded
+
+    def reload(self, key: str | None = None) -> None:
+        """
+        Drop the cache so the next `get()` re-reads disk.
+
+        Needed because Wave B trains a model into a directory this process is
+        already serving from. Without it, the only way to pick up a freshly trained
+        artifact is to restart uvicorn — survivable for one developer, and exactly
+        the kind of footgun that turns into "the model didn't change" during a demo.
+        """
+        with self._lock:
+            if key is None:
+                self._cache.clear()
+            else:
+                self._cache.pop(key, None)
+
+    def _load(self, key: str) -> LoadedModel:
+        path = self.path_for(key)
+        if not path.exists():
+            return LoadedModel(
+                key,
+                status=STATUS_NOT_LOADED,
+                reason=(
+                    f"{path.name} not found in {self._dir}. "
+                    "Train it with:  python training/train_pricing.py"
+                ),
+            )
+
+        # joblib is imported here, not at module import: it pulls in numpy and
+        # scipy, and /health must still answer if the ML dependencies are only
+        # half-installed. A health endpoint that cannot start because of the thing
+        # it is meant to report on is not a health endpoint.
+        try:
+            import joblib  # noqa: PLC0415  (deliberate late import)
+        except Exception as exc:  # pragma: no cover - environment failure
+            return LoadedModel(
+                key, path=path, status=STATUS_ERROR, reason=f"joblib unavailable: {exc}"
+            )
+
+        try:
+            payload = joblib.load(path)
+        except Exception as exc:
+            # Truncated: an unpickling traceback can be enormous and this string
+            # goes into an HTTP response body.
+            return LoadedModel(
+                key,
+                path=path,
+                status=STATUS_ERROR,
+                reason=f"could not load artifact: {type(exc).__name__}: {str(exc)[:200]}",
+            )
+
+        if not isinstance(payload, dict) or "model" not in payload:
+            return LoadedModel(
+                key,
+                path=path,
+                status=STATUS_ERROR,
+                reason=(
+                    "artifact is not the expected dict "
+                    "{model, featureSpecVersion, featureOrder, modelVersion, ...} — "
+                    "retrain with training/train_pricing.py"
+                ),
+            )
+
+        meta = {k: v for k, v in payload.items() if k != "model"}
+
+        trained_spec = payload.get("featureSpecVersion")
+        if trained_spec != features.FEATURE_SPEC_VERSION:
+            # The guard this class exists for. Refuse, loudly, rather than predict.
+            return LoadedModel(
+                key,
+                path=path,
+                status=STATUS_INCOMPATIBLE,
+                meta=meta,
+                reason=(
+                    f"feature spec mismatch: artifact was trained on {trained_spec!r} "
+                    f"but this service builds {features.FEATURE_SPEC_VERSION!r}. "
+                    "Retrain: python training/train_pricing.py"
+                ),
+            )
+
+        trained_order = payload.get("featureOrder")
+        if trained_order is not None and tuple(trained_order) != features.FEATURE_ORDER:
+            # Same version string, different columns — a bad rebase, or a feature
+            # added without bumping FEATURE_SPEC_VERSION. Belt and braces: the
+            # version check is the discipline, this is the mechanism that catches
+            # the day someone forgets it.
+            return LoadedModel(
+                key,
+                path=path,
+                status=STATUS_INCOMPATIBLE,
+                meta=meta,
+                reason=(
+                    "feature ORDER mismatch under the same spec version — "
+                    f"artifact={list(trained_order)} service={list(features.FEATURE_ORDER)}. "
+                    "Bump FEATURE_SPEC_VERSION and retrain."
+                ),
+            )
+
+        estimator = payload["model"]
+        if not hasattr(estimator, "predict_proba"):
+            return LoadedModel(
+                key,
+                path=path,
+                status=STATUS_ERROR,
+                meta=meta,
+                reason=(
+                    f"estimator {type(estimator).__name__} has no predict_proba; "
+                    "the pricing model must be a probability classifier"
+                ),
+            )
+
+        log.info(
+            "model %s loaded: version=%s spec=%s artifact=%s",
+            key,
+            meta.get("modelVersion"),
+            trained_spec,
+            path.name,
+        )
+        return LoadedModel(
+            key, path=path, status=STATUS_READY, estimator=estimator, meta=meta
+        )
+
+    # ── reporting ───────────────────────────────────────────────────────────
+
+    def inventory(self) -> list[dict[str, Any]]:
+        """
+        Every known model plus any unexpected `*_latest.joblib` found on disk.
+
+        Both halves matter. KNOWN_MODELS reports what SHOULD be there (so a missing
+        pricing model is visible as `not_loaded`, not as an empty list); the disk
+        scan reports what actually is (so a stray artifact from an experiment is
+        visible rather than quietly ignored).
+        """
+        keys = list(KNOWN_MODELS)
+        try:
+            for found in sorted(self._dir.glob(f"*{LATEST_SUFFIX}")):
+                key = found.name[: -len(LATEST_SUFFIX)]
+                if key not in keys:
+                    keys.append(key)
+        except OSError as exc:  # pragma: no cover - unreadable model dir
+            log.warning("could not scan %s: %s", self._dir, exc)
+        return [self.get(key).describe() for key in keys]
+
+    def runtime(self) -> dict[str, Any]:
+        """
+        Library versions of the RUNNING process.
+
+        Compared against the artifact's `libraries` block, this is what explains a
+        model that loads but predicts differently than it did in training. A joblib
+        pickle is not version-portable; sklearn says so in its own docs and warns
+        on a cross-version load. requirements.txt pins exact versions for this
+        reason, and this endpoint is how you check the pin actually held.
+
+        Imports are guarded so /health survives a partial install — the case where
+        you most want a working health endpoint.
+        """
+        out: dict[str, Any] = {
+            "python": platform.python_version(),
+            "platform": f"{platform.system()} {platform.release()}",
+            "executable": sys.executable,
+        }
+        for name, module_name in (
+            ("sklearn", "sklearn"),
+            ("numpy", "numpy"),
+            ("pandas", "pandas"),
+            ("joblib", "joblib"),
+        ):
+            try:
+                module = __import__(module_name)
+                out[name] = getattr(module, "__version__", "unknown")
+            except Exception:  # pragma: no cover - partial install
+                out[name] = None
+        return out
+
+
+#: Process-wide registry. One instance, so the cache is shared across requests.
+registry = ModelRegistry()
+
+
+__all__ = (
+    "KNOWN_MODELS",
+    "LATEST_SUFFIX",
+    "STATUS_READY",
+    "STATUS_NOT_LOADED",
+    "STATUS_INCOMPATIBLE",
+    "STATUS_ERROR",
+    "LoadedModel",
+    "ModelRegistry",
+    "registry",
+)
