@@ -9,7 +9,10 @@ import '../../constants/api_constants.dart';
 import '../../models/match.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/match_service.dart';
+import '../../services/pricing_service.dart';
 import '../../services/realtime_service.dart';
+import '../../widgets/apply_price_sheet.dart';
+import '../../widgets/pricing_widgets.dart';
 import 'owner_booking_requests_screen.dart';
 import 'owner_match_verify_screen.dart';
 import 'owner_slot_calendar_screen.dart';
@@ -36,6 +39,16 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
   List<MatchModel> _toVerify = const [];
   StreamSubscription? _matchSub;
 
+  // ── AI price suggestion (FR4.17) ──────────────────────────
+  // Loaded on its own, AFTER the dashboard, because the venue id it needs comes out
+  // of the dashboard payload and because a slow or dead ml-service must never delay
+  // the revenue figures. `_priceLoading` starts false: there is nothing to load
+  // until we know which venue.
+  final _pricingService = PricingService();
+  PriceSuggestion? _price;
+  bool _priceLoading = false;
+  String? _priceVenueId;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +69,39 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
   }
 
   Future<void> _refreshAll() => Future.wait([_load(), _loadToVerify()]);
+
+  /// Fetches the suggestion for [venueId]. The server picks the date (PKT today) and
+  /// the hour (the venue's own peak-adjacent hour) — deliberately not duplicated
+  /// here, because two implementations of "which hour do we mean" is two answers.
+  Future<void> _loadPricing(String venueId) async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null || token.isEmpty) return;
+    setState(() {
+      _priceLoading = true;
+      _priceVenueId = venueId;
+    });
+    final s = await _pricingService.suggestion(token, venueId);
+    if (!mounted) return;
+    setState(() {
+      _price = s;
+      _priceLoading = false;
+    });
+  }
+
+  /// Opens the slot picker. Returns only after the sheet closes, so the card and the
+  /// dashboard both refresh against the prices that were actually written — the
+  /// server drops its cached suggestion for this venue on a successful apply, so the
+  /// re-fetch is guaranteed to be recomputed rather than served stale.
+  Future<void> _openApply() async {
+    final s = _price;
+    final venueId = _priceVenueId;
+    if (s == null || venueId == null) return;
+    final applied = await showApplyPriceSheet(context, venueId: venueId, suggestion: s);
+    if (applied == true && mounted) {
+      await _load();
+      if (mounted) await _loadPricing(venueId);
+    }
+  }
 
   Future<void> _loadToVerify() async {
     final token = Provider.of<AuthProvider>(context, listen: false).token;
@@ -89,6 +135,12 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
           _data = json['data'];
           _loading = false;
         });
+        // Chained rather than parallel: the venue id only exists once this landed.
+        // Not awaited by the caller's refresh indicator either — the spinner should
+        // stop when the revenue numbers are on screen, not when the ML service
+        // finishes thinking.
+        final venueId = (json['data']?['venue']?['id'])?.toString();
+        if (venueId != null && venueId.isNotEmpty) _loadPricing(venueId);
       } else {
         if (mounted) setState(() => _loading = false);
       }
@@ -176,9 +228,6 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
     final wallet = _data?['wallet'] as Map<String, dynamic>? ?? {};
     final venue = _data?['venue'] as Map<String, dynamic>?;
     final pendingEscrow = _parseNum(_data?['pendingEscrow']);
-    double basePrice = _parseNum(venue?['price_per_hour']);
-    if (basePrice <= 0) basePrice = 2000.0;
-    final suggestedPrice = (basePrice * 1.12).roundToDouble();
 
     return RefreshIndicator(
       color: AppColors.accent,
@@ -300,91 +349,23 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
             ),
           ),
 
-          // ── AI PRICE SUGGESTION ──────────────────────────
+          // ── AI PRICE SUGGESTION (FR4.17) ─────────────────
+          // Real model output, not `base × 1.12`. The card decides for itself what it
+          // is allowed to claim from the payload's `source`, and Apply is the only
+          // path from a suggestion to a price a player will actually be charged.
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.accentLight,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
-                ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Row(children: [
-                      const Text('✨', style: TextStyle(fontSize: 16)),
-                      const SizedBox(width: 6),
-                      Text(
-                        'AI Suggested Price',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
-                      ),
-                    ]),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(8)),
-                      child: Text(
-                        '92% CONFIDENCE',
-                        style: GoogleFonts.poppins(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 8),
-                  Text(
-                    'PKR ${suggestedPrice.toStringAsFixed(0)}/hr',
-                    style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary),
-                  ),
-                  const SizedBox(height: 2),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: LinearProgressIndicator(
-                      value: 0.92,
-                      backgroundColor: AppColors.border,
-                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
-                      minHeight: 3,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Based on demand, time of day, and nearby venues',
-                    style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {},
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.textSecondary,
-                          side: const BorderSide(color: AppColors.border),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        ),
-                        child: Text('Override', style: GoogleFonts.poppins(fontSize: 12)),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Price updated!', style: GoogleFonts.poppins(color: Colors.white)),
-                            backgroundColor: AppColors.accent,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        ),
-                        child: Text(
-                          'Accept',
-                          style: GoogleFonts.poppins(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ),
-                  ]),
-                ]),
+              child: AiPriceCard(
+                suggestion: _price,
+                loading: _priceLoading,
+                onRetry: _priceVenueId == null ? null : () => _loadPricing(_priceVenueId!),
+                // Nullable on purpose: no button at all unless there is a real,
+                // actionable model suggestion to apply. A rule-of-thumb price is
+                // shown for information; it is not something to write to slots.
+                onApply: (_price != null && _price!.isModel && _price!.isActionable)
+                    ? _openApply
+                    : null,
               ),
             ),
           ),

@@ -124,6 +124,72 @@ const PRICE_ROUND_TO = 50;
 const BREAKER_THRESHOLD = 3;
 const BREAKER_COOLDOWN_MS = 30_000;
 
+/**
+ * Demand-level thresholds for the forecast chart's colours.
+ *
+ * These live HERE, not in the ml-service, on purpose. "Is 0.41 a high-demand hour"
+ * is a presentation question, not a modelling one — the model's job ends at
+ * P(book) = 0.41, and turning that into a colour is a product decision that must
+ * apply identically to whatever path produced the number. Keeping it on the Node
+ * side means one threshold table, one chart legend, and no chance of the ML service
+ * and the dashboard disagreeing about what "high" means.
+ *
+ * ANCHORED ON A MEASURED NUMBER, not on taste. `DEMAND_BASE_RATE` is the training
+ * set's unconditional booking rate (`baseRate` in reports/pricing_metrics.json,
+ * 0.280109 for the current artifact) — i.e. the probability of a slot booking when
+ * you know nothing about it. So "high" means clearly above what an average slot
+ * does, and "low" means clearly below, which is the comparison an owner is actually
+ * making when they look at the chart. A fixed 0.33/0.66 split would be arbitrary,
+ * and scaling to each series' own max would be worse: a dead week would render
+ * exactly like a busy one and the colour would carry no information at all.
+ *
+ * Update DEMAND_BASE_RATE when a retrain moves it materially. It is duplicated
+ * across the language boundary for the same reason PEAK_START_HOUR is, and
+ * scripts/check_ml_service.js is the place to assert it.
+ */
+const DEMAND_BASE_RATE = 0.28;
+const DEMAND_HIGH_MULTIPLE = 1.6; // ~0.45
+const DEMAND_LOW_MULTIPLE = 0.55; // ~0.15
+
+/** Demand level values. Exported so no caller writes the string itself. */
+const DEMAND_HIGH = 'high';
+const DEMAND_MEDIUM = 'medium';
+const DEMAND_LOW = 'low';
+
+/**
+ * Bucket a probability for the chart. `null` in, `null` out — an unknown demand is
+ * not a low demand, and colouring it as one would be a lie told in green.
+ */
+function demandLevel(probability) {
+  // `typeof` first, because Number(null) is 0 and Number('') is 0 — both finite, both
+  // would bucket an ABSENT probability as `low` and paint a green bar on the chart
+  // for an hour nothing is known about. Only a real number gets a colour.
+  if (typeof probability !== "number" || !Number.isFinite(probability)) return null;
+  const p = probability;
+  if (p >= DEMAND_BASE_RATE * DEMAND_HIGH_MULTIPLE) return DEMAND_HIGH;
+  if (p < DEMAND_BASE_RATE * DEMAND_LOW_MULTIPLE) return DEMAND_LOW;
+  return DEMAND_MEDIUM;
+}
+
+/**
+ * PKT wall-clock date + hour -> a fully-qualified ISO instant.
+ *
+ * Pakistan is UTC+05:00 with no DST, ever, so the offset is a constant rather than
+ * a lookup. Emitting the offset explicitly is what lets Flutter call
+ * `DateTime.parse()` and get the right instant without doing timezone arithmetic of
+ * its own — and doing it here rather than in Dart means the 72 bars on the chart and
+ * the slot rows in the booking list are stamped by the same code.
+ *
+ * Returns null rather than a half-built string when the parts are unusable, so a bad
+ * point is droppable instead of silently landing on 1970.
+ */
+function pktTimestamp(slotDate, hour) {
+  const h = Number(hour);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(slotDate || '')) || !Number.isInteger(h)) return null;
+  if (h < 0 || h > 23) return null;
+  return `${slotDate}T${String(h).padStart(2, '0')}:00:00+05:00`;
+}
+
 /** Response `source` values. Exported so no caller writes the string itself. */
 const SOURCE_MODEL = 'model';
 const SOURCE_HEURISTIC = 'heuristic';
@@ -361,6 +427,7 @@ function heuristicPrice(basePrice, startTime) {
     return {
       raw: basePrice,
       reason: 'ML service unavailable; slot time unreadable, so no peak uplift applied',
+      factors: [],
     };
   }
   if (isPeakHour(hour)) {
@@ -369,11 +436,17 @@ function heuristicPrice(basePrice, startTime) {
       reason:
         `ML service unavailable; peak-hour rule applied ` +
         `(${PEAK_START_HOUR}:00–${PEAK_END_HOUR}:59, +${Math.round((HEURISTIC_PEAK_MULTIPLIER - 1) * 100)}%)`,
+      // One chip, no impact number. The rule KNOWS this is a peak hour — that part
+      // is true and worth showing — but it has not measured anything, so `impact`
+      // stays null and the UI renders the label without a magnitude. See
+      // priceResponse().
+      factors: [{ key: 'time_of_day', label: 'Peak hour', direction: 'up', impact: null }],
     };
   }
   return {
     raw: basePrice,
     reason: `ML service unavailable; off-peak rule applied (no change to base price)`,
+    factors: [{ key: 'time_of_day', label: 'Off-peak hour', direction: 'down', impact: null }],
   };
 }
 
@@ -384,6 +457,14 @@ function heuristicPrice(basePrice, startTime) {
  * two hand-written object literals would eventually disagree about a field name.
  * `confidence` and `demand` are null unless a model supplied them — see the
  * header comment.
+ *
+ * `topFactors` carries an `impact` of `null` on the heuristic path. That is the same
+ * honesty rule as `confidence: null`: the model path's impacts are MEASURED (a
+ * counterfactual re-prediction per factor, see ml-service/app/routers/pricing.py),
+ * while the heuristic can only assert "this is a peak hour" from a hardcoded rule.
+ * A number there would be indistinguishable on screen from a measured one, so there
+ * is no number — the chip renders as a bare label and the card's `source` badge says
+ * why.
  */
 function priceResponse({
   source,
@@ -393,6 +474,10 @@ function priceResponse({
   demand = null,
   reason = null,
   modelVersion = null,
+  topFactors = [],
+  modelMetrics = null,
+  atPolicyCap = false,
+  policyMaxRatio = null,
 }) {
   const { price, clamped } = applyGuardrails(rawPrice, basePrice);
   return {
@@ -402,10 +487,40 @@ function priceResponse({
     deltaPct: deltaPct(price, basePrice),
     confidence,
     demand,
+    demandLevel: demandLevel(demand),
     reason,
     modelVersion,
     clamped,
+    topFactors,
+    modelMetrics,
+    atPolicyCap,
+    policyMaxRatio,
   };
+}
+
+/**
+ * Normalise the ml-service's `topFactors` for the wire.
+ *
+ * Defensive rather than trusting: this array is rendered directly as chips on an
+ * owner's dashboard, so every field is coerced and anything unusable is dropped
+ * instead of reaching Flutter as `null` inside a `Text()`. A malformed factor costs
+ * a chip; it must never cost the suggestion.
+ */
+function normaliseFactors(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((f) => {
+      const label = typeof f?.label === 'string' ? f.label.trim() : '';
+      if (!label) return null;
+      const impact = Number(f?.impact);
+      return {
+        key: typeof f?.key === 'string' && f.key ? f.key : 'factor',
+        label,
+        direction: f?.direction === 'down' ? 'down' : 'up',
+        impact: Number.isFinite(impact) ? impact : null,
+      };
+    })
+    .filter(Boolean);
 }
 
 // ─── Public API ───────────────────────────────────────────────
@@ -434,15 +549,26 @@ async function suggestPrice(ctx = {}) {
       deltaPct: 0,
       confidence: null,
       demand: null,
+      demandLevel: null,
       reason: 'No base price available for this venue',
       modelVersion: null,
       clamped: false,
+      topFactors: [],
+      modelMetrics: null,
+      atPolicyCap: false,
+      policyMaxRatio: null,
     };
   }
 
   const fallback = () => {
-    const { raw, reason } = heuristicPrice(basePrice, ctx.startTime);
-    return priceResponse({ source: SOURCE_HEURISTIC, basePrice, rawPrice: raw, reason });
+    const { raw, reason, factors } = heuristicPrice(basePrice, ctx.startTime);
+    return priceResponse({
+      source: SOURCE_HEURISTIC,
+      basePrice,
+      rawPrice: raw,
+      reason,
+      topFactors: factors,
+    });
   };
 
   if (breakerIsOpen() || !isConfigured()) return fallback();
@@ -488,6 +614,7 @@ async function suggestPrice(ctx = {}) {
 
   const confidence = Number(data.confidence);
   const demand = Number(data.bookProbability);
+  const policyMaxRatio = Number(data.policyMaxRatio);
   return priceResponse({
     source: SOURCE_MODEL,
     basePrice,
@@ -499,6 +626,14 @@ async function suggestPrice(ctx = {}) {
     demand: Number.isFinite(demand) ? demand : null,
     reason: data.reason || null,
     modelVersion: data.modelVersion || null,
+    topFactors: normaliseFactors(data.topFactors),
+    // Passed through whole rather than re-shaped. The dashboard's "Model v1 · AUC
+    // 0.76" caption reads from here, so it quotes the served artifact's own test
+    // scores; a constant in Dart would drift the first time the model is retrained
+    // and nothing would catch it.
+    modelMetrics: data.modelMetrics && typeof data.modelMetrics === 'object' ? data.modelMetrics : null,
+    atPolicyCap: data.atPolicyCap === true,
+    policyMaxRatio: Number.isFinite(policyMaxRatio) ? policyMaxRatio : null,
   });
 }
 
@@ -507,8 +642,12 @@ async function suggestPrice(ctx = {}) {
  *
  * ctx: { basePrice, sport, city, venueRating?, hours?, openFrom?, openTo?, venueId? }
  *
- * Returns { source, available, hours, points: [{slotDate, hour, bookProbability}],
- *           reason, modelVersion }
+ * Returns { source, available, hours, points: [{ts, slotDate, hour, bookProbability,
+ *           level}], modelMetrics, reason, modelVersion }
+ *
+ * `ts` is a fully-qualified PKT instant and `level` is the chart's colour bucket —
+ * both computed here so the 72 bars are stamped and bucketed by one piece of code
+ * rather than by Dart. See pktTimestamp() and demandLevel().
  *
  * THERE IS NO HEURISTIC FALLBACK HERE, and that is the important part of this
  * function. A peak-hour price rule is a defensible business rule that venue owners
@@ -528,6 +667,7 @@ async function forecastDemand(ctx = {}) {
     available: false,
     hours: 0,
     points: [],
+    modelMetrics: null,
     reason,
     modelVersion: null,
   });
@@ -569,15 +709,37 @@ async function forecastDemand(ctx = {}) {
     return unavailable('Demand forecast unavailable — model returned no points');
   }
 
+  // A point that cannot be stamped or has no readable probability is DROPPED, not
+  // passed through with a null. fl_chart plots a bar per entry, and a bar with no
+  // height at an unknown time is a hole in the chart that reads as zero demand.
+  const shaped = points
+    .map((p) => {
+      const probability = Number(p.bookProbability);
+      const ts = pktTimestamp(p.slotDate, p.hour);
+      if (!ts || !Number.isFinite(probability)) return null;
+      return {
+        ts,
+        slotDate: p.slotDate,
+        hour: Number(p.hour),
+        bookProbability: probability,
+        level: demandLevel(probability),
+      };
+    })
+    .filter(Boolean);
+
+  if (!shaped.length) {
+    return unavailable('Demand forecast unavailable — model returned no usable points');
+  }
+
   return {
     source: SOURCE_MODEL,
     available: true,
-    hours: points.length,
-    points: points.map((p) => ({
-      slotDate: p.slotDate,
-      hour: Number(p.hour),
-      bookProbability: Number(p.bookProbability),
-    })),
+    // The COUNT OF POINTS SERVED, not the hours requested. They differ whenever the
+    // venue's operating window drops hours (72 asked, 48 served for an 08:00–23:00
+    // venue), and the chart's axis must describe what it is drawing.
+    hours: shaped.length,
+    points: shaped,
+    modelMetrics: data.modelMetrics && typeof data.modelMetrics === 'object' ? data.modelMetrics : null,
     reason: null,
     modelVersion: data.modelVersion || null,
   };
@@ -629,6 +791,12 @@ module.exports = {
   SOURCE_MODEL,
   SOURCE_HEURISTIC,
   SOURCE_UNAVAILABLE,
+  DEMAND_HIGH,
+  DEMAND_MEDIUM,
+  DEMAND_LOW,
+  DEMAND_BASE_RATE,
+  DEMAND_HIGH_MULTIPLE,
+  DEMAND_LOW_MULTIPLE,
   PEAK_START_HOUR,
   PEAK_END_HOUR,
   HEURISTIC_PEAK_MULTIPLIER,
@@ -646,6 +814,9 @@ module.exports = {
   heuristicPrice,
   isPeakHour,
   hourOf,
+  demandLevel,
+  pktTimestamp,
+  normaliseFactors,
   resetBreaker,
   breakerState,
 };

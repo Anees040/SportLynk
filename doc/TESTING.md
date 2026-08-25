@@ -204,6 +204,11 @@ model exists. Two terminals — `uvicorn` in `ml-service/`, `node src/server.js`
 > test 54 is unaffected and must **still** return 422, which is the whole point of writing
 > it that way. To re-run §4.5 exactly as specified, move the artifact aside
 > (`ren models\pricing_latest.joblib pricing_latest.joblib.bak`) and restart `uvicorn`.
+>
+> **And once Wave D has been run, test 53's 501 becomes a 200** with a real price
+> suggestion — that branch no longer exists. Test 54's 422 still stands: a malformed body
+> is rejected by the schema before any model is consulted, which is exactly why it was
+> written against the schema and not against the model. See §4.8.
 
 49. `python -c "from app.core import features; print(features.FEATURE_SPEC_VERSION, len(features.FEATURE_ORDER))"`
     → `pricing-features-v1 11`. If this import fails, nothing below can be trusted.
@@ -454,9 +459,14 @@ cd D:\sportlynk\ml-service
     treats a model suggestion and an honest fallback as equal passes, so it should still
     report `0 FAILED` — and the backend still serves prices from the heuristic, which is why
     the Flutter app is unchanged.
+    > **Superseded by §4.8 (Wave D has landed).** The 501 is gone: both endpoints now run
+    > inference and answer 200 with a real suggestion. Run this step only when reproducing
+    > Wave C's state from a checkout at that commit.
 84. Open the Flutter app and confirm **nothing changed** — a third time. No price
     suggestion, no chart, no new screen. If something did change, something is wired ahead
     of its wave.
+    > **Superseded by §4.8.** Wave D is the wave that changes the app. Expect a live price
+    > card on the owner dashboard and a 72-hour chart on the venue screen.
 
 **What these tests cannot tell you.** Every gate can pass on a model that will be wrong
 about the real market, because the gates check *internal validity* — no leakage, honest
@@ -464,6 +474,110 @@ calibration, a sane price response — and nothing can check external validity a
 market with 22 bookings and one price per venue in it. Read the metrics as evidence that
 the **pipeline** is correct, and the model card's limitations as the honest statement of
 what the numbers do not cover.
+
+---
+
+### 4.8 Pricing served + on screen (S.3 Wave D)
+
+Wave D is the wave where the model stops being a file and starts being something an owner
+reads and acts on. So the tests below are less about "does it return 200" and more about
+**can any number on that card be wrong without anyone noticing.** The whole design premise
+is that every figure is measured rather than asserted — confidence, the "why" chips, the
+caption's AUC, the bar colours — and each test below picks at one of those claims.
+
+**Endpoint naming, recorded once so it is not a surprise later.** The wave brief writes the
+FastAPI routes as `POST /pricing/suggest` and `POST /pricing/forecast`. They ship as
+**`POST /predict/price`** and **`POST /predict/demand`** — the names frozen in the Wave A
+contract that `mlClient.js` and `check_ml_service.js` were both built against. Renaming
+them would break a working client and a working harness for zero behavioural gain.
+
+```bash
+cd D:\sportlynk\ml-service ; .\run_dev.ps1        # terminal 1
+cd D:\sportlynk\backend    ; npm run dev          # terminal 2
+```
+
+85. **The harness first — it is the cheapest 60 seconds in this section.**
+    `node src/scripts/check_ml_service.js` (from `D:\sportlynk\backend`).
+    Expect **`60/60 checks passed`** with the service up, and **`31/31 passed, 4 skipped`**
+    with it down. Both are passes; the second is the more important one, because it is the
+    state a real outage puts you in.
+    The 501s from test 83 are now **200s** — the not-implemented branch is gone. Read the
+    two summary lines it prints: `source='model' PKR 2600 (+30%)` and
+    `forecast source='model' 72 points` with a `demand mix` that is **not** all one level.
+86. **`GET /api/owner/venues/:id/pricing`** as a logged-in owner (Postman or the app).
+    Confirm `source: "model"`, a `suggestedPrice` inside 0.70×–1.50× of your
+    `price_per_hour`, a `confidence` strictly between 0.05 and 0.95, and a `topFactors`
+    array. Then **call it twice** and check the second response has `cached: true` and
+    comes back instantly — the suggestion is cached for one hour, keyed on venue + date +
+    hour + the current PKT hour.
+87. **The ownership check is the one that matters.** Call the same endpoint with
+    *another owner's* venue id → **404 "Venue not found or unauthorized"**, never 403 and
+    never a suggestion. A wrong id and someone else's id must be indistinguishable in the
+    response; ownership is in the SQL `WHERE`, not an `if` after the read. Same for
+    `/forecast` and the `PATCH .../slots/price`. (This is §6.2 applied to Wave D — do it
+    here rather than trusting that it was done there.)
+88. **Stop uvicorn and reload the dashboard.** The card must still appear, with a
+    **`RULE-BASED`** badge instead of `AI MODEL`, **no confidence bar**, a single chip
+    carrying **no number**, no caption — and **no Apply button**. That last one is the
+    point: a rule of thumb is shown for information, and the app will not write it to a
+    slot. Restart uvicorn, pull to refresh, and the model card must come back within one
+    request — a degraded answer is served but never cached, so the recovery is immediate
+    rather than up to an hour later.
+89. **Read the "why" chips against the slot you asked about.** A Saturday 20:00 football
+    slot should chip `Peak hour` and `Weekend`; a Sunday 07:00 cricket slot should chip
+    `Off-peak hour` and `Weekend` — the model surfacing the cricket dawn peak through a
+    counterfactual rather than a rule. A neutral Wednesday 15:00 slot should show **no
+    chips at all**, and that is correct: nothing about it deviates from neutral.
+    There is deliberately **no rating chip and no sport/city chip**. Written, measured,
+    removed: on a 4.5-star venue the rating counterfactual reported P(book) *falling*
+    0.052, opposite in sign to the generator's causal effect (+0.01) and five times its
+    size, because with six venue profiles in training `venue_rating` is very nearly a
+    venue ID. The reasoning is in the comment block in `app/routers/pricing.py` — read it
+    before anyone asks why reputation is missing from the explanation.
+90. **The caption under the card.** It must read the served artifact's own scores —
+    `Model pricing-v1-… · AUC 0.76 · 98% of ceiling`. The brief suggested a hardcoded
+    `AUC 0.84`; this model scores **0.7628**. If the caption ever shows a number that is
+    not in `reports\pricing_metrics.json`, that is the single most quotable defect in the
+    project, so check it against the file once with your own eyes.
+91. **Apply — FR4.17, the owner keeps control.** Tap **Apply to slots…**. The sheet opens
+    on the date the suggestion was computed for, with that hour pre-selected and nothing
+    else. Confirm booked, held and past slots are **shown, greyed, with the reason** and
+    cannot be selected. Select two available slots → Apply → the snackbar reports the
+    server's own count, and the slot prices in the Schedule tab change to match.
+92. **Now the partial case, which is the one that breaks in production.** Select a mix
+    including a slot you have already applied this price to, and one that a second device
+    booked while the sheet was open. Expect `applied to N of M` plus a skip reason
+    (`already at this price`, `already booked`). Nothing may be silently dropped, and the
+    booked slot's price **must not move** — a booked price is what a player already agreed
+    to pay.
+93. **Verify the cache is actually invalidated by an Apply.** After a successful apply,
+    the next `/pricing` call for that venue must be recomputed (`cached: false`) — the
+    suggestion was computed against the old price, so serving the cached one would show a
+    delta against a price that no longer exists.
+94. **The forecast chart** (venue management screen, under the price field). 72 bars, three
+    day labels, y-axis fixed at 0–100%. Tap a bar: the tooltip must name the PKT hour and
+    the demand word. Check the axis is **not** scaled to the series maximum — a quiet week
+    must *look* quiet. Confirm the legend's thresholds match the dashed gridlines; both
+    come from the `levels` block the server sends beside the series, so they cannot
+    disagree.
+95. **Ask the chart to be wrong.** Point the app at a venue with no `price_per_hour` (or
+    stop uvicorn) → the section must say **"Forecast unavailable"** with the server's own
+    sentence and a retry, and draw **nothing**. A row of zero-height bars would read as
+    "we predict no demand", which is a claim the model never made.
+96. **Timezone sanity, the mistake that hides until deploy.** Every timestamp on the wire
+    ends in `+05:00`, and the cache key contains the PKT hour. Set your *device* to UTC and
+    reload: the day labels (`Today`, `Tomorrow`) must not shift, because they are relative
+    to the first day in the series, not the device clock. On the server side the day comes
+    from `(NOW() AT TIME ZONE 'Asia/Karachi')`, not from container-local time — a Node
+    container in UTC would otherwise roll over at 05:00 PKT and serve yesterday's
+    lead-day arithmetic all morning.
+
+**What this section cannot tell you.** That the suggested prices are *right*. The model is
+trained on simulated demand, so these tests prove the pipeline is honest end to end —
+calibrated probabilities, attributable explanations, an owner who must consent — and prove
+nothing at all about what a Lahore futsal court should charge on a Saturday. That answer
+only exists after real bookings at more than one price per venue, which is the retraining
+trigger the model card names.
 
 ---
 

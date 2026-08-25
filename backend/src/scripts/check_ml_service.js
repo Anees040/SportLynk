@@ -39,6 +39,15 @@
  *      Self-contained on purpose. A test that needs a human to kill a process in
  *      another terminal is a test that gets skipped, and this is the path that
  *      protects the owner dashboard in production.
+ *   6. WAVE D — THAT THE OWNER'S SCREEN CANNOT LIE. Every figure the dashboard card
+ *      and the 72-hour chart display is asserted here to be measured rather than
+ *      asserted: the confidence is inside its derived clamp, the "why" chips carry
+ *      real counterfactual impacts strongest-first, the caption's AUC comes from the
+ *      served artifact, the demand palette's thresholds are checked against the
+ *      trained base rate in ml-service/reports/pricing_metrics.json, and every
+ *      forecast bar carries the colour its own probability earns. It also proves the
+ *      cache serves a degraded answer WITHOUT storing it — the difference between a
+ *      30-second outage and a 60-minute one.
  *
  * WHAT IT DOES NOT DO
  * -------------------
@@ -63,6 +72,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const crypto = require('crypto');
 const net = require('net');
+const fs = require('fs');
 
 const ml = require('../services/mlClient');
 
@@ -236,6 +246,141 @@ async function main() {
     );
   }
 
+  // ── Wave D pure functions: the demand palette and the PKT stamp ──
+  {
+    // These three shape every bar on the owner's forecast chart, so they are checked
+    // without the service: a colour that is wrong here is wrong on the demo laptop.
+    check(
+      `demand thresholds bucket around the trained base rate (${ml.DEMAND_BASE_RATE})`,
+      ml.demandLevel(0.9) === ml.DEMAND_HIGH &&
+        ml.demandLevel(ml.DEMAND_BASE_RATE) === ml.DEMAND_MEDIUM &&
+        ml.demandLevel(0.01) === ml.DEMAND_LOW,
+      `high>=${(ml.DEMAND_BASE_RATE * ml.DEMAND_HIGH_MULTIPLE).toFixed(3)}, ` +
+        `low<${(ml.DEMAND_BASE_RATE * ml.DEMAND_LOW_MULTIPLE).toFixed(3)}`,
+    );
+    check(
+      'the level boundaries are inclusive-low / exclusive-high, with no gap',
+      ml.demandLevel(ml.DEMAND_BASE_RATE * ml.DEMAND_HIGH_MULTIPLE) === ml.DEMAND_HIGH &&
+        ml.demandLevel(ml.DEMAND_BASE_RATE * ml.DEMAND_LOW_MULTIPLE) === ml.DEMAND_MEDIUM,
+    );
+    check(
+      // The bug this exists to prevent: Number(null) === 0, which is finite, so a
+      // naive guard buckets an ABSENT probability as `low` and paints a bar on the
+      // chart for an hour nothing is known about.
+      'an absent or non-numeric probability gets NO colour, not the low colour',
+      [null, undefined, '', '0.5', NaN, {}].every((v) => ml.demandLevel(v) === null),
+    );
+    check(
+      'pktTimestamp stamps +05:00 and rejects anything it cannot stamp honestly',
+      ml.pktTimestamp('2026-08-25', 19) === '2026-08-25T19:00:00+05:00' &&
+        ml.pktTimestamp('2026-08-25', 0) === '2026-08-25T00:00:00+05:00' &&
+        ml.pktTimestamp('25-08-2026', 19) === null &&
+        ml.pktTimestamp('2026-08-25', 24) === null &&
+        ml.pktTimestamp('2026-08-25', '19:00') === null,
+    );
+    const factors = ml.normaliseFactors([
+      { key: 'is_peak', label: ' Peak hour ', direction: 'up', impact: 0.52 },
+      { key: 'x', label: '', direction: 'up', impact: 0.1 },   // no label -> dropped
+      { label: 'Weekend', direction: 'sideways', impact: 'nope' },
+      'not an object',
+    ]);
+    check(
+      'normaliseFactors keeps usable chips, drops the unusable, never throws',
+      factors.length === 2 &&
+        factors[0].label === 'Peak hour' &&
+        factors[1].direction === 'up' &&
+        factors[1].impact === null,
+      JSON.stringify(factors),
+    );
+    check('normaliseFactors survives a non-array', ml.normaliseFactors(null).length === 0);
+  }
+
+  // ── Wave D: the thresholds must be anchored on MEASURED data ────
+  {
+    // The demand palette's whole claim is that "high" means high relative to what
+    // this venue population actually books, not relative to a number someone liked.
+    // That claim is only true while DEMAND_BASE_RATE tracks the base rate the model
+    // was trained against, so it is asserted against the artifact's own metrics.
+    const metricsPath = path.join(
+      __dirname, '..', '..', '..', 'ml-service', 'reports', 'pricing_metrics.json',
+    );
+    if (!fs.existsSync(metricsPath)) {
+      skip('DEMAND_BASE_RATE matches the trained base rate', 'pricing_metrics.json not found');
+    } else {
+      let measured = null;
+      try {
+        const raw = JSON.parse(fs.readFileSync(metricsPath, 'utf8'));
+        // `metrics.test.baseRate` is the held-out split's unconditional booking rate —
+        // the same population the served model is scored against. Deliberately not
+        // `dataset.bookedRate`, which is the whole file including the training half.
+        measured = Number(raw?.metrics?.test?.baseRate);
+      } catch {
+        measured = null;
+      }
+      if (!Number.isFinite(measured)) {
+        skip('DEMAND_BASE_RATE matches the trained base rate', 'no metrics.test.baseRate found');
+      } else {
+        check(
+          'DEMAND_BASE_RATE is the trained base rate, not a taste-based constant',
+          Math.abs(ml.DEMAND_BASE_RATE - measured) <= 0.02,
+          `constant ${ml.DEMAND_BASE_RATE} vs measured ${measured.toFixed(6)}`,
+        );
+      }
+    }
+  }
+
+  // ── Wave D: the owner-route cache ───────────────────────────────
+  {
+    // owner.js keys its caches on user-supplied date/hour values, so the bound is
+    // what stops a scripted client turning the cache into a memory leak.
+    const { TtlCache, ONE_HOUR_MS } = require('../utils/ttlCache');
+    const c = new TtlCache({ name: 'probe', ttlMs: ONE_HOUR_MS, maxEntries: 3 });
+    let loads = 0;
+    const load = async () => { loads += 1; return { v: loads }; };
+
+    const [a, b] = await Promise.all([c.getOrSet('k', load), c.getOrSet('k', load)]);
+    check(
+      'concurrent callers on a cold key share ONE load, not one each',
+      loads === 1 && a === b,
+      `loads=${loads}`,
+    );
+    check('a second call is served from memory', (await c.getOrSet('k', load)).v === 1 && loads === 1);
+
+    for (const k of ['a', 'b', 'c', 'd']) await c.getOrSet(k, load);
+    check(
+      `the cache is bounded (maxEntries respected, oldest evicted)`,
+      c.stats().size === 3,
+      JSON.stringify(c.stats()),
+    );
+
+    let degradedLoads = 0;
+    const degraded = new TtlCache({ name: 'degraded', ttlMs: ONE_HOUR_MS });
+    const opts = { shouldCache: (v) => v?.source === ml.SOURCE_MODEL };
+    for (let i = 0; i < 2; i += 1) {
+      await degraded.getOrSet('venue:price', async () => {
+        degradedLoads += 1;
+        return { source: ml.SOURCE_HEURISTIC };
+      }, opts);
+    }
+    check(
+      // Caching a degraded answer would keep the dashboard degraded for an hour after
+      // the ml-service came back, which is worse than the outage it papers over.
+      'a degraded (heuristic) answer is served but NOT cached',
+      degradedLoads === 2 && degraded.stats().size === 0,
+      `loads=${degradedLoads} size=${degraded.stats().size}`,
+    );
+
+    c.set('v1:price:a', 1);
+    c.set('v1:price:b', 2);
+    c.set('v2:price:a', 3);
+    const dropped = c.invalidatePrefix('v1:price:');
+    check(
+      'applying a price can drop every cached suggestion for that venue by prefix',
+      dropped === 2 && c.get('v2:price:a') === 3 && c.get('v1:price:a') === undefined,
+      `dropped=${dropped}`,
+    );
+  }
+
   // ─── 2. Up path ───────────────────────────────────────────────
   section('2. ML service up path');
 
@@ -353,7 +498,8 @@ async function main() {
     check(
       'suggestPrice returns the full response shape',
       ['source', 'basePrice', 'suggestedPrice', 'deltaPct', 'confidence', 'demand',
-        'reason', 'modelVersion', 'clamped'].every((f) => f in suggestion),
+        'demandLevel', 'reason', 'modelVersion', 'clamped', 'topFactors', 'modelMetrics',
+        'atPolicyCap', 'policyMaxRatio'].every((f) => f in suggestion),
       Object.keys(suggestion).join(', '),
     );
     check(
@@ -362,12 +508,81 @@ async function main() {
         suggestion.suggestedPrice <= BASE * ml.PRICE_RATIO_MAX,
       `${suggestion.suggestedPrice} in [${BASE * ml.PRICE_RATIO_MIN}, ${BASE * ml.PRICE_RATIO_MAX}]`,
     );
+    check(
+      // The bar and the chips are drawn from these; a shape drift here shows up on the
+      // owner's dashboard as a card that silently loses half its content.
+      'topFactors is always an array and demandLevel always agrees with demand',
+      Array.isArray(suggestion.topFactors) &&
+        suggestion.demandLevel === ml.demandLevel(suggestion.demand),
+      `${suggestion.topFactors.length} factors, level=${suggestion.demandLevel}`,
+    );
 
     if (suggestion.source === ml.SOURCE_MODEL) {
       console.log(`   -> source='model'  PKR ${suggestion.suggestedPrice} ` +
         `(${suggestion.deltaPct >= 0 ? '+' : ''}${suggestion.deltaPct}%) ` +
         `model=${suggestion.modelVersion}`);
       check('a model response carries a model version', Boolean(suggestion.modelVersion));
+
+      // ── Wave D: the numbers the card puts on screen ──────────
+      check(
+        // Confidence is derived (identification x boundary penalty x attainment) and
+        // clamped to [0.05, 0.95]. A hard 0 or 1 would mean the derivation was skipped.
+        'confidence is a derived probability inside its clamp, never 0 or 1',
+        typeof suggestion.confidence === 'number' &&
+          suggestion.confidence >= 0.05 && suggestion.confidence <= 0.95,
+        `confidence=${suggestion.confidence}`,
+      );
+      check(
+        'expected occupancy is a probability, and the card can render it',
+        typeof suggestion.demand === 'number' &&
+          suggestion.demand >= 0 && suggestion.demand <= 1,
+        `demand=${suggestion.demand}`,
+      );
+      check(
+        // 19:00 is inside the peak window on a Tuesday, so the model must have SOMETHING
+        // to say about why. Zero chips here means the counterfactual probe silently
+        // failed and the card would render an unexplained price.
+        'a peak-hour suggestion comes with at least one measured "why" chip',
+        suggestion.topFactors.length > 0 &&
+          suggestion.topFactors.every((f) =>
+            typeof f.label === 'string' && f.label.length > 0 &&
+            (f.direction === 'up' || f.direction === 'down') &&
+            typeof f.impact === 'number' && f.impact >= 0 && f.impact <= 1),
+        suggestion.topFactors.map((f) => `${f.label} ${f.direction}${f.impact.toFixed(3)}`).join(', '),
+      );
+      check(
+        'factors arrive strongest-first, so the card can trust the order',
+        suggestion.topFactors.every((f, i, a) => i === 0 || a[i - 1].impact >= f.impact),
+      );
+      check(
+        // This is the caption under the card. If it is absent the caption disappears;
+        // if it is WRONG the demo claims a score the artifact never measured.
+        'modelMetrics carries the served artifact\'s own measured scores',
+        suggestion.modelMetrics &&
+          typeof suggestion.modelMetrics.rocAuc === 'number' &&
+          suggestion.modelMetrics.rocAuc > 0.5 &&
+          typeof suggestion.modelMetrics.brier === 'number',
+        suggestion.modelMetrics
+          ? `AUC ${suggestion.modelMetrics.rocAuc} ceiling ${suggestion.modelMetrics.rocAucCeiling} ` +
+            `brier ${suggestion.modelMetrics.brier} rows ${suggestion.modelMetrics.testRows}`
+          : 'absent',
+      );
+      check(
+        'the policy cap is reported as a boolean plus the ratio it capped at',
+        typeof suggestion.atPolicyCap === 'boolean' &&
+          (suggestion.policyMaxRatio === null || suggestion.policyMaxRatio > 1),
+        `atPolicyCap=${suggestion.atPolicyCap} ratio=${suggestion.policyMaxRatio}`,
+      );
+      if (suggestion.atPolicyCap) {
+        check(
+          // ELASTICITY_PEAK < 1 makes expected revenue rise monotonically to the cap on
+          // peak slots, so this fires legitimately and often — but then the reason must
+          // SAY so, or the owner sees a price that stopped for no stated cause.
+          'a capped suggestion explains that it was the cap that stopped it',
+          /cap/i.test(String(suggestion.reason)),
+          suggestion.reason,
+        );
+      }
     } else {
       // The EXPECTED state in Wave A/B. Not a failure — but it must be honest
       // about being a heuristic, which is the whole point of the `source` field.
@@ -381,6 +596,20 @@ async function main() {
       );
       check('heuristic response explains itself', typeof suggestion.reason === 'string' &&
         suggestion.reason.length > 0);
+      check(
+        // The heuristic gets ONE chip, and it must be honest about being a rule: an
+        // `impact` of 0 would present a rule as a measurement of no effect, which is
+        // the same dishonesty as the old hardcoded "92% CONFIDENCE" in the other
+        // direction. The card renders the label without a number when impact is null.
+        'the heuristic\'s chip is a rule, and says so by carrying no impact',
+        suggestion.topFactors.length === 1 && suggestion.topFactors[0].impact === null,
+        JSON.stringify(suggestion.topFactors),
+      );
+      check(
+        'a heuristic never carries model metrics or a policy cap',
+        suggestion.modelMetrics === null && suggestion.atPolicyCap === false,
+        `metrics=${suggestion.modelMetrics} cap=${suggestion.atPolicyCap}`,
+      );
     }
 
     // ── demand forecast: must NOT invent a chart
@@ -392,6 +621,37 @@ async function main() {
       console.log(`   -> forecast source='${forecast.source}' ${forecast.hours} points`);
       check('forecast points are probabilities in [0,1]',
         forecast.points.every((p) => p.bookProbability >= 0 && p.bookProbability <= 1));
+      check(
+        // `hours` is the count SERVED, not the count asked for. Any point that could
+        // not be stamped or read is dropped rather than drawn as a zero-height bar at
+        // an unknown time, so these two must always agree.
+        'the reported hour count is the number of points actually served',
+        forecast.hours === forecast.points.length,
+        `hours=${forecast.hours} points=${forecast.points.length}`,
+      );
+      check(
+        'every point is stamped in PKT (+05:00) — the chart never converts a timezone',
+        forecast.points.every((p) =>
+          /^\d{4}-\d{2}-\d{2}T\d{2}:00:00\+05:00$/.test(String(p.ts)) &&
+          p.ts === ml.pktTimestamp(p.slotDate, p.hour)),
+        forecast.points[0] ? forecast.points[0].ts : 'no points',
+      );
+      check(
+        'every bar has a colour, and it is the one its own probability earns',
+        forecast.points.every((p) => p.level !== null && p.level === ml.demandLevel(p.bookProbability)),
+      );
+      check(
+        // The forecast holds price_ratio at 1.0 and walks the clock, so a flat series
+        // would mean the time features are not reaching the model at all.
+        'the forecast actually varies by hour rather than repeating one number',
+        new Set(forecast.points.map((p) => p.bookProbability.toFixed(4))).size > 3,
+        `${new Set(forecast.points.map((p) => p.bookProbability.toFixed(4))).size} distinct values`,
+      );
+      const levels = forecast.points.reduce((acc, p) => {
+        acc[p.level] = (acc[p.level] || 0) + 1;
+        return acc;
+      }, {});
+      console.log(`      demand mix: ${JSON.stringify(levels)}`);
     } else {
       check(
         'no model -> forecast is unavailable, NOT a fabricated series',

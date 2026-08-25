@@ -49,6 +49,17 @@ class ApiConstants {
   static const String checkin = '/owner/checkin';
   static const String checkinDecide = '/owner/checkin/decide';
 
+  // Owner — AI pricing (S.3 Wave D). These three sit behind the same owner auth as
+  // the rest of this block; the venue id in the path is checked against the caller's
+  // ownership server-side, so a wrong id and someone else's id both read as 404.
+  static String ownerVenuePricing(String venueId) => '/owner/venues/$venueId/pricing';
+  static String ownerVenueForecast(String venueId) => '/owner/venues/$venueId/forecast';
+  static String ownerVenueSlotPrice(String venueId) => '/owner/venues/$venueId/slots/price';
+
+  /// The owner's slots for one day: `?date=YYYY-MM-DD&venueId=…`. The Apply sheet
+  /// reads this to know which slots exist before it offers to reprice any of them.
+  static const String ownerSlots = '/owner/slots';
+
   // ── Realtime (Socket.IO) ────────────────────────────────────
   /// The Socket.IO origin. The server mounts engine.io at the ROOT (`/socket.io`),
   /// not under `/api`, so the socket must connect to the bare origin — [baseUrl]

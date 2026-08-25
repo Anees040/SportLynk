@@ -1740,6 +1740,212 @@ monotone, well-calibrated and commercially useless.
   model defect and a real defect in a gate — so the review is now a *hardening* step rather
   than a correctness prerequisite. Still worth doing before the viva.
 
+---
+
+## Wave S3-D (Serving the pricing model — the owner's price card and 72h forecast)
+
+**Status: DONE and VERIFIED GREEN.** `check_ml_service.js` reads **60/60 checks passed** with
+the service up and **31/31 passed, 4 skipped** with it down. `flutter analyze lib/` → **No
+issues found!** `node --check` clean on all four touched JS files. The recorded run:
+
+```
+model pricing    ready          pricing-v1-20260825-0041
+-> source='model'  PKR 2600 (+30%) model=pricing-v1-20260825-0041
+-> forecast source='model' 72 points
+demand mix: {"high":18,"low":48,"medium":6}
+```
+
+Twelve files: three new Flutter files, one new backend util, eight edits. No migration, no
+new dependency, `features.py` still byte-identical, and the model artifact untouched — this
+wave adds no modelling, only the path from the joblib to a screen an owner acts on.
+
+### The 501 is gone — what this wave actually changes
+
+`/predict/price` and `/predict/demand` answered `501 not_implemented` from Wave A through
+Wave C. They now run inference. That is the whole behavioural delta at the ML tier, and
+everything else in this entry is about making sure the numbers that reach a human are
+*measured* rather than asserted.
+
+### Endpoint naming: a deliberate override of the wave text
+
+The wave brief specifies `POST /pricing/suggest` and `POST /pricing/forecast`. They ship as
+**`POST /predict/price`** and **`POST /predict/demand`** — the names frozen in the Wave A
+contract, which `mlClient.js`, `check_ml_service.js` and `TESTING.md` §4.5 were all built
+and verified against. Renaming a working client and a 37-check harness to match a prose
+label buys nothing and risks the one seam this wave depends on. The mapping is recorded in
+the router's module docstring so the brief stays auditable against the code.
+
+### Confidence is derived, not chosen — and it is three numbers multiplied
+
+The old dashboard card printed a hardcoded **`92% CONFIDENCE`** with a
+`LinearProgressIndicator(value: 0.92)` beside it. Deleting that string is the single most
+important edit in the wave. What replaces it is
+`identification x boundary x attainment`, clamped to **[0.05, 0.95]**:
+
+- **identification** — sharpness of the *revenue* peak across the sweep, not the spread of
+  P(book). Wave C already established why: spread-of-P measures elasticity, and a highly
+  elastic slot has a wide spread *and* a razor-sharp argmax. A **flat revenue curve** is
+  what actually makes an argmax untrustworthy, so that is what is measured.
+- **boundary** — `BOUNDARY_CONFIDENCE_PENALTY = 0.85` applied when the optimum sits *on* the
+  band edge, because the true optimum may lie outside the range the model was trained on and
+  the sweep cannot see it. Wave C's theorem makes this the common case, not an edge case:
+  `ELASTICITY_PEAK = 0.85 < 1` means peak-slot revenue rises monotonically to the policy cap,
+  so peak slots pin at 1.30x and this penalty fires on most of them. Correct behaviour.
+- **attainment** — `rocAuc / rocAucCeiling`. The model's own measured share of what is
+  achievable on this data (0.7628 / 0.7770 = 98.2%) discounts every suggestion it makes. A
+  confidence that ignores model quality is a progress bar, not a confidence.
+
+The clamp is why the ceiling is 0.95 and not 1.0: the model cannot certify itself.
+
+### `top_factors` is per-request counterfactual occlusion, and one probe was deleted
+
+Chips are computed per request by re-scoring the same slot with one feature moved to
+neutral (`NEUTRAL_HOUR = 15`, `NEUTRAL_WEEKDAY = 2` Wednesday, `NEUTRAL_LEAD_DAYS = 7`) and
+reporting the signed change in P(book), strongest first, `MIN_FACTOR_IMPACT = 0.01`,
+`MAX_FACTORS = 3`. Not global permutation importance — an owner asking "why this price for
+*this* slot" is asking a local question, and a global ranking answers a different one.
+
+**`venue_rating` was written as a probe, measured, and removed.** On a 4.5-star venue the
+counterfactual reported P(book) *falling* 0.052 when rating was neutralised — opposite in
+sign to the generator's causal effect (+0.01) and five times its magnitude. The cause is
+structural, not a bug: with six venue profiles in training, `venue_rating` is very nearly a
+venue ID, so the probe moves the model's whole notion of *which venue this is*, and the
+number it returns is unattributable to reputation. `sport` and `city` are excluded for the
+same reason. A chip an owner cannot act on, carrying a number that means something other
+than what it says, is worse than no chip. The 27-line evidence comment is in
+`app/routers/pricing.py` — it is the answer to "why is reputation missing from the
+explanation", which a panel will ask.
+
+Also removed: **"Weekday ↓"** as a chip. Against a Wednesday neutral, a Wednesday slot
+deviates by nothing, and a chip claiming otherwise is noise dressed as insight. A neutral
+Wednesday 15:00 slot correctly shows **no chips at all**.
+
+### The caption reads the artifact, because `AUC 0.84` is not our score
+
+The brief specifies a `Model v1 · AUC 0.84` caption. **This model scores 0.7628.** Shipping
+the literal would put a number on the owner's screen that contradicts
+`reports/pricing_metrics.json` — the most quotable possible defect in an FYP whose entire
+premise is a genuinely trained model. The caption is built from the loaded artifact's own
+metrics block: `Model pricing-v1-… · AUC 0.76 · 98% of ceiling`. The "% of ceiling" clause
+is the addition, and it is what turns a modest-looking number into a defensible one.
+
+### Caching: one hour, keyed on the PKT hour, and a degraded answer is never stored
+
+New `backend/src/utils/ttlCache.js` — in-process, TTL'd, with three properties that each
+close a real hole:
+
+1. **In-flight de-duplication.** Two dashboard loads racing on a cold cache produce *one*
+   ml-service call, not two. Without it the first render of every owner session pays double.
+2. **`shouldCache` predicate.** Only `source === 'model'` responses are stored. This is the
+   difference between a 30-second outage and a 60-minute one: cache the heuristic and every
+   owner sees `RULE-BASED` for the rest of the hour after uvicorn blinks. The harness
+   asserts it directly — two loads, cache size 0.
+3. **`invalidatePrefix`.** A successful Apply drops that venue's cached suggestion and
+   nothing else. The suggestion was computed against the old price, so serving it after a
+   write would show a delta against a price that no longer exists.
+
+`maxEntries` bounds the map, because an unbounded cache keyed on venue x date x hour in a
+long-lived Node process is a slow memory leak.
+
+### `DEMAND_BASE_RATE` is anchored to the trained base rate by a gate
+
+The three demand bands (high / medium / low) that colour the chart are thresholds around the
+model's own base rate. A taste-based constant there would make the colours decorative, so
+the harness asserts `|DEMAND_BASE_RATE − metrics.test.baseRate| ≤ 0.02` against the artifact.
+
+Getting the JSON path right mattered: `dataset.bookedRate` is **0.324234** (the whole file,
+both halves) and `metrics.test.baseRate` is **0.280109** (the held-out split). The served
+model is scored against the held-out population, so that is the one the thresholds must
+follow. Recorded in a comment beside the gate, because the two keys are one character apart
+in intent and four in name.
+
+### The bug the harness found: `Number(null) === 0`
+
+`demandLevel(p)` bucketed an **absent** probability as `'low'`, because `Number(null)` is 0,
+0 is finite, and a naive `Number.isFinite` guard therefore passes it. A missing prediction
+would have drawn a short grey bar — a confident claim of no demand where the model said
+nothing at all. It now returns `null`, and the regression test is explicit:
+`[null, undefined, '', '0.5', NaN, {}].every(v => ml.demandLevel(v) === null)`.
+
+The Flutter side refuses the same case independently: `DemandPoint.tryParse` returns `null`
+for a point with no probability or no timestamp, and the chart draws nothing rather than a
+zero-height bar.
+
+### FR4.17 — the owner keeps control, enforced in three places
+
+The old card's `Accept` button showed a snackbar and wrote nothing; `Override` was inert.
+Now:
+
+- **No Apply button at all** unless the suggestion is `isModel && isActionable`
+  (`suggestedPrice > 0 && != basePrice`). A rule of thumb is shown for information and
+  cannot be written to a slot — the button's *absence* is the policy.
+- **`apply_price_sheet.dart`** stands between the suggestion and the price. It opens on the
+  suggestion's own date with only the suggestion's own hour pre-selected: the model priced
+  20:00 on a Saturday, not the whole day. Booked, held and past slots are shown **greyed
+  with the reason** rather than hidden, so an owner who taps "All" and gets 6 of 9 can
+  already see which three and why. Each row shows **its own** rupee delta, not the card's
+  headline percentage — slots sit at different prices after an earlier partial apply, so one
+  global "+30%" would be wrong on some rows.
+- **The server enforces every one of those rules inside the transaction.** The sheet is the
+  courtesy, not the guard. A booked slot's price is what a player already agreed to pay.
+
+The partial-apply result is a first-class case, not an error path: `applied to N of M` plus
+the top skip reason translated into owner English (`already booked`, `held by a player`,
+`already at this price`). Silently dropping three of nine is how an owner stops trusting the
+feature.
+
+### The chart's y-axis is fixed at 0..1, deliberately
+
+A probability chart whose axis rescales to the series maximum makes a dead week look exactly
+like a busy one, which destroys the entire value of a calibrated model — the point of
+0.45 is that it means 0.45 everywhere. Gridlines are drawn **only** at the three threshold
+values the server ships in the `levels` block, so the legend and the lines cannot disagree.
+Bottom labels mark the first bar of each new day, and `Today` / `Tomorrow` resolve **relative
+to the first day in the series, not the device clock** — a phone in UTC must not shift them.
+
+Amber for high demand rather than red: high demand is *good news* for an owner, and an alert
+colour on their best hour reads as a warning.
+
+### Verified, and what the verification actually proves
+
+The 60/60 run is not a smoke test. Beyond shape, it asserts: confidence strictly inside
+[0.05, 0.95]; at least one well-formed chip carrying a *measured* impact, sorted
+strongest-first; `modelMetrics.rocAuc > 0.5` and a numeric Brier; `atPolicyCap` boolean with
+its ratio, and when capped, a `reason` that says so; on the heuristic path **exactly one
+chip with `impact === null`** (an impact of 0 would present a rule as a measurement of no
+effect — the same dishonesty as `92% CONFIDENCE` in the other direction) plus
+`modelMetrics === null`; every forecast `ts` matching `/\+05:00$/` **and** equal to
+`pktTimestamp(slotDate, hour)`; every `level` equal to `demandLevel(bookProbability)`; and
+**more than 3 distinct probabilities**, because a flat series means the time features never
+reached the model.
+
+`demand mix: {"high":18,"low":48,"medium":6}` is the substantive result — 72 PKT-stamped
+points, a varied curve, and 18 genuinely high-demand hours in the next three days.
+
+### Not touched, on purpose
+
+`ownerVenueSlots(venueId)` in `api_constants.dart` points at a route that does not exist
+(the real one is `GET /owner/slots?venueId=`). Golden Rule 1: a new `ownerSlots` constant
+was added beside it and the broken one left alone. It is dead in the client either way; the
+fix belongs to whichever wave owns that screen.
+
+### Open at the end of this wave
+
+- [ ] **The owner's domain verdict on `reports/demand_patterns.png`** — still Wave B's last
+  human gate, still upstream of every number in this wave.
+- [ ] **No live authenticated HTTP test of the two Node routes.** The seam is covered at the
+  `mlClient` level by the 60/60 run and by a stubbed-transport test, but nobody has held a
+  real owner JWT against `GET /api/owner/venues/:id/pricing`. `TESTING.md` §4.8 tests 86–87
+  are written for exactly that, and test 87 (another owner's venue id → 404, never a
+  suggestion) is the one that must not be skipped.
+- [ ] **`npm test` (10/10), `verify_schema.js` (113/113) and `run_match_flow_check.js`
+  (69/69) not re-run.** No migration, no ELO, no match code, no schema — expected untouched,
+  but expected is not measured.
+- [ ] The **elasticity re-estimation** from real bookings remains the first thing to do when
+  real data exists, ahead of any retuning. Unchanged from Wave C, and now visible on a
+  screen: every `+30%` an owner reads inherits `ELASTICITY_PEAK = 0.85`, which is an
+  assumption in the generator, not an estimate from data.
+
 
 
 

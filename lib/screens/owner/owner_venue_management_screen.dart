@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/pricing_service.dart';
+import '../../widgets/pricing_widgets.dart';
 
 class OwnerVenueManagementScreen extends StatefulWidget {
   final Map<String, dynamic> venue;
@@ -22,11 +24,36 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
   late TextEditingController _priceCtrl;
   bool _isSaving = false;
 
+  // ── 72-hour demand forecast (FR4.18) ──────────────────────
+  // Read-only and independent of the form: the owner is looking at it precisely to
+  // decide what to type into the price field, so a failure here must leave the form
+  // fully usable.
+  final _pricing = PricingService();
+  DemandForecast? _forecast;
+  bool _forecastLoading = true;
+
   @override
   void initState() {
     super.initState();
     _descCtrl = TextEditingController(text: widget.venue['description']?.toString() ?? '');
     _priceCtrl = TextEditingController(text: _parseNum(widget.venue['price_per_hour']).toStringAsFixed(0));
+    _loadForecast();
+  }
+
+  Future<void> _loadForecast() async {
+    final id = widget.venue['id']?.toString();
+    if (id == null || id.isEmpty) {
+      setState(() => _forecastLoading = false);
+      return;
+    }
+    setState(() => _forecastLoading = true);
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    final f = await _pricing.forecast(token ?? '', id, hours: 72);
+    if (!mounted) return;
+    setState(() {
+      _forecast = f;
+      _forecastLoading = false;
+    });
   }
 
   @override
@@ -129,6 +156,17 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
             children: [
               _buildField('Venue Description & Amenities', _descCtrl, maxLines: 4),
               _buildField('Price Per Hour', _priceCtrl, isNumber: true, suffixText: 'PKR'),
+
+              // Sits directly under the price field on purpose: this is the evidence
+              // for the number the owner is about to type. Above the escrow note,
+              // which is policy they cannot change.
+              DemandForecastSection(
+                forecast: _forecast,
+                loading: _forecastLoading,
+                onRetry: _loadForecast,
+              ),
+              const SizedBox(height: 16),
+
               // Deposit policy is platform-wide and computed server-side — read only.
               Container(
                 padding: const EdgeInsets.all(14),

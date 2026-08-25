@@ -12,8 +12,363 @@ const {
   logTxn,
 } = require("../utils/escrow");
 const { notify } = require("../utils/notify");
+const mlClient = require("../services/mlClient");
+const { TtlCache, ONE_HOUR_MS } = require("../utils/ttlCache");
 
 router.use(auth, checkRole("owner"));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI pricing — S.3 Wave D
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Two read endpoints and one write endpoint, and the split between them is the
+// whole point of FR4.17: the model SUGGESTS and the owner APPLIES. There is no code
+// path anywhere in this file that writes a model-suggested price to a slot without
+// an explicit, per-slot request from the owner. That is a product requirement, not a
+// missing feature — a venue owner whose prices moved on their own would stop
+// trusting the dashboard the first time it happened, and would be right to.
+//
+// Caching: one hour, as the wave specifies, in-process. See utils/ttlCache.js for
+// why in-memory rather than Redis, and why a degraded answer is never cached.
+
+/** Two caches, so a forecast eviction can never displace a price suggestion. */
+const priceCache = new TtlCache({ name: "owner-price", ttlMs: ONE_HOUR_MS, maxEntries: 500 });
+const forecastCache = new TtlCache({ name: "owner-forecast", ttlMs: ONE_HOUR_MS, maxEntries: 200 });
+
+/**
+ * `YYYY-MM-DDTHH` in PKT — part of every cache key.
+ *
+ * Both ML answers depend on the current clock: a price suggestion's `lead_days` is
+ * measured from today, and a forecast is anchored on the next hour. Stamping the
+ * PKT hour into the key means an entry cannot outlive the hour it describes, so a
+ * cache hit is a genuinely identical answer rather than a stale one — and the chart
+ * can never start with a bar that is already in the past.
+ *
+ * Pakistan is UTC+05:00 with no DST, so the shift is arithmetic and needs no tz
+ * database. This must NOT use the server's local time: a container in UTC would roll
+ * the key over at 05:00 PKT and hand the dashboard yesterday's lead-day arithmetic.
+ */
+function pktHourStamp(now = new Date()) {
+  const pkt = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+  return pkt.toISOString().slice(0, 13); // 'YYYY-MM-DDTHH'
+}
+
+/** Today in PKT as `YYYY-MM-DD`. Same reasoning as pktHourStamp. */
+function pktToday(now = new Date()) {
+  return new Date(now.getTime() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/** '08:00:00' | '08:00' | 8 -> 8. NaN when unreadable, and callers fall back. */
+function hourFromTime(value) {
+  if (value === null || value === undefined) return NaN;
+  if (typeof value === "number") return Number.isInteger(value) ? value : NaN;
+  const hour = parseInt(String(value).split(":")[0], 10);
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : NaN;
+}
+
+/**
+ * The venue row the ML calls need, or null when it is not this owner's.
+ *
+ * Ownership is enforced in the WHERE clause rather than by fetching and comparing,
+ * so a wrong id and someone else's id are indistinguishable to the caller — a 404
+ * either way, and no confirmation that the venue exists.
+ */
+async function loadOwnedVenue(venueId, ownerId) {
+  const result = await pool.query(
+    `SELECT id, name, sport_type, city, price_per_hour, base_price, rating,
+            operating_hours_from, operating_hours_to
+       FROM venues WHERE id=$1 AND owner_id=$2`,
+    [venueId, ownerId],
+  );
+  return result.rows[0] || null;
+}
+
+/**
+ * A default slot hour to price when the client does not name one.
+ *
+ * Peak hour, because that is the slot where a pricing decision is worth money and
+ * the one an owner opening the dashboard is thinking about — but clamped into the
+ * venue's own operating window, so a venue that closes at 20:00 is not handed a
+ * suggestion for a 20:00 slot it will never sell.
+ */
+function defaultHourFor(venue) {
+  const openFrom = hourFromTime(venue.operating_hours_from);
+  const openTo = hourFromTime(venue.operating_hours_to);
+  const preferred = mlClient.PEAK_START_HOUR + 2; // 20:00 — mid-peak
+  if (!Number.isInteger(openFrom) || !Number.isInteger(openTo) || openFrom === openTo) {
+    return preferred;
+  }
+  if (openFrom <= openTo) return Math.min(Math.max(preferred, openFrom), openTo);
+  // A window that wraps midnight (open 20:00, close 02:00) already contains 20:00.
+  return preferred >= openFrom || preferred <= openTo ? preferred : openFrom;
+}
+
+// GET /api/owner/venues/:id/pricing?date=YYYY-MM-DD&hour=20
+router.get("/venues/:id/pricing", async (req, res, next) => {
+  try {
+    const venue = await loadOwnedVenue(req.params.id, req.user.id);
+    if (!venue) {
+      return res.status(404).json({ success: false, message: "Venue not found or unauthorized" });
+    }
+
+    const slotDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || ""))
+      ? req.query.date
+      : pktToday();
+    const askedHour = hourFromTime(req.query.hour);
+    const hour = Number.isInteger(askedHour) ? askedHour : defaultHourFor(venue);
+    const startTime = `${String(hour).padStart(2, "0")}:00:00`;
+
+    const basePrice = Number(venue.price_per_hour ?? venue.base_price);
+    const key = `${venue.id}:price:${slotDate}:${hour}:${pktHourStamp()}`;
+
+    let served = "cache";
+    const suggestion = await priceCache.getOrSet(
+      key,
+      async () => {
+        served = "fresh";
+        return mlClient.suggestPrice({
+          basePrice,
+          slotDate,
+          startTime,
+          sport: venue.sport_type,
+          city: venue.city,
+          // 0 is the schema default for an unreviewed venue, and 0 is NOT a rating —
+          // features.py takes null for "unrated" and would otherwise be told this
+          // venue scored zero out of five.
+          venueRating: Number(venue.rating) > 0 ? Number(venue.rating) : null,
+          venueId: venue.id,
+        });
+      },
+      // Only a real model answer is worth an hour of memory. Caching a heuristic
+      // would keep the dashboard degraded for an hour after the ML service came
+      // back — mlClient's circuit breaker already makes the retry cheap.
+      { shouldCache: (value) => value?.source === mlClient.SOURCE_MODEL },
+    );
+
+    res.json({
+      success: true,
+      data: {
+        ...suggestion,
+        venueId: venue.id,
+        venueName: venue.name,
+        slotDate,
+        startTime,
+        hour,
+        cached: served === "cache",
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /api/owner/venues/:id/forecast?hours=72
+router.get("/venues/:id/forecast", async (req, res, next) => {
+  try {
+    const venue = await loadOwnedVenue(req.params.id, req.user.id);
+    if (!venue) {
+      return res.status(404).json({ success: false, message: "Venue not found or unauthorized" });
+    }
+
+    const asked = parseInt(req.query.hours, 10);
+    // Clamped, not rejected: an out-of-range `hours` on a chart is a client bug, and
+    // the useful response is the chart. The 168 ceiling mirrors MAX_FORECAST_HOURS in
+    // the ml-service, which would 422 anything larger.
+    const hours = Number.isInteger(asked) ? Math.min(Math.max(asked, 1), 168) : 72;
+
+    const openFrom = hourFromTime(venue.operating_hours_from);
+    const openTo = hourFromTime(venue.operating_hours_to);
+    const basePrice = Number(venue.price_per_hour ?? venue.base_price);
+    const key = `${venue.id}:forecast:${hours}:${pktHourStamp()}`;
+
+    let served = "cache";
+    const forecast = await forecastCache.getOrSet(
+      key,
+      async () => {
+        served = "fresh";
+        return mlClient.forecastDemand({
+          basePrice,
+          sport: venue.sport_type,
+          city: venue.city,
+          venueRating: Number(venue.rating) > 0 ? Number(venue.rating) : null,
+          hours,
+          openFrom: Number.isInteger(openFrom) ? openFrom : null,
+          openTo: Number.isInteger(openTo) ? openTo : null,
+          venueId: venue.id,
+        });
+      },
+      { shouldCache: (value) => value?.available === true },
+    );
+
+    res.json({
+      success: true,
+      data: {
+        ...forecast,
+        venueId: venue.id,
+        venueName: venue.name,
+        hoursRequested: hours,
+        // Thresholds travel WITH the series so the chart's legend is generated from
+        // the same numbers that bucketed the bars. A legend hardcoded in Dart is a
+        // legend that can disagree with its own chart.
+        levels: {
+          high: mlClient.DEMAND_BASE_RATE * mlClient.DEMAND_HIGH_MULTIPLE,
+          low: mlClient.DEMAND_BASE_RATE * mlClient.DEMAND_LOW_MULTIPLE,
+          baseRate: mlClient.DEMAND_BASE_RATE,
+        },
+        cached: served === "cache",
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Most slots an Apply can touch in one call. Bounds the query, not the feature. */
+const MAX_PRICE_APPLY_SLOTS = 200;
+
+/**
+ * Slot ids are cast to `uuid[]` in the Apply query, and Postgres raises 22P02 on a
+ * malformed one — which would turn a client typo into a 500. Filtered up front so a
+ * bad id is reported as `not_found` alongside the ids that were fine.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// PATCH /api/owner/venues/:id/slots/price   { slotIds: [...], price: 2600 }
+//
+// The APPLY half of FR4.17. Every constraint below exists because this endpoint
+// changes what a player will be charged:
+//
+//   * the price is clamped to the SAME [0.70, 1.50] x price_per_hour band that
+//     mlClient guards, so a typo'd body cannot do what a bad model could not;
+//   * only `available` slots move — a booked slot's price is part of a booking, and
+//     a held slot has someone on the payment screen looking at the old number;
+//   * only future slots move, because repricing the past is meaningless and would
+//     desynchronise completed bookings from their slots;
+//   * every skipped slot comes back WITH ITS REASON, so the owner is told "3 of 8
+//     were already booked" rather than silently getting a partial write.
+router.patch("/venues/:id/slots/price", async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const venue = await loadOwnedVenue(req.params.id, req.user.id);
+    if (!venue) {
+      return res.status(404).json({ success: false, message: "Venue not found or unauthorized" });
+    }
+
+    const rawIds = Array.isArray(req.body?.slotIds) ? req.body.slotIds : [];
+    const slotIds = [...new Set(rawIds.filter((id) => typeof id === "string" && id.length))];
+    if (!slotIds.length) {
+      return res.status(400).json({ success: false, message: "Select at least one slot to apply the price to" });
+    }
+    if (slotIds.length > MAX_PRICE_APPLY_SLOTS) {
+      return res.status(400).json({
+        success: false,
+        message: `Too many slots in one request (max ${MAX_PRICE_APPLY_SLOTS})`,
+      });
+    }
+    const queryableIds = slotIds.filter((id) => UUID_RE.test(id));
+
+    const price = Number(req.body?.price);
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({ success: false, message: "A positive price is required" });
+    }
+
+    const basePrice = Number(venue.price_per_hour ?? venue.base_price);
+    if (!Number.isFinite(basePrice) || basePrice <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "This venue has no base price, so a slot price cannot be validated against it",
+      });
+    }
+    const minPrice = Math.round(basePrice * mlClient.PRICE_RATIO_MIN);
+    const maxPrice = Math.round(basePrice * mlClient.PRICE_RATIO_MAX);
+    if (price < minPrice || price > maxPrice) {
+      return res.status(400).json({
+        success: false,
+        message: `Price must be between PKR ${minPrice} and PKR ${maxPrice} for this venue`,
+      });
+    }
+    const finalPrice = Math.round(price);
+
+    await client.query("BEGIN");
+
+    // Eligibility is computed in SQL and read back per slot, rather than filtered in
+    // the UPDATE's WHERE clause, precisely so a skipped slot can be EXPLAINED. A bare
+    // `UPDATE ... WHERE eligible` returns a count and loses the reason.
+    // FOR UPDATE on the slot rows: without it, a player could take a lock between the
+    // eligibility read and the write, and we would reprice a slot mid-checkout.
+    const { rows: found } = await client.query(
+      `SELECT s.id,
+              s.status::text            AS status,
+              s.price                   AS current_price,
+              (s.locked_until IS NOT NULL AND s.locked_until > NOW()) AS is_locked,
+              (s.slot_date > (NOW() AT TIME ZONE 'Asia/Karachi')::date
+               OR (s.slot_date = (NOW() AT TIME ZONE 'Asia/Karachi')::date
+                   AND s.start_time > (NOW() AT TIME ZONE 'Asia/Karachi')::time)) AS is_future
+         FROM slots s
+        WHERE s.id = ANY($1::uuid[]) AND s.venue_id = $2
+        FOR UPDATE OF s`,
+      [queryableIds, venue.id],
+    );
+
+    const byId = new Map(found.map((row) => [row.id, row]));
+    const eligible = [];
+    const skipped = [];
+
+    for (const id of slotIds) {
+      const row = byId.get(id);
+      if (!row) skipped.push({ slotId: id, reason: "not_found" });
+      else if (row.status !== "available") skipped.push({ slotId: id, reason: row.status });
+      else if (row.is_locked) skipped.push({ slotId: id, reason: "locked" });
+      else if (!row.is_future) skipped.push({ slotId: id, reason: "past" });
+      else if (Number(row.current_price) === finalPrice) skipped.push({ slotId: id, reason: "unchanged" });
+      else eligible.push(id);
+    }
+
+    let updated = [];
+    if (eligible.length) {
+      const result = await client.query(
+        `UPDATE slots SET price=$1 WHERE id = ANY($2::uuid[]) RETURNING id, slot_date, start_time, price`,
+        [finalPrice, eligible],
+      );
+      updated = result.rows;
+    }
+
+    await client.query("COMMIT");
+
+    // The suggestion for this venue was computed against the old price, so it is now
+    // wrong. Dropped by prefix rather than by key because a suggestion is cached per
+    // date and hour and every one of them is stale.
+    priceCache.invalidatePrefix(`${venue.id}:price:`);
+
+    res.json({
+      success: true,
+      message:
+        updated.length === slotIds.length
+          ? `Price applied to ${updated.length} slot${updated.length === 1 ? "" : "s"}`
+          : `Price applied to ${updated.length} of ${slotIds.length} slots`,
+      data: {
+        venueId: venue.id,
+        price: finalPrice,
+        basePrice: Math.round(basePrice),
+        updatedCount: updated.length,
+        skippedCount: skipped.length,
+        updated,
+        skipped,
+      },
+    });
+  } catch (e) {
+    // Rollback must not mask the original error — if the connection is already gone,
+    // the ROLLBACK throws and `e` is what the client needs to know about.
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    next(e);
+  } finally {
+    client.release();
+  }
+});
 
 async function autoGenerateVenueIfMissing(ownerId) {
   const checkVenues = await pool.query('SELECT COUNT(*) FROM venues WHERE owner_id=$1', [ownerId]);
