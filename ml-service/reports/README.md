@@ -16,7 +16,28 @@ artifact it describes.
 | `calibration_pricing.png` | `train_pricing.py` | three panels: reliability (predicted vs observed, 10 quantile bins), where the predictions sit split by outcome, and predicted vs **true** probability |
 | `price_response_pricing.png` | `train_pricing.py` | two panels on one shared x-axis: P(book) across the swept band, then expected revenue indexed to the list price with the recommendation circled and the policy cap marked |
 | `importance_pricing.png` | `train_pricing.py` | permutation importance over the eleven contract columns, measured as **Brier** damage — 5 repeats, with error bars |
+| `price_sanity.json` | `backend/src/scripts/check_price_sanity.js` | the served model answered through the real Node path: Friday 20:00 vs Tuesday 03:00, the rating pairs, a 24-hour demand curve, and the observations that are **recorded without a verdict** because the effect is smaller than the model's resolution |
 | `requirements.lock.txt` | `pip freeze` at train time | the FULL resolved environment, transitives included |
+
+### If you were sent here looking for `calibration.png` or `feature_importance.png`
+
+The S.3 milestone lists the evidence pack by generic name. On disk the two plots
+carry a `_pricing` suffix:
+
+| asked for | on disk |
+|---|---|
+| `calibration.png` | `calibration_pricing.png` |
+| `feature_importance.png` | `importance_pricing.png` |
+
+`demand_patterns.png`, `pricing_metrics.json` and `model_card_pricing.md` are
+exactly as listed. The suffix is not tidiness — S.4's match-outcome model and
+S.5's recommender write their own calibration and importance plots into this same
+committed directory, and a bare `calibration.png` would be silently overwritten by
+whichever training script ran last. Every filename here is `<what>_<model>` so that
+collision cannot happen, and so a reader can tell from the filename alone which
+model a plot is evidence *for*. The names are literals in `train_pricing.py`
+(≈ line 2407) rather than derived from a variable — a convention, so S.4 and S.5
+have to honour it deliberately. Keep the `_<model>` suffix.
 
 ---
 
@@ -160,28 +181,55 @@ single-axis fix; a second y-axis would be the wrong one.
 
 ---
 
-## Right now
+## Right now (end of S.3)
 
 Everything in the file table is written. `demand_patterns.png` came from Wave B; the
-`train_pricing.py` outputs landed in Wave C.
+`train_pricing.py` outputs landed in Wave C; `price_sanity.json` in Wave E.
+
+The served artifact is **`pricing-v1-20260825-0041`** — ROC-AUC 0.7628 against a
+measured Bayes ceiling of 0.7770, Brier 0.1680 (skill +0.1668), 6,244 held-out rows,
+all 12 gates passed. Every one of those numbers is in `pricing_metrics.json`; nothing
+in this directory is typed by hand.
 
 Regenerate the model outputs alone (the dataset is untouched):
 
 ```
 cd ml-service
-python training/train_pricing.py
+python training/train_pricing.py --seed 42
 ```
 
-Two things to know about that run:
+**68 seconds** end to end. `--seed 42` is not an example — it is the run that
+produced the artifact above, and re-running it is **bit-for-bit reproducible**: nine
+metrics to six decimal places, the same winning hyperparameters, the same
+`csvSha256`, the same 12 gate verdicts. That is the reproducibility claim in the S.3
+milestone, and it is checkable in one command.
+
+It ends by printing a metrics table — this model beside a plain `LogisticRegression`
+on the same split, beside the Bayes-optimal ceiling. Read that ordering as intended:
+the baseline column is there so the boosted model has to earn its complexity, and
+the ceiling column turns "is 0.76 good?" (unanswerable) into "is 0.76 near the best
+any model could score on these rows?" (98.2% — yes).
+
+Three things to know about that run:
 
 - **`models/pricing_latest.joblib` is written only if every gate passes.** On a failure
   the reports and a timestamped `models/pricing_<stamp>.joblib` are still written — so the
   failure is auditable and loadable rather than invisible — but the artifact the service
   actually reads is left alone. Exit code 1.
-- **Once it succeeds, `/predict/price` and `/predict/demand` return `501 not_implemented`
-  instead of `503 model_not_loaded`.** That is the correct and expected transition: the
-  registry can now load a valid artifact, and wiring the inference path is Wave D. Both
-  responses are passes in `backend/src/scripts/check_ml_service.js`.
+- **It overwrites this directory.** To rehearse the command — before a demo, say —
+  send both outputs somewhere disposable so the committed evidence is never at risk:
+
+  ```
+  python training/train_pricing.py --seed 42 `
+    --models-dir .rehearsal\models --reports-dir .rehearsal\reports
+  ```
+
+  That exercises the full path, plots and `joblib.dump` included, and takes the same
+  68 s. (`--no-write` is faster at 61 s but skips the write, so it rehearses less.)
+- **A retrain does not hot-swap the served model.** A running `ml-service` holds its
+  artifact in memory from boot. Restart uvicorn, or the owner dashboard keeps
+  reporting the previous `model_version` — which is a bad thing to discover while
+  pointing at the screen.
 
 Do **not** re-run `training/generate_bookings.py` to "refresh" anything. It would write a
 new CSV with a new sha256, which invalidates the provenance recorded in

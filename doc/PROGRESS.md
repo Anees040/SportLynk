@@ -1569,176 +1569,93 @@ monotone, well-calibrated and commercially useless.
   `TESTING.md` now carries a note saying which of its Wave A expectations flip, and §4.7 is
   the new Wave C suite.
 
-### Open at the end of this wave
+### The result, in one entry (three runs; run #1 caught the defects, run #3 is GREEN)
 
-- [x] **`python training/train_pricing.py` has been executed and the wave is GREEN.** Final
-  artifact `pricing-v1-20260825-0041`, **ALL 12 GATES PASSED**, `models/pricing_latest.joblib`
-  in place. ROC-AUC **0.7628** against a *measured* Bayes ceiling of **0.7770** — **98.2% of
-  what is attainable on this dataset** — Brier **0.1680**, Brier skill **0.1668**. Run #1
-  (before the two fixes below) scored 0.7609 / 0.1686 / 0.1637, PR-AUC 0.5240, train/test gap
-  **+0.032**, with the cold subset (`as_of` after the cutoff, n=4,789) at 0.7632, so the split
-  discipline cost nothing; every headline number moved by less than 0.002, which is the point —
-  the fixes changed the *gates* and the shape of the price curve, not the model's power. The
-  logistic baseline's `price_ratio` coefficient came out **−0.2652** — negative, which
-  sign-checks the entire pricing premise. An AUC in the 0.7s sitting flush against the ceiling
-  is the *correct* outcome; `reports/README.md` says why a 0.99 would have been bad news.
-- [x] **Ten of twelve gates passed on run #1; the two failures were different in kind, and
-  both are now fixed and re-run GREEN.** The distinction is the point:
-  - **Gate 3 was a defect in my check, not in the model.** `diagnostics match the contract`
-    reported `price_ratio` differing on 34,281 of 81,395 rows, which reads like catastrophic
-    train/serve skew and is nothing of the sort. `generate_bookings.py` writes the CSV with
-    `float_format="%.6g"` — six significant figures — so the generator's *diagnostic*
-    `price_ratio` column is stored as `1.01762` where it computed `1.0176190476190476`,
-    while `features.build_frame` recomputes the ratio from the two **integer** columns
-    `candidate_price` and `base_price`, which the CSV round-trips exactly. The model trains
-    on the full-precision value and Wave D will serve that same division from the database;
-    the degraded number is the decorative column that never enters the pipeline. It hit
-    `price_ratio` alone because that is the only float in `DIAGNOSTIC_MIRRORS`
-    (`float_format` does not touch integers) and ~42% rather than 100% of rows because
-    `PRICE_AT_LIST_PROB` pins 30% of ratios to exactly 1.0, which `%.6g` writes as `1` and
-    reads back bit-exact. The old `atol=1e-9` was demanding exact float equality across a
-    lossy serialiser. **Fixed by deriving the tolerance from the cause**: `CSV_FLOAT_RTOL`
-    relative for the one float mirror, exact equality kept for the six integer ones, and the
-    gate now prints the worst deviation beside the count so the next failure is diagnosable
-    from one line. It loses no power — a flipped `is_peak` boundary or an off-by-one hour
-    differs by a *whole unit*, five orders of magnitude above the bound. **The constant took
-    two attempts and the mistake is worth recording**: `2e-6` still FAILED on run #2 at
-    `worst deviation 4.92e-06`, because I had bounded the sixth significant figure at 5e-7
-    when for a ratio just above 1.0 the last kept digit sits at the **1e-5** place, so
-    half-ulp rounding costs up to **5e-6 relatively** (below 1.0 the exponent drops and the
-    bound falls to ~7e-7). That 4.92e-06 landing flush against the corrected 5e-6 ceiling is
-    itself the evidence that the mechanism is purely the serialiser. Final value **`1e-5`** —
-    twice the derived bound, with the derivation written beside the constant. The lesson: a
-    tolerance must be *derived from the format that produced the number*, and the derivation
-    kept next to it; a tuned tolerance would have passed by luck and hidden the next real
-    skew. Final gate line: `7 columns agree on all 81,395 rows (worst deviation 4.92e-06)`.
-  - **Gate 11 was real.** `monotone price response` caught P(book) **rising +0.0622** across
-    the band on one peak profile, 12× over the 0.005 tolerance. The data is monotone by
-    construction (`−elasticity × log(price_ratio)`, elasticity strictly positive) but
-    `HistGradientBoostingClassifier` carries **no monotonicity guarantee** and will fit a
-    locally rising step out of noise in a thin region of feature space. A pricing engine
-    reading that curve recommends charging more, forever. **Fixed structurally**:
-    `monotonic_cst={'price_ratio': -1}` constrains P(book) to be non-increasing in price
-    inside the grower, so the curve cannot invert for any input. Two mechanical
-    requirements, both load-bearing: the dict-keyed-by-name form needs the estimator to see
-    feature names, which behind a `ColumnTransformer` means `set_output(transform="pandas")`
-    or sklearn raises from `_check_monotonic_cst`; and `verbose_feature_names_out=False` is
-    what keeps the key a bare `price_ratio` instead of `num__price_ratio`. Verified against
-    the *installed* sklearn 1.9 source, not from memory: `-1` is monotonic decrease, the
-    constraint is documented as holding "over the probability of the positive class" for
-    binary classification — exactly the quantity the optimizer multiplies by rupees — and
-    the only restriction is multiclass. **Only `price_ratio` is constrained**; demand is
-    genuinely non-monotone in `hour` and `dow`, so constraining those would be a modelling
-    error dressed as safety. Both alternatives were worse and both tempting: widening the
-    tolerance hides the defect, and isotonic-smoothing the swept curve fixes the *report*
-    while leaving the artifact the service loads still inverted. The gate is kept as a
-    regression test against the constraint being deleted. Applied in `make_hgb`, so all 12
-    tuning fits are selected **under** the constraint they ship with; `make_baseline` is
-    deliberately untouched, so the passing coefficient gate carries zero new risk. **Final
-    gate line: `24 profiles; worst step +0.0000, smallest fall 0.1791`.** Read both halves:
-    `+0.0000` is the grower structurally unable to build a rising split (against `+0.0622`
-    unconstrained), and the 0.1791 end-to-end fall proves the model still uses price hard —
-    so this is not the degenerate flat fit the min-drop branch exists to catch.
-- [ ] **Elasticity, not the classifier, is now the weakest link — and this is the viva
-  question.** On the green run **7 of 24** profiles pinned to the 1.30× policy cap
-  (suggested ratios span `0.75× .. 1.30×`) and the run headlines a mean uplift. That is not a
-  defect and not a discovered insight, it is a
-  **theorem**: expected revenue `R = r·p(r)` gives `dlnR/dlnr = 1 − e·(1−p)`, so the
-  interior optimum sits at `p* = 1 − 1/e`. `ELASTICITY_PEAK = 0.85` is **below 1**, so
-  `e·(1−p)` can never reach 1, the derivative is positive at every probability, and revenue
-  on a peak slot rises monotonically until policy stops it. `ELASTICITY_OFFPEAK = 2.20`
-  gives `p* = 0.545`, which is why off-peak slots below that go to the floor and above it to
-  the cap — both ends of the band occupied is *evidence the optimizer works*. So the uplift
-  figure is **modelled, not measured**: expected revenue against a counterfactual nobody
-  ran, inheriting `ELASTICITY_PEAK`, which is a stated assumption in
-  `generate_bookings.py` rather than an estimate from data. If true peak elasticity exceeds
-  1.0 an interior optimum exists and the advice changes *qualitatively*. **Re-estimating
-  elasticity from live bookings is therefore the first thing to do once real data exists**,
-  ahead of any retuning of the classifier — the pipeline is validated, the elasticity is
-  not. Both the printed line and the model card now carry that caveat inline so the number
-  cannot be lifted into a slide without the sentence that qualifies it. The actionability
-  gate was one-sided (it failed only if *every* profile pinned to the floor); it now also
-  catches every profile suggesting the **same** ratio, and reports the floor/cap/interior
-  split — but it deliberately does **not** fail on cap-pinning, which would block a model
-  that is mathematically correct.
-- [ ] **Two Ramadan limitations were sharpened in the card after reading the slice numbers.**
-  The model absorbed the Ramadan demand collapse as a **February–March month effect**
-  (`is_ramadan` is not a feature, but `month` is), which the Hijri calendar's ~11-day annual
-  drift will misalign by roughly a month within three years. And the Ramadan slice's
-  flattering in-sample Brier (0.0842 vs 0.1772 overall) is a **base-rate artifact** of a
-  near-all-negative slice — read it as "the model is not confidently wrong during Ramadan",
-  never as "the model handles Ramadan".
-- [x] **A fifth defect, found by auditing the run's own output rather than the code, and
-  the most instructive of the set: the monotone gate was SILENTLY under-covering.** The
-  docstring, `reports/README.md` and this file all promised **24 slot profiles** (six venues
-  × four scenarios). `pricing_metrics.json` from run #1 records `"profiles": 16`. Cause:
-  `representative_profiles` deduplicates its venue picks but never backfills, and the
-  targeted picks *overlap* — the per-sport pick took that sport's **cheapest** venue, which
-  for whichever sport owns the globally cheapest venue is index 0, already taken, and an
-  unrated venue can equally be the median-tier one. Two of six candidates collapsed and
-  nothing replaced them, so the gate ran on **four** venues. Nothing failed, nothing warned,
-  and the report truthfully said 16 while three documents said 24. **Silent under-coverage
-  of a release gate is worse than a failing gate**, because a failing gate stops the run.
-  Fixed on the code side rather than by downgrading the docs, since six venues was the
-  intent and wider coverage makes the monotone gate strictly stronger: the per-sport pick
-  now takes that sport's cheapest venue *not already chosen*; any remaining shortfall is
-  backfilled from evenly-spaced positions along the price-sorted list (price being the axis
-  this market actually varies along); `PROFILE_VENUES = 6` is now the single source of truth
-  for both the builder and the check; and the run prints the venue × scenario breakdown plus
-  an explicit NOTE when the product falls short. A `_venue` key is carried on each profile
-  rather than re-parsed out of `_label`, because a `venue_id` containing a space would have
-  silently corrupted a `split(" ")[0]` count — the same class of bug as the one being fixed.
-  The vacuous-truth hole in the actionability gate was closed at the same time: with an
-  empty sweep list, `at_floor == len(ratios)` was `0 == 0`, so it failed while blaming the
-  model for a missing input. **The green run confirms the fix**: `sweeping 17 prices across
-  24 representative slot profiles (6 venues x 4 scenarios)`, and `pricing_metrics.json` now
-  carries `profileVenues: 6` / `profileVenuesExpected: 6` as audit fields, so the count can
-  never silently drift from the claim again.
-- [x] **All five fixes were verified by *reading* before they were ever executed, and then
-  ran green.** The Bash classifier was unavailable across both authoring sessions (seven
-  refusals, including a `py_compile`, a PowerShell attempt and a `Workflow` launch), so what
-  could be verified was verified from source:
-  sklearn's `_check_monotonic_cst` confirms the dict form accepts a **subset** of features
-  (unnamed ones default to 0, which is the intent) and raises only on names absent from
-  `feature_names_in_`; `ColumnTransformer.set_output` mutates in place, returns self, and
-  propagates to child transformers while skipping the `"passthrough"` string; HGB validates
-  the constraint at `gradient_boosting.py:495`, well after `validate_data` has recorded
-  feature names, and skips constraint remapping entirely because `is_categorical_` is None
-  on this path (one-hot happens upstream); `features.py:414` pins plain `float64`, **not**
-  nullable `Float64`, so HGB's native NaN routing is unaffected by the pandas container; and
-  `build_frame` builds from `FEATURE_ORDER` via `build_feature_dict`, which reads only named
-  contract keys, so the added `_venue` key is *structurally* incapable of reaching the
-  matrix. One genuine bug was caught this way — the new card paragraph first referenced
-  `len(sweeps)`, which is not in `write_model_card`'s scope and would have raised
-  `NameError` after a full training run; it reads `m["pricing"]["profiles"]` instead. Every
-  `say()` line is confirmed pure ASCII. **The prediction held**: the syntax check and the
-  `--no-write --no-plot` dry run both executed cleanly, run #2 failed *only* the tolerance
-  arithmetic above, and run #3 came back **12/12 with metrics inside 0.002** of run #1 —
-  attainment 98.2% against its 0.90 gate. The flagged risk did **not** materialise: a
-  monotone constraint permits a *flat* curve, so `MONOTONE_MIN_DROP = 0.010` could have
-  fired as "flat response" if the constrained fit stopped using price; the smallest observed
-  fall was **0.1791**, an 18× margin, so the constraint agreed with the true relationship
-  rather than fighting it. The profile count reads **24**, not 16.
-- [ ] **Wave B's owner verdict on `reports/demand_patterns.png` is still outstanding**, and
-  it is upstream of everything here: this model's numbers describe that dataset's
-  assumptions. Unchanged from the Wave B entry.
-- [ ] **Baseline not re-measured** (`npm test` 10/10, `verify_schema.js` 113/113,
-  `flutter analyze` 0, `check_ml_service.js` 37/37). No migration, no route, no Flutter
-  code, and `features.py` is byte-identical — but `check_ml_service.js` **must** be re-run
-  now, because the 503 → 501 transition has HAPPENED: `models/pricing_latest.joblib` is
-  written and the registry can load it, so `/predict/price` and `/predict/demand` answer
-  **501 `not_implemented`** instead of `503 model_not_loaded`. Both responses are passes in
-  `check_ml_service.js`, so the suite should still read 37/37 — that run is the confirmation.
-  Wave D removes the 501.
-- [ ] **The planned adversarial multi-lens review of the script did not run** — the
-  classifier outage persisted across both sessions, and a `Workflow` launch was refused for
-  the same reason. It was scoped to check the written module against the frozen contract
-  (does anything leak, does the payload satisfy every `registry._load` guard, does the
-  split assertion actually prove no-leakage, is any printed string non-ASCII, does any
-  sklearn call use a removed API). Run #1 answered most of those empirically — the script
-  executed end to end, wrote all six report files, and its own gates caught both a real
-  model defect and a real defect in a gate — so the review is now a *hardening* step rather
-  than a correctness prerequisite. Still worth doing before the viva.
+**GREEN — `pricing-v1-20260825-0041`, ALL 12 GATES PASSED, `models/pricing_latest.joblib`
+in place.** ROC-AUC **0.7628** against a *measured* Bayes ceiling of **0.7770** = **98.2% of
+attainable**, Brier **0.1680**, Brier skill **0.1668**. Logistic baseline `price_ratio`
+coefficient **−0.2652** (negative — sign-checks the whole premise). Cold subset (`as_of` >
+cutoff, n=4,789) held at 0.7632, so the split discipline cost nothing. An AUC in the 0.7s
+flush against the ceiling is the *correct* outcome, not a weak one.
+
+It took three runs, and the fixes changed the *gates* and the shape of the price curve, not
+the model's power (every headline number moved < 0.002 from run #1's 0.7609 / 0.1686 /
+0.1637, gap +0.032). Run #1 passed 10/12 and caught two failures of different kinds; run #2
+failed *only* a tolerance-arithmetic mistake; run #3 came back 12/12. The three lessons worth
+a viva:
+
+- **Gate 3 was a defect in my check, not the model.** It reported `price_ratio` differing on
+  34,281/81,395 rows — reads like catastrophic skew, is nothing of the sort.
+  `generate_bookings.py` writes the CSV with `float_format="%.6g"`, so the *diagnostic*
+  `price_ratio` column stores `1.01762` where it computed `1.0176190476190476`, while
+  `features.build_frame` recomputes the ratio from the two **integer** columns (which
+  round-trip exactly). The model trains on and Wave D serves the full-precision division; the
+  degraded number is a decorative column that never enters the pipeline. Fixed by **deriving
+  the tolerance from the cause** — relative for the one float mirror, exact for the six
+  integers, worst deviation now printed beside the count. The constant took two tries: `2e-6`
+  still FAILED run #2 at `4.92e-06`, because for a ratio just above 1.0 the last `%.6g` digit
+  sits at the 1e-5 place (half-ulp ≈ 5e-6 relative), not the 5e-7 I first assumed. Final
+  **`1e-5`**, derivation written beside the constant. The lesson: a tolerance must be *derived
+  from the format that produced the number* — a tuned one passes by luck and hides the next
+  real skew. Final gate line: `7 columns agree on all 81,395 rows (worst deviation 4.92e-06)`.
+- **Gate 11 was real.** It caught P(book) **rising +0.0622** across the band on one peak
+  profile (12× over tolerance). The data is monotone by construction, but
+  `HistGradientBoostingClassifier` has **no monotonicity guarantee** and fits a locally rising
+  step out of noise — a pricing engine reading that curve charges more, forever. Fixed
+  **structurally** with `monotonic_cst={'price_ratio': -1}` (only `price_ratio` — demand is
+  genuinely non-monotone in `hour`/`dow`). Two load-bearing mechanics: the dict-by-name form
+  needs `set_output(transform="pandas")` behind the `ColumnTransformer`, and
+  `verbose_feature_names_out=False` keeps the key a bare `price_ratio`. Verified against the
+  *installed* sklearn 1.9 source (−1 = decrease, holds "over the probability of the positive
+  class" for binary — exactly what the optimizer multiplies by rupees). Applied in `make_hgb`
+  so all 12 tuning fits ship under the constraint; `make_baseline` untouched. Final gate line:
+  `24 profiles; worst step +0.0000, smallest fall 0.1791` — the `+0.0000` is the grower unable
+  to build a rising split, the 0.1791 fall proves it still uses price hard (not the degenerate
+  flat fit the min-drop branch guards against).
+- **A fifth defect, found by auditing the run's *output* not the code: the monotone gate was
+  SILENTLY under-covering.** Three docs promised 24 profiles; run #1's `pricing_metrics.json`
+  recorded 16. `representative_profiles` dedups venue picks but never backfills, and the
+  targeted picks overlapped (the per-sport pick took the sport's cheapest venue = often index
+  0, already taken), so the gate ran on **four** venues while everything said 24. **Silent
+  under-coverage of a gate is worse than a failing gate** — a failing gate stops the run.
+  Fixed on the code side (six venues was the intent, wider coverage is strictly stronger):
+  per-sport pick takes the cheapest venue *not already chosen*, shortfall backfills along the
+  price-sorted list, `PROFILE_VENUES = 6` is the single source of truth for builder and check,
+  and a per-profile `_venue` key avoids a `split(" ")[0]` count that a spaced `venue_id` would
+  corrupt. The green run carries `profileVenues: 6` / `profileVenuesExpected: 6` as audit
+  fields, so the count can never silently drift again.
+
+**The elasticity is now the weakest link, and this is the viva question.** 7 of 24 profiles
+pinned to the 1.30× cap — a **theorem**, not a defect: `R = r·p(r)` gives
+`dlnR/dlnr = 1 − e·(1−p)`, so `p* = 1 − 1/e`; `ELASTICITY_PEAK = 0.85 < 1` makes the
+derivative positive at every probability, so peak revenue rises to the cap, while
+`ELASTICITY_OFFPEAK = 2.20` gives `p* = 0.545` (both band ends occupied = the optimizer
+works). So the uplift figure is **modelled, not measured** — a counterfactual inheriting
+`ELASTICITY_PEAK`, a stated assumption in `generate_bookings.py`, not data. If true peak
+elasticity exceeds 1.0 the advice changes *qualitatively*, so **re-estimating elasticity from
+live bookings is the first thing to do once real data exists** — the pipeline is validated,
+the elasticity is not. The caveat is inline in the printed line and the card; the
+actionability gate now also fails an all-same-ratio suggestion, but deliberately does not fail
+on cap-pinning.
+
+**Two Ramadan limitations sharpened in the card:** the model absorbed the Ramadan collapse as
+a **Feb–March month effect** (`is_ramadan` isn't a feature, `month` is), which the Hijri
+~11-day annual drift will misalign by ~a month within three years; and the flattering in-sample
+Ramadan Brier (0.0842 vs 0.1772) is a **base-rate artifact** of a near-all-negative slice — "not
+confidently wrong during Ramadan", never "handles Ramadan".
+
+All five fixes were **read-verified before they ran** (the Bash classifier was unavailable
+across both authoring sessions — seven refusals), against the installed sklearn/pandas source;
+that pass caught a real `NameError` (`len(sweeps)` out of `write_model_card`'s scope → reads
+`m["pricing"]["profiles"]`). The predicted risk (a monotone constraint permits a flat curve →
+`MONOTONE_MIN_DROP` could fire) did not materialise: the 0.1791 fall is an 18× margin.
+
+**Still open:** Wave B's owner verdict on `reports/demand_patterns.png` (upstream of every
+number here — unchanged from the Wave B entry); and the planned adversarial multi-lens review
+of the script, which run #1 answered empirically (the script ran end to end and its own gates
+caught a real model defect and a real gate defect), so it is now a *hardening* step, not a
+correctness prerequisite. The 503→501 transition happened as designed; Wave D then removed the
+501 entirely.
 
 ---
 
@@ -1945,6 +1862,203 @@ fix belongs to whichever wave owns that screen.
   real data exists, ahead of any retuning. Unchanged from Wave C, and now visible on a
   screen: every `+30%` an owner reads inherits `ELASTICITY_PEAK = 0.85`, which is an
   assumption in the generator, not an estimate from data.
+
+---
+
+## Wave S3-E (Evidence pack, the retrain demo, and the claims made falsifiable)
+
+**Status: DONE and VERIFIED GREEN.** Two code files, four docs. No model change, no
+endpoint, no screen, no migration, no dependency — `features.py` and
+`models/pricing_latest.joblib` both byte-identical. This wave adds no capability; it
+makes the milestone's own claims **checkable by someone who does not trust us**, which
+at the end of a sprint is the more valuable thing.
+
+Measured this wave, not asserted:
+
+```
+retrain, full path            68 s   (--no-write: 61 s)   target was < 120 s
+seed 42 reproduces            bit-for-bit — 9 metrics to 6 dp, same
+                              hyperparameters, same csvSha256, 12/12 gates
+check_price_sanity.js         ALL 20 REQUIRED CHECKS PASSED — pricing-v1-20260825-0041
+flutter analyze lib/          0 issues
+model artifact                374 KB   (Render free-tier limit: 20 MB)
+```
+
+### The evidence pack exists, under different filenames — and the difference is deliberate
+
+The milestone asks for `calibration.png` and `feature_importance.png`. On disk they are
+`calibration_pricing.png` and `importance_pricing.png`. Not renamed to match: S.4's
+sentiment model and S.5's recommender will write their own calibration and importance
+plots into this same **committed** directory, and a bare `calibration.png` would be
+silently overwritten by whichever training script ran last — losing evidence for one
+model without a single error message. Every filename here is `<what>_<model>`. The
+mapping table is now at the top of `reports/README.md` so nobody hunting for the
+milestone's filename concludes the deliverable is missing.
+
+### The retrain demo is the *reproducibility* demo, and it now proves itself
+
+`python training/train_pricing.py --seed 42` is not an illustrative command — 42 is
+`DEFAULT_SEED`, and that exact invocation is what produced the served artifact. Verified
+by running it twice into a scratch directory (`--models-dir .rehearsal\models
+--reports-dir .rehearsal\reports`, so the committed evidence was never at risk while
+still exercising the full path including `joblib.dump` and all three figures):
+`rocAuc 0.762774`, `prAuc 0.530169`, `brier 0.168011`, `logLoss 0.506264`,
+`accuracy 0.746477`, `brierSkill 0.16681`, `n 6244`, `baseRate 0.280109` — identical,
+along with the winning hyperparameters, the `csvSha256` and all twelve gate verdicts.
+68 seconds. That is the difference between *claiming* reproducibility in a model card
+and being able to demonstrate it while someone watches.
+
+`print_metrics_table()` is new, and its column order is an argument. The numbers were
+already printed at step 7, but they scroll off during the hyperparameter sweep and the
+permutation-importance pass, so the last screen of a live retrain showed gates and no
+metrics. It now reprints them immediately above the gate table, through `shout` so
+`--quiet` cannot suppress them, in three columns:
+
+- **`logistic`** — a plain `LogisticRegression` on the same split. It is there so the
+  boosted model has to *earn* its complexity in public.
+- **`THIS MODEL`**.
+- **`best poss`** — the Bayes-optimal score, **measured** from `latent_p`. This is the
+  column that does the work: it converts "is 0.76 good?" (unanswerable, and the
+  question a panel will ask) into "is 0.76 close to the best score any model could
+  achieve on these rows?" — 98.2%, yes. It prints blank when training on real bookings,
+  where nobody knows the true probability, and the header says so.
+
+### One stale line was deleted, and it was on the worst possible screen
+
+The success message ended with a note that `/predict/price` returns `501
+not_implemented` and that "wiring the inference path is S.3 Wave D". Wave D landed. So
+the final screen of a live retrain was printing something false, in front of whoever
+was watching. Replaced with the warning that is actually true and actually useful:
+**a retrain does not hot-swap the served model.** A running `ml-service` holds its
+artifact in memory from boot, so after this command the owner dashboard still reports
+the *previous* `model_version` until uvicorn restarts. Demoing a retrain and then
+pointing at an unchanged caption is a specific, avoidable way to lose a viva.
+
+### `check_price_sanity.js` — the acceptance checklist as an executable
+
+The milestone contains a claim no test in this repo covered, because it is not about a
+code path:
+
+> Suggested price changes sensibly: Friday 8pm > Tuesday 3am; low-rated venue < high-rated
+
+`check_ml_service.js` proves the *wiring* (60 checks) and deliberately does not prove
+this. A passing wiring test on top of a nonsense model is precisely the failure this
+project cannot afford. So the claim is now 20 required checks against the live serving
+path, plus 6 quantities recorded **without** a verdict.
+
+Four decisions inside it are load-bearing:
+
+**It goes through `mlClient.suggestPrice`, not `curl` to FastAPI.** The number a
+committee sees is the number on the owner's card, and that number has already been
+through `applyGuardrails` and the rounding step. Probing Python directly would test a
+figure nobody is ever shown.
+
+**`source: 'heuristic'` is a hard failure — the only place in this codebase where the
+fallback is not an acceptable answer.** The heuristic multiplies peak hours by a
+constant, so it would pass "Friday 8pm > Tuesday 3am" perfectly while telling us
+nothing about the model. A green tick earned by the fallback is worse than a red one.
+
+**The rating gate is the weak form (`hi >= lo`), and that is not a dodge.** With six
+venue profiles in training, a strict `hi > lo` fails wherever the +30% cap pins both
+venues to the same rupee — which is most of peak — so gating on it would make a correct
+system look broken. Inversion is what must never happen, so inversion is what is gated.
+
+**The demand curve is measured from `forecastDemand`, not from `suggestPrice`.** This
+was a real bug in the first version, and the fix is the most transferable thing in the
+file: `suggestPrice.demand` is P(book) **at the suggested price**, and the suggested
+price differs at every hour (0.75× at 03:00, 1.30× at 20:00). Reading those eight
+numbers as a demand curve compares eight different prices and calls the result a clock
+effect — it reported a fake dip at 19:00 and I nearly recorded it as a finding.
+`forecastDemand` holds `price_ratio` at 1.0 and varies only the clock, which is the
+definition of a demand curve and is the series the venue chart draws. **A comparison is
+only valid if exactly one thing varies**, and in a pricing model the price is the thing
+most likely to be varying behind your back.
+
+Recorded run — Friday 20:00 **PKR 2600 (+30%)**, P(book) 0.6257 against Tuesday 03:00
+**PKR 1600 (−20%)**, P(book) 0.2248; the clean 24-hour curve `03:00 0.0998 → 07:00
+0.0974 (deadest) → 11:00 0.1201 → 15:00 0.1409 → 17:00 0.3861 → 19:00 0.5623 → 20:00
+0.6314 (busiest) → 22:00 0.5350`; the price ladder `−25 −25 −20 −25 −20 +30 +30 +10`;
+72 contiguous `+05:00` points across three demand levels. Written to
+`reports/price_sanity.json` — a committed evidence artifact, and the sixth file in the
+pack.
+
+### The finding: "low-rated < high-rated" is only true where the guardrail leaves room
+
+This is the one acceptance claim that does not hold as written, and it is better said
+plainly here than discovered by an examiner.
+
+| hour | 4.8★ | 2.0★ | P(book) gap | why |
+|---|---|---|---|---|
+| Friday 20:00 | 2600 | 2600 | **+0.0421** | both pinned to the +30% policy cap |
+| Thursday 11:00 | 1600 | 1600 | +0.0012 | gap below the model's resolution |
+| Thursday 03:00 | 1600 | **1500** | **−0.0024** | strict — but see below |
+
+The rating signal is **real at peak**: on identical slots the 4.8★ venue's P(book) is
+0.6384 against 0.5963, a 0.042 gap in the right direction. But the +30% cap binds
+first, so the *suggestion* cannot express it. That is a safety feature working exactly
+as designed — an owner is never shown a 3× price — not a modelling failure.
+
+Read the third row carefully, because it is the one an examiner will pick at. It is the
+only strictly-ordered row in the table, and its P(book) gap is **negative** — the 4.8★
+venue is priced higher while the model gives it a *slightly lower* booking probability.
+Both facts are noise: at 03:00 the revenue curve is nearly flat across the band, so a
+0.002 difference in P is enough to move the `argmax` by one grid step (PKR 100), and a
+0.002 difference on a model with Brier 0.168 carries no information at all. So the
+honest summary is not "monotone at 03:00, capped at peak" — it is **the rating effect is
+measurable only at peak, and only in P(book), never in the price.** Both off-peak gaps
+are `[OBSERVE]` lines rather than assertions for exactly this reason; dressing a 0.002
+swing as a passing test is the kind of thing that collapses under one question.
+
+### The Jummah dip, found while validating something else
+
+The 72-hour forecast puts Friday 2026-08-28 12:00–14:00 at 0.065–0.069 against
+Thursday's 0.099–0.101 at the same hours. That is the **Jummah prayer** collapse the
+generator encodes as a `dow × hour` interaction (Wave B departure #2) surviving all the
+way through training into a served prediction — a genuinely Pakistani signal, learned
+rather than hardcoded, and visible in a chart an owner can point at. It is also the
+strongest new evidence for Wave B's still-open human gate on `demand_patterns.png`.
+
+### The five pitfalls, audited rather than acknowledged
+
+1. **Train and serve share `core/features.py`** — enforced by a gate, not by discipline:
+   the skew check re-runs the contract round-trip on all 81,395 rows at train time
+   (`7 columns agree, worst deviation 4.92e-06`).
+2. **`random_state` fixed everywhere** — `random_state=seed` in both `make_baseline` and
+   `make_hgb`, and reproducibility is now *proven* bit-for-bit rather than assumed.
+3. **No live-weather claim anywhere.** Checked all three places it could have crept in:
+   `features.py:62` ("no source. Future work"), `data/README.md:494` ("monthly average,
+   not daily"), model-card limitation 9 ("No weather, no competitor prices"). The
+   seasonality is a month table plus noise, and every document says so.
+4. **Not over-tuned** — 0.7628 at 98.2% of a *measured* 0.7770 ceiling, with the reason
+   the residual is irreducible written down (Ramadan, holidays, `ground_type`, payday and
+   a per-venue random effect all move demand and are all deliberately not features).
+5. **374 KB**, against a 20 MB budget. 54× of headroom.
+
+### Verified, and what the verification proves
+
+`flutter analyze lib/` **0 issues** (no Dart touched this wave — measured, not assumed).
+`node --check` clean on `check_price_sanity.js`. The retrain ran green twice into a
+scratch directory and once into `reports/`. `check_price_sanity.js` exits 0 with 20/20.
+Scratch (`.rehearsal/`, `.rehearsal_run.log`, `.rehearsal_table.log`) deleted.
+
+What it does **not** prove: that any suggested price is *right*. Same caveat as Wave D,
+and the model card names the trigger — real bookings at more than one price per venue.
+
+### Open at the end of this wave (and of S.3)
+
+- [ ] **`tag s3-done` is not done, because nothing is committed.** The tag is the one
+  checklist item that cannot be honestly self-served — commands are in the wave report.
+- [ ] **The owner's domain verdict on `reports/demand_patterns.png`.** Wave B's last
+  human gate, now carried into the milestone. The Jummah dip above is new supporting
+  evidence for it.
+- [ ] **No live authenticated HTTP test of the two Node owner routes** — `TESTING.md`
+  §4.8 tests 86–87 still open; test 87 (another owner's venue id → 404) must not be
+  skipped.
+- [ ] **`npm test`, `verify_schema.js`, `run_match_flow_check.js` not re-run** this wave.
+- [ ] **Elasticity re-estimation from real bookings** — still the first thing to do when
+  real data exists, ahead of any retuning of the classifier.
+- [ ] **Rotate `ML_API_KEY`** in both `.env` files before S.7 puts `ml-service` on a
+  public Render URL.
 
 
 

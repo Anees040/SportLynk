@@ -1,0 +1,414 @@
+{
+  "generatedAt": "2026-08-25T17:50:45.365Z",
+  "modelVersion": "pricing-v1-20260825-0041",
+  "modelMetrics": {
+    "rocAuc": 0.762774,
+    "prAuc": 0.530169,
+    "brier": 0.168011,
+    "brierSkill": 0.16681,
+    "rocAucCeiling": 0.776994,
+    "testRows": 6244,
+    "trainedAt": "2026-08-25T00:41:14+00:00",
+    "datasetSource": "synthetic"
+  },
+  "venueProfile": {
+    "basePrice": 2000,
+    "sport": "Futsal",
+    "city": "Lahore"
+  },
+  "dates": {
+    "friday": "2026-08-28",
+    "tuesday": "2026-08-25",
+    "thursday": "2026-08-27"
+  },
+  "claims": {
+    "peakBeatsDeadOfNight": {
+      "fridayEvening": 2600,
+      "tuesdayPreDawn": 1600,
+      "holds": true
+    },
+    "ratingNeverInverts": [
+      {
+        "hour": "20:00",
+        "highRating": 2600,
+        "lowRating": 2600,
+        "demandGap": 0.0421,
+        "bothAtPolicyCap": true
+      },
+      {
+        "hour": "11:00",
+        "highRating": 1600,
+        "lowRating": 1600,
+        "demandGap": 0.0012,
+        "bothAtPolicyCap": false
+      },
+      {
+        "hour": "03:00",
+        "highRating": 1600,
+        "lowRating": 1500,
+        "demandGap": -0.0024,
+        "bothAtPolicyCap": false
+      }
+    ],
+    "demandCurve": [
+      {
+        "hour": 0,
+        "demand": 0.0998,
+        "level": "low"
+      },
+      {
+        "hour": 1,
+        "demand": 0.0998,
+        "level": "low"
+      },
+      {
+        "hour": 2,
+        "demand": 0.0998,
+        "level": "low"
+      },
+      {
+        "hour": 3,
+        "demand": 0.0998,
+        "level": "low"
+      },
+      {
+        "hour": 4,
+        "demand": 0.0998,
+        "level": "low"
+      },
+      {
+        "hour": 5,
+        "demand": 0.0998,
+        "level": "low"
+      },
+      {
+        "hour": 6,
+        "demand": 0.0998,
+        "level": "low"
+      },
+      {
+        "hour": 7,
+        "demand": 0.0974,
+        "level": "low"
+      },
+      {
+        "hour": 8,
+        "demand": 0.0974,
+        "level": "low"
+      },
+      {
+        "hour": 9,
+        "demand": 0.1207,
+        "level": "low"
+      },
+      {
+        "hour": 10,
+        "demand": 0.1326,
+        "level": "low"
+      },
+      {
+        "hour": 11,
+        "demand": 0.1201,
+        "level": "low"
+      },
+      {
+        "hour": 12,
+        "demand": 0.1004,
+        "level": "low"
+      },
+      {
+        "hour": 13,
+        "demand": 0.1016,
+        "level": "low"
+      },
+      {
+        "hour": 14,
+        "demand": 0.1024,
+        "level": "low"
+      },
+      {
+        "hour": 15,
+        "demand": 0.1409,
+        "level": "low"
+      },
+      {
+        "hour": 16,
+        "demand": 0.2306,
+        "level": "medium"
+      },
+      {
+        "hour": 17,
+        "demand": 0.3861,
+        "level": "medium"
+      },
+      {
+        "hour": 18,
+        "demand": 0.4866,
+        "level": "high"
+      },
+      {
+        "hour": 19,
+        "demand": 0.5623,
+        "level": "high"
+      },
+      {
+        "hour": 20,
+        "demand": 0.6314,
+        "level": "high"
+      },
+      {
+        "hour": 21,
+        "demand": 0.6096,
+        "level": "high"
+      },
+      {
+        "hour": 22,
+        "demand": 0.535,
+        "level": "high"
+      },
+      {
+        "hour": 23,
+        "demand": 0.535,
+        "level": "high"
+      }
+    ],
+    "suggestedPriceByHour": [
+      {
+        "hour": 3,
+        "price": 1500,
+        "deltaPct": -25
+      },
+      {
+        "hour": 8,
+        "price": 1500,
+        "deltaPct": -25
+      },
+      {
+        "hour": 11,
+        "price": 1600,
+        "deltaPct": -20
+      },
+      {
+        "hour": 15,
+        "price": 1500,
+        "deltaPct": -25
+      },
+      {
+        "hour": 17,
+        "price": 1600,
+        "deltaPct": -20
+      },
+      {
+        "hour": 19,
+        "price": 2600,
+        "deltaPct": 30
+      },
+      {
+        "hour": 20,
+        "price": 2600,
+        "deltaPct": 30
+      },
+      {
+        "hour": 22,
+        "price": 2200,
+        "deltaPct": 10
+      }
+    ]
+  },
+  "requiredPassed": 20,
+  "requiredTotal": 20,
+  "observations": [
+    {
+      "kind": "observe",
+      "name": "where rating actually moves the price",
+      "detail": "1/3 scenarios (03:00)"
+    },
+    {
+      "kind": "observe",
+      "name": "where the policy cap hides the rating signal",
+      "detail": "20:00 — both ratings pinned to the cap, so the price cannot differ even though P(book) does"
+    },
+    {
+      "kind": "observe",
+      "name": "price ordering that disagrees with P(book)",
+      "detail": "03:00 — priced higher on the LOWER P(book). A flat off-peak revenue curve, not a rating effect: do not quote it as monotonicity"
+    },
+    {
+      "kind": "observe",
+      "name": "20:00: P(book) gap from 2.8 stars of rating",
+      "detail": "+0.0421"
+    },
+    {
+      "kind": "observe",
+      "name": "11:00: P(book) gap from 2.8 stars of rating",
+      "detail": "+0.0012  (below the model's resolution — noise)"
+    },
+    {
+      "kind": "observe",
+      "name": "03:00: P(book) gap from 2.8 stars of rating",
+      "detail": "-0.0024  (below the model's resolution — noise)"
+    },
+    {
+      "kind": "observe",
+      "name": "suggested price across the same day",
+      "detail": "3:00 -25%  8:00 -25%  11:00 -20%  15:00 -25%  17:00 -20%  19:00 +30%  20:00 +30%  22:00 +10%"
+    }
+  ],
+  "checks": [
+    {
+      "kind": "require",
+      "name": "Friday 20:00 priced above Tuesday 03:00",
+      "ok": true,
+      "detail": "PKR 2,600 > PKR 1,600"
+    },
+    {
+      "kind": "require",
+      "name": "and it is demand, not noise, driving it",
+      "ok": true,
+      "detail": "P(book) 0.6257 > 0.2248"
+    },
+    {
+      "kind": "require",
+      "name": "the peak slot explains itself",
+      "ok": true,
+      "detail": "Peak hour up, Friday up, Short notice down"
+    },
+    {
+      "kind": "require",
+      "name": "20:00: high rating is never priced below low",
+      "ok": true,
+      "detail": "equal at PKR 2,600 (both at policy cap)"
+    },
+    {
+      "kind": "require",
+      "name": "11:00: high rating is never priced below low",
+      "ok": true,
+      "detail": "equal at PKR 1,600"
+    },
+    {
+      "kind": "require",
+      "name": "03:00: high rating is never priced below low",
+      "ok": true,
+      "detail": "PKR 1,600 > PKR 1,500"
+    },
+    {
+      "kind": "observe",
+      "name": "where rating actually moves the price",
+      "detail": "1/3 scenarios (03:00)"
+    },
+    {
+      "kind": "observe",
+      "name": "where the policy cap hides the rating signal",
+      "detail": "20:00 — both ratings pinned to the cap, so the price cannot differ even though P(book) does"
+    },
+    {
+      "kind": "observe",
+      "name": "price ordering that disagrees with P(book)",
+      "detail": "03:00 — priced higher on the LOWER P(book). A flat off-peak revenue curve, not a rating effect: do not quote it as monotonicity"
+    },
+    {
+      "kind": "observe",
+      "name": "20:00: P(book) gap from 2.8 stars of rating",
+      "detail": "+0.0421"
+    },
+    {
+      "kind": "observe",
+      "name": "11:00: P(book) gap from 2.8 stars of rating",
+      "detail": "+0.0012  (below the model's resolution — noise)"
+    },
+    {
+      "kind": "observe",
+      "name": "03:00: P(book) gap from 2.8 stars of rating",
+      "detail": "-0.0024  (below the model's resolution — noise)"
+    },
+    {
+      "kind": "require",
+      "name": "evening peak beats midday",
+      "ok": true,
+      "detail": "0.6314 > 0.1409"
+    },
+    {
+      "kind": "require",
+      "name": "evening peak beats dawn",
+      "ok": true,
+      "detail": "0.6314 > 0.0998"
+    },
+    {
+      "kind": "require",
+      "name": "demand climbs 15:00 → 17:00 → 19:00 → 20:00",
+      "ok": true,
+      "detail": "0.1409 < 0.3861 < 0.5623 <= 0.6314"
+    },
+    {
+      "kind": "require",
+      "name": "and it falls again after 20:00",
+      "ok": true,
+      "detail": "0.535 < 0.6314"
+    },
+    {
+      "kind": "require",
+      "name": "the busiest hour of the day is an evening hour",
+      "ok": true,
+      "detail": "20:00 at 0.6314"
+    },
+    {
+      "kind": "require",
+      "name": "the deadest hour is overnight or early morning",
+      "ok": true,
+      "detail": "7:00 at 0.0974"
+    },
+    {
+      "kind": "observe",
+      "name": "suggested price across the same day",
+      "detail": "3:00 -25%  8:00 -25%  11:00 -20%  15:00 -25%  17:00 -20%  19:00 +30%  20:00 +30%  22:00 +10%"
+    },
+    {
+      "kind": "require",
+      "name": "the clock actually changes the price",
+      "ok": true,
+      "detail": "4 distinct prices across 8 hours — a model that priced every hour the same would be useless to an owner"
+    },
+    {
+      "kind": "require",
+      "name": "every suggestion sits inside the policy band",
+      "ok": true,
+      "detail": "8 suggestions span 0.75x–1.30x (cap 1.3x)"
+    },
+    {
+      "kind": "require",
+      "name": "prices are whole rupees an owner can read",
+      "ok": true,
+      "detail": "no fractional PKR"
+    },
+    {
+      "kind": "require",
+      "name": "forecast came from the model",
+      "ok": true,
+      "detail": "source='model'"
+    },
+    {
+      "kind": "require",
+      "name": "72 points",
+      "ok": true,
+      "detail": "got 72"
+    },
+    {
+      "kind": "require",
+      "name": "every timestamp is PKT (+05:00)",
+      "ok": true,
+      "detail": "no UTC leaked into the chart"
+    },
+    {
+      "kind": "require",
+      "name": "hours are contiguous with no gaps",
+      "ok": true,
+      "detail": "23:00 → 22:00"
+    },
+    {
+      "kind": "require",
+      "name": "the chart is not one flat colour",
+      "ok": true,
+      "detail": "{\"high\":18,\"low\":48,\"medium\":6}"
+    }
+  ]
+}

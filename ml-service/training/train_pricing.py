@@ -1891,6 +1891,78 @@ def write_lockfile(path: Path) -> Path | None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def print_metrics_table(
+    *,
+    model_version: str,
+    seed: int,
+    test: dict[str, Any],
+    train: dict[str, Any],
+    base: dict[str, Any],
+    ceiling: dict[str, Any] | None,
+    cold: dict[str, Any] | None,
+    importance: list[dict[str, Any]],
+) -> None:
+    """
+    The one table to point a camera at.
+
+    S.3 Wave E asks for a metrics table on a live retrain. The numbers were already
+    printed at step 7, but they scroll off the top of the terminal while the sweep and
+    the importance pass run -- so by the time the run ends, the screen is showing gates
+    and the metrics are gone. This reprints them at the end, immediately above the gate
+    table, and uses `shout` so `--quiet` still shows it.
+
+    Three columns, in this order on purpose:
+
+      logistic     a plain LogisticRegression on the same split. Without it, "0.7628"
+                   is a number with nothing to beat. With it, the gradient-boosted
+                   model has to earn its complexity.
+      THIS MODEL   the artifact this run produced.
+      best poss    the Bayes-optimal score, MEASURED from `latent_p` -- the true
+                   probability each label was drawn from. This is the column that
+                   matters in a viva: it converts "is 0.76 good?" (unanswerable) into
+                   "is 0.76 close to the best score any model could get on these
+                   rows?" (98.2%, yes).
+
+    `best poss` is blank when training on a CSV without `latent_p` -- i.e. on real
+    bookings, where nobody knows the true probability. That is expected, not a fault.
+    """
+    def cell(value: float | None) -> str:
+        return "-".rjust(11) if value is None else f"{value:.4f}".rjust(11)
+
+    def row(name: str, b: float | None, m: float | None, c: float | None, note: str = "") -> None:
+        shout(f"  {name:<16}{cell(b)}{cell(m)}{cell(c)}   {note}")
+
+    ceil_auc = float(ceiling["rocAuc"]) if ceiling else None
+    attainment = (float(test["rocAuc"]) / ceil_auc) if ceil_auc else None
+
+    shout("")
+    shout("-" * 78)
+    shout(f"METRICS  {model_version}   seed {seed}   {int(test['n']):,} held-out rows")
+    shout("-" * 78)
+    shout(f"  {'metric':<16}{'logistic':>11}{'THIS MODEL':>11}{'best poss':>11}")
+    row("ROC-AUC", base.get("rocAuc"), test.get("rocAuc"), ceil_auc,
+        f"{attainment:.1%} of ceiling" if attainment else "")
+    row("Brier", base.get("brier"), test.get("brier"),
+        ceiling.get("bayesBrierFloor") if ceiling else None,
+        f"skill {test['brierSkill']:+.4f}")
+    row("log loss", base.get("logLoss"), test.get("logLoss"),
+        ceiling.get("logLoss") if ceiling else None, "lower is better")
+    row("PR-AUC", base.get("prAuc"), test.get("prAuc"), None,
+        f"base rate {test['baseRate']:.4f}")
+    row("accuracy", base.get("accuracy"), test.get("accuracy"), None,
+        "at 0.5 -- unused in app")
+
+    gap = float(train["rocAuc"]) - float(test["rocAuc"])
+    shout(f"  {'overfit check':<16}train ROC-AUC {train['rocAuc']:.4f} vs test "
+          f"{test['rocAuc']:.4f}  (gap {gap:+.4f})")
+    if cold:
+        shout(f"  {'cold-start':<16}ROC-AUC {cold['rocAuc']:.4f}  Brier {cold['brier']:.4f}  "
+              f"(n={int(cold['n']):,}) -- venues with little history")
+    if importance:
+        shout(f"  {'drives it':<16}" +
+              ", ".join(f"{r['feature']} {r['brierIncreaseMean']:+.4f}" for r in importance[:4]))
+
+
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="train_pricing.py",
@@ -2401,7 +2473,19 @@ def main(argv: list[str] | None = None) -> int:
             except (OSError, ValueError):  # pragma: no cover
                 say(f"  {path_str}")
 
-    # ── 13. the gate table, last, so it is the thing on screen at the end
+    # ── 13. the metrics table, then the gate table, so those two are what is on screen
+    #        at the end of a live retrain (S.3 Wave E asks for exactly this).
+    print_metrics_table(
+        model_version=model_version,
+        seed=args.seed,
+        test=test_scores,
+        train=train_scores,
+        base=base_scores,
+        ceiling=ceiling,
+        cold=cold_scores,
+        importance=importance,
+    )
+
     shout("")
     shout("-" * 78)
     shout("RELEASE GATES")
@@ -2420,11 +2504,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.no_write:
             shout("  --no-write: models/pricing_latest.joblib was NOT written")
         else:
-            shout("  models/pricing_latest.joblib is in place; the ml-service will serve it after")
-            shout("  a restart or a call to registry.reload().")
-            shout("  NOTE: /predict/price and /predict/demand now return 501 not_implemented")
-            shout("  instead of 503 model_not_loaded. That is correct and expected -- wiring the")
-            shout("  inference path is S.3 Wave D.")
+            shout("  models/pricing_latest.joblib is in place.")
+            # This warning replaces a note that said /predict/price returns 501 and that
+            # wiring inference "is S.3 Wave D". Wave D has landed, so that text was false
+            # in the worst possible place -- the last screen of a live demo. What matters
+            # now is the opposite hazard: a retrain does NOT hot-swap the served model, so
+            # after this run the owner dashboard still shows the PREVIOUS model_version
+            # until uvicorn is restarted. Demoing a retrain and then pointing at an
+            # unchanged caption is how a viva goes wrong.
+            shout("  A RUNNING ml-service still holds its loaded artifact in memory: restart")
+            shout("  uvicorn (or call registry.reload()) before the owner card will report")
+            shout(f"  {model_version}.")
         return 0
 
     failed = [g.name for g in gates if not g.ok]

@@ -55,6 +55,17 @@ was trained on simulated data" cannot be quietly dropped from a slide.
 
 ## Right now
 
-Empty. Wave B trains the first model. Until then `/predict/*` answers
-`503 model_not_loaded` and the Node backend serves heuristic prices labelled
-`source: "heuristic"`.
+`pricing_latest.joblib` — **`pricing-v1-20260825-0041`**, 374 KB, all 12 training gates
+passed, ROC-AUC 0.7628 (98.2% of the measured Bayes ceiling). It is committed, so a fresh
+clone serves predictions without training first. Beside it sit the timestamped provenance
+copies of the three runs it took to get there; only `*_latest.joblib` is ever loaded.
+
+Two behaviours worth knowing before you touch anything here:
+
+- **The service loads this file once, at boot.** A retrain does not hot-swap it — restart
+  `uvicorn` or the owner dashboard keeps reporting the previous `model_version`.
+- **If it is missing, or its `FEATURE_SPEC_VERSION` no longer matches
+  `app/core/features.py`,** `/predict/*` answers `503 model_not_loaded` and the Node
+  backend serves heuristic prices labelled `source: "heuristic"`. That is the designed
+  degradation, not an outage — but it is also what a mid-sprint `features.py` edit looks
+  like, so check `/health` first.

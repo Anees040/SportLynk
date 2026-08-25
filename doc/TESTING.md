@@ -332,8 +332,9 @@ the model card exists for exactly that moment.
 
 Wave C ships **no endpoint and no screen either.** It ships a trained model, the script
 that trains it, and the evidence that the model is worth serving. Wiring inference into
-`/predict/price` is Wave D, so the correct outcome of this section is a valid artifact on
-disk and *no visible product change*.
+`/predict/price` was Wave D's job, so the correct outcome of *this* section is a valid
+artifact on disk and *no visible product change*. (Wave D has since landed — steps 83–84
+carry superseded notes, and §4.8 is the section that expects the app to change.)
 
 **Recorded green baseline** (compare a future run against this, and treat a large move in
 either direction as something to explain): `pricing-v1-20260825-0041`, **ALL 12 GATES
@@ -578,6 +579,65 @@ calibrated probabilities, attributable explanations, an owner who must consent �
 nothing at all about what a Lahore futsal court should charge on a Saturday. That answer
 only exists after real bookings at more than one price per venue, which is the retraining
 trigger the model card names.
+
+---
+
+### 4.9 The retrain demo and the price-sanity probe (S.3 Wave E)
+
+Wave E's headline is a claim a supervisor will make you demonstrate: **"the model is
+reproducible"**. Tests 97–100 check that claim in the order a demo would, and
+97–99 are runnable before any UI is open.
+
+```bash
+cd D:\sportlynk\ml-service ; .\.venv\Scripts\python.exe training\train_pricing.py --seed 42
+```
+
+97. **Reproducibility, the demo itself.** The command above exits 0 in **≈68 s**, prints
+    the three-column metrics table (logistic baseline · this model · Bayes-optimal
+    ceiling), then the 12 gate rows, then writes the artifact. Run it twice into
+    `.rehearsal\` (`--models-dir` / `--reports-dir`) and diff the two
+    `pricing_metrics.json` files — **they must be byte-identical**: nine metrics to six
+    decimals, same winning hyperparameters, same `csvSha256`, same gate verdicts. A
+    single differing byte breaks the "seed 42 reproduces the artifact" claim, which is
+    the whole point of the command you just demoed. (For the live demo itself, train
+    straight into `reports\` — the artifact is written only if every gate passes, so a
+    failing run cannot take the served model down with it.)
+98. **The metrics table is not decoration.** `--quiet` must still print it (it uses the
+    same channel as the gate verdicts, which are how you know the run succeeded). The
+    logistic-baseline column exists so the boosted model has to earn its complexity;
+    the ceiling column converts "is 0.76 good?" into "is 0.76 near the best any model
+    could score on these rows?" — the answer, 98.2%, is the sentence to say out loud.
+99. **A retrain does not hot-swap the served model.** After the live retrain, before
+    restarting uvicorn, `/health` still reports the **previous** `model_version`.
+    Restart, and it moves. The printed success message now says exactly this —
+    read that message during the demo, it is on-message.
+100. **The price-sanity probe — `node src/scripts/check_price_sanity.js`** (from
+     `D:\sportlynk\backend`, both servers running). It is the acceptance checklist
+     turned into an executable: **20 required checks** — Friday 20:00 beats Tuesday
+     03:00 in price *and* in P(book), the rating signal never *inverts* (weak form: on
+     these synthetic six profiles a strict `hi > lo` would fail wherever the +30% cap
+     pins both venues to the same rupee, and gating on that would make a correct system
+     look broken — read the comment block before judging the gate), the demand curve
+     measured **from the forecast** (not from `suggestPrice`, whose `demand` is P(book)
+     at the *suggested* price and differs every hour), the price ladder inside
+     0.75×–1.30×, whole rupees, 72 contiguous `+05:00` points, not one flat level.
+     Exit code 0 and a line like `ALL 20 REQUIRED CHECKS PASSED — pricing-v1-…`.
+     It writes `ml-service\reports\price_sanity.json` — an evidence artifact, committed.
+     `source: "heuristic"` anywhere in it is a **hard failure**: a green tick earned by
+     the fallback is worse than a red one.
+101. The observations in that file are deliberately **not** verdicts — read them, and
+     repeat them in your own words before the committee does. The biggest: **"low-rated
+     venue < high-rated" is only partially true**, because the guardrail cap binds
+     before the rating signal at peak. At 03:00 the model *does* price the 2.0★ venue
+     below the 4.8★ (PKR 1600 vs 1500); at Friday 20:00 both are pinned at +30% and
+     equal. The rating effect is real at peak (P(book) 0.6384 vs 0.5963 on identical
+     slots) but the +30% cap binds first. Saying "the gradient is monotonic everywhere"
+     is the one claim in the evidence pack that will not survive a push — the file
+     writes down the honest version.
+
+**What this section still cannot tell you.** Nothing here validates the *numbers*:
+the probe checks the pipeline, not the economics. Same caveat as §4.8 — the
+retraining trigger is real bookings.
 
 ---
 
@@ -830,6 +890,8 @@ Wave: ____            Date: ____
 [ ] npm test ..................... 10/10
 [ ] verify_schema.js ............. 113/113
 [ ] run_match_flow_check.js ...... 69/69
+[ ] check_ml_service.js .......... 60/60 up · 31/31+4 skipped down   (S.3+)
+[ ] check_price_sanity.js ........ 20/20 required, source='model'    (S.3+)
 [ ] server boots, 4 jobs registered
 [ ] this wave's feature steps (§3/§4)
 [ ] IDOR spot-check (§6.2)

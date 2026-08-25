@@ -10,6 +10,80 @@ safe to deploy as a second Render service in S.7.
 
 ---
 
+## Architecture
+
+Four processes. Only one of them is allowed to talk to this one.
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│ FLUTTER  (lib/)                                                            │
+│   owner_home_screen ............... suggested-price card, Apply button     │
+│   owner_venue_management_screen ... 72-hour demand chart                   │
+└─────────────────────────────────┬──────────────────────────────────────────┘
+                                  │ HTTPS · Authorization: Bearer <JWT>
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│ NODE / EXPRESS  :3000  (+ Socket.IO for chat and match events)             │
+│   routes/owner.js ....... GET :id/pricing · GET :id/forecast               │
+│   routes/venues.js ...... PATCH :id/slots/price  ← what Apply calls        │
+│   services/mlClient.js .. timeout · breaker · guardrails · FALLBACK        │
+│   utils/ttlCache.js ..... 1 h TTL, keyed on venue + PKT hour               │
+└──────────┬───────────────────────────────────────────┬─────────────────────┘
+           │ pg — owner_id in every WHERE              │ POST · X-API-Key
+           ▼                                           ▼ 127.0.0.1:8000 only
+┌──────────────────────────┐   ┌─────────────────────────────────────────────┐
+│ SUPABASE POSTGRES        │   │ ML-SERVICE  FastAPI + uvicorn               │
+│   venues · slots         │   │   app/main.py ......... key mw, envelope    │
+│   bookings · reviews     │   │   app/core/features.py  ★ THE CONTRACT      │
+│   (no ML tables — the    │   │   app/core/registry.py  loads *_latest      │
+│    service is stateless) │   │   app/routers/pricing.py price sweep, why   │
+└──────────────────────────┘   └───────────────────┬─────────────────────────┘
+                                                   │ joblib.load, once, at boot
+                                                   ▼
+                               models/pricing_latest.joblib          374 KB
+                                                   ▲
+                                                   │ written only if 12 gates pass
+                               training/train_pricing.py ──► reports/  (plots,
+                                        ▲                    metrics, model card)
+                                        │ imports the SAME features.py  ★
+                               data/bookings_synth.csv   seeded, sha256-pinned
+```
+
+Five edges in that diagram carry the design; the rest is plumbing.
+
+**Flutter never reaches this service.** There is no route from the app to port
+8000, and the app has never held `ML_API_KEY`. That is not layering for its own
+sake: the key is a *shared secret*, so any client that could send it would also
+be shipping it. Node is the only holder, and this process binds loopback so the
+question cannot arise in development either.
+
+**The ★ arrows are the same file.** `app/core/features.py` is imported by
+`training/train_pricing.py` and by `app/routers/pricing.py`. Neither side owns a
+copy of any derivation. See "`app/core/features.py` is the important file" below
+for the two mechanisms that keep it that way after someone edits one of them.
+
+**The FALLBACK edge is the honest one.** Kill uvicorn mid-demo and
+`mlClient.js` still answers HTTP 200 — with `source: "heuristic"` in the body and
+`confidence: null`, which the owner card renders as a plainly different caption.
+Nothing throws, nothing retries in a loop, and no number is presented as
+model-derived when it isn't. The circuit breaker then stops calling a dead
+service for 30 s rather than paying the timeout on every request.
+
+**Reads are cached, writes are not.** The two `GET` routes go through a 1-hour
+TTL cache keyed on venue + PKT hour, because a price suggestion that changes
+between two pulls of the same screen looks broken. `PATCH :id/slots/price` —
+the Apply button — bypasses all of it: a normal authenticated Node route,
+ownership checked in SQL, no ML process in the path. **This service never
+writes to Postgres**, and holds no connection to it.
+
+**The model file is the only state.** `registry.py` loads
+`models/pricing_latest.joblib` once at boot and validates its
+`FEATURE_SPEC_VERSION` before serving a single request. A retrain therefore does
+*not* hot-swap the live model — restart uvicorn, or the owner dashboard keeps
+reporting the previous `model_version`.
+
+---
+
 ## Run it
 
 ```powershell
@@ -37,18 +111,53 @@ development: one for `node src/server.js`, one for this.
 
 ---
 
-## What exists right now (S.3 Wave A)
+## What exists right now (S.3 Wave E — sprint complete)
 
 | endpoint | auth | status |
 |---|---|---|
-| `GET /health` | public | working — reports model inventory, feature spec, library versions |
-| `GET /features/spec` | `X-API-Key` | working — publishes the frozen feature contract |
-| `POST /predict/price` | `X-API-Key` | validates + builds features, then **503 `model_not_loaded`** |
-| `POST /predict/demand` | `X-API-Key` | validates + builds features, then **503 `model_not_loaded`** |
+| `GET /health` | public | reports model inventory, feature spec, library versions |
+| `GET /features/spec` | `X-API-Key` | publishes the frozen feature contract |
+| `POST /predict/price` | `X-API-Key` | **serving** — sweeps the price band, returns the revenue-optimal ratio, confidence and `top_factors` |
+| `POST /predict/demand` | `X-API-Key` | **serving** — 72 hourly `P(book)` points at `price_ratio = 1.0` |
 
-The 503 is correct and expected until Wave B trains a model. The Node backend
-degrades to its heuristic and labels the response `source: "heuristic"`, so nothing
-in the app breaks.
+Served artifact `pricing-v1-20260825-0041`: ROC-AUC **0.7628** against a measured
+Bayes ceiling of 0.7770 (98.2% of it), Brier 0.1680, 6,244 held-out rows. All 12
+training gates passed. Numbers, plots and limitations: `reports/`.
+
+Those two endpoints answered **503 `model_not_loaded`** through Wave A, and that
+was correct — no model existed yet. If you see a 503 today it means
+`models/pricing_latest.joblib` is missing or its `FEATURE_SPEC_VERSION` no longer
+matches `app/core/features.py`; the registry refuses to predict on misaligned
+columns rather than guess. Either way the Node backend degrades to its heuristic
+and labels the response `source: "heuristic"`, so nothing in the app breaks.
+
+---
+
+## Retrain it
+
+```powershell
+cd D:\sportlynk\ml-service
+.\.venv\Scripts\python.exe training\train_pricing.py --seed 42
+```
+
+68 seconds end to end on a dev laptop. It prints a metrics table (this model vs a
+plain logistic baseline vs the Bayes-optimal ceiling), runs 12 gates, and writes
+the artifact plus every plot and the model card. **Bit-for-bit reproducible** —
+`--seed 42` is the run that produced the served artifact, and re-running it
+reproduces all nine metrics to six decimal places.
+
+The gates are the point: the model is only written if it passes them. A failing
+run leaves `models/pricing_latest.joblib` untouched, so a bad retrain cannot take
+the demo down with it. To rehearse without touching committed evidence, redirect
+both outputs:
+
+```powershell
+.\.venv\Scripts\python.exe training\train_pricing.py --seed 42 `
+  --models-dir .rehearsal\models --reports-dir .rehearsal\reports
+```
+
+A retrain does not hot-swap the running model — restart uvicorn afterwards, or
+the owner card keeps reporting the previous `model_version`.
 
 ---
 
@@ -133,8 +242,8 @@ app/
   core/registry.py     loads models/*_latest.joblib, validates the feature spec
   routers/pricing.py   request/response models, /predict/price, /predict/demand
 training/
-  generate_bookings.py synthetic simulator   (design docstring; Wave B)
-  train_pricing.py     training script       (design docstring; Wave B)
+  generate_bookings.py synthetic simulator — DO NOT re-run, the CSV is sha-pinned
+  train_pricing.py     training + 12 gates + plots + model card
 models/                *_latest.joblib is committed; timestamped runs are not
 data/                  generated CSVs (gitignored — regenerate from the seed)
 reports/               metrics.json, plots, model card — COMMITTED, this is the
