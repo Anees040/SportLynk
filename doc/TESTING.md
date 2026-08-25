@@ -196,6 +196,15 @@ service-level, and their whole purpose is to prove the plumbing is honest *befor
 model exists. Two terminals — `uvicorn` in `ml-service/`, `node src/server.js` in
 `backend/`.
 
+> **Once Wave C has been run, three of these expectations change — by design, not by
+> regression.** With `models/pricing_latest.joblib` on disk the registry loads it, so:
+> test 51 reports `modelsReady: 1` and the boot log says `pricing=loaded` with no warning;
+> test 53 returns **`501 not_implemented`** instead of `503 model_not_loaded`, because the
+> router now gets past `_require_model()` and reaches the inference branch Wave D writes;
+> test 54 is unaffected and must **still** return 422, which is the whole point of writing
+> it that way. To re-run §4.5 exactly as specified, move the artifact aside
+> (`ren models\pricing_latest.joblib pricing_latest.joblib.bak`) and restart `uvicorn`.
+
 49. `python -c "from app.core import features; print(features.FEATURE_SPEC_VERSION, len(features.FEATURE_ORDER))"`
     → `pricing-features-v1 11`. If this import fails, nothing below can be trusted.
 50. `.\run_dev.ps1` → boots, and the log says `pricing=not_loaded` plus a **loud warning**
@@ -228,6 +237,233 @@ model exists. Two terminals — `uvicorn` in `ml-service/`, `node src/server.js`
     dependency on a Python process.
 59. Open the Flutter app and confirm **nothing changed**: no price suggestion, no forecast
     chart, no new spinner. If any of those appear, something got wired a wave early.
+
+---
+
+### 4.6 Demand simulator — the dataset and its figure (S.3 Wave B)
+
+Wave B ships **no model, no endpoint and no screen**. It ships a dataset, the script that
+writes it, and one figure. So these are not "does the app still work" tests — they are
+*can somebody else reproduce this file, and is what it claims plausible?* One terminal:
+
+```bash
+cd D:\sportlynk\ml-service
+.\.venv\Scripts\Activate.ps1
+```
+
+60. **Smoke first, always:**
+    `python training\generate_bookings.py --rows 6000 --no-plot --out data\smoke.csv`
+    → seconds, not minutes. A typo or a bad column name surfaces here instead of after a
+    full 12-month simulate. Delete `data\smoke.csv` afterwards — it is not the dataset, and
+    a 6000-row file left lying next to the real one will eventually get trained on.
+61. `python training\generate_bookings.py` → writes `data\bookings_synth.csv`,
+    `data\bookings_meta.json` and `reports\demand_patterns.png`, and prints **twelve check
+    lines, all PASS**. On any FAIL the CSV is written to `*.rejected.csv` and the exit code
+    is non-zero. A rejected file must **never** be renamed into place; the check that failed
+    is telling you the dataset does not mean what the README says it means.
+62. Run it again with no flags. `bookings_meta.json`'s `csv_sha256` must be **identical**.
+    Reproducibility is the one property a synthetic dataset must have — it is the only
+    reason to believe the model described in `reports/model_card_pricing.md` was trained on the
+    file `data/README.md` describes.
+63. `python training\generate_bookings.py --seed 7` → a **different** sha256, twelve PASS
+    again. A generator that only passes on its lucky seed is a generator whose parameters
+    were quietly tuned until the checks went green.
+64. Read the `price_independence` check line. It reports the correlation between
+    `price_ratio` and every demand driver; the largest absolute value must be near zero.
+    **This is the most important line in the run.** `seed_venues.js:381` prices peak slots
+    at 1.2× base; if the simulator reproduced that correlation, the model would learn
+    "price up → bookings up" and Wave C's revenue maximiser would push every price to the
+    1.50 ceiling — while still passing a monotonic-response gate on the training data.
+65. Read `no_leak`. It asserts `latent_p`, `booked_gross` and `cancelled` are absent from
+    `features.FEATURE_ORDER`. Those columns are in the CSV deliberately — Wave C measures
+    calibration against ground truth with `latent_p` — and this check is the thing standing
+    between them and the model.
+66. Round-trip the CSV through the **serving** feature builder:
+    ```bash
+    python -c "import sys, pandas as pd; sys.path.insert(0,'.'); from app.core import features; d=pd.read_csv('data/bookings_synth.csv'); f=features.build_frame(d.to_dict('records')); features.validate_frame(f); print(f.shape, list(f.columns))"
+    ```
+    → `(<rows>, 11)` and the 11 names of `FEATURE_ORDER`. Train/serve skew begins the day
+    there are two feature builders; this proves there is one, and that the file on disk
+    satisfies it. If it raises, the dataset is unusable regardless of how good the figure looks.
+67. Confirm the generator is offline by construction:
+    `findstr /n "supabase psycopg asyncpg requests httpx app.routers" training\generate_bookings.py`
+    → no hits. A training script that can reach the database is a training script that can
+    train on production data by accident.
+68. **Open `reports\demand_patterns.png` and actually look at it.** This is a *human* gate,
+    not an assertion — `reports/README.md` lists the one claim each panel exposes. The
+    twelve checks prove the dataset is internally consistent; none of them can prove it is
+    plausible. You have booked a turf in this country, so you are the instrument here.
+
+    *If the figure predates the plot fixes, re-render first:* `python training\demand_plots.py`.
+    That reads the existing `data\bookings_synth.csv` and `data\bookings_meta.json` — it does
+    **not** re-simulate, so `csv_sha256` is unchanged and the run above stays valid.
+
+    Look for: football peaking at **20:00–21:00** (observed 20:00 · 64%); cricket **bimodal**
+    with a dawn peak (07:00 · 45%); Ramadan **inverting** the night — dead afternoon, alive
+    after Taraweeh (flat near 0% by day, **71% at 22:00**); Friday **daytime** notched at
+    Jummah while Friday **night** is the week's biggest; **Sat ahead of both Sun and Fri**
+    (39% / 35.5% / 34% — note Sunday outranks Friday, because the Jummah dip costs Friday
+    more than its night bonus returns); **two** seasonal peaks, spring + autumn, read off the
+    month panel's **Ramadan-excluded** line, not the raw one (the raw line puts March at the
+    annual low, which is Ramadan 1447 sitting inside it, not a seasonal fact); and both price
+    lines falling with off-peak falling **faster** (100→38 vs 100→79).
+69. If a curve looks wrong, that is a real finding — and the fix is the labelled constant
+    block in `training/generate_bookings.py`, never the plot. Every multiplier sits beside
+    a comment stating why it has that value. Change the constant, rerun, and the sha256
+    changes. That is the point: this dataset is a **stated set of assumptions**, not a
+    measurement, and it should be easy to argue with.
+70. Open the Flutter app and confirm **nothing changed** — again. Wave B is invisible to the
+    product. No new screen, no price suggestion, no chart.
+
+**What these tests cannot tell you.** Twelve passing checks and a plausible figure still
+describe *simulated* demand. Every number a Wave C model produces inherits the assumptions
+in §"Every distribution" of `data/README.md`. The first real bookings that land in
+`bookings` are worth more than the entire synthetic corpus, and the retraining trigger in
+the model card exists for exactly that moment.
+
+---
+
+### 4.7 Pricing model #1 — training, gates and the artifact (S.3 Wave C)
+
+Wave C ships **no endpoint and no screen either.** It ships a trained model, the script
+that trains it, and the evidence that the model is worth serving. Wiring inference into
+`/predict/price` is Wave D, so the correct outcome of this section is a valid artifact on
+disk and *no visible product change*.
+
+**Recorded green baseline** (compare a future run against this, and treat a large move in
+either direction as something to explain): `pricing-v1-20260825-0041`, **ALL 12 GATES
+PASSED**, ROC-AUC **0.7628** against the measured ceiling **0.7770** = **98.2% of
+attainable**, Brier **0.1680**, Brier skill **0.1668**; skew gate `7 columns agree on all
+81,395 rows (worst deviation 4.92e-06)`; monotone gate `24 profiles; worst step +0.0000,
+smallest fall 0.1791`; `suggested ratios 0.75x .. 1.30x, 7/24 hit the 1.3x policy cap`.
+A markedly *higher* AUC is not good news — read tests 77 and 79 before celebrating it.
+
+```bash
+cd D:\sportlynk\ml-service
+.\.venv\Scripts\Activate.ps1
+```
+
+71. **Do NOT run `generate_bookings.py` first.** The dataset is already validated and
+    `train_pricing.py` re-checks its sha256 against `data\bookings_meta.json` as a release
+    gate. Regenerating it writes a new hash, which fails that gate on every subsequent
+    training run until the recorded hash is reconciled. If you genuinely need a
+    reproducibility check, send it somewhere harmless:
+    `python training\generate_bookings.py --seed 7 --out data\_seed7_check.csv`.
+72. **Dry run first:** `python training\train_pricing.py --no-write --no-plot`
+    → fits everything, prints the metrics and the full gate table, writes **nothing**. This
+    is the cheap way to find out whether a gate fails before any artifact is touched.
+73. `python training\train_pricing.py` → a few minutes (14 fits: a logistic baseline, 12
+    validation fits across the capacity grid, and the final refit). It must end with
+    **`ALL <n> GATES PASSED`** and exit code 0. Check it:
+    `echo $LASTEXITCODE` → `0`.
+74. Read the gate table, not the metrics. It is the last thing on screen for a reason — a
+    `FAIL` on any line means `models\pricing_latest.joblib` was **not** written or replaced,
+    and the exit code is 1. The reports and a timestamped `models\pricing_<stamp>.joblib` are
+    still written on failure, deliberately: a failed run should be loadable and auditable,
+    not invisible. Never copy a timestamped joblib over `pricing_latest.joblib` by hand —
+    that is the one action the whole gate system exists to prevent.
+75. Read **`price response is negative`** — the logistic baseline's `price_ratio`
+    coefficient. **This is the most important line in the run**, and it is the counterpart to
+    test 64 on the generator side. It must be negative. A gradient-boosted tree will happily
+    fit an inverted price response and report a fine Brier score while doing it; a linear
+    coefficient is a signed, readable number that cannot hide. If it comes out positive, the
+    dataset is wrong and every price this project ever suggests is built on sand.
+76. Read **`monotone price response`** — 24 slot profiles, six venues × four scenarios. It
+    checks both that no 5% step raises P(book) and that the end-to-end fall clears a floor,
+    because a perfectly flat curve is technically monotone and is really a model that
+    ignored the price feature.
+    **Check the profile count on the `sweeping ... representative slot profiles` line
+    above it — it must say `24` and `6 venues x 4 scenarios`.** Run #1 said 16, because the
+    venue picker deduped without backfilling and its targeted picks overlapped, so the gate
+    silently ran on four venues while three documents claimed six. If a `NOTE: expected 24
+    profiles, got N` line appears, coverage fell short again and the gate is weaker than it
+    reads — that NOTE exists so the failure can never be silent twice.
+    This gate is also now the **regression test for `monotonic_cst`**. It caught P(book)
+    *rising* +0.0622 on a peak profile in run #1, which is why the classifier is fitted with
+    `monotonic_cst={'price_ratio': -1}`. If it ever fails on the rise branch again, the
+    constraint has been removed or bypassed — do not widen the tolerance to make it pass.
+    A **`flat response`** failure is the opposite finding and is worth reporting rather than
+    patching: a monotone constraint *permits* a flat curve, so it would mean the constrained
+    model stopped using price at all.
+77. Read the **ROC-AUC vs the ceiling** line. `train_pricing.py` scores `latent_p` itself
+    against the realised labels to measure the best result *any* model could achieve on the
+    test rows, then reports the model as a percentage of that. Two things follow, and both
+    matter for the viva:
+    - A headline ROC-AUC in the **0.7s is the correct outcome here**, not a disappointment,
+      if it sits close to the ceiling. Ramadan, holidays, `ground_type`, payday and a
+      per-venue random effect all move demand and are all deliberately *not* features — that
+      residual is irreducible by construction. See `reports/README.md`.
+    - **A near-1.0 AUC is a bug report.** There is a gate for it in both directions.
+78. Read **`diagnostics match the contract`** — Wave B's mirror check re-run at train time
+    on **100% of rows**, the strongest single guard against train/serve skew. It proves the
+    `hour` the simulator applied its multiplier to is the `hour` the serving path extracts.
+    It must PASS, and the line now ends with `(worst deviation N.NNe-NN)`.
+    **The magnitude of that number is the whole diagnostic**, so read it, don't just read
+    PASS/FAIL. Around `1e-6` or smaller is expected and harmless: the generator writes the
+    CSV with `float_format="%.6g"`, so its *diagnostic* `price_ratio` column keeps six
+    significant figures while the contract recomputes the ratio from the two **integer**
+    price columns at full precision. Run #1 failed here on 34,281 rows against an
+    `atol=1e-9`, which looked like catastrophic skew and was really a lossy serialiser
+    versus an exact-equality comparison — the model trains on the full-precision value and
+    Wave D serves that same division. A worst deviation near **1.0** is the opposite story
+    and is a genuine bug (a flipped `is_peak` boundary, an off-by-one `hour`, a `lead_days`
+    sign error): real errors differ by a whole unit, six orders of magnitude above the
+    `2e-6` tolerance. Only `price_ratio` gets that tolerance; the six integer mirrors are
+    still compared with **exact** equality.
+79. Confirm `latent_p` never became a feature — the gate is called `no leaky column is a
+    feature`, and independently:
+    `findstr /n "drop( latent_p booked_gross cancelled" training\train_pricing.py`
+    → hits only in comments, the `LEAKY_COLUMNS` constant, and the evaluation-only ceiling
+    code. There must be **no `df.drop`** anywhere. `build_matrix` hands
+    `features.build_frame` only the nine feature-source columns, so a leak is structurally
+    impossible rather than merely absent.
+80. Verify the artifact satisfies the registry contract *without* starting the service:
+    ```bash
+    python -c "import sys, joblib; sys.path.insert(0,'.'); from app.core import features, registry; p=joblib.load('models/pricing_latest.joblib'); print(p['modelVersion'], p['featureSpecVersion']==features.FEATURE_SPEC_VERSION, tuple(p['featureOrder'])==features.FEATURE_ORDER, hasattr(p['model'],'predict_proba'))"
+    ```
+    → a version string and **three `True`s**. Those are exactly the checks
+    `app/core/registry.py::_load` runs; if any is `False` the service reports
+    `incompatible` and keeps serving the heuristic instead of a mismatched model. Nothing
+    raises either way — that is the design.
+81. Open the three figures in `reports\` and look at them:
+    - `calibration_pricing.png` — the reliability line should track the diagonal. Middle
+      panel: the two outcome histograms must **separate**; a well-calibrated model whose
+      predictions all huddle at the base rate would look fine on the left panel and be
+      useless for pricing. Right panel is the one no real project can draw — predicted
+      versus the *true* probability.
+    - `price_response_pricing.png` — both curves fall, and the revenue peak is circled. Two
+      panels sharing one x-axis, never a second y-axis (a probability and a rupee amount on
+      twin axes lets the crossing point be moved by choosing the scales).
+    - `importance_pricing.png` — `price_ratio`, `is_peak`/`hour` and `base_price` should
+      lead. A near-zero bar is a feature the model chose not to use, not a bug.
+82. Read `reports\model_card_pricing.md` end to end once. It is script-written, so it cannot
+    drift from the artifact, and it is the document an external examiner will actually read.
+    Confirm the limitations section still says **"trained on simulated data; it retrains on
+    live data"** and that the retraining trigger names *price variation* as the binding
+    constraint — not row count. More rows at one price per venue create no elasticity signal
+    no matter how many there are.
+83. **Now the behaviour change to expect.** With `pricing_latest.joblib` in place, restart
+    `uvicorn` and call the endpoints:
+    ```bash
+    node src/scripts/check_ml_service.js     # from D:\sportlynk\backend
+    ```
+    `/predict/price` and `/predict/demand` now return **`501 not_implemented`** where they
+    previously returned `503 model_not_loaded`. **That is correct and expected.** The
+    registry can now load a valid artifact, so the routers get past `_require_model()` and
+    reach the not-yet-written inference branch. Wave D removes it. `check_ml_service.js`
+    treats a model suggestion and an honest fallback as equal passes, so it should still
+    report `0 FAILED` — and the backend still serves prices from the heuristic, which is why
+    the Flutter app is unchanged.
+84. Open the Flutter app and confirm **nothing changed** — a third time. No price
+    suggestion, no chart, no new screen. If something did change, something is wired ahead
+    of its wave.
+
+**What these tests cannot tell you.** Every gate can pass on a model that will be wrong
+about the real market, because the gates check *internal validity* — no leakage, honest
+calibration, a sane price response — and nothing can check external validity against a
+market with 22 bookings and one price per venue in it. Read the metrics as evidence that
+the **pipeline** is correct, and the model card's limitations as the honest statement of
+what the numbers do not cover.
 
 ---
 
