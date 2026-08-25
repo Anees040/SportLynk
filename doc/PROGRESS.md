@@ -1867,11 +1867,10 @@ fix belongs to whichever wave owns that screen.
 
 ## Wave S3-E (Evidence pack, the retrain demo, and the claims made falsifiable)
 
-**Status: DONE and VERIFIED GREEN.** Two code files, four docs. No model change, no
-endpoint, no screen, no migration, no dependency — `features.py` and
-`models/pricing_latest.joblib` both byte-identical. This wave adds no capability; it
-makes the milestone's own claims **checkable by someone who does not trust us**, which
-at the end of a sprint is the more valuable thing.
+**Status: DONE and VERIFIED GREEN.** Two code files, four docs. No model change, no endpoint,
+no screen, no migration, no dependency — `features.py` and `models/pricing_latest.joblib` both
+byte-identical. This wave adds no capability; it makes the milestone's own claims **checkable
+by someone who does not trust us**.
 
 Measured this wave, not asserted:
 
@@ -1881,111 +1880,75 @@ seed 42 reproduces            bit-for-bit — 9 metrics to 6 dp, same
                               hyperparameters, same csvSha256, 12/12 gates
 check_price_sanity.js         ALL 20 REQUIRED CHECKS PASSED — pricing-v1-20260825-0041
 flutter analyze lib/          0 issues
-model artifact                374 KB   (Render free-tier limit: 20 MB)
+model artifact                374 KB   (Render free-tier limit: 20 MB, 54x headroom)
 ```
 
-### The evidence pack exists, under different filenames — and the difference is deliberate
+### The evidence pack exists under different filenames, deliberately
 
-The milestone asks for `calibration.png` and `feature_importance.png`. On disk they are
-`calibration_pricing.png` and `importance_pricing.png`. Not renamed to match: S.4's
-sentiment model and S.5's recommender will write their own calibration and importance
-plots into this same **committed** directory, and a bare `calibration.png` would be
-silently overwritten by whichever training script ran last — losing evidence for one
-model without a single error message. Every filename here is `<what>_<model>`. The
-mapping table is now at the top of `reports/README.md` so nobody hunting for the
-milestone's filename concludes the deliverable is missing.
+Milestone asks for `calibration.png` / `feature_importance.png`; on disk they are
+`calibration_pricing.png` / `importance_pricing.png`. NOT renamed: S.4 (sentiment) and S.5
+(recommender) will write their own calibration/importance plots into this same **committed**
+dir, so a bare `calibration.png` would be silently overwritten by whichever script ran last —
+evidence lost without an error. Convention is `<what>_<model>`; a mapping table at the top of
+`reports/README.md` stops anyone concluding the deliverable is missing.
 
-### The retrain demo is the *reproducibility* demo, and it now proves itself
+### The retrain demo IS the reproducibility demo
 
-`python training/train_pricing.py --seed 42` is not an illustrative command — 42 is
-`DEFAULT_SEED`, and that exact invocation is what produced the served artifact. Verified
-by running it twice into a scratch directory (`--models-dir .rehearsal\models
---reports-dir .rehearsal\reports`, so the committed evidence was never at risk while
-still exercising the full path including `joblib.dump` and all three figures):
-`rocAuc 0.762774`, `prAuc 0.530169`, `brier 0.168011`, `logLoss 0.506264`,
-`accuracy 0.746477`, `brierSkill 0.16681`, `n 6244`, `baseRate 0.280109` — identical,
-along with the winning hyperparameters, the `csvSha256` and all twelve gate verdicts.
-68 seconds. That is the difference between *claiming* reproducibility in a model card
-and being able to demonstrate it while someone watches.
+`python training/train_pricing.py --seed 42` is not illustrative — 42 is `DEFAULT_SEED`, so it
+is what produced the served artifact. Run twice into a scratch dir (`--models-dir` /
+`--reports-dir`, so committed evidence was never at risk while still exercising `joblib.dump`
+and all three figures): `rocAuc 0.762774, prAuc 0.530169, brier 0.168011, logLoss 0.506264,
+accuracy 0.746477, brierSkill 0.16681, n 6244, baseRate 0.280109` — identical, plus same
+hyperparameters, same `csvSha256`, 12/12 gates. That is *demonstrating* reproducibility, not
+claiming it in a card.
 
-`print_metrics_table()` is new, and its column order is an argument. The numbers were
-already printed at step 7, but they scroll off during the hyperparameter sweep and the
-permutation-importance pass, so the last screen of a live retrain showed gates and no
-metrics. It now reprints them immediately above the gate table, through `shout` so
-`--quiet` cannot suppress them, in three columns:
+`print_metrics_table()` is new — the step-7 numbers scroll off during the sweep, so the last
+screen of a live retrain showed gates and no metrics. It reprints them above the gate table,
+through `shout` so `--quiet` can't hide them, in three columns: **`logistic`** (a plain
+LogisticRegression on the same split, so the boosted model must *earn* its complexity in
+public), **`THIS MODEL`**, and **`best poss`** — the Bayes-optimal score MEASURED from
+`latent_p`, which converts "is 0.76 good?" into "is 0.76 close to the best any model could do
+here?" (98.2%, yes). Prints blank when training on real bookings where nobody knows the truth.
 
-- **`logistic`** — a plain `LogisticRegression` on the same split. It is there so the
-  boosted model has to *earn* its complexity in public.
-- **`THIS MODEL`**.
-- **`best poss`** — the Bayes-optimal score, **measured** from `latent_p`. This is the
-  column that does the work: it converts "is 0.76 good?" (unanswerable, and the
-  question a panel will ask) into "is 0.76 close to the best score any model could
-  achieve on these rows?" — 98.2%, yes. It prints blank when training on real bookings,
-  where nobody knows the true probability, and the header says so.
+### One stale line deleted, on the worst possible screen
 
-### One stale line was deleted, and it was on the worst possible screen
-
-The success message ended with a note that `/predict/price` returns `501
-not_implemented` and that "wiring the inference path is S.3 Wave D". Wave D landed. So
-the final screen of a live retrain was printing something false, in front of whoever
-was watching. Replaced with the warning that is actually true and actually useful:
-**a retrain does not hot-swap the served model.** A running `ml-service` holds its
-artifact in memory from boot, so after this command the owner dashboard still reports
-the *previous* `model_version` until uvicorn restarts. Demoing a retrain and then
-pointing at an unchanged caption is a specific, avoidable way to lose a viva.
+The success message said `/predict/price` returns `501 not_implemented` and "wiring is Wave D".
+Wave D landed — so the final screen of a live retrain printed something *false* while someone
+watched. Replaced with the true, useful warning: **a retrain does not hot-swap the served
+model.** ml-service holds its artifact in memory from boot, so the owner dashboard reports the
+*previous* `model_version` until uvicorn restarts. Demoing a retrain then pointing at an
+unchanged caption is an avoidable way to lose a viva.
 
 ### `check_price_sanity.js` — the acceptance checklist as an executable
 
-The milestone contains a claim no test in this repo covered, because it is not about a
-code path:
+The milestone claims "Suggested price changes sensibly: Friday 8pm > Tuesday 3am; low-rated <
+high-rated" — no test covered it because it is not a code path. `check_ml_service.js` proves the
+*wiring* (60 checks) and deliberately not this; a passing wiring test on a nonsense model is the
+failure this project can't afford. Now 20 required checks against the live path + 6 recorded
+without a verdict. Four load-bearing decisions:
 
-> Suggested price changes sensibly: Friday 8pm > Tuesday 3am; low-rated venue < high-rated
+1. **Through `mlClient.suggestPrice`, not `curl`** — the number a committee sees is post-
+   `applyGuardrails` and rounding; probing Python directly tests a figure nobody is shown.
+2. **`source:'heuristic'` is a HARD FAILURE** — the one place the fallback is unacceptable. The
+   heuristic multiplies peak by a constant, so it would pass "Fri 8pm > Tue 3am" perfectly while
+   saying nothing about the model; a green tick earned by the fallback is worse than a red one.
+3. **Rating gate is the WEAK form (`hi >= lo`)** — with six venue profiles, strict `hi > lo`
+   fails wherever the +30% cap pins both to the same rupee (most of peak). Inversion is what must
+   never happen, so inversion is what is gated.
+4. **Demand curve MEASURED FROM `forecastDemand`, not `suggestPrice`** — a real bug in v1 and the
+   most transferable lesson. `suggestPrice.demand` is P(book) *at the suggested price*, which
+   differs every hour, so reading eight of them as a demand curve compares eight prices and calls
+   it a clock effect (it reported a fake 19:00 dip I nearly recorded). `forecastDemand` holds
+   `price_ratio` at 1.0 and varies only the clock. A comparison is valid only if exactly one thing
+   varies — in a pricing model the price is the thing most likely varying behind your back.
 
-`check_ml_service.js` proves the *wiring* (60 checks) and deliberately does not prove
-this. A passing wiring test on top of a nonsense model is precisely the failure this
-project cannot afford. So the claim is now 20 required checks against the live serving
-path, plus 6 quantities recorded **without** a verdict.
+Recorded run: Friday 20:00 **PKR 2600 (+30%)** P(book) 0.6257 vs Tuesday 03:00 **PKR 1600
+(−20%)** P(book) 0.2248; clean 24h curve `03:00 0.0998 → 07:00 0.0974 (deadest) → 11:00 0.1201
+→ 15:00 0.1409 → 17:00 0.3861 → 19:00 0.5623 → 20:00 0.6314 (busiest) → 22:00 0.5350`; price
+ladder `−25 −25 −20 −25 −20 +30 +30 +10`; 72 contiguous `+05:00` points. Written to
+`reports/price_sanity.json` (the sixth file in the pack).
 
-Four decisions inside it are load-bearing:
-
-**It goes through `mlClient.suggestPrice`, not `curl` to FastAPI.** The number a
-committee sees is the number on the owner's card, and that number has already been
-through `applyGuardrails` and the rounding step. Probing Python directly would test a
-figure nobody is ever shown.
-
-**`source: 'heuristic'` is a hard failure — the only place in this codebase where the
-fallback is not an acceptable answer.** The heuristic multiplies peak hours by a
-constant, so it would pass "Friday 8pm > Tuesday 3am" perfectly while telling us
-nothing about the model. A green tick earned by the fallback is worse than a red one.
-
-**The rating gate is the weak form (`hi >= lo`), and that is not a dodge.** With six
-venue profiles in training, a strict `hi > lo` fails wherever the +30% cap pins both
-venues to the same rupee — which is most of peak — so gating on it would make a correct
-system look broken. Inversion is what must never happen, so inversion is what is gated.
-
-**The demand curve is measured from `forecastDemand`, not from `suggestPrice`.** This
-was a real bug in the first version, and the fix is the most transferable thing in the
-file: `suggestPrice.demand` is P(book) **at the suggested price**, and the suggested
-price differs at every hour (0.75× at 03:00, 1.30× at 20:00). Reading those eight
-numbers as a demand curve compares eight different prices and calls the result a clock
-effect — it reported a fake dip at 19:00 and I nearly recorded it as a finding.
-`forecastDemand` holds `price_ratio` at 1.0 and varies only the clock, which is the
-definition of a demand curve and is the series the venue chart draws. **A comparison is
-only valid if exactly one thing varies**, and in a pricing model the price is the thing
-most likely to be varying behind your back.
-
-Recorded run — Friday 20:00 **PKR 2600 (+30%)**, P(book) 0.6257 against Tuesday 03:00
-**PKR 1600 (−20%)**, P(book) 0.2248; the clean 24-hour curve `03:00 0.0998 → 07:00
-0.0974 (deadest) → 11:00 0.1201 → 15:00 0.1409 → 17:00 0.3861 → 19:00 0.5623 → 20:00
-0.6314 (busiest) → 22:00 0.5350`; the price ladder `−25 −25 −20 −25 −20 +30 +30 +10`;
-72 contiguous `+05:00` points across three demand levels. Written to
-`reports/price_sanity.json` — a committed evidence artifact, and the sixth file in the
-pack.
-
-### The finding: "low-rated < high-rated" is only true where the guardrail leaves room
-
-This is the one acceptance claim that does not hold as written, and it is better said
-plainly here than discovered by an examiner.
+### The finding: "low-rated < high-rated" holds only where the guardrail leaves room
 
 | hour | 4.8★ | 2.0★ | P(book) gap | why |
 |---|---|---|---|---|
@@ -1993,56 +1956,43 @@ plainly here than discovered by an examiner.
 | Thursday 11:00 | 1600 | 1600 | +0.0012 | gap below the model's resolution |
 | Thursday 03:00 | 1600 | **1500** | **−0.0024** | strict — but see below |
 
-The rating signal is **real at peak**: on identical slots the 4.8★ venue's P(book) is
-0.6384 against 0.5963, a 0.042 gap in the right direction. But the +30% cap binds
-first, so the *suggestion* cannot express it. That is a safety feature working exactly
-as designed — an owner is never shown a 3× price — not a modelling failure.
-
-Read the third row carefully, because it is the one an examiner will pick at. It is the
-only strictly-ordered row in the table, and its P(book) gap is **negative** — the 4.8★
-venue is priced higher while the model gives it a *slightly lower* booking probability.
-Both facts are noise: at 03:00 the revenue curve is nearly flat across the band, so a
-0.002 difference in P is enough to move the `argmax` by one grid step (PKR 100), and a
-0.002 difference on a model with Brier 0.168 carries no information at all. So the
-honest summary is not "monotone at 03:00, capped at peak" — it is **the rating effect is
-measurable only at peak, and only in P(book), never in the price.** Both off-peak gaps
-are `[OBSERVE]` lines rather than assertions for exactly this reason; dressing a 0.002
-swing as a passing test is the kind of thing that collapses under one question.
+The rating signal is **real at peak** (identical slots: 4.8★ P(book) 0.6384 vs 2.0★ 0.5963, a
+0.042 gap in the right direction), but the +30% cap binds first so the *suggestion* cannot
+express it — a safety feature working as designed, not a modelling failure. The third row is the
+one an examiner picks at: the only strictly-ordered row, and its P(book) gap is *negative*
+(priced higher on a slightly lower probability). Both facts are noise — at 03:00 the revenue
+curve is nearly flat, so a 0.002 P difference moves the `argmax` one grid step (PKR 100), and
+0.002 on a Brier-0.168 model carries no information. Honest summary: **the rating effect is
+measurable only at peak, and only in P(book), never in the price.** Both off-peak gaps are
+`[OBSERVE]` lines, not assertions — dressing a 0.002 swing as a passing test collapses under one
+question.
 
 ### The Jummah dip, found while validating something else
 
-The 72-hour forecast puts Friday 2026-08-28 12:00–14:00 at 0.065–0.069 against
-Thursday's 0.099–0.101 at the same hours. That is the **Jummah prayer** collapse the
-generator encodes as a `dow × hour` interaction (Wave B departure #2) surviving all the
-way through training into a served prediction — a genuinely Pakistani signal, learned
-rather than hardcoded, and visible in a chart an owner can point at. It is also the
+The 72h forecast puts Friday 2026-08-28 12:00–14:00 at 0.065–0.069 against Thursday's 0.099–0.101
+at the same hours — the **Jummah prayer** collapse the generator encodes as a `dow × hour`
+interaction (Wave B departure #2) surviving training into a served prediction. A genuinely
+Pakistani signal, learned not hardcoded, visible in a chart an owner can point at — and the
 strongest new evidence for Wave B's still-open human gate on `demand_patterns.png`.
 
-### The five pitfalls, audited rather than acknowledged
+### The five pitfalls, audited not acknowledged
 
-1. **Train and serve share `core/features.py`** — enforced by a gate, not by discipline:
-   the skew check re-runs the contract round-trip on all 81,395 rows at train time
-   (`7 columns agree, worst deviation 4.92e-06`).
-2. **`random_state` fixed everywhere** — `random_state=seed` in both `make_baseline` and
-   `make_hgb`, and reproducibility is now *proven* bit-for-bit rather than assumed.
-3. **No live-weather claim anywhere.** Checked all three places it could have crept in:
-   `features.py:62` ("no source. Future work"), `data/README.md:494` ("monthly average,
-   not daily"), model-card limitation 9 ("No weather, no competitor prices"). The
-   seasonality is a month table plus noise, and every document says so.
-4. **Not over-tuned** — 0.7628 at 98.2% of a *measured* 0.7770 ceiling, with the reason
-   the residual is irreducible written down (Ramadan, holidays, `ground_type`, payday and
-   a per-venue random effect all move demand and are all deliberately not features).
-5. **374 KB**, against a 20 MB budget. 54× of headroom.
+1. **Shared `core/features.py`** — enforced by the skew GATE (contract round-trip on all 81,395
+   rows at train time: `7 columns agree, worst deviation 4.92e-06`), not by discipline.
+2. **`random_state=seed`** in both `make_baseline` and `make_hgb` — reproducibility now *proven*.
+3. **No live-weather claim** anywhere: `features.py:62` ("no source. Future work"),
+   `data/README.md:494` ("monthly average, not daily"), card limitation 9 ("No weather").
+4. **Not over-tuned** — 0.7628 at 98.2% of a MEASURED 0.7770 ceiling; the residual is irreducible
+   by design (Ramadan, holidays, `ground_type`, payday, per-venue effect all move demand, none a
+   feature).
+5. **374 KB** against a 20 MB budget.
 
-### Verified, and what the verification proves
+### Verified
 
-`flutter analyze lib/` **0 issues** (no Dart touched this wave — measured, not assumed).
-`node --check` clean on `check_price_sanity.js`. The retrain ran green twice into a
-scratch directory and once into `reports/`. `check_price_sanity.js` exits 0 with 20/20.
-Scratch (`.rehearsal/`, `.rehearsal_run.log`, `.rehearsal_table.log`) deleted.
-
-What it does **not** prove: that any suggested price is *right*. Same caveat as Wave D,
-and the model card names the trigger — real bookings at more than one price per venue.
+`flutter analyze lib/` 0 issues (no Dart touched — measured). `node --check` clean. Retrain green
+twice into scratch and once into `reports/`. `check_price_sanity.js` exits 0 with 20/20. Scratch
+deleted. What it does NOT prove: that any suggested price is *right* — same caveat as Wave D; the
+trigger is real bookings at more than one price per venue.
 
 ### Open at the end of this wave (and of S.3)
 
