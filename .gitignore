@@ -95,6 +95,35 @@ ml-service/models/*.joblib
 ml-service/data/*.csv
 ml-service/data/*.parquet
 
+# ─── Sentiment corpus (S.4) ─────────────────────────────────────────────
+# The rule above only covers data/ itself, not data/sentiment/, which holds ~9 MB
+# of third-party downloads (RUSA, TweetEval) next to the small files that ARE the
+# project's own work. So this is default-deny with explicit exceptions: a raw
+# dataset added later is ignored until someone deliberately un-ignores it, which is
+# the right default when the accident being prevented is redistributing someone
+# else's licensed corpus.
+#
+# `sentiment/*` and NOT `sentiment/` on purpose — ignoring a DIRECTORY stops git
+# descending into it at all, and every `!` exception below would then be dead.
+ml-service/data/sentiment/*
+
+# Committed, and why each one has to be:
+#   README.md            where every source came from, and under what licence
+#   authored*.csv        hand-written in-domain rows — our own work, unreproducible
+#   .backup_authored*    pre-strip copy, so "85 template clones removed" is auditable
+#   domain_test_200.csv  THE REL-8 EXAM. Never regenerate, never train on it.
+#   domain_test_meta.json / train.meta.json
+#                        sha256s + provenance. These are what let a fresh clone
+#                        VERIFY the corpus it rebuilds instead of trusting it, which
+#                        is what makes shipping the metadata (but not the 9 MB of
+#                        raw text) a real reproducibility story rather than a dodge.
+!ml-service/data/sentiment/README.md
+!ml-service/data/sentiment/authored*.csv
+!ml-service/data/sentiment/.backup_authored*.csv
+!ml-service/data/sentiment/domain_test_200.csv
+!ml-service/data/sentiment/domain_test_meta.json
+!ml-service/data/sentiment/train.meta.json
+
 # ml-service/reports/ is deliberately NOT ignored. metrics.json, the calibration
 # plots and model_card.md are the AI evidence trail this milestone exists to
 # produce — they are the only inspectable record of what the model claims, and they

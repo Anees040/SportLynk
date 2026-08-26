@@ -1,0 +1,201 @@
+id,text,label,lang,aspect,phenomena,notes
+dt-001,"owner ne time pe slot nahi diya, bakwas experience",negative,ru,owner,plain,
+dt-002,"ground bilkul ganda tha, ghaas kati hui nahi thi",negative,ru,ground,plain,
+dt-003,"lights aadhi band thin, raat ko ball nazar hi nahi ati thi",negative,ru,lights,plain,
+dt-004,"paisay advance liye phir booking cancel kar di, dhoka hai ye",negative,ru,refund,plain,Money grievance. Material by the guideline.
+dt-005,"washroom ki halat bohat kharab thi, pani bhi nahi tha",negative,ru,facilities,plain,
+dt-006,"acha nahi tha bilkul, umeed se kam",negative,ru,overall,negation,Contains the positive token acha; the negation flips it. A word-unigram model gets this wrong.
+dt-007,"staff badtameez hai, baat karne ka tareeqa hi nahi",negative,ru,staff,plain,
+dt-008,"3000 le liye ek ghante ka, itne paisay ki koi wajah nahi",negative,ru,price,numeric_price,
+dt-009,"pitch pe kankar thay, mera dost gir gaya aur choot lag gayi",negative,ru,ground,plain,Safety complaint.
+dt-010,"bohatttt bura tajurba, dobara kabhi nahi",negative,ru,overall,repeated_chars,Elongation on an intensifier.
+dt-011,"slot confirm tha phir kaha ke double booking ho gayi",negative,ru,booking,plain,
+dt-012,"turf phatti hui thi jagah jagah se",negative,ru,ground,plain,
+dt-013,"parking hi nahi hai, gari sarak pe khari karni pari",negative,ru,location,plain,
+dt-014,"refund maanga tha, ab tak nahi mila. do hafte ho gaye",negative,ru,refund,plain,
+dt-015,"maza nahi aya, ground chota tha aur net tooti hui",negative,ru,ground,negation,maza nahi aya - negated positive.
+dt-016,bakwaaas 😡 paisay zaya,negative,ru,overall,repeated_chars;emoji;spelling_variant,Elongated misspelling plus a negative emoji. Tests both normalisation rules at once.
+dt-017,"owner phone hi nahi uthata, booking ke baad ghayab",negative,ru,owner,plain,
+dt-018,"changing room mein taala laga tha, kapre gari mein badle",negative,ru,facilities,plain,No explicit sentiment word; the complaint is in the situation.
+dt-019,"ghatiya intezam, koi water cooler bhi nahi",negative,ru,facilities,plain,
+dt-020,"subah ki booking thi, gate band mila, ek ghanta intezar kiya",negative,ru,booking,plain,Purely factual sentences that are unmistakably a complaint.
+dt-021,"opponent team ne beimani ki aur owner ne kuch nahi kaha",negative,ru,opponent,plain,
+dt-022,"faltu jagah hai, itni door aana bekar gaya",negative,ru,location,plain,
+dt-023,"bohot mehnga hai is quality ke liye, sasta options behtar hain",negative,ru,price,comparative;spelling_variant,bohot variant of bohat.
+dt-024,"floodlight mein se do kharab, aadha ground andhera",negative,ru,lights,plain,
+dt-025,"QR scan nahi hua, owner ne kaha cash do, phir dobara paisay maange",negative,ru,booking,plain,
+dt-026,achha lag raha tha pehle lekin baad mein sab kharab nikla,negative,ru,overall,mixed_aspect;spelling_variant,"Praise then a material complaint; the complaint resolves the stance. achha variant of acha."
+dt-027,"tang kar diya inhon ne, timing bar bar badalte rahe",negative,ru,owner,plain,
+dt-028,"theek tha, average ground",neutral,ru,overall,plain,Seed example from the sprint plan.
+dt-029,"bas guzara ho gaya, na acha na bura",neutral,ru,overall,plain,Explicitly refuses a stance.
+dt-030,ground theek hai lekin lights thori kam hain,neutral,ru,lights,mixed_aspect,Minor complaint against a neutral base; does not resolve to negative.
+dt-031,"aam sa maidan hai, jo paisay hain us hisab se sahi",neutral,ru,price,plain,
+dt-032,"do ghante khela, kuch khaas nahi tha",neutral,ru,overall,plain,
+dt-033,"location theek hai, ground bhi chalta hai",neutral,ru,location,plain,chalta hai - it will do. The canonical neutral idiom.
+dt-034,"pitch theek thi, thora better ho sakti thi",neutral,ru,ground,mixed_aspect,
+dt-035,"maine Friday ko slot liya tha, sab normal raha",neutral,ru,booking,plain,Descriptive with no evaluative content.
+dt-036,"paisay theek hain, ground bhi theek hai, bas itna hi",neutral,ru,price,plain,
+dt-037,"thk tha, dobara soch kar jaunga",neutral,ru,overall,spelling_variant,"thk is theek. Hedged return intent - not a refusal, so not negative."
+dt-038,"staff ne baat ki, ground dikhaya, phir khela. koi masla nahi hua",neutral,ru,staff,plain,
+dt-039,lights hain magar ghaas thori kam thi,neutral,ru,ground,mixed_aspect,
+dt-040,"average experience, na shikayat na tareef",neutral,ru,overall,plain,
+dt-041,"ok tha, expectations zyada nahi thin",neutral,ru,overall,plain,
+dt-042,"cricket ke liye theek hai, football ke liye chota",neutral,ru,ground,conditional,Sentiment conditional on use case.
+dt-043,washroom saaf tha lekin canteen band thi,neutral,ru,facilities,mixed_aspect,
+dt-044,"slot mil gaya asani se, ground normal tha",neutral,ru,booking,plain,
+dt-045,"2500 ka slot tha, jaisa socha tha waisa hi mila",neutral,ru,price,numeric_price,Met expectations exactly - neutral by the guideline.
+dt-046,"dopahar mein khela, garmi thi, ground theek tha",neutral,ru,overall,plain,Complaint is about the weather rather than the venue.
+dt-047,"teek tha overall, kuch cheezen behtar ho sakti hain",neutral,ru,overall,spelling_variant,teek is a theek variant.
+dt-048,maidan bara hai lekin ghaas patli hai,neutral,ru,ground,mixed_aspect,
+dt-049,"owner ne waqt pe slot diya, ground thora purana hai",neutral,ru,owner,mixed_aspect,
+dt-050,"na maza aya na bura laga, bas khel liya",neutral,ru,overall,negation,Double negation of both poles.
+dt-051,"dono team ke liye jagah thi, baqi sab aam",neutral,ru,ground,plain,
+dt-052,"ek dafa ja sakte hain, roz jane wali jagah nahi",neutral,ru,overall,mixed_aspect,
+dt-053,"booking asan thi, ground theek theek tha",neutral,ru,booking,plain,
+dt-054,thora shor tha bahar se lekin khel mein farq nahi para,neutral,ru,location,mixed_aspect,Complaint explicitly discounted by the reviewer.
+dt-055,"ground bohat zabardast tha, lights full best",positive,ru,ground,plain,Seed example from the sprint plan.
+dt-056,"mazedar experience, dobara zaroor aunga",positive,ru,overall,plain,
+dt-057,"behtreen turf hai, football khelne ka maza dobala ho gaya",positive,ru,ground,plain,
+dt-058,"owner bohat acha banda hai, time pe sab arrange kar diya",positive,ru,owner,plain,
+dt-059,"saaf suthra maidan, washroom bhi bilkul clean",positive,ru,facilities,plain,
+dt-060,"zabardasttt lights, raat ko din jaisa lagta hai",positive,ru,lights,repeated_chars,
+dt-061,"paisay ki poori value mili, is se sasta kahin nahi milega",positive,ru,price,comparative;negation,"Contains nahi but the negation is on a comparison, and the stance stays positive."
+dt-062,"full maza aya, poori team khush thi",positive,ru,overall,plain,
+dt-063,"pitch kamaal ki thi, bounce bilkul theek",positive,ru,ground,plain,Contains theek in a positive frame - theek alone is neutral but bilkul theek about bounce is praise.
+dt-064,"lajawab jagah hai, parking bhi asan",positive,ru,overall,plain,
+dt-065,"bhot acha ground, ghaas bilkul nayi",positive,ru,ground,spelling_variant,bhot is a bohat variant.
+dt-066,"staff bohat cooperative tha, pani aur chairs bhi diye",positive,ru,staff,code_switch,
+dt-067,"subah ki cricket ke liye best, pitch tayyar milti hai",positive,ru,ground,conditional,
+dt-068,"slot foran confirm hua, koi jhanjhat nahi",positive,ru,booking,negation,koi jhanjhat nahi - no hassle. A negation that is positive.
+dt-069,"mast ground hai yaar, dosron ko bhi bataya",positive,ru,ground,plain,
+dt-070,"achha khasa bara maidan, 11 a side asani se",positive,ru,ground,numeric;spelling_variant,
+dt-071,"top class facilities, changing room bhi acha",positive,ru,facilities,code_switch,
+dt-072,"QR se check in hua, 10 second ka kaam",positive,ru,booking,numeric,
+dt-073,"owner ne slot late tak barha diya, bohat mehrbani",positive,ru,owner,plain,
+dt-074,🔥🔥 zabardast turf full recommend,positive,ru,ground,emoji,Positive emoji carrying part of the signal.
+dt-075,"floodlights bohat tez hain, raat ka match perfect",positive,ru,lights,plain,
+dt-076,"sasta aur acha, dono cheezen ek jagah",positive,ru,price,plain,
+dt-077,refund bina poochhe hi kar diya jab slot cancel karna para,positive,ru,refund,plain,A refund complaint is the commonest negative; the same aspect handled well is positive.
+dt-078,opponent team bhi achi thi aur intezam bhi behtreen,positive,ru,opponent,plain,
+dt-079,"har hafte ja rahe hain ab, itna acha laga",positive,ru,overall,plain,
+dt-080,"axa ground, paisay wasool",positive,ru,ground,spelling_variant,axa is the phonetic acha variant named in the sprint plan.
+dt-081,"worst experience, owner ne last minute pe slot cancel kar diya",negative,mixed,owner,code_switch,
+dt-082,ground was okay but lights bilkul bakwas thin,negative,mixed,lights,mixed_aspect;code_switch,Neutral base plus a strong material complaint - resolves negative.
+dt-083,"paid 3500 for nothing, ghaas hi nahi thi ground pe",negative,mixed,price,numeric_price;code_switch,
+dt-084,"staff behaviour very rude tha, baat karne ka tameez nahi",negative,mixed,staff,code_switch,
+dt-085,booking confirmed thi but on arrival they said slot not available,negative,mixed,booking,code_switch,
+dt-086,"not good at all, paisay waste hue",negative,mixed,overall,negation;code_switch,
+dt-087,"the pitch was uneven, mera ankle twist ho gaya",negative,mixed,ground,code_switch,
+dt-088,"no parking, no washroom, kuch bhi theek nahi",negative,mixed,facilities,negation;code_switch,Contains theek negated.
+dt-089,owner said 2 hours but sirf 1 ghanta khelne diya,negative,mixed,owner,numeric;code_switch,
+dt-090,"very poor maintenance, net tooti hui aur goal post hila hua",negative,mixed,ground,code_switch,
+dt-091,"refund policy zero, paisay le kar baat hi nahi karte",negative,mixed,refund,code_switch,
+dt-092,"lights were dim and ground bhi geela tha, khel hi nahi sake",negative,mixed,lights,code_switch,
+dt-093,"asked for a morning slot, unhon ne evening ka de diya without telling",negative,mixed,booking,code_switch,
+dt-094,"disappointed 😞 expected much better, itne reviews dekh kar aye thay",negative,mixed,overall,emoji;code_switch,
+dt-095,good location but everything else bakwas,negative,mixed,overall,mixed_aspect;code_switch,Minor positive against a total negative.
+dt-096,"they double booked us, dono teams gate pe khari thin",negative,mixed,booking,code_switch,
+dt-097,"overpriced for the quality, 4000 mein bohat behtar milta hai",negative,mixed,price,comparative;numeric_price;code_switch,
+dt-098,"app pe slot show ho raha tha, owner ne kaha wo purana hai",negative,mixed,booking,code_switch,
+dt-099,"horrible turf, chhoti chhoti kankar puri ground pe",negative,mixed,ground,code_switch,
+dt-100,"never again, itna bura intezam pehli dafa dekha",negative,mixed,overall,code_switch,
+dt-101,the washroom smelled bad and pani ka koi bandobast nahi tha,negative,mixed,facilities,code_switch,
+dt-102,they kept our advance and slot bhi nahi diya. total fraud,negative,mixed,refund,code_switch,
+dt-103,"wasteee of money, ground bilkul chota tha",negative,mixed,price,repeated_chars;code_switch,
+dt-104,nice photos on the app lekin haqeeqat mein ganda hai,negative,mixed,overall,mixed_aspect;code_switch,The praise is of the listing rather than the venue - a trap for aspect-blind models.
+dt-105,"decent ground, theek tha overall",neutral,mixed,overall,code_switch,
+dt-106,"average place, kuch khaas nahi lekin bura bhi nahi",neutral,mixed,overall,negation;code_switch,
+dt-107,lights are good but ghaas thori kam thi,neutral,mixed,ground,mixed_aspect;code_switch,
+dt-108,"it was ok, paisay ke hisab se theek",neutral,mixed,price,code_switch,
+dt-109,"booked for Sunday, sab kuch normal tha",neutral,mixed,booking,code_switch,
+dt-110,ground is big lekin facilities basic hain,neutral,mixed,facilities,mixed_aspect;code_switch,
+dt-111,"staff was fine, ground bhi theek tha, nothing special",neutral,mixed,staff,code_switch,
+dt-112,price is reasonable but location thori door hai,neutral,mixed,location,mixed_aspect;code_switch,
+dt-113,"played two hours, koi masla nahi hua",neutral,mixed,overall,negation;code_switch,
+dt-114,clean washroom but canteen band thi,neutral,mixed,facilities,mixed_aspect;code_switch,
+dt-115,"average pitch, cricket ke liye chal jata hai",neutral,mixed,ground,conditional;code_switch,
+dt-116,not bad not great. bas theek tha,neutral,mixed,overall,negation;code_switch,Explicitly both-and-neither.
+dt-117,"slot booking was easy, ground average tha",neutral,mixed,booking,mixed_aspect;code_switch,
+dt-118,the turf is old but abhi bhi khelne ke qabil hai,neutral,mixed,ground,mixed_aspect;code_switch,
+dt-119,parking available hai lekin choti si jagah hai,neutral,mixed,location,mixed_aspect;code_switch,
+dt-120,"3000 for two hours, jaisa suna tha waisa hi mila",neutral,mixed,price,numeric_price;code_switch,
+dt-121,"it is fine for casual games, professional ke liye nahi",neutral,mixed,ground,conditional;code_switch,
+dt-122,"owner replied on WhatsApp, booking ho gayi, sab theek",neutral,mixed,owner,code_switch,
+dt-123,ground theek hai but timing options limited hain,neutral,mixed,booking,mixed_aspect;code_switch,
+dt-124,mid range place hai expectations set kar ke jayen,neutral,mixed,overall,code_switch,
+dt-125,"lights ok, pitch ok, price ok. bas",neutral,mixed,overall,code_switch,
+dt-126,we played we left. kuch bolne wali baat nahi,neutral,mixed,overall,code_switch,Flat and deliberately affectless.
+dt-127,good size ground lekin ghaas patli thi jagah jagah,neutral,mixed,ground,mixed_aspect;code_switch,
+dt-128,"best ground in Islamabad, bohat maza aya",positive,mixed,ground,comparative;code_switch,
+dt-129,"amazing lights, raat ko khelna zabardast tha",positive,mixed,lights,code_switch,
+dt-130,"owner is very cooperative, har cheez ka khayal rakha",positive,mixed,owner,code_switch,
+dt-131,"excellent turf, paisay ki poori value",positive,mixed,price,code_switch,
+dt-132,loved it 🔥 poori team ne enjoy kiya,positive,mixed,overall,emoji;code_switch,
+dt-133,"superb pitch for cricket, subah ka maza alag hai",positive,mixed,ground,code_switch,
+dt-134,"very clean facilities, washroom bhi saaf tha",positive,mixed,facilities,code_switch,
+dt-135,"booking process smooth tha, QR scan aur bas",positive,mixed,booking,code_switch,
+dt-136,"great value for money, is se sasta acha ground nahi hai",positive,mixed,price,comparative;negation;code_switch,Another positive sentence whose only negator sits inside a comparison.
+dt-137,"highly recommended, dosto ko bhi bhej diya",positive,mixed,overall,code_switch,
+dt-138,the staff was helpful aur pani bhi free diya,positive,mixed,staff,code_switch,
+dt-139,"perfect for 7 a side, ground ka size bilkul theek",positive,mixed,ground,numeric;code_switch,
+dt-140,"floodlights are excellent, raat 11 baje tak khela",positive,mixed,lights,numeric;code_switch,
+dt-141,"bohat acha experience, owner ne slot extend bhi kar diya",positive,mixed,owner,code_switch,
+dt-142,"top notch maintenance, ghaas bilkul nayi lag rahi thi",positive,mixed,ground,code_switch,
+dt-143,"love this place, har weekend yahin aate hain",positive,mixed,overall,code_switch,
+dt-144,refund was instant jab humein cancel karna para,positive,mixed,refund,code_switch,
+dt-145,"sahi jagah hai for evening football, lights full",positive,mixed,overall,code_switch,
+dt-146,friendly opponent team and behtreen intezam,positive,mixed,opponent,code_switch,
+dt-147,"really goooood ground, maza aya",positive,mixed,ground,repeated_chars;code_switch,Elongation on an English word - the collapse rule must not damage good.
+dt-148,"worth every rupee, 2 ghante full khela",positive,mixed,price,numeric;code_switch,
+dt-149,beautiful turf 👍 bilkul professional level,positive,mixed,ground,emoji;code_switch,
+dt-150,"very well managed, owner ne time se pehle ready kar diya",positive,mixed,owner,code_switch,
+dt-151,Terrible experience. The owner cancelled my slot an hour before.,negative,en,owner,plain,
+dt-152,The ground was in poor condition and the grass was patchy everywhere.,negative,en,ground,plain,
+dt-153,"Half the floodlights were not working, we could barely see the ball.",negative,en,lights,negation,
+dt-154,They took the advance and never refunded it after cancelling.,negative,en,refund,negation,
+dt-155,Not worth the money at all. Very disappointing.,negative,en,price,negation,
+dt-156,The washrooms were filthy and there was no running water.,negative,en,facilities,plain,
+dt-157,Staff was extremely rude when we asked about the timing.,negative,en,staff,plain,
+dt-158,Overpriced for what you get. Better options nearby for less.,negative,en,price,comparative,Contains better in a sentence that is a complaint.
+dt-159,"The turf had gravel on it, one of our players got injured.",negative,en,ground,plain,
+dt-160,Double booked our slot and made both teams wait at the gate.,negative,en,booking,plain,
+dt-161,Booked online but on arrival they said the slot did not exist.,negative,en,booking,negation,
+dt-162,"No parking, no changing room, nothing as advertised.",negative,en,facilities,negation,
+dt-163,Waited forty minutes past our slot time and still no one opened the gate.,negative,en,booking,numeric,
+dt-164,The pictures on the app look nothing like the actual ground.,negative,en,overall,negation,
+dt-165,Worst ground I have played on this year.,negative,en,ground,comparative,
+dt-166,They changed our timing three times without informing us.,negative,en,owner,numeric,
+dt-167,Absolutely not recommended for a serious match.,negative,en,overall,negation,recommended negated - the mirror of dt-137.
+dt-168,It was okay. Average ground for the price.,neutral,en,overall,plain,
+dt-169,"Decent place, nothing special but nothing wrong either.",neutral,en,overall,negation,
+dt-170,The ground is large but the facilities are very basic.,neutral,en,facilities,mixed_aspect,
+dt-171,"Played two hours, no issues, no highlights.",neutral,en,overall,negation,
+dt-172,The lights are fine but the grass could be better.,neutral,en,ground,mixed_aspect,
+dt-173,"Reasonable price, slightly inconvenient location.",neutral,en,location,mixed_aspect,
+dt-174,"Booked for Saturday evening, everything went as expected.",neutral,en,booking,plain,
+dt-175,"Fine for a casual game, not for a proper match.",neutral,en,ground,conditional;negation,
+dt-176,"Clean washrooms, but the canteen was closed.",neutral,en,facilities,mixed_aspect,
+dt-177,The pitch is old but still playable.,neutral,en,ground,mixed_aspect,
+dt-178,Staff were fine and the ground was fine. That is about it.,neutral,en,staff,plain,
+dt-179,"Average maintenance. Some parts good, some parts worn.",neutral,en,ground,mixed_aspect,
+dt-180,It served the purpose. Would consider other options too.,neutral,en,overall,plain,
+dt-181,Booking was simple. The ground itself is unremarkable.,neutral,en,booking,mixed_aspect,
+dt-182,Parking exists but it is a very small area.,neutral,en,location,mixed_aspect,
+dt-183,Mid range venue. Set your expectations accordingly.,neutral,en,overall,plain,
+dt-184,"Not bad for the rate, though I would not call it good.",neutral,en,price,negation,Two negations that cancel into a refusal to praise. The hardest English item in the set.
+dt-185,Excellent ground and the floodlights are superb at night.,positive,en,lights,plain,
+dt-186,The owner was very cooperative and arranged everything on time.,positive,en,owner,plain,
+dt-187,Best turf I have played on in Rawalpindi. Highly recommended.,positive,en,ground,comparative,
+dt-188,Spotlessly clean facilities and a well maintained pitch.,positive,en,facilities,plain,
+dt-189,Great value for money. Will definitely book again.,positive,en,price,plain,
+dt-190,The check in with the QR code took ten seconds. Very smooth.,positive,en,booking,numeric,
+dt-191,Perfect size for a seven a side game. Loved it.,positive,en,ground,numeric,
+dt-192,"Fantastic experience, the whole team enjoyed the evening.",positive,en,overall,plain,
+dt-193,The staff brought us water and chairs without being asked.,positive,en,staff,plain,No explicit sentiment word; the praise is in the reported behaviour.
+dt-194,Refunded immediately when we had to cancel. Very fair.,positive,en,refund,plain,
+dt-195,"Beautiful new grass, plays like a professional pitch.",positive,en,ground,plain,
+dt-196,Wonderful place for early morning cricket. The pitch is always ready.,positive,en,ground,conditional,
+dt-197,They extended our slot at no extra charge. Excellent service.,positive,en,owner,negation,no extra charge - a negation inside a positive.
+dt-198,Very well managed venue. Everything was ready before our time.,positive,en,overall,plain,
+dt-199,"Superb lights, we played comfortably until eleven at night.",positive,en,lights,plain,
+dt-200,"Really good ground, the opponent team was friendly too.",positive,en,opponent,plain,

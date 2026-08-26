@@ -62,11 +62,12 @@ import logging
 import platform
 import sys
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from . import config, features
+from . import config, features, text_norm
 
 log = logging.getLogger("sportlynk.ml.registry")
 
@@ -78,7 +79,7 @@ LATEST_SUFFIX = "_latest.joblib"
 #: EXPECTED but absent. Discovery alone cannot distinguish "no pricing model yet"
 #: from "no pricing model was ever supposed to exist" — and in Wave A the correct
 #: answer is the first one, which is the whole point of the health endpoint.
-KNOWN_MODELS: tuple[str, ...] = ("pricing",)
+KNOWN_MODELS: tuple[str, ...] = ("pricing", "sentiment")
 
 #: Status values, exhaustive. Exported as constants because the router branches on
 #: them and the Node client's tests assert on them — a typo'd string literal in
@@ -87,6 +88,85 @@ STATUS_READY = "ready"
 STATUS_NOT_LOADED = "not_loaded"
 STATUS_INCOMPATIBLE = "incompatible"
 STATUS_ERROR = "error"
+
+
+# ── per-model load contracts ──────────────────────────────────────────────────
+#
+# The registry's reason for existing is to refuse a stale artifact rather than
+# serve a confidently-wrong one. But "stale" is model-specific: pricing skews if
+# the FEATURE SET drifts (core/features.py), sentiment skews if the frozen TEXT
+# NORMALIZER drifts (core/text_norm.py) — a model trained on `<num>`/`_neg` tokens
+# fed text tokenised by a different normalizer predicts garbage with a confidence
+# score. So each known model pins itself, at load time, to the exact serving-side
+# component it must agree with. Expressed once, here, so both models get the same
+# guarantee and adding the third is a dict entry, not a rewrite of _load().
+
+
+@dataclass(frozen=True)
+class ModelContract:
+    """What a given model key must prove at load time to be served.
+
+    * ``spec_field``   — the payload key holding the spec string stamped at train time.
+    * ``service_spec`` — the spec string THIS process would stamp now; the artifact's
+                         must equal it or the model is `incompatible`.
+    * ``trainer``      — retrain command, quoted verbatim in the reason string so the
+                         /health reader knows exactly how to fix a mismatch.
+    * ``verify``       — a second, finer check under the SAME spec version (feature
+                         ORDER for pricing, normalizer FINGERPRINT for sentiment):
+                         returns an incompatibility reason, or None when compatible.
+    """
+
+    spec_field: str
+    service_spec: Callable[[], str]
+    trainer: str
+    verify: Callable[[dict[str, Any]], str | None]
+
+
+def _pricing_verify(payload: dict[str, Any]) -> str | None:
+    order = payload.get("featureOrder")
+    if order is not None and tuple(order) != features.FEATURE_ORDER:
+        # Same version string, different columns — a bad rebase, or a feature added
+        # without bumping FEATURE_SPEC_VERSION. Belt and braces to the version check.
+        return (
+            "feature ORDER mismatch under the same spec version — "
+            f"artifact={list(order)} service={list(features.FEATURE_ORDER)}. "
+            "Bump FEATURE_SPEC_VERSION and retrain."
+        )
+    return None
+
+
+def _sentiment_verify(payload: dict[str, Any]) -> str | None:
+    fingerprint = payload.get("normSpecFingerprint")
+    current = text_norm.norm_spec_fingerprint()
+    if fingerprint is not None and fingerprint != current:
+        # The version string can stay "sentiment-norm-v1" while the regex/vocab of
+        # the normalizer changes underneath it; the fingerprint is the mechanism
+        # that catches the day someone edits text_norm.py without bumping the name.
+        return (
+            "normalizer FINGERPRINT mismatch under the same spec version — "
+            f"artifact={fingerprint!r} service={current!r}. The frozen normalizer in "
+            "core/text_norm.py changed; retrain: python training/train_sentiment.py"
+        )
+    return None
+
+
+#: The contract per known model. A key absent here (a stray *_latest.joblib from an
+#: experiment) is still loaded and reported, but without a spec check — we cannot
+#: verify a contract we do not know, and that fact is made explicit in its reason.
+MODEL_CONTRACTS: dict[str, ModelContract] = {
+    "pricing": ModelContract(
+        spec_field="featureSpecVersion",
+        service_spec=lambda: features.FEATURE_SPEC_VERSION,
+        trainer="python training/train_pricing.py",
+        verify=_pricing_verify,
+    ),
+    "sentiment": ModelContract(
+        spec_field="normSpecVersion",
+        service_spec=lambda: text_norm.NORM_SPEC_VERSION,
+        trainer="python training/train_sentiment.py",
+        verify=_sentiment_verify,
+    ),
+}
 
 
 class LoadedModel:
@@ -129,12 +209,21 @@ class LoadedModel:
         `"status": "error"` and nothing else sends whoever is on call to read logs
         on a box they may not have; the reason string is the whole value of the
         endpoint at 2am.
+
+        `specVersion` is the model-agnostic answer to "what contract was this trained
+        under" — pricing's featureSpecVersion, sentiment's normSpecVersion, whichever
+        applies. `featureSpecVersion` is kept alongside it, unchanged, so the existing
+        pricing consumers (main.py, the Node client tests) keep reading the field they
+        already read; it is simply null for a model that has no feature spec.
         """
+        contract = MODEL_CONTRACTS.get(self.key)
+        spec_version = self.meta.get(contract.spec_field) if contract else None
         return {
             "key": self.key,
             "status": self.status,
             "reason": self.reason,
             "modelVersion": self.version,
+            "specVersion": spec_version,
             "featureSpecVersion": self.meta.get("featureSpecVersion"),
             "trainedAt": self.meta.get("trainedAt"),
             "datasetSource": (self.meta.get("dataset") or {}).get("source"),
@@ -194,14 +283,14 @@ class ModelRegistry:
 
     def _load(self, key: str) -> LoadedModel:
         path = self.path_for(key)
+        contract = MODEL_CONTRACTS.get(key)
+        trainer_hint = contract.trainer if contract else "the matching training script"
+
         if not path.exists():
             return LoadedModel(
                 key,
                 status=STATUS_NOT_LOADED,
-                reason=(
-                    f"{path.name} not found in {self._dir}. "
-                    "Train it with:  python training/train_pricing.py"
-                ),
+                reason=f"{path.name} not found in {self._dir}. Train it with:  {trainer_hint}",
             )
 
         # joblib is imported here, not at module import: it pulls in numpy and
@@ -233,46 +322,40 @@ class ModelRegistry:
                 path=path,
                 status=STATUS_ERROR,
                 reason=(
-                    "artifact is not the expected dict "
-                    "{model, featureSpecVersion, featureOrder, modelVersion, ...} — "
-                    "retrain with training/train_pricing.py"
+                    "artifact is not the expected dict {model, modelVersion, ...} — "
+                    f"retrain with {trainer_hint}"
                 ),
             )
 
         meta = {k: v for k, v in payload.items() if k != "model"}
 
-        trained_spec = payload.get("featureSpecVersion")
-        if trained_spec != features.FEATURE_SPEC_VERSION:
-            # The guard this class exists for. Refuse, loudly, rather than predict.
-            return LoadedModel(
-                key,
-                path=path,
-                status=STATUS_INCOMPATIBLE,
-                meta=meta,
-                reason=(
-                    f"feature spec mismatch: artifact was trained on {trained_spec!r} "
-                    f"but this service builds {features.FEATURE_SPEC_VERSION!r}. "
-                    "Retrain: python training/train_pricing.py"
-                ),
-            )
-
-        trained_order = payload.get("featureOrder")
-        if trained_order is not None and tuple(trained_order) != features.FEATURE_ORDER:
-            # Same version string, different columns — a bad rebase, or a feature
-            # added without bumping FEATURE_SPEC_VERSION. Belt and braces: the
-            # version check is the discipline, this is the mechanism that catches
-            # the day someone forgets it.
-            return LoadedModel(
-                key,
-                path=path,
-                status=STATUS_INCOMPATIBLE,
-                meta=meta,
-                reason=(
-                    "feature ORDER mismatch under the same spec version — "
-                    f"artifact={list(trained_order)} service={list(features.FEATURE_ORDER)}. "
-                    "Bump FEATURE_SPEC_VERSION and retrain."
-                ),
-            )
+        # ── the compatibility contract: refuse a stale artifact, don't serve it ──
+        # Model-specific (see MODEL_CONTRACTS): pricing checks the feature spec +
+        # column order against core/features.py; sentiment checks the normalizer
+        # spec + fingerprint against core/text_norm.py. A key with no contract is a
+        # stray *_latest.joblib from an experiment — we cannot vouch for a contract
+        # we do not know, so it loads but is flagged, never silently trusted.
+        trained_spec = meta.get(contract.spec_field) if contract else None
+        if contract is not None:
+            service_spec = contract.service_spec()
+            if trained_spec != service_spec:
+                # The guard this class exists for. Refuse, loudly, rather than predict.
+                return LoadedModel(
+                    key,
+                    path=path,
+                    status=STATUS_INCOMPATIBLE,
+                    meta=meta,
+                    reason=(
+                        f"{contract.spec_field} mismatch: artifact was trained on "
+                        f"{trained_spec!r} but this service builds {service_spec!r}. "
+                        f"Retrain: {contract.trainer}"
+                    ),
+                )
+            finer = contract.verify(payload)
+            if finer is not None:
+                return LoadedModel(
+                    key, path=path, status=STATUS_INCOMPATIBLE, meta=meta, reason=finer
+                )
 
         estimator = payload["model"]
         if not hasattr(estimator, "predict_proba"):
@@ -283,15 +366,17 @@ class ModelRegistry:
                 meta=meta,
                 reason=(
                     f"estimator {type(estimator).__name__} has no predict_proba; "
-                    "the pricing model must be a probability classifier"
+                    "a served model must be a probability classifier"
                 ),
             )
 
+        if contract is None:
+            log.warning("model %s has no load contract; served without a spec check", key)
         log.info(
             "model %s loaded: version=%s spec=%s artifact=%s",
             key,
             meta.get("modelVersion"),
-            trained_spec,
+            trained_spec if contract else "(unverified)",
             path.name,
         )
         return LoadedModel(

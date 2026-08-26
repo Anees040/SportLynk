@@ -138,7 +138,7 @@ Each row: do the action, confirm the expected result. A ✗ is a bug — log it 
 
 ---
 
-## 4. Feature tests — S2 · S3 (teams, chat, matchmaking, ELO, ML tier)
+## 4. Feature tests — S2 · S3 · S4 (teams, chat, matchmaking, ELO, ML tier)
 
 ### 4.1 Teams & membership (Wave A)
 19. Create a team → creator is captain.
@@ -641,6 +641,121 @@ retraining trigger is real bookings.
 
 ---
 
+### 4.10 Sentiment — the exam and the corpus (S.4 Wave A)
+
+This wave shipped no model, so there is nothing to click. What there *is* to check is
+whether the **measuring instrument** is still trustworthy — and every one of these is a
+five-second command, because a corrupted exam is the single failure that would make every
+number in §4.11 meaningless while everything still looked green.
+
+```bash
+cd D:\sportlynk\ml-service
+.\.venv\Scripts\python.exe -c "import hashlib,pathlib; p=pathlib.Path('data/sentiment/domain_test_200.csv'); print(hashlib.sha256(p.read_bytes()).hexdigest())"
+```
+
+102. **The exam's sha256 must equal the one in `data/sentiment/domain_test_meta.json`**
+     (`7e388c84…bd46`). If it differs, *stop* — someone edited the test set, and the only
+     honest response is to find out which rows and why. `train_sentiment.py` checks this
+     itself on every run and refuses to release on a mismatch, so the practical way to
+     fail this test is to notice the trainer refusing.
+103. **The exam is 200 rows, 68 negative / 67 neutral / 65 positive**, and **no row of it
+     appears in `train.csv`**. The corpus builder enforces the second half (0 exact
+     matches, 1 authored near-duplicate removed at Jaccard ≥ 0.8) and records the result
+     in `train.meta.json` under `contamination_gate`. Read that block rather than trusting
+     the sentence.
+104. **The rule that is a discipline, not a check: never edit an exam row because the model
+     got it wrong.** There is no test for this — it is the one thing in the whole ML tier
+     that only integrity enforces. The moment a row is "fixed" to match a prediction, the
+     0.8250 headline becomes a number about itself. If a row genuinely *is* mislabelled,
+     fix it, re-hash, re-record, and say so in the wave log — the crime is the silent fix.
+105. **The normalisation fingerprint must match in three places** — the corpus metadata,
+     the served artifact, and `GET /sentiment/spec`: `sentiment-norm-v1` /
+     `b96e65df85f9692b`. This is not ceremony. `app/core/text_norm.py` is pickled into the
+     pipeline **by reference**, so editing `prep_word` changes how every already-released
+     artifact normalises text at serve time — with no version mismatch, no exception and no
+     failing test. The fingerprint is the only thing that turns that silent failure into a
+     loud one, and a release gate compares it.
+106. **Corpus provenance.** `train.csv` is 21,405 rows at sha256 `408b4c52…a068`, and the
+     arithmetic in `train.meta.json` reconciles exactly: 21,957 loaded − 539 exact
+     duplicates − 12 empty-after-normalisation − 1 exam near-duplicate. A gate re-checks
+     the sha on every training run. `train.csv` is **gitignored** (13 MB of third-party
+     licensed text); the metadata is committed, which is what lets a fresh clone *verify*
+     a rebuilt corpus instead of trusting it.
+107. **The shortcut test worth understanding.** If Roman Urdu rows were mostly negative and
+     English rows mostly positive, a model could score well by detecting *language* and
+     never learn sentiment at all. `train.meta.json` reports Cramér's V **0.1334**
+     (source~label) and **0.1298** (lang~label) — weak association, which is the passing
+     result. It reports χ² and effect size and deliberately **no p-value**: at n = 21,405
+     significance is free, so only the effect size answers the question.
+
+---
+
+### 4.11 Sentiment model #2 — trained, gated, served (S.4 Wave B)
+
+Tests 108–113 are runnable with no UI, because **no screen shows sentiment yet**. That is
+the honest state of this wave and test 113 exists to keep it from being overstated.
+
+```bash
+cd D:\sportlynk\ml-service
+.\.venv\Scripts\python.exe training\train_sentiment.py          # no flags — see below
+.\.venv\Scripts\python.exe training\smoke_sentiment_api.py      # 49 checks, released artifact
+```
+
+108. **Retrain with no flags.** The defaults *are* the shipped configuration
+     (`--branches both --C 0.1 --upweight-authored 40 --seed 42`), so the bare command is
+     what produced the served artifact. It must print **7/7 gates ok** and release:
+     contract self-check (12 receipts) · corpus provenance (sha + norm fingerprint) · exam
+     provenance · `predict_proba` present · no leakage · beats baseline · domain ≥ 0.80.
+     The artifact is written **only if every gate passes**, so a failing run cannot take
+     the served model down. For a rehearsal, add `--no-write --no-plot`: the gates still
+     run and the released artifact is never touched. That form also re-derives the
+     published metrics **exactly** (0.8250 / 0.8247, per-language 0.7600 · 0.8286 · 0.8625,
+     ablations 0.7800 · 0.7650 · 0.8100, CI [0.7700, 0.8750]) — the reproducibility demo
+     for model #2, the same claim test 97 makes for pricing.
+109. **The headline: exam accuracy ≥ 0.80.** Recorded run **0.8250**, macro-F1 0.8247,
+     95% CI **[0.7700, 0.8750]** over 2,000 bootstrap resamples, against a majority
+     baseline of 0.3400. Say the CI out loud: **its lower bound is below the target.** On
+     200 rows "we cleared 0.80" is a point estimate, not a proven inequality, and a
+     committee that spots you hiding that has found something worse than a low score.
+110. **The validation split reads *lower*, and that is not a bug.** 0.6447 on 4,281
+     held-out corpus rows against 0.8250 on the exam. They measure different
+     distributions: the split is 97% third-party open-domain text (tweets, RUSA sentences)
+     where 3-class sentiment is genuinely ambiguous and the labels are somebody else's; the
+     exam is 200 venue reviews in the register this app receives. The model is
+     **specialised**, both numbers are published, and quoting only one of them is the
+     failure mode in either direction.
+111. **The probabilities are not calibrated, and the artifact says so.**
+     `predict_proba = softmax(decision_function)`, recorded as
+     `{"method":"softmax_over_decision_function","calibrated":false}`. Two things follow.
+     `argmax(proba) == predict` **exactly**, so `classScores` can never disagree with the
+     label shipped beside it — `smoke_sentiment_api.py` asserts this on every probe. And
+     0.9 means "well inside the margin", **not** "90% of such reviews are negative"; do
+     not read these as frequencies in a demo.
+112. **The abuse flag (FR9.10) reads its threshold from the artifact.** 32-term lexicon
+     **or** P(negative) ≥ **0.70** → escalate; 18 of the 200 exam rows escalate; the smoke
+     test prints `threshold came from the artifact -- 0.7`. **Never hardcode this number.**
+     Softmax sharpness tracks margin width, which tracks `C`: moving C from 3.0 to 0.1
+     moved max P(negative) on the exam from 0.9811 to 0.9234, which silently near-killed a
+     hardcoded 0.90 threshold *while accuracy improved*. Nothing failed and nothing warned.
+     If you ever re-tune C, the threshold must be re-measured — that is the whole reason it
+     travels inside the artifact. `MIN_NEG_THRESHOLD = 0.50` in the router floors what any
+     artifact is allowed to ask for.
+113. **`/health` reports both models, and Node calls only one of them.** The health payload
+     is a `models[]` array — `pricing` and `sentiment`, each with its own status and
+     metrics, so one broken artifact degrades one entry instead of the whole report. Seven
+     paths are served (`/predict/sentiment`, `/predict/sentiment/batch`, `/sentiment/spec`
+     are the new three). **`reviews.sentiment_score` and `reviews.sentiment_label` exist in
+     the schema and no Node route calls the model** — the only sentiment reference in
+     `backend/src/` is a column check in `verify_schema.js`. Do not demo this as a
+     closed loop; it is an endpoint with a passing smoke test, and the wiring is next.
+
+**What this section cannot tell you.** Whether the model is right about a *real* review.
+The exam is 200 rows written by one annotator — second-annotator κ is still open — and no
+real user review has ever been scored. Every number above is a claim about 200 rows we
+wrote ourselves, which is a much smaller claim than "the model understands reviews".
+
+---
+
 ## 5. Non-functional tests
 
 - **Responsiveness:** run on a small phone (~5") and a tablet. Nothing clipped, no
@@ -771,6 +886,33 @@ tested rather than assumed.
   `[base×0.70, base×1.50]` with `clamped:true`. The guardrail in `mlClient.js` is what
   stops a bad model — or a compromised service — from quoting a real owner PKR 190,000.
 
+**Sentiment additions (S.4).** The sentiment endpoints take *free text*, which the pricing
+endpoints never did — a new attack surface, and the first place in this service where the
+size of a request body is attacker-controlled.
+
+- **Text and batch size limits are enforced server-side and both are tested over HTTP.**
+  `MAX_TEXT_CHARS = 4000` and `MAX_BATCH_ITEMS = 200` in `app/routers/sentiment.py`. A
+  char 2–6 n-gram vectoriser is superlinear in input length, so an unbounded batch of long
+  strings is a CPU-exhaustion vector on a free-tier dyno. `smoke_sentiment_api.py` posts
+  201 items → 422, exactly 4,000 characters → **200**, 4,001 → 422, and an over-long row
+  inside an otherwise-valid batch → 422. The boundary is pinned in both directions on
+  purpose: "very long text is rejected" would pass just as happily on a cap of 40, so the
+  caps' absolute values are asserted separately from the boundary behaviour.
+- **No review text is logged.** A review is user content and may contain abuse, names or
+  phone numbers. The per-review log line in `app/routers/sentiment.py` records
+  `len(request.text)` — the *length* — alongside the review id, label, score, confidence
+  and flags, and never the string itself. Grep the format string before believing this
+  sentence: escalation *decisions* are safe to log, escalation *text* is not.
+- **The abuse verdict is advisory, never an authorisation.** `escalate:true` must not by
+  itself hide a review, suspend a user or block a booking. It is a flag for a human, and a
+  model with 0.84 precision on the exam's negative class is nowhere near a basis for
+  automated punishment — an FR9.10 escalation that silently bans someone is the worst
+  failure this model can cause.
+- **A hostile sentiment response cannot act on its own.** The same rule as pricing: when
+  Node is eventually wired up, an out-of-range score or an unknown label must be rejected
+  by the caller, not written to `reviews.sentiment_label`. Only the three values in
+  `LABELS` (`negative` / `neutral` / `positive`) are ever valid.
+
 ---
 
 ## 7. Data-integrity checks (run in the Supabase SQL editor)
@@ -892,6 +1034,8 @@ Wave: ____            Date: ____
 [ ] run_match_flow_check.js ...... 69/69
 [ ] check_ml_service.js .......... 60/60 up · 31/31+4 skipped down   (S.3+)
 [ ] check_price_sanity.js ........ 20/20 required, source='model'    (S.3+)
+[ ] train_sentiment.py ........... 7/7 gates, exam >= 0.80           (S.4+)
+[ ] smoke_sentiment_api.py ....... 49/49 vs released artifact        (S.4+)
 [ ] server boots, 4 jobs registered
 [ ] this wave's feature steps (§3/§4)
 [ ] IDOR spot-check (§6.2)

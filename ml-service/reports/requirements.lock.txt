@@ -1,6 +1,6 @@
-# Resolved environment at train time, transitives included.
-# python 3.14.4 on Windows-11-10.0.26200-SP0
-# written by training/train_pricing.py at 2026-08-25T00:42:21+00:00
+# Resolved environment for the sentiment training run.
+# requirements.txt is the install contract; THIS file is what actually ran.
+
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.14.2

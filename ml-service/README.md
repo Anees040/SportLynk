@@ -8,6 +8,12 @@ It holds no database connection, no session and no state. Given features, it ret
 a prediction. That is what makes it safe to restart mid-demo and what will make it
 safe to deploy as a second Render service in S.7.
 
+**Two models are served.** Pricing (S.3) takes eleven contract columns and returns a
+revenue-optimal price; sentiment (S.4) takes **raw review text** and returns a 3-class
+label plus an abuse verdict. They share the registry, the API-key middleware and the
+error envelope, and nothing else — each owns its own frozen contract module, its own
+gates and its own evidence in `reports/`.
+
 ---
 
 ## Architecture
@@ -35,8 +41,10 @@ Four processes. Only one of them is allowed to talk to this one.
 │ SUPABASE POSTGRES        │   │ ML-SERVICE  FastAPI + uvicorn               │
 │   venues · slots         │   │   app/main.py ......... key mw, envelope    │
 │   bookings · reviews     │   │   app/core/features.py  ★ THE CONTRACT      │
-│   (no ML tables — the    │   │   app/core/registry.py  loads *_latest      │
-│    service is stateless) │   │   app/routers/pricing.py price sweep, why   │
+│   reviews.sentiment_*    │   │   app/core/text_norm.py ◆ NORM CONTRACT     │
+│   (schema ready, unused) │   │   app/core/registry.py  loads *_latest      │
+│   (no ML tables — the    │   │   app/routers/pricing.py price sweep, why   │
+│    service is stateless) │   │   app/routers/sentiment.py 3-class + abuse  │
 └──────────────────────────┘   └───────────────────┬─────────────────────────┘
                                                    │ joblib.load, once, at boot
                                                    ▼
@@ -47,6 +55,14 @@ Four processes. Only one of them is allowed to talk to this one.
                                         ▲                    metrics, model card)
                                         │ imports the SAME features.py  ★
                                data/bookings_synth.csv   seeded, sha256-pinned
+
+                               models/sentiment_latest.joblib        2.9 MB
+                                                   ▲
+                                                   │ written only if 7 gates pass
+                               training/train_sentiment.py ─► reports/ (confusion
+                                        ▲                     matrix, metrics, card)
+                                        │ imports the SAME text_norm.py  ◆
+                               data/sentiment/train.csv  sha256-pinned, rebuildable
 ```
 
 Five edges in that diagram carry the design; the rest is plumbing.
@@ -57,10 +73,13 @@ sake: the key is a *shared secret*, so any client that could send it would also
 be shipping it. Node is the only holder, and this process binds loopback so the
 question cannot arise in development either.
 
-**The ★ arrows are the same file.** `app/core/features.py` is imported by
-`training/train_pricing.py` and by `app/routers/pricing.py`. Neither side owns a
-copy of any derivation. See "`app/core/features.py` is the important file" below
-for the two mechanisms that keep it that way after someone edits one of them.
+**The ★ and ◆ arrows are each the same file, twice.** `app/core/features.py` is
+imported by `training/train_pricing.py` and by `app/routers/pricing.py`;
+`app/core/text_norm.py` is imported by `training/train_sentiment.py` and by
+`app/routers/sentiment.py`. Neither side of either pair owns a copy of any
+derivation. One is a feature contract and the other a text-normalisation contract,
+but the failure they exist to prevent is the same one — see "`app/core/features.py`
+is the important file" below, and the norm-fingerprint note that follows it.
 
 **The FALLBACK edge is the honest one.** Kill uvicorn mid-demo and
 `mlClient.js` still answers HTTP 200 — with `source: "heuristic"` in the body and
@@ -76,11 +95,12 @@ the Apply button — bypasses all of it: a normal authenticated Node route,
 ownership checked in SQL, no ML process in the path. **This service never
 writes to Postgres**, and holds no connection to it.
 
-**The model file is the only state.** `registry.py` loads
-`models/pricing_latest.joblib` once at boot and validates its
-`FEATURE_SPEC_VERSION` before serving a single request. A retrain therefore does
-*not* hot-swap the live model — restart uvicorn, or the owner dashboard keeps
-reporting the previous `model_version`.
+**The model files are the only state.** `registry.py` loads each
+`models/*_latest.joblib` once at boot and validates its stamped contract before
+serving a single request — `FEATURE_SPEC_VERSION` for pricing, the normalisation
+fingerprint for sentiment. A retrain therefore does *not* hot-swap the live model:
+restart uvicorn (or call `registry.reload('<key>')`), or `/health` and the owner
+dashboard keep reporting the previous `model_version`.
 
 ---
 
@@ -111,29 +131,51 @@ development: one for `node src/server.js`, one for this.
 
 ---
 
-## What exists right now (S.3 Wave E — sprint complete)
+## What exists right now (S.4 Wave B — sentiment trained and served)
 
 | endpoint | auth | status |
 |---|---|---|
-| `GET /health` | public | reports model inventory, feature spec, library versions |
+| `GET /health` | public | reports model inventory, feature spec, **norm spec**, library versions |
 | `GET /features/spec` | `X-API-Key` | publishes the frozen feature contract |
 | `POST /predict/price` | `X-API-Key` | **serving** — sweeps the price band, returns the revenue-optimal ratio, confidence and `top_factors` |
 | `POST /predict/demand` | `X-API-Key` | **serving** — 72 hourly `P(book)` points at `price_ratio = 1.0` |
+| `GET /sentiment/spec` | `X-API-Key` | publishes the frozen normalisation contract: label set, `normSpecVersion`, fingerprint |
+| `POST /predict/sentiment` | `X-API-Key` | **serving** — one review → label, signed polarity, class scores, abuse verdict, `needsReview` |
+| `POST /predict/sentiment/batch` | `X-API-Key` | **serving** — up to 200 reviews in one `predict_proba` call, metrics on the envelope not per row |
 
-Served artifact `pricing-v1-20260825-0041`: ROC-AUC **0.7628** against a measured
-Bayes ceiling of 0.7770 (98.2% of it), Brier 0.1680, 6,244 held-out rows. All 12
-training gates passed. Numbers, plots and limitations: `reports/`.
+Served pricing artifact `pricing-v1-20260825-0041`: ROC-AUC **0.7628** against a
+measured Bayes ceiling of 0.7770 (98.2% of it), Brier 0.1680, 6,244 held-out rows. All
+12 training gates passed.
 
-Those two endpoints answered **503 `model_not_loaded`** through Wave A, and that
-was correct — no model existed yet. If you see a 503 today it means
-`models/pricing_latest.joblib` is missing or its `FEATURE_SPEC_VERSION` no longer
-matches `app/core/features.py`; the registry refuses to predict on misaligned
-columns rather than guess. Either way the Node backend degrades to its heuristic
-and labels the response `source: "heuristic"`, so nothing in the app breaks.
+Served sentiment artifact `sentiment-wordchar-linsvc-softmax-20260826-1306`: **0.8250**
+accuracy (macro-F1 0.8247, CI 0.77–0.88) on the 200-row held-out in-domain exam, against
+a majority-class baseline of 0.3400. All 7 training gates passed. Trained on 21,405 rows
+of English + Roman Urdu + code-mixed text; it takes **raw text**, not features, because
+the normalisation lives inside the pipeline.
+
+Numbers, plots and limitations for both: `reports/`.
+
+**One boundary worth being explicit about.** The sentiment endpoints are live and
+directly smoke-tested (`training/smoke_sentiment_api.py`, 49 checks against the released
+artifact), and `reviews.sentiment_score` / `reviews.sentiment_label` already exist in the
+schema — but **no Node route calls them yet**. Nothing in `backend/src/` references this
+model. Wiring it into the review-submission path, and the moderation queue that
+`needsReview` is meant to feed, is the next wave's work, not something this one quietly
+half-did.
+
+The prediction endpoints answered **503 `model_not_loaded`** before their models existed,
+and that was correct. If you see a 503 today it means the relevant `*_latest.joblib` is
+missing or its stamped contract no longer matches the module that serves it — a
+`FEATURE_SPEC_VERSION` drift for pricing, a norm-fingerprint drift for sentiment. The
+registry refuses to predict through a changed contract rather than guess. For pricing,
+the Node backend then degrades to its heuristic and labels the response
+`source: "heuristic"`, so nothing in the app breaks.
 
 ---
 
 ## Retrain it
+
+### Pricing
 
 ```powershell
 cd D:\sportlynk\ml-service
@@ -156,8 +198,48 @@ both outputs:
   --models-dir .rehearsal\models --reports-dir .rehearsal\reports
 ```
 
-A retrain does not hot-swap the running model — restart uvicorn afterwards, or
-the owner card keeps reporting the previous `model_version`.
+### Sentiment
+
+```powershell
+.\.venv\Scripts\python.exe training\train_sentiment.py
+```
+
+**No flags, deliberately.** The defaults *are* the shipped configuration
+(`--branches both --C 0.1 --upweight-authored 40 --seed 42`), so a bare invocation
+reproduces the released model rather than a nearby variant. A tuned model whose
+reproduction command carries four flags nobody wrote down is not reproducible in
+practice, only in principle.
+
+It runs 7 gates and writes `reports/sentiment_metrics.json`,
+`model_card_sentiment.md` and `confusion_matrix_sentiment.png`. It releases only if
+the 200-row exam clears **0.80**. Two things it will refuse to do: train on
+`data/sentiment/domain_test_200.csv` (a provenance gate re-checks the exam's sha256
+every run), and ship a model whose normalisation fingerprint disagrees with
+`app/core/text_norm.py`.
+
+`--models-dir` / `--reports-dir` work here too, so the same rehearsal trick applies.
+
+**If you change `--branches` or `--upweight-authored`, `C = 0.1` stops being the right
+value** — it was selected against the current ~100k-feature union, and regularisation
+strength scales with feature-space size. The model card records the validation sweep to
+re-run. Then re-check the abuse threshold, because it is a property of this model's score
+scale rather than a portable constant:
+
+```powershell
+.\.venv\Scripts\python.exe training\validate_neg_threshold.py   # precision/recall table
+.\.venv\Scripts\python.exe training\audit_exam.py               # the 20 worst errors
+.\.venv\Scripts\python.exe training\smoke_sentiment_api.py      # 49 API checks
+```
+
+The first two open the exam **read-only** and decide nothing — they print a table for a
+human to read. `reports/README.md` explains why that threshold needs re-checking at all,
+and what went wrong the one time it was left alone.
+
+### Either model
+
+A retrain does not hot-swap the running model. Restart uvicorn afterwards (or call
+`registry.reload('pricing' | 'sentiment')`), or `/health` and the owner card keep
+reporting the previous `model_version`.
 
 ---
 
@@ -230,6 +312,36 @@ Backing it up mechanically:
   `timestamptz` columns; these two are not that. Getting it wrong would shift every
   hour by 5 and move the entire peak window.
 
+### `app/core/text_norm.py` is the same idea, and needs a stronger mechanism
+
+Sentiment's contract is not a column list — it is the text normalisation itself:
+casefolding, elongation collapse (*"boohoot achaaa"*), emoji handling, and the negation
+scoping that lets *"acha nahi tha"* mean the opposite of *"acha tha"*. Training and
+serving import the one module, for the same reason pricing does.
+
+But this contract needs a **fingerprint**, not just a version string, because of how
+joblib works: `FunctionTransformer` pickles a callable **by reference**. The artifact
+does not contain the normalisation code — it contains a pointer to
+`text_norm.prep_word`. Edit that function and every previously-released artifact
+silently starts normalising text the *new* way at serve time. No version mismatch fires,
+no exception is raised, and the model is simply fed inputs it was never trained on. This
+is a nastier failure than a column reorder, because a reordered column usually produces
+obvious nonsense while a subtly different tokeniser just quietly costs accuracy.
+
+So `NORM_SPEC_VERSION` (`sentiment-norm-v1`) is paired with `norm_spec_fingerprint()`
+(`b96e65df85f9692b`), a hash over the spec itself. It is stamped at train time,
+re-checked at load, and published by both `GET /sentiment/spec` and `/health`. The
+publishing is what makes it assertable from the Node side the way
+`GET /features/spec` already is for pricing — `check_ml_service.js` does not check it
+yet, because nothing in `backend/src/` calls this model yet.
+
+One smaller decision in the same file: `LABELS` is `("negative", "neutral",
+"positive")` — **alphabetical, to match scikit-learn's `classes_` ordering**. The router
+indexes `predict_proba` columns by position, and a hand-chosen order like
+`(negative, positive, neutral)` would transpose two classes with no error anywhere. The
+smoke suite closes that loop by asserting `argmax(classScores)` equals the estimator's
+own `predict()` on every probe.
+
 ---
 
 ## Layout
@@ -239,14 +351,28 @@ app/
   main.py              FastAPI app, API-key middleware, /health, error envelope
   core/config.py       env settings; fails fast when ML_API_KEY is missing
   core/features.py     THE FEATURE CONTRACT — imported by training and serving
-  core/registry.py     loads models/*_latest.joblib, validates the feature spec
+  core/text_norm.py    THE NORM CONTRACT — the same, for sentiment's raw text
+  core/proba.py        SoftmaxSVC — softmax over an SVM's decision_function
+  core/toxicity.py     abuse-lexicon match; orthogonal to the sentiment label
+  core/pk_calendar.py  Ramadan / Eid windows used by the pricing features
+  core/registry.py     loads models/*_latest.joblib, validates each contract
   routers/pricing.py   request/response models, /predict/price, /predict/demand
+  routers/sentiment.py /predict/sentiment[/batch], /sentiment/spec
 training/
   generate_bookings.py synthetic simulator — DO NOT re-run, the CSV is sha-pinned
   train_pricing.py     training + 12 gates + plots + model card
+  train_sentiment.py   training + 7 gates + confusion matrix + model card
+  build_sentiment_corpus.py
+                       rebuilds data/sentiment/train.csv from its sources
+  validate_neg_threshold.py, audit_exam.py, smoke_sentiment_api.py
+                       read-only checks: the threshold table, the 20 worst
+                       errors, and 45 assertions against the RELEASED artifact
 models/                *_latest.joblib is committed; timestamped runs are not
 data/                  generated CSVs (gitignored — regenerate from the seed)
-reports/               metrics.json, plots, model card — COMMITTED, this is the
+data/sentiment/        default-DENY in .gitignore, because the corpus is ~9 MB of
+                       third-party licensed text. The exam, the hand-authored
+                       rows and the sha256 metadata are explicit exceptions
+reports/               metrics.json, plots, model cards — COMMITTED, this is the
                        AI evidence trail
 ```
 

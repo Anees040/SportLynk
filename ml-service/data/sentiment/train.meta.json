@@ -1,0 +1,103 @@
+{
+  "generated_by": "build_sentiment_corpus.py",
+  "generated_at": "2026-08-26T12:35:51+00:00",
+  "norm_spec_version": "sentiment-norm-v1",
+  "norm_spec_fingerprint": "b96e65df85f9692b",
+  "rows": 21405,
+  "labels": {
+    "negative": 5494,
+    "neutral": 9030,
+    "positive": 6881
+  },
+  "langs": {
+    "en": 9295,
+    "mixed": 219,
+    "ru": 11891
+  },
+  "sources": {
+    "authored": 690,
+    "rusa": 11719,
+    "tweeteval": 8996
+  },
+  "source_x_label": {
+    "authored|negative": 238,
+    "authored|neutral": 217,
+    "authored|positive": 235,
+    "tweeteval|negative": 2998,
+    "tweeteval|neutral": 2998,
+    "tweeteval|positive": 3000,
+    "rusa|negative": 2258,
+    "rusa|neutral": 5815,
+    "rusa|positive": 3646
+  },
+  "lang_x_label": {
+    "en|negative": 3096,
+    "en|neutral": 3091,
+    "en|positive": 3108,
+    "mixed|negative": 73,
+    "mixed|neutral": 74,
+    "mixed|positive": 72,
+    "ru|negative": 2325,
+    "ru|neutral": 5865,
+    "ru|positive": 3701
+  },
+  "independence": {
+    "source_vs_label": {
+      "n": 21405,
+      "chi2": 762.011,
+      "dof": 4,
+      "cramers_v": 0.1334
+    },
+    "lang_vs_label": {
+      "n": 21405,
+      "chi2": 721.382,
+      "dof": 4,
+      "cramers_v": 0.1298
+    },
+    "tvd_by_source": {
+      "authored": 0.1074,
+      "tweeteval": 0.0886,
+      "rusa": 0.0743
+    },
+    "note": "chi2 statistic + Cramer's V, deliberately not a p-value: at this n the null is rejected by associations too weak to matter, so effect size is the informative number. High Cramer's V / TVD flags a language-or-source => label shortcut."
+  },
+  "dedup": {
+    "loaded": 21957,
+    "exact_dup_dropped": 539,
+    "empty_after_normalize": 12
+  },
+  "contamination_gate": {
+    "exam_file": "domain_test_200.csv",
+    "exam_sha256": "7e388c841fb8f9e98ce9f7c71f0c390c5f824e765c67e1d80cb03f53d77abd46",
+    "exact_matches_removed": 0,
+    "authored_near_dup_removed": 1,
+    "authored_near_dup_by_metric": {
+      "word_set": 1
+    },
+    "near_dup_threshold": 0.8,
+    "near_dup_metrics": "max(char 4-shingle Jaccard, word-set Jaccard) -- shingles miss reordering, word sets miss spelling drift",
+    "limitation": "Exhaustive near-dup vs exam is applied to authored rows only; rusa/tweeteval get exact-match removal (pairwise near-dup is infeasible at corpus scale in stdlib). Domain overlap of those sources with the exam is low, so residual risk is small."
+  },
+  "per_source_load": {
+    "rusa": {
+      "seen": 12377,
+      "kept": 12264,
+      "bad_label": 0,
+      "empty": 113
+    },
+    "tweeteval": {
+      "seen": 45615,
+      "kept": 9000,
+      "bad_label": 0,
+      "empty": 0
+    },
+    "authored": {
+      "seen": 693,
+      "kept": 693,
+      "bad_label": 0,
+      "empty": 0
+    }
+  },
+  "sha256": "408b4c528d40118cf20c277a06854d0e3436cb4015c79b1a82ff63356305a068",
+  "output": "train.csv"
+}

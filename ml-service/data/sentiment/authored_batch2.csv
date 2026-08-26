@@ -1,0 +1,89 @@
+text,label,lang
+ground acha tha lekin staff rude tha,negative,mixed
+slot book kiya phir cancel hua,negative,mixed
+turf ghatiya aur lights band thin,negative,mixed
+"price zyada, paise wasool nahi hue",negative,mixed
+"washroom ganda, parking faltu",negative,mixed
+"QR check-in fail, timing miss hui",negative,mixed
+"owner ne jawab nahi diya, bakwaas",negative,mixed
+"pitch theek nahi thi, maza nahi aya",negative,mixed
+"recommend nahi karunga, service bekaar",negative,mixed
+ground pehle acha laga phir kharab,negative,mixed
+"ground theek tha, facilities basic thin",neutral,mixed
+"parking available, baaki average",neutral,mixed
+"slot mil gaya, timing normal rahi",neutral,mixed
+turf purana magar playable tha,neutral,mixed
+"price standard, koi discount nahi",neutral,mixed
+"washroom theek, safai average thi",neutral,mixed
+floodlights normal brightness ki thin,neutral,mixed
+"owner ne rules bataye, bas",neutral,mixed
+"booking confirm hui, email der se aayi",neutral,mixed
+ground jaisa socha tha waisa mila,neutral,mixed
+ground bohot acha aur staff helpful tha,positive,mixed
+"floodlights bright, match zabardast raha",positive,mixed
+"booking smooth, QR check-in foran hua",positive,mixed
+turf clean aur parking mil gayi,positive,mixed
+"owner cooperative, timing on point",positive,mixed
+"pitch excellent, team dobara aayegi",positive,mixed
+"price fair, paise wasool hue",positive,mixed
+"washroom saaf, changing room comfortable",positive,mixed
+"cricket net strong, practice ka maza aya",positive,mixed
+"futsal court spacious, game enjoyable",positive,mixed
+"ground acha nahi tha, dobara nahi aaunga",negative,ru
+"maza nahi aya, pitch kharab thi",negative,ru
+"washroom ganda tha, use nahi kiya",negative,ru
+"paise wasool nahi hue, price zyada tha",negative,ru
+owner ne slot cancel kar diya,negative,ru
+"staff ne tang kiya, service bakwaas",negative,ru
+"turf ghatiya tha, ball nahi chalti",negative,ru
+"floodlights band thin, match waste hua",negative,ru
+"parking nahi mili, timing kharab hui",negative,ru
+"booking confirm nahi hui, paisa phans gaya",negative,ru
+"ground theek tha bas, kuch khaas nahi",neutral,ru
+"parking bahar hai, chal jata hai",neutral,ru
+"slot mil gaya, sab normal raha",neutral,ru
+turf purana magar playable hai,neutral,ru
+"staff ne check-in kiya, phir chup raha",neutral,ru
+"price aam hai, na sasta na mehnga",neutral,ru
+"floodlights chalti hain, roshni normal hai",neutral,ru
+pitch shehr ke beech mein hai,neutral,ru
+"ground bohot zabardast tha, dobara aaunga",positive,ru
+"booking asaan thi, slot mil gaya",positive,ru
+"staff cooperative tha, check-in jaldi hua",positive,ru
+"floodlights bright thin, maza aa gaya",positive,ru
+"turf saaf tha, game achi rahi",positive,ru
+owner ne time pe slot diya,positive,ru
+"price munasib tha, paise wasool hue",positive,ru
+"washroom saaf tha, facilities achi thin",positive,ru
+"pitch smooth thi, cricket ka maza aya",positive,ru
+parking araam se mil gayi,positive,ru
+The booking vanished before arrival,negative,en
+The pitch was unsafe after rain,negative,en
+The owner never returned our money,negative,en
+Floodlights failed during the match,negative,en
+The washroom was filthy and unusable,negative,en
+The price was not worth it,negative,en
+Staff gave us the wrong court,negative,en
+The turf was torn near the goals,negative,en
+QR check-in failed and delayed kickoff,negative,en
+The changing room had broken lockers,negative,en
+The ground was average for its listing,neutral,en
+Parking exists but fills on weekends,neutral,en
+The booking confirmation arrived late,neutral,en
+The pitch was usable with worn markings,neutral,en
+Staff completed check-in without help,neutral,en
+The price was standard nearby,neutral,en
+The washroom was clean enough,neutral,en
+Floodlights had ordinary brightness,neutral,en
+The owner explained the rules,neutral,en
+The slot started at the advertised time,neutral,en
+The booking was confirmed instantly,positive,en
+The football pitch was smooth,positive,en
+Bright floodlights made play enjoyable,positive,en
+Staff handled our group with care,positive,en
+The owner offered a replacement slot,positive,en
+The turf was clean and comfortable,positive,en
+The price felt fair,positive,en
+QR check-in took seconds,positive,en
+The changing room was spotless,positive,en
+Parking was easy to find,positive,en

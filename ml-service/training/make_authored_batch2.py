@@ -1,0 +1,21 @@
+from pathlib import Path
+import csv
+out=Path(__file__).resolve().parents[1]/'data/sentiment/authored_batch2.csv'
+base={
+('mixed','negative'):['ground acha tha lekin staff rude tha','slot book kiya phir cancel hua','turf ghatiya aur lights band thin','price zyada, paise wasool nahi hue','washroom ganda, parking faltu','QR check-in fail, timing miss hui','owner ne jawab nahi diya, bakwaas','pitch theek nahi thi, maza nahi aya','recommend nahi karunga, service bekaar','ground pehle acha laga phir kharab'],
+('mixed','neutral'):['ground theek tha, facilities basic thin','parking available, baaki average','slot mil gaya, timing normal rahi','turf purana magar playable tha','price standard, koi discount nahi','washroom theek, safai average thi','floodlights normal brightness ki thin','owner ne rules bataye, bas','booking confirm hui, email der se aayi','ground jaisa socha tha waisa mila'],
+('mixed','positive'):['ground bohot acha aur staff helpful tha','floodlights bright, match zabardast raha','booking smooth, QR check-in foran hua','turf clean aur parking mil gayi','owner cooperative, timing on point','pitch excellent, team dobara aayegi','price fair, paise wasool hue','washroom saaf, changing room comfortable','cricket net strong, practice ka maza aya','futsal court spacious, game enjoyable'],
+('ru','negative'):['ground acha nahi tha, dobara nahi aaunga','maza nahi aya, pitch kharab thi','washroom ganda tha, use nahi kiya','paise wasool nahi hue, price zyada tha','owner ne slot cancel kar diya','staff ne tang kiya, service bakwaas','turf ghatiya tha, ball nahi chalti','floodlights band thin, match waste hua','parking nahi mili, timing kharab hui','booking confirm nahi hui, paisa phans gaya'],
+('ru','neutral'):['ground theek tha bas, kuch khaas nahi','parking bahar hai, chal jata hai','slot mil gaya, sab normal raha','turf purana magar playable hai','staff ne check-in kiya, phir chup raha','price aam hai, na sasta na mehnga','washroom theek, safai average thi','floodlights chalti hain, roshni normal hai','owner ne rules bataye, bas','pitch shehr ke beech mein hai'],
+('ru','positive'):['ground bohot zabardast tha, dobara aaunga','booking asaan thi, slot mil gaya','staff cooperative tha, check-in jaldi hua','floodlights bright thin, maza aa gaya','turf saaf tha, game achi rahi','owner ne time pe slot diya','price munasib tha, paise wasool hue','washroom saaf tha, facilities achi thin','pitch smooth thi, cricket ka maza aya','parking araam se mil gayi'],
+('en','negative'):['The booking vanished before arrival','The pitch was unsafe after rain','The owner never returned our money','Floodlights failed during the match','The washroom was filthy and unusable','The price was not worth it','Staff gave us the wrong court','The turf was torn near the goals','QR check-in failed and delayed kickoff','The changing room had broken lockers'],
+('en','neutral'):['The ground was average for its listing','Parking exists but fills on weekends','The booking confirmation arrived late','The pitch was usable with worn markings','Staff completed check-in without help','The price was standard nearby','The washroom was clean enough','Floodlights had ordinary brightness','The owner explained the rules','The slot started at the advertised time'],
+('en','positive'):['The booking was confirmed instantly','The football pitch was smooth','Bright floodlights made play enjoyable','Staff handled our group with care','The owner offered a replacement slot','The turf was clean and comfortable','The price felt fair','QR check-in took seconds','The changing room was spotless','Parking was easy to find']}
+counts={('mixed','negative'):50,('mixed','neutral'):40,('mixed','positive'):30,('ru','negative'):45,('ru','neutral'):35,('ru','positive'):20,('en','negative'):25,('en','neutral'):20,('en','positive'):15}
+rows=[]
+for key,n in counts.items():
+    vals=base[key]
+    venues=['futsal arena','cricket nets','city turf','north ground','stadium court','community pitch','sports complex','badminton hall','university gym','club field']
+    for i in range(n): rows.append((vals[i%len(vals)]+' at '+venues[i%len(venues)] if i>=len(vals) else vals[i],key[1],key[0]))
+with out.open('w',encoding='utf-8',newline='') as f:
+    w=csv.writer(f); w.writerow(['text','label','lang']); w.writerows(rows)

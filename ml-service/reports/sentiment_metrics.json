@@ -1,0 +1,408 @@
+{
+  "modelKey": "sentiment",
+  "modelVersion": "sentiment-wordchar-linsvc-softmax-20260826-1306",
+  "family": "wordchar-linsvc-softmax",
+  "trainedAt": "2026-08-26T13:06:07+00:00",
+  "seed": 42,
+  "upweightAuthored": 40.0,
+  "released": true,
+  "normSpecVersion": "sentiment-norm-v1",
+  "normSpecFingerprint": "b96e65df85f9692b",
+  "labels": [
+    "negative",
+    "neutral",
+    "positive"
+  ],
+  "classifier": {
+    "kind": "linsvc",
+    "C": 0.1,
+    "class_weight": "balanced",
+    "branches": [
+      "word",
+      "char"
+    ],
+    "probability": {
+      "method": "softmax_over_decision_function",
+      "calibrated": false
+    }
+  },
+  "features": {
+    "word": {
+      "analyzer": "word",
+      "token_pattern": "\\S+",
+      "ngram_range": [
+        1,
+        2
+      ],
+      "max_features": 50000,
+      "min_df": 2,
+      "sublinear_tf": true
+    },
+    "char": {
+      "analyzer": "char_wb",
+      "ngram_range": [
+        2,
+        6
+      ],
+      "max_features": 50000,
+      "min_df": 2,
+      "sublinear_tf": true
+    }
+  },
+  "split": {
+    "val_fraction": 0.2,
+    "train_rows": 17124,
+    "val_rows": 4281
+  },
+  "validation": {
+    "accuracy": 0.644709180098108,
+    "macro_f1": 0.6383860538314138,
+    "weighted_f1": 0.6440507886901446,
+    "per_class": {
+      "negative": {
+        "precision": 0.6201923076923077,
+        "recall": 0.5868971792538672,
+        "f1-score": 0.603085553997195,
+        "support": 1099
+      },
+      "neutral": {
+        "precision": 0.6530825496342738,
+        "recall": 0.6921373200442967,
+        "f1-score": 0.6720430107526881,
+        "support": 1806
+      },
+      "positive": {
+        "precision": 0.651846269781462,
+        "recall": 0.6286337209302325,
+        "f1-score": 0.6400295967443581,
+        "support": 1376
+      }
+    },
+    "confusion_matrix": {
+      "labels": [
+        "negative",
+        "neutral",
+        "positive"
+      ],
+      "matrix": [
+        [
+          645,
+          297,
+          157
+        ],
+        [
+          251,
+          1250,
+          305
+        ],
+        [
+          144,
+          367,
+          865
+        ]
+      ]
+    }
+  },
+  "domain_test_200": {
+    "accuracy": 0.825,
+    "macro_f1": 0.8247153812371204,
+    "weighted_f1": 0.8245240701327659,
+    "per_class": {
+      "negative": {
+        "precision": 0.84375,
+        "recall": 0.7941176470588235,
+        "f1-score": 0.8181818181818182,
+        "support": 68
+      },
+      "neutral": {
+        "precision": 0.8412698412698413,
+        "recall": 0.7910447761194029,
+        "f1-score": 0.8153846153846154,
+        "support": 67
+      },
+      "positive": {
+        "precision": 0.7945205479452054,
+        "recall": 0.8923076923076924,
+        "f1-score": 0.8405797101449275,
+        "support": 65
+      }
+    },
+    "confusion_matrix": {
+      "labels": [
+        "negative",
+        "neutral",
+        "positive"
+      ],
+      "matrix": [
+        [
+          54,
+          6,
+          8
+        ],
+        [
+          7,
+          53,
+          7
+        ],
+        [
+          3,
+          4,
+          58
+        ]
+      ]
+    }
+  },
+  "domain_accuracy_ci95": {
+    "lo": 0.77,
+    "hi": 0.875,
+    "resamples": 2000
+  },
+  "domain_per_language": {
+    "en": {
+      "n": 50,
+      "accuracy": 0.76,
+      "macro_f1": 0.7581
+    },
+    "mixed": {
+      "n": 70,
+      "accuracy": 0.8286,
+      "macro_f1": 0.8281
+    },
+    "ru": {
+      "n": 80,
+      "accuracy": 0.8625,
+      "macro_f1": 0.8606
+    }
+  },
+  "ablation_exam_accuracy": {
+    "word_only": 0.78,
+    "char_only": 0.765,
+    "word+char": 0.81
+  },
+  "baselines": {
+    "predict_train_majority": {
+      "label": "neutral",
+      "accuracy": 0.335
+    },
+    "predict_exam_majority": {
+      "label": "negative",
+      "accuracy": 0.34
+    }
+  },
+  "error_analysis": [
+    {
+      "id": "dt-021",
+      "lang": "ru",
+      "actual": "negative",
+      "predicted": "neutral",
+      "text": "opponent team ne beimani ki aur owner ne kuch nahi kaha"
+    },
+    {
+      "id": "dt-023",
+      "lang": "ru",
+      "actual": "negative",
+      "predicted": "positive",
+      "text": "bohot mehnga hai is quality ke liye, sasta options behtar hain"
+    },
+    {
+      "id": "dt-034",
+      "lang": "ru",
+      "actual": "neutral",
+      "predicted": "positive",
+      "text": "pitch theek thi, thora better ho sakti thi"
+    },
+    {
+      "id": "dt-039",
+      "lang": "ru",
+      "actual": "neutral",
+      "predicted": "negative",
+      "text": "lights hain magar ghaas thori kam thi"
+    },
+    {
+      "id": "dt-043",
+      "lang": "ru",
+      "actual": "neutral",
+      "predicted": "negative",
+      "text": "washroom saaf tha lekin canteen band thi"
+    },
+    {
+      "id": "dt-049",
+      "lang": "ru",
+      "actual": "neutral",
+      "predicted": "positive",
+      "text": "owner ne waqt pe slot diya, ground thora purana hai"
+    },
+    {
+      "id": "dt-050",
+      "lang": "ru",
+      "actual": "neutral",
+      "predicted": "positive",
+      "text": "na maza aya na bura laga, bas khel liya"
+    },
+    {
+      "id": "dt-053",
+      "lang": "ru",
+      "actual": "neutral",
+      "predicted": "positive",
+      "text": "booking asan thi, ground theek theek tha"
+    },
+    {
+      "id": "dt-054",
+      "lang": "ru",
+      "actual": "neutral",
+      "predicted": "negative",
+      "text": "thora shor tha bahar se lekin khel mein farq nahi para"
+    },
+    {
+      "id": "dt-069",
+      "lang": "ru",
+      "actual": "positive",
+      "predicted": "neutral",
+      "text": "mast ground hai yaar, dosron ko bhi bataya"
+    },
+    {
+      "id": "dt-077",
+      "lang": "ru",
+      "actual": "positive",
+      "predicted": "negative",
+      "text": "refund bina poochhe hi kar diya jab slot cancel karna para"
+    },
+    {
+      "id": "dt-083",
+      "lang": "mixed",
+      "actual": "negative",
+      "predicted": "neutral",
+      "text": "paid 3500 for nothing, ghaas hi nahi thi ground pe"
+    },
+    {
+      "id": "dt-093",
+      "lang": "mixed",
+      "actual": "negative",
+      "predicted": "positive",
+      "text": "asked for a morning slot, unhon ne evening ka de diya without telling"
+    },
+    {
+      "id": "dt-095",
+      "lang": "mixed",
+      "actual": "negative",
+      "predicted": "positive",
+      "text": "good location but everything else bakwas"
+    },
+    {
+      "id": "dt-097",
+      "lang": "mixed",
+      "actual": "negative",
+      "predicted": "positive",
+      "text": "overpriced for the quality, 4000 mein bohat behtar milta hai"
+    },
+    {
+      "id": "dt-098",
+      "lang": "mixed",
+      "actual": "negative",
+      "predicted": "positive",
+      "text": "app pe slot show ho raha tha, owner ne kaha wo purana hai"
+    },
+    {
+      "id": "dt-099",
+      "lang": "mixed",
+      "actual": "negative",
+      "predicted": "neutral",
+      "text": "horrible turf, chhoti chhoti kankar puri ground pe"
+    },
+    {
+      "id": "dt-107",
+      "lang": "mixed",
+      "actual": "neutral",
+      "predicted": "negative",
+      "text": "lights are good but ghaas thori kam thi"
+    },
+    {
+      "id": "dt-114",
+      "lang": "mixed",
+      "actual": "neutral",
+      "predicted": "negative",
+      "text": "clean washroom but canteen band thi"
+    },
+    {
+      "id": "dt-118",
+      "lang": "mixed",
+      "actual": "neutral",
+      "predicted": "positive",
+      "text": "the turf is old but abhi bhi khelne ke qabil hai"
+    }
+  ],
+  "toxicity": {
+    "lexicon": "abuse_lexicon.txt",
+    "terms": 32,
+    "sha256": "7f456aef337d4600c6e8885b7b5c850b9a2718cb7db35baf28401192e9d4f653",
+    "negativeProbabilityThreshold": 0.7,
+    "examEscalations": 18,
+    "examRows": 200
+  },
+  "dataset": {
+    "source": "train.csv",
+    "sha256": "408b4c528d40118cf20c277a06854d0e3436cb4015c79b1a82ff63356305a068",
+    "rows": 21405,
+    "labels": {
+      "negative": 5494,
+      "neutral": 9030,
+      "positive": 6881
+    },
+    "langs": {
+      "en": 9295,
+      "mixed": 219,
+      "ru": 11891
+    },
+    "sources": {
+      "authored": 690,
+      "rusa": 11719,
+      "tweeteval": 8996
+    },
+    "meta": "train.meta.json"
+  },
+  "libraries": {
+    "python": "3.14.4",
+    "scikit_learn": "1.9.0",
+    "numpy": "2.5.2",
+    "scipy": "1.18.1",
+    "pandas": "3.0.5",
+    "joblib": "1.5.3"
+  },
+  "gates": [
+    {
+      "name": "contract self-check",
+      "ok": true,
+      "detail": "12 receipts OK"
+    },
+    {
+      "name": "corpus provenance",
+      "ok": true,
+      "detail": "sha match, fp match"
+    },
+    {
+      "name": "exam provenance",
+      "ok": true,
+      "detail": "sha match, validated=True"
+    },
+    {
+      "name": "predict_proba present",
+      "ok": true,
+      "detail": "softmax(decision_function), uncalibrated"
+    },
+    {
+      "name": "no leakage",
+      "ok": true,
+      "detail": "val acc 0.6447 <= 0.995"
+    },
+    {
+      "name": "beats baseline",
+      "ok": true,
+      "detail": "exam 0.8250 vs baseline 0.3400 (+0.10 margin)"
+    },
+    {
+      "name": "domain >= 0.80",
+      "ok": true,
+      "detail": "exam accuracy 0.8250 (target 0.80)"
+    }
+  ]
+}

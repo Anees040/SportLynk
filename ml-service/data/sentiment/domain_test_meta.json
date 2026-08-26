@@ -1,0 +1,164 @@
+{
+  "generated_by": "validate_domain_test.py",
+  "generated_at": "2026-08-26T08:13:54+00:00",
+  "source_file": "domain_test_200.csv",
+  "sha256": "7e388c841fb8f9e98ce9f7c71f0c390c5f824e765c67e1d80cb03f53d77abd46",
+  "norm_spec_version": "sentiment-norm-v1",
+  "norm_spec_fingerprint": "b96e65df85f9692b",
+  "rows": 200,
+  "columns": [
+    "id",
+    "text",
+    "label",
+    "lang",
+    "aspect",
+    "phenomena",
+    "notes"
+  ],
+  "labels": {
+    "negative": 68,
+    "neutral": 67,
+    "positive": 65
+  },
+  "langs": {
+    "ru": 80,
+    "mixed": 70,
+    "en": 50
+  },
+  "grid": {
+    "en|negative": 17,
+    "en|neutral": 17,
+    "en|positive": 16,
+    "mixed|negative": 24,
+    "mixed|neutral": 23,
+    "mixed|positive": 23,
+    "ru|negative": 27,
+    "ru|neutral": 27,
+    "ru|positive": 26
+  },
+  "phenomena": {
+    "code_switch": 72,
+    "plain": 71,
+    "mixed_aspect": 29,
+    "negation": 23,
+    "numeric": 10,
+    "comparative": 8,
+    "spelling_variant": 8,
+    "conditional": 6,
+    "emoji": 5,
+    "numeric_price": 5,
+    "repeated_chars": 5
+  },
+  "aspects": {
+    "ground": 43,
+    "overall": 43,
+    "booking": 22,
+    "price": 19,
+    "facilities": 16,
+    "owner": 16,
+    "lights": 12,
+    "staff": 9,
+    "location": 8,
+    "refund": 8,
+    "opponent": 4
+  },
+  "near_duplicate": {
+    "max_jaccard": 0.4179,
+    "max_pair": [
+      "dt-045",
+      "dt-120"
+    ],
+    "warn_threshold": 0.85,
+    "fail_threshold": 0.97,
+    "warn_pairs": [],
+    "fatal_pairs": []
+  },
+  "checks": [
+    {
+      "name": "file_exists",
+      "ok": true,
+      "detail": "D:\\sportlynk\\ml-service\\data\\sentiment\\domain_test_200.csv"
+    },
+    {
+      "name": "csv_parses",
+      "ok": true,
+      "detail": "200 data rows"
+    },
+    {
+      "name": "columns",
+      "ok": true,
+      "detail": "id,text,label,lang,aspect,phenomena,notes"
+    },
+    {
+      "name": "row_count",
+      "ok": true,
+      "detail": "200 (want 200)"
+    },
+    {
+      "name": "ids_well_formed",
+      "ok": true,
+      "detail": "all match dt-NNN"
+    },
+    {
+      "name": "ids_unique",
+      "ok": true,
+      "detail": "all unique"
+    },
+    {
+      "name": "labels_in_contract",
+      "ok": true,
+      "detail": "subset of ('negative', 'neutral', 'positive')"
+    },
+    {
+      "name": "label_distribution",
+      "ok": true,
+      "detail": "{'negative': 68, 'neutral': 67, 'positive': 65}"
+    },
+    {
+      "name": "langs_known",
+      "ok": true,
+      "detail": "subset of {ru,mixed,en}"
+    },
+    {
+      "name": "lang_distribution",
+      "ok": true,
+      "detail": "{'ru': 80, 'mixed': 70, 'en': 50}"
+    },
+    {
+      "name": "lang_label_grid",
+      "ok": true,
+      "detail": "9 cells as designed"
+    },
+    {
+      "name": "no_empty_raw_text",
+      "ok": true,
+      "detail": "all non-empty"
+    },
+    {
+      "name": "scoreable_after_normalize",
+      "ok": true,
+      "detail": "no row destroyed by normalizer"
+    },
+    {
+      "name": "no_exact_duplicates",
+      "ok": true,
+      "detail": "all distinct after normalize"
+    },
+    {
+      "name": "no_near_duplicates",
+      "ok": true,
+      "detail": "max=0.418 ('dt-045', 'dt-120') (0 soft warns)"
+    },
+    {
+      "name": "phenomena_coverage",
+      "ok": true,
+      "detail": "11 tags; neg=23, cs=72"
+    },
+    {
+      "name": "aspect_coverage",
+      "ok": true,
+      "detail": "11 distinct aspects"
+    }
+  ],
+  "all_passed": true
+}

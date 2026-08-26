@@ -1,0 +1,151 @@
+text,label,lang,aspect
+"The futsal surface felt fresh and grippy throughout our evening match",positive,en,ground
+"The cricket nets were tidy and the booking started exactly on time",positive,en,facilities
+"Staff welcomed our school team and explained the changing rooms patiently",positive,en,staff
+"The owner solved a double booking before we even arrived",positive,en,owner
+"A bright football pitch made passing easy after sunset",positive,en,lights
+"The badminton court had excellent flooring and plenty of clear space",positive,en,ground
+"The pool was spotless and the lifeguard watched every lane carefully",positive,en,facilities
+"Online checkout took less than a minute and showed the correct fee",positive,en,booking
+"Our refund appeared the same afternoon after we cancelled",positive,en,refund
+"The price included balls bibs and water, which felt very fair",positive,en,price
+"The basketball hoops were sturdy and the court lines were freshly painted",positive,en,facilities
+"A helpful caretaker found us a replacement tennis racket",positive,en,staff
+"The gym equipment was clean, modern, and never crowded at noon",positive,en,facilities
+"The padel glass was clear and the court lights had no dark patches",positive,en,lights
+"We found the venue easily beside the main road with safe parking",positive,en,location
+"The snooker table rolled straight and the cloth looked professionally maintained",positive,en,ground
+"The owner offered an extra half hour when our slot began late",positive,en,owner
+"The cricket wicket bounced consistently for both teams",positive,en,ground
+"Booking reminders arrived promptly by text and email",positive,en,booking
+"The football nets were intact and the changing area smelled fresh",positive,en,facilities
+"The tennis court stayed bright even when clouds gathered",positive,en,lights
+"The receptionist handled our questions without rushing us",positive,en,staff
+"The membership rate made regular swimming genuinely affordable",positive,en,price
+"The cancellation policy was clear and the refund was processed without a call",positive,en,refund
+"Our badminton session was comfortable because the air conditioning worked quietly",positive,en,facilities
+"The location is convenient for players coming from three different neighborhoods",positive,en,location
+"The futsal goals were firmly anchored and the pitch markings were sharp",positive,en,ground
+"The booking page displayed open slots accurately all week",positive,en,booking
+"The gym trainer gave a useful orientation before leaving us to exercise",positive,en,staff
+"The pool temperature was comfortable for a long training session",positive,en,facilities
+"The price was higher than the public park but the quality justified it",positive,en,price
+"The court was not slippery even after several players tracked in rain",positive,en,ground
+"They never ignored our complaint about a broken floodlight",positive,en,owner
+"The venue wasn't difficult to reach despite being inside a busy market",positive,en,location
+"We were not charged a surprise service fee at checkout",positive,en,booking
+"The court lights never flickered during our late tennis match",positive,en,lights
+"The owner did not argue when we showed the confirmation receipt",positive,en,owner
+"The staff did not make us wait for towels at the pool",positive,en,staff
+"The refund was not delayed even though the cancellation was last minute",positive,en,refund
+"The padel court looked better in person than in the listing photographs",positive,en,overall
+"The facilities made our visiting team feel genuinely comfortable",positive,en,facilities
+"The venue has a calm atmosphere that suits serious practice",positive,en,overall
+"The football ground was maintained better than most nearby options",positive,en,ground
+"The lights were strong enough for players to judge high balls",positive,en,lights
+"We received an honest answer about the available locker space",positive,en,staff
+"The location near the bus stop saved our group a costly taxi ride",positive,en,location
+"The booking confirmation included directions and the exact starting time",positive,en,booking
+"The snooker room stayed quiet while we played",positive,en,overall
+"The pool lanes were arranged sensibly for beginners and fast swimmers",positive,en,facilities
+"The court fee was reasonable for a full two-hour reservation",positive,en,price
+"Our whole group left recommending the venue to other teams",positive,en,overall
+"The cricket practice area was usable, though the nets and pitch were ordinary",neutral,en,facilities
+"The football ground was average and matched what the listing promised",neutral,en,overall
+"Booking required a few screens but nothing went seriously wrong",neutral,en,booking
+"The badminton floor was serviceable with some visible wear near the net",neutral,en,ground
+"The pool was clean enough, although the water felt slightly cool",neutral,en,facilities
+"The staff answered our questions briefly and completed the check-in",neutral,en,staff
+"The owner offered the booked slot and no additional help",neutral,en,owner
+"The lights covered the court but left one corner a little dim",neutral,en,lights
+"The refund arrived after several days, within the stated policy",neutral,en,refund
+"The hourly price was standard for this part of town",neutral,en,price
+"The gym had basic machines and enough room for a short workout",neutral,en,facilities
+"The tennis court was fine for casual play but not tournament quality",neutral,en,ground
+"The padel glass had fingerprints, though visibility remained acceptable",neutral,en,facilities
+"The location was convenient by car but awkward without private transport",neutral,en,location
+"The snooker table was playable and the room was neither busy nor empty",neutral,en,overall
+"We received the confirmation email after a noticeable but harmless delay",neutral,en,booking
+"The changing rooms had lockers, benches, and nothing particularly unusual",neutral,en,facilities
+"The basketball court lines were faded but still understandable",neutral,en,ground
+"The floodlights worked normally for our evening football session",neutral,en,lights
+"The caretaker showed us the entrance and then left us alone",neutral,en,staff
+"The owner explained the cancellation terms in a straightforward way",neutral,en,owner
+"The membership discount was modest compared with nearby gyms",neutral,en,price
+"The cancellation refund was correct but not especially quick",neutral,en,refund
+"The swimming pool suited our training plan without offering extra features",neutral,en,overall
+"The booking calendar showed availability accurately on the day we checked",neutral,en,booking
+"The futsal surface was acceptable although it had a few scuff marks",neutral,en,ground
+"The venue sits behind a row of shops and is easy to miss initially",neutral,en,location
+"The price seemed neither cheap nor excessive for an indoor court",neutral,en,price
+"The lights were adequate, not bright enough for recording video",neutral,en,lights
+"Our group had a normal session with no memorable highs or lows",neutral,en,overall
+"The gym was reasonably clean and had equipment from different brands",neutral,en,facilities
+"The cricket booking opened on time after one ordinary confirmation call",neutral,en,booking
+"The staff were polite but offered no guidance about local competitions",neutral,en,staff
+"The owner accepted our reservation and nothing else needed attention",neutral,en,owner
+"The tennis court was dry and usable after the morning rain",neutral,en,ground
+"The pool rules were posted clearly, including the shower requirement",neutral,en,facilities
+"The refund process worked, though it required filling out a short form",neutral,en,refund
+"The venue has parking, but spaces disappear quickly on weekends",neutral,en,location
+"The basketball hoops were regulation height and looked well used",neutral,en,facilities
+"The snooker room was quiet enough and the table needed no adjustment",neutral,en,overall
+"The listing photos were accurate but did not show much detail",neutral,en,overall
+"The court was not impressive, but it was perfectly usable for practice",neutral,en,ground
+"The lights were not terrible, although shadows appeared near the baseline",neutral,en,lights
+"The owner never promised extras and delivered exactly the reservation",neutral,en,owner
+"The staff did not seem enthusiastic, yet check-in was handled correctly",neutral,en,staff
+"The price was not a bargain, but it followed the advertised rate",neutral,en,price
+"The booking was not instant because approval took about ten minutes",neutral,en,booking
+"The refund was never late according to policy, but it felt slow to us",neutral,en,refund
+"The venue was not far from our office and served its basic purpose",neutral,en,location
+"The facilities were not luxurious; they covered the essentials",neutral,en,facilities
+"The overall experience was not memorable in either direction",neutral,en,overall
+"The football pitch had standing water and became unsafe after light rain",negative,en,ground
+"Our badminton reservation disappeared from the calendar before arrival",negative,en,booking
+"The owner refused to acknowledge the time printed on our receipt",negative,en,owner
+"Several floodlights failed and half the cricket net was difficult to see",negative,en,lights
+"The changing rooms were dirty and had no working hooks",negative,en,facilities
+"The staff spoke rudely when we asked for the promised equipment",negative,en,staff
+"The cancellation was accepted but our refund never arrived",negative,en,refund
+"The court fee was excessive for such worn-out flooring",negative,en,price
+"The pool smelled strongly of chemicals and the water looked cloudy",negative,en,facilities
+"The gym machines were broken often enough to interrupt every workout",negative,en,facilities
+"The padel glass was scratched and the overhead lights were harsh",negative,en,lights
+"The venue was hidden behind construction and impossible to find on foot",negative,en,location
+"The snooker cloth was torn and balls rolled toward one cushion",negative,en,ground
+"We were charged twice because the booking page froze during payment",negative,en,booking
+"The owner cancelled our evening slot without offering another time",negative,en,owner
+"The football nets were torn and balls kept leaving the field",negative,en,ground
+"The tennis court had cracks that made quick movement risky",negative,en,ground
+"The receptionist ignored our messages for most of the afternoon",negative,en,staff
+"The price increased at checkout without any explanation",negative,en,price
+"The pool lane was overcrowded despite our reserved training slot",negative,en,facilities
+"The lights flickered repeatedly and stopped play twice",negative,en,lights
+"The refund took three weeks and required several reminders",negative,en,refund
+"The location offered no safe place to leave bicycles",negative,en,location
+"The court was not worth the advertised hourly rate",negative,en,price
+"The venue wasn't clean when our team arrived for the first booking",negative,en,facilities
+"The owner never returned the deposit after cancelling on us",negative,en,owner
+"Staff did not explain that the pool would close early",negative,en,staff
+"The booking system wasn't reliable enough for a tournament schedule",negative,en,booking
+"The basketball floor was not level near the three-point line",negative,en,ground
+"The cricket nets were too loose to stop hard shots",negative,en,facilities
+"The gym was so crowded that we could not finish the planned routine",negative,en,overall
+"The venue never answered our request for an accessible entrance",negative,en,location
+"The lights were not strong enough for a safe late-night match",negative,en,lights
+"The advertised refund was not paid within the promised working days",negative,en,refund
+"The staff blamed us for a booking error they had made",negative,en,staff
+"The futsal surface became dangerously slick under the leaking roof",negative,en,ground
+"The fee was not transparent because taxes appeared only at payment",negative,en,price
+"The pool showers stopped working before our session ended",negative,en,facilities
+"The snooker table was never levelled despite repeated requests",negative,en,ground
+"Our team waited outside because the owner had locked the entrance",negative,en,owner
+"The venue was not suitable for a serious badminton match",negative,en,overall
+"The confirmation message never included the address or court number",negative,en,booking
+"The car park was full and nobody suggested a safe alternative",negative,en,location
+"The lights made it impossible to track a high tennis serve",negative,en,lights
+"The facilities looked neglected and several taps had no water",negative,en,facilities
+"We were not offered any compensation for the shortened session",negative,en,refund
+"The overall experience left our visiting team unwilling to return",negative,en,overall
+"The venue never confirmed whether our reserved court was actually available",negative,en,booking

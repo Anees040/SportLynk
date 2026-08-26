@@ -18,9 +18,11 @@ trained ML models — never replace them with external AI API calls.
   `flutter run --dart-define=API_BASE_URL=http://127.0.0.1:3000/api`
   (emulator: http://10.0.2.2:3000/api). A PHYSICAL phone ALWAYS needs the
   --dart-define set to the laptop's LAN IP; the 10.0.2.2 default is emulator-only.
-- ml-service: `cd ml-service && python -m uvicorn app.main:app` — binds
-  127.0.0.1:8000, X-API-Key auth. Loads models/pricing_latest.joblib ONCE at boot;
-  a retrain does NOT hot-swap (restart uvicorn). The phone NEVER calls it — only Node does.
+- ml-service: `cd ml-service && python -m uvicorn app.main:app` — binds 127.0.0.1:8000,
+  X-API-Key auth. Loads BOTH models/*_latest.joblib (pricing, sentiment) ONCE at boot;
+  a retrain does NOT hot-swap (restart uvicorn, or registry.reload('<key>')). /health
+  reports a models[] array so one bad artifact degrades one entry, not the whole report.
+  The phone NEVER calls it — only Node does.
 
 ## Golden rules
 1. Implement ONLY the wave pasted in the prompt. No unrequested refactors,
@@ -51,9 +53,10 @@ trained ML models — never replace them with external AI API calls.
 - generate_bookings.py must NOT touch the DB and must NOT import from app/routers/.
 
 ## Status
-S.1, S.2 (A–D) and S.3 (A–E) are all code-complete. The ML tier is live end to end:
-model #1 (dynamic pricing) is trained, gated, served, and on the owner's screen with
-real confidence + a 72h demand chart, plus a reproducibility/evidence pack.
+S.1, S.2 (A–D), S.3 (A–E) and S.4 (A–B) are all code-complete. The ML tier is live end to
+end: model #1 (dynamic pricing) is trained, gated, served, and on the owner's screen with
+real confidence + a 72h demand chart, plus a reproducibility/evidence pack. Model #2
+(sentiment) is trained, gated and served — but NOT yet called by Node.
 - Model: `pricing-v1-20260825-0041`, HistGradientBoostingClassifier, 374 KB, 12/12
   release gates. Binary classifier P(booked | features, price) — price is an INPUT
   (price_ratio), so one model serves BOTH the 72h forecast (ratio=1.0) and the price
@@ -61,7 +64,26 @@ real confidence + a 72h demand chart, plus a reproducibility/evidence pack.
   ROC-AUC 0.7628 = 98.2% of the MEASURED 0.7770 Bayes ceiling; Brier 0.1680, skill 0.1668.
 - Reproduce: `cd ml-service && python training/train_pricing.py --seed 42` — 42 is
   DEFAULT_SEED, so that exact command produced the served artifact, bit-for-bit, in ~68s.
-- OPEN at end of S.3, in order:
+- Model #2: `sentiment-wordchar-linsvc-softmax-20260826-1306`, LinearSVC(C=0.1) over a
+  word ∪ char_wb TF-IDF union, 2.9 MB, 7/7 gates. 3-class (negative/neutral/positive) on
+  RAW text — normalisation lives INSIDE the pipeline (`app/core/text_norm.py`, the ◆
+  contract, imported by builder + trainer + router). Exam (`domain_test_200.csv`) accuracy
+  0.8250, macro-F1 0.8247, 95% CI [0.7700, 0.8750] vs a 0.3400 majority baseline; the
+  4,281-row validation split reads LOWER (0.6447) because it is 97% third-party
+  open-domain text — the model is specialised, and both numbers are published.
+  predict_proba = softmax(decision_function), declared UNCALIBRATED in the artifact.
+  FR9.10 abuse flag = 32-term lexicon OR P(negative) ≥ 0.70, threshold MEASURED and read
+  back from the artifact (a hardcoded 0.90 silently near-died when C moved 3.0 → 0.1 —
+  softmax sharpness tracks margin width, so no absolute probability threshold is portable
+  across retrains). Reproduce: `python training/train_sentiment.py` — no flags; the
+  defaults ARE the shipped configuration. Re-tuning C requires re-measuring the threshold.
+- OPEN at end of S.4, in order:
+  - **wire Node to the sentiment endpoints** — `reviews.sentiment_score` /
+    `sentiment_label` exist in the schema and NOTHING calls the model yet (the only
+    sentiment reference in `backend/src/` is a column check in verify_schema.js).
+  - second-annotator κ on `domain_test_200.csv` — 200 rows are single-annotator; the one
+    criticism of the 0.8250 headline that no gate can answer.
+- OPEN at end of S.3, still open:
   - `tag s3-done` — needs a commit; NOTHING is committed yet. Do not commit unless asked.
   - judge reports/demand_patterns.png — Wave B's last human gate (owner's domain verdict
     on the curves; the Jummah dip is new supporting evidence).
@@ -71,8 +93,9 @@ real confidence + a 72h demand chart, plus a reproducibility/evidence pack.
     ELO, or match change since) — expected untouched, not measured.
   - re-estimate elasticity from real bookings once data exists (pipeline is validated;
     ELASTICITY_PEAK 0.85 / OFFPEAK 2.20 are stated assumptions, not estimates).
-- NEXT: S.4 sentiment + trust → S.5 recommender → S.6 NLU assistant → S.7
-  tournaments/chat/admin dispute-UI/demo pack + deploy ml-service as a 2nd Render service.
+- NEXT: wire sentiment into Node (S.4 trust/reviews) → S.5 recommender → S.6 NLU assistant
+  → S.7 tournaments/chat/admin dispute-UI/demo pack + deploy ml-service as a 2nd Render
+  service.
 
 ## Wave log (one entry per completed wave: what shipped · the gotcha · verified)
 - S1-A — escrow ledger unified (20% deposit / 24h window / 30-min no-show); escrow.js +
@@ -169,6 +192,42 @@ real confidence + a 72h demand chart, plus a reproducibility/evidence pack.
   thing varies). Finding: low<high rating holds only where the guardrail leaves room (off-peak gaps are
   noise → [OBSERVE], never tests). The Jummah dip survived training into a served forecast. Writes
   reports/price_sanity.json.
+- S4-A — sentiment exam + corpus + the ◆ normalisation contract (NO model, deliberately: the measuring
+  instrument ships BEFORE the classifier so the target can't be moved to meet a score). domain_test_200.csv
+  = 200 hand-written/hand-labelled venue reviews (68/67/65), sha-locked in domain_test_meta.json and
+  re-checked every training run; NEVER "fix" a row because the model got it wrong. text_norm.py is the
+  2nd frozen contract and needs MORE than features.py's version string, because a FunctionTransformer
+  pickles callables BY REFERENCE — editing prep_word after release silently changes how every shipped
+  artifact normalises, with no mismatch and no exception → NORM_SPEC_VERSION + a source FINGERPRINT
+  (b96e65df85f9692b) stamped into corpus meta AND every artifact, gate-compared, published by
+  /sentiment/spec. train.csv 21,405 rows (RUSA 11,719 + TweetEval 8,996 + authored 690), sha256
+  408b4c52…a068. TweetEval SAMPLED 3,000/label from 45,615 — taken whole, 45k English swamps 12k Roman
+  Urdu and LANGUAGE becomes a proxy for LABEL (Cramér's V 0.1334 source~label / 0.1298 lang~label is the
+  check that it didn't; χ² + effect size, deliberately no p-value — at n=21,405 significance is free).
+  690 authored rows = 3% of corpus, up-weighted ×40 (only rows from the target distribution). Arithmetic
+  reconciles: 21,957 − 539 dups − 12 empty − 1 exam near-dup = 21,405. .gitignore uses
+  data/sentiment/* NOT sentiment/ — a directory ignore stops git descending and makes every ! line dead.
+- S4-B — model #2 trained, gated, served (VERIFIED 7/7 gates, 49/49 smoke, 7 endpoints, /health both
+  models). sentiment-wordchar-linsvc-softmax-20260826-1306, LinearSVC(C=0.1) on word(1-2, \S+) ∪
+  char_wb(2-6), 2.9 MB. Exam 0.8250 / macro-F1 0.8247 / CI [0.7700, 0.8750] vs baseline 0.3400 — and the
+  CI LOWER BOUND IS BELOW 0.80, published rather than hidden. Validation split reads LOWER (0.6447): it's
+  97% third-party open-domain text, so the model is SPECIALISED and both numbers ship. predict_proba =
+  softmax(decision_function) via SoftmaxSVC ⇒ argmax(proba) == predict EXACTLY (classScores can't
+  contradict its own label); declared calibrated:false — these are ranked margins, not probabilities.
+  BOTH branches ship because char_wb pads each word separately and CANNOT cross a word boundary, so
+  Roman Urdu post-posed negation ("acha nahi tha") is unrepresentable in char — only prep_word's _neg
+  scoping expresses it; an earlier char-only run outscored word+char and nearly settled it wrongly (C was
+  tuned for ~50k features, the union is ~100k). ablation_exam_accuracy is NOT a config comparison — all
+  rows are train-split-only at the shipped C, hence word+char 0.8100 there vs 0.8250 refit on full.
+  The C sweep's hidden cost: softmax sharpness tracks margin width tracks C, so 3.0 → 0.1 moved max
+  P(negative) 0.9811 → 0.9234 and a hardcoded 0.90 abuse threshold near-died while accuracy IMPROVED —
+  no error, no warning. FR9.10 now = 32-term lexicon OR P(neg) ≥ 0.70, MEASURED, stored in the artifact
+  and read back at serve time (MIN_NEG_THRESHOLD 0.50 floors it); 18/200 exam rows escalate. en 0.7600
+  (38/50) is the weakest language row and the cause is NOT claimed (n=50, inside noise). 20-row error
+  table lives INSIDE sentiment_metrics.json. Near-miss: the trainer first wrote a bare
+  confusion_matrix.png — the name S.5 would reuse, in a COMMITTED dir, losing the evidence with no error;
+  S3-E predicted exactly this and the convention caught it → confusion_matrix_sentiment.png. NOT DONE:
+  no Node route calls the model (columns exist, endpoints exist, nothing joins them).
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;

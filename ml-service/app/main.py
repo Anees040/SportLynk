@@ -1,4 +1,4 @@
-"""
+r"""
 SportLynk ML service  —  FastAPI application  —  S.3 Wave A
 
 WHAT THIS PROCESS IS
@@ -64,6 +64,10 @@ RUN IT
     .\.venv\Scripts\Activate.ps1
     uvicorn app.main:app --port 8000        (or: .\run_dev.ps1)
 """
+# NOTE: this module's docstring is a raw string (r""") purely so the Windows
+# activate path above does not read as an invalid \. escape. Without it Python
+# emits a SyntaxWarning on every single boot, and a boot log that cries wolf is a
+# boot log nobody reads.
 
 from __future__ import annotations
 
@@ -79,7 +83,7 @@ from fastapi.responses import JSONResponse
 
 from .core import config
 from .core.registry import registry
-from .routers import pricing
+from .routers import pricing, sentiment
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Startup guards — these run at IMPORT time, before uvicorn binds a port
@@ -334,6 +338,7 @@ def health() -> dict[str, Any]:
             "modelsTotal": len(models),
             "models": models,
             "featureSpec": pricing.features.spec(),
+            "normSpec": sentiment.text_norm.spec(),
             "runtime": registry.runtime(),
         },
         "message": "SportLynk ML service is healthy",
@@ -356,6 +361,7 @@ def root() -> dict[str, Any]:
 
 
 app.include_router(pricing.router)
+app.include_router(sentiment.router)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

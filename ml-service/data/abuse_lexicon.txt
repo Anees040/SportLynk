@@ -1,0 +1,49 @@
+# SportLynk abuse / profanity lexicon  —  FR9.10 moderation guard
+#
+# SCOPE: abusive language only (profanity + slurs). NOT negative sentiment.
+#   A clean angry review ("worst venue, staff ignored us") is negative, not toxic
+#   and must NOT appear here. Terms that are merely negative or ambiguous were
+#   removed for exactly this reason: bakwas (=nonsense), bewaqoof (=foolish),
+#   pagal (=crazy), gali (=street; abuse only in context) — all sentiment, not abuse.
+#
+# MATCHING is whole-token, case-insensitive (see app/core/toxicity.py). One term
+# per line; `#` lines and blanks are ignored. Keep it conservative: a term earns
+# its place only if its presence, on its own, makes a review abusive.
+
+# --- English profanity / slurs ---
+fuck
+fucking
+fucked
+motherfucker
+shit
+bullshit
+asshole
+bitch
+bastard
+cunt
+dick
+douchebag
+
+# --- mild directed insults (kept: insult, not sentiment) ---
+idiot
+stupid
+moron
+
+# --- Roman Urdu profanity / slurs ---
+harami
+haramzada
+haramzadi
+chutiya
+chutia
+gaand
+gandu
+bhenchod
+behanchod
+madarchod
+madarchd
+kutti
+kameena
+kaminey
+lund
+lauda
+randi

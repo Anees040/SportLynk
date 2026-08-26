@@ -1,0 +1,174 @@
+text,label,lang
+ground acha tha lekin staff rude tha,negative,mixed
+slot book kiya phir cancel hua,negative,mixed
+turf ghatiya aur lights band thin,negative,mixed
+"price zyada, paise wasool nahi hue",negative,mixed
+"washroom ganda, parking faltu",negative,mixed
+"QR check-in fail, timing miss hui",negative,mixed
+"owner ne jawab nahi diya, bakwaas",negative,mixed
+"pitch theek nahi thi, maza nahi aya",negative,mixed
+"recommend nahi karunga, service bekaar",negative,mixed
+ground pehle acha laga phir kharab,negative,mixed
+ground acha tha lekin staff rude tha at futsal arena,negative,mixed
+slot book kiya phir cancel hua at cricket nets,negative,mixed
+turf ghatiya aur lights band thin at city turf,negative,mixed
+"price zyada, paise wasool nahi hue at north ground",negative,mixed
+"washroom ganda, parking faltu at stadium court",negative,mixed
+"QR check-in fail, timing miss hui at community pitch",negative,mixed
+"owner ne jawab nahi diya, bakwaas at sports complex",negative,mixed
+"pitch theek nahi thi, maza nahi aya at badminton hall",negative,mixed
+"recommend nahi karunga, service bekaar at university gym",negative,mixed
+ground pehle acha laga phir kharab at club field,negative,mixed
+"ground theek tha, facilities basic thin",neutral,mixed
+"parking available, baaki average",neutral,mixed
+"slot mil gaya, timing normal rahi",neutral,mixed
+turf purana magar playable tha,neutral,mixed
+"price standard, koi discount nahi",neutral,mixed
+"washroom theek, safai average thi",neutral,mixed
+floodlights normal brightness ki thin,neutral,mixed
+"owner ne rules bataye, bas",neutral,mixed
+"booking confirm hui, email der se aayi",neutral,mixed
+ground jaisa socha tha waisa mila,neutral,mixed
+"ground theek tha, facilities basic thin at futsal arena",neutral,mixed
+"parking available, baaki average at cricket nets",neutral,mixed
+"slot mil gaya, timing normal rahi at city turf",neutral,mixed
+turf purana magar playable tha at north ground,neutral,mixed
+"price standard, koi discount nahi at stadium court",neutral,mixed
+"washroom theek, safai average thi at community pitch",neutral,mixed
+floodlights normal brightness ki thin at sports complex,neutral,mixed
+"owner ne rules bataye, bas at badminton hall",neutral,mixed
+"booking confirm hui, email der se aayi at university gym",neutral,mixed
+ground jaisa socha tha waisa mila at club field,neutral,mixed
+ground bohot acha aur staff helpful tha,positive,mixed
+"floodlights bright, match zabardast raha",positive,mixed
+"booking smooth, QR check-in foran hua",positive,mixed
+turf clean aur parking mil gayi,positive,mixed
+"owner cooperative, timing on point",positive,mixed
+"pitch excellent, team dobara aayegi",positive,mixed
+"price fair, paise wasool hue",positive,mixed
+"washroom saaf, changing room comfortable",positive,mixed
+"cricket net strong, practice ka maza aya",positive,mixed
+"futsal court spacious, game enjoyable",positive,mixed
+ground bohot acha aur staff helpful tha at futsal arena,positive,mixed
+"floodlights bright, match zabardast raha at cricket nets",positive,mixed
+"booking smooth, QR check-in foran hua at city turf",positive,mixed
+turf clean aur parking mil gayi at north ground,positive,mixed
+"owner cooperative, timing on point at stadium court",positive,mixed
+"pitch excellent, team dobara aayegi at community pitch",positive,mixed
+"price fair, paise wasool hue at sports complex",positive,mixed
+"washroom saaf, changing room comfortable at badminton hall",positive,mixed
+"cricket net strong, practice ka maza aya at university gym",positive,mixed
+"futsal court spacious, game enjoyable at club field",positive,mixed
+"ground acha nahi tha, dobara nahi aaunga",negative,ru
+"maza nahi aya, pitch kharab thi",negative,ru
+"washroom ganda tha, use nahi kiya",negative,ru
+"paise wasool nahi hue, price zyada tha",negative,ru
+owner ne slot cancel kar diya,negative,ru
+"staff ne tang kiya, service bakwaas",negative,ru
+"turf ghatiya tha, ball nahi chalti",negative,ru
+"floodlights band thin, match waste hua",negative,ru
+"parking nahi mili, timing kharab hui",negative,ru
+"booking confirm nahi hui, paisa phans gaya",negative,ru
+"ground acha nahi tha, dobara nahi aaunga at futsal arena",negative,ru
+"maza nahi aya, pitch kharab thi at cricket nets",negative,ru
+"washroom ganda tha, use nahi kiya at city turf",negative,ru
+"paise wasool nahi hue, price zyada tha at north ground",negative,ru
+owner ne slot cancel kar diya at stadium court,negative,ru
+"staff ne tang kiya, service bakwaas at community pitch",negative,ru
+"turf ghatiya tha, ball nahi chalti at sports complex",negative,ru
+"floodlights band thin, match waste hua at badminton hall",negative,ru
+"parking nahi mili, timing kharab hui at university gym",negative,ru
+"booking confirm nahi hui, paisa phans gaya at club field",negative,ru
+"ground theek tha bas, kuch khaas nahi",neutral,ru
+"parking bahar hai, chal jata hai",neutral,ru
+"slot mil gaya, sab normal raha",neutral,ru
+turf purana magar playable hai,neutral,ru
+"staff ne check-in kiya, phir chup raha",neutral,ru
+"price aam hai, na sasta na mehnga",neutral,ru
+"floodlights chalti hain, roshni normal hai",neutral,ru
+pitch shehr ke beech mein hai,neutral,ru
+"ground theek tha bas, kuch khaas nahi at futsal arena",neutral,ru
+"parking bahar hai, chal jata hai at cricket nets",neutral,ru
+"slot mil gaya, sab normal raha at city turf",neutral,ru
+turf purana magar playable hai at north ground,neutral,ru
+"staff ne check-in kiya, phir chup raha at stadium court",neutral,ru
+"price aam hai, na sasta na mehnga at community pitch",neutral,ru
+"washroom theek, safai average thi at sports complex",neutral,ru
+"floodlights chalti hain, roshni normal hai at badminton hall",neutral,ru
+"owner ne rules bataye, bas at university gym",neutral,ru
+pitch shehr ke beech mein hai at club field,neutral,ru
+"ground bohot zabardast tha, dobara aaunga",positive,ru
+"booking asaan thi, slot mil gaya",positive,ru
+"staff cooperative tha, check-in jaldi hua",positive,ru
+"floodlights bright thin, maza aa gaya",positive,ru
+"turf saaf tha, game achi rahi",positive,ru
+owner ne time pe slot diya,positive,ru
+"price munasib tha, paise wasool hue",positive,ru
+"washroom saaf tha, facilities achi thin",positive,ru
+"pitch smooth thi, cricket ka maza aya",positive,ru
+parking araam se mil gayi,positive,ru
+"ground bohot zabardast tha, dobara aaunga at futsal arena",positive,ru
+"booking asaan thi, slot mil gaya at cricket nets",positive,ru
+"staff cooperative tha, check-in jaldi hua at city turf",positive,ru
+"floodlights bright thin, maza aa gaya at north ground",positive,ru
+"turf saaf tha, game achi rahi at stadium court",positive,ru
+owner ne time pe slot diya at community pitch,positive,ru
+"price munasib tha, paise wasool hue at sports complex",positive,ru
+"washroom saaf tha, facilities achi thin at badminton hall",positive,ru
+"pitch smooth thi, cricket ka maza aya at university gym",positive,ru
+parking araam se mil gayi at club field,positive,ru
+The booking vanished before arrival,negative,en
+The pitch was unsafe after rain,negative,en
+The owner never returned our money,negative,en
+Floodlights failed during the match,negative,en
+The washroom was filthy and unusable,negative,en
+The price was not worth it,negative,en
+Staff gave us the wrong court,negative,en
+The turf was torn near the goals,negative,en
+QR check-in failed and delayed kickoff,negative,en
+The changing room had broken lockers,negative,en
+The booking vanished before arrival at futsal arena,negative,en
+The pitch was unsafe after rain at cricket nets,negative,en
+The owner never returned our money at city turf,negative,en
+Floodlights failed during the match at north ground,negative,en
+The washroom was filthy and unusable at stadium court,negative,en
+The price was not worth it at community pitch,negative,en
+Staff gave us the wrong court at sports complex,negative,en
+The turf was torn near the goals at badminton hall,negative,en
+QR check-in failed and delayed kickoff at university gym,negative,en
+The changing room had broken lockers at club field,negative,en
+The ground was average for its listing,neutral,en
+Parking exists but fills on weekends,neutral,en
+The booking confirmation arrived late,neutral,en
+The pitch was usable with worn markings,neutral,en
+Staff completed check-in without help,neutral,en
+The price was standard nearby,neutral,en
+The washroom was clean enough,neutral,en
+Floodlights had ordinary brightness,neutral,en
+The owner explained the rules,neutral,en
+The slot started at the advertised time,neutral,en
+The ground was average for its listing at futsal arena,neutral,en
+Parking exists but fills on weekends at cricket nets,neutral,en
+The booking confirmation arrived late at city turf,neutral,en
+The pitch was usable with worn markings at north ground,neutral,en
+Staff completed check-in without help at stadium court,neutral,en
+The price was standard nearby at community pitch,neutral,en
+The washroom was clean enough at sports complex,neutral,en
+Floodlights had ordinary brightness at badminton hall,neutral,en
+The owner explained the rules at university gym,neutral,en
+The slot started at the advertised time at club field,neutral,en
+The booking was confirmed instantly,positive,en
+The football pitch was smooth,positive,en
+Bright floodlights made play enjoyable,positive,en
+Staff handled our group with care,positive,en
+The owner offered a replacement slot,positive,en
+The turf was clean and comfortable,positive,en
+The price felt fair,positive,en
+QR check-in took seconds,positive,en
+The changing room was spotless,positive,en
+Parking was easy to find,positive,en
+The booking was confirmed instantly at futsal arena,positive,en
+The football pitch was smooth at cricket nets,positive,en
+Bright floodlights made play enjoyable at city turf,positive,en
+Staff handled our group with care at north ground,positive,en
+The owner offered a replacement slot at stadium court,positive,en

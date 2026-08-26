@@ -1,0 +1,121 @@
+text,label,lang
+owner said two hours but sirf ek ghanta khelne diya,negative,mixed
+lights chal rahi thin magar ghaas thori kam thi,negative,mixed
+booking confirm thi lekin gate band mila,negative,mixed
+staff ne hansi mein complaint ko ignore kar diya,negative,mixed
+ground dekhne mein acha tha magar pitch phatti hui thi,negative,mixed
+QR check-in hua phir slot kisi aur ko de diya,negative,mixed
+price reasonable laga but refund kabhi nahi aya,negative,mixed
+futsal court tang tha aur players takraate rahe,negative,mixed
+owner promised parking but jagah bilkul nahi mili,negative,mixed
+washroom ka haal dekh kar team wapas chali gayi,negative,mixed
+hamari cricket net tooti hui thi practice bekaar rahi,negative,mixed
+timing change hui aur humein koi message nahi mila,negative,mixed
+canteen open thi lekin khana stale nikla,negative,mixed
+staff helpful tha but floodlights aadhi raat ko band ho gaye,negative,mixed
+pitch par pani tha phir bhi match start karwaya,negative,mixed
+booking app ne payment li aur confirmation nahi bheji,negative,mixed
+"changing room dirty tha, lockers bhi tootay thay",negative,mixed
+owner ne bola slot free hai magar already occupied tha,negative,mixed
+parking mil gayi lekin exit par guard ne tang kiya,negative,mixed
+ground theek laga but ball har shot par uchalti thi,negative,mixed
+refund approve hua magar paisa abhi tak pending hai,negative,mixed
+"team ko gate par roka, staff ne wajah nahi batayi",negative,mixed
+ground normal tha aur koi khaas masla nahi hua,neutral,mixed
+"parking available hai, baaki facilities basic hain",neutral,mixed
+slot mil gaya lekin confirmation thori der se ayi,neutral,mixed
+owner ne rules samjhaye aur phir chala gaya,neutral,mixed
+lights chalti thin magar brightness ordinary thi,neutral,mixed
+"pitch usable thi, markings kuch faded thin",neutral,mixed
+"washroom saaf tha, size thora chota hai",neutral,mixed
+"booking process simple tha, extra help nahi chahiye thi",neutral,mixed
+"QR check-in hua, sab normal raha",neutral,mixed
+futsal court shehr ke beech mein hai,neutral,mixed
+"price standard hai, discount available nahi",neutral,mixed
+"staff polite tha, interaction short rahi",neutral,mixed
+"cricket net theek tha, kuch khaas nahi laga",neutral,mixed
+"changing room functional hai, luxury wali baat nahi",neutral,mixed
+gate khula mila aur timing wahi thi jo book ki,neutral,mixed
+"ground average tha, listing jaisi photos thin",neutral,mixed
+"refund policy clear hai, process normal lagta hai",neutral,mixed
+"owner ne koi promise nahi kiya, slot mil gaya",neutral,mixed
+parking door hai magar paid option mil jata hai,neutral,mixed
+lights hain lekin recording ke liye kam hain,neutral,mixed
+pitch theek thi aur match routine raha,neutral,mixed
+"staff ne check-in kiya, phir sab apna kaam karte rahe",neutral,mixed
+"owner ne time diya, humne araam se practice ki",positive,mixed
+"floodlights full bright thin, night match zabardast raha",positive,mixed
+booking fast hui aur QR entry foran mil gayi,positive,mixed
+"staff ka behaviour friendly tha, team comfortable rahi",positive,mixed
+"turf clean tha, passes smoothly chalay",positive,mixed
+"price fair laga, facilities ne paisa justify kiya",positive,mixed
+"parking asaani se mili, location convenient hai",positive,mixed
+washroom saaf tha aur changing room fresh thi,positive,mixed
+"cricket net mazboot tha, practice ka maza aya",positive,mixed
+"pitch smooth thi, players dobara aana chahte hain",positive,mixed
+ground acha tha lekin canteen bhi surprisingly useful thi,positive,mixed
+"refund same din mila, owner cooperative nikla",positive,mixed
+slot exact timing par start hua,positive,mixed
+staff ne replacement court arrange karke madad ki,positive,mixed
+"lights strong thin, ball raat mein clearly nazar ayi",positive,mixed
+owner ne rules bataye aur booking smoothly handle ki,positive,mixed
+"ground acha nahi tha, dobara aane ka irada nahi",negative,ru
+"maza nahi aya, pitch par har jagah darar thi",negative,ru
+slot book kiya tha magar gate band mila,negative,ru
+"staff ne bohot tang kiya, jawab bhi ulta diya",negative,ru
+ghaas kam thi aur ground bilkul bekaar lag raha tha,negative,ru
+"floodlights aadhi band thin, raat ka match mushkil hua",negative,ru
+"washroom ganda tha, use karna mumkin nahi tha",negative,ru
+owner ne paisa liya lekin booking nahi di,negative,ru
+"QR check-in nahi hua, poora timing zaya gaya",negative,ru
+price itna zyada tha ke paise wasool nahi hue,negative,ru
+"cricket net tooti hui thi, practice ruk gayi",negative,ru
+futsal court phatti hui flooring ke saath mila,negative,ru
+"parking nahi mili, staff ne koi rehnumai nahi ki",negative,ru
+"refund mangwaya tha, teen haftay se intezar hai",negative,ru
+ground pehle acha laga phir sab kharab nikla,negative,ru
+booking ka time badla aur humein bataya bhi nahi,negative,ru
+"canteen ka khana raddi tha, dobara nahi lenge",negative,ru
+changing room mein locker toote hue thay,negative,ru
+"pitch gandi thi, team ka mood kharab ho gaya",negative,ru
+owner ne masla suna magar hal nahi kiya,negative,ru
+"lights kharab thin, ball dekhna mushkil raha",negative,ru
+staff ne be-imani ki aur extra paisa liya,negative,ru
+"ground normal tha, koi masla nahi hua",neutral,ru
+"parking bahar hai, jagah aam tor par mil jati hai",neutral,ru
+"slot mil gaya, timing seedhi si rahi",neutral,ru
+"owner ne rules bataye, baqi sab routine tha",neutral,ru
+"pitch theek thi bas, kuch khaas nahi",neutral,ru
+"lights chalti hain, roshni darmiyani hai",neutral,ru
+washroom saaf tha magar chota hai,neutral,ru
+"booking confirm hui, email der se ayi",neutral,ru
+"QR check-in asaan tha, koi masla nahi hua",neutral,ru
+"yeh futsal court shehr ke andar hai, aana asaan hai",neutral,ru
+"price na sasta na mehnga, aam rate hai",neutral,ru
+staff ne salam kiya aur entry karwa di,neutral,ru
+"cricket net normal tha, practice ho gayi",neutral,ru
+"changing room kaam chalau hai, zyada jagah nahi",neutral,ru
+"gate khula tha, hum waqt par andar gaye",neutral,ru
+ground jaisa socha tha waisa hi mila,neutral,ru
+"refund policy likhi hui hai, amal ka pata nahi",neutral,ru
+"kuch khaas nahi, bas aik normal session tha",neutral,ru
+"theek tha bas, recommendation dene jaisa kuch nahi",neutral,ru
+"koi masla nahi hua, lekin koi extra sahulat bhi nahi",neutral,ru
+"floodlights theek thin, match routine guzra",neutral,ru
+owner ne booking li aur waqt par slot diya,positive,ru
+"ground bohot zabardast tha, dobara zaroor aaunga",positive,ru
+"staff cooperative tha, check-in jaldi ho gaya",positive,ru
+"turf saaf tha, khelne ka maza aa gaya",positive,ru
+"price munasib tha, paise wasool hue",positive,ru
+parking araam se mil gayi,positive,ru
+washroom saaf aur changing room behtar thi,positive,ru
+"floodlights bright thin, raat ka match kamal raha",positive,ru
+"practice wali cricket net mazboot thi, shots achay lage",positive,ru
+"pitch smooth thi, team khush ho kar nikli",positive,ru
+booking foran confirm hui,positive,ru
+owner ne late start ka extra waqt diya,positive,ru
+QR check-in bilkul seedha tha,positive,ru
+"location qareeb thi, sab ke liye asaan",positive,ru
+staff ne har sawal ka araam se jawab diya,positive,ru
+ground acha tha aur canteen bhi kaam ki thi,positive,ru
+"ground shehar ke kone mein hai, raasta seedha milta hai",neutral,ru
