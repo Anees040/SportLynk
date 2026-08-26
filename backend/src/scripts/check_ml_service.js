@@ -391,6 +391,8 @@ async function main() {
     skip('/health', healthResult.error || 'not reachable');
     skip('/features/spec cross-language constant check', 'ml-service not reachable');
     skip('/predict/price', 'ml-service not reachable');
+    skip('/sentiment/spec cross-language label check', 'ml-service not reachable');
+    skip('/predict/sentiment (sentiment up path)', 'ml-service not reachable');
     skip('API-key gate (401 on missing / wrong key)', 'ml-service not reachable');
     console.log('\n   To run these, start the ML service in another terminal:');
     console.log('       cd ..\\ml-service ; .\\run_dev.ps1');
@@ -657,6 +659,107 @@ async function main() {
         'no model -> forecast is unavailable, NOT a fabricated series',
         forecast.points.length === 0 && forecast.source === ml.SOURCE_UNAVAILABLE,
         forecast.reason,
+      );
+    }
+
+    // ── sentiment: the cross-language label set, then the up path ──
+    // The mirror of the /features/spec check above. SENTIMENT_LABELS in mlClient.js is
+    // a hand-copy of text_norm.LABELS that Node cannot import, and a drift silently
+    // mislabels every stored review, so the two are asserted equal over the wire.
+    const sentSpec = await ml.sentimentSpec();
+    if (!sentSpec.reachable) {
+      fail('/sentiment/spec', sentSpec.error || `status ${sentSpec.status}`);
+    } else {
+      const s = sentSpec.data || {};
+      check(
+        '/sentiment/spec publishes a normaliser spec version',
+        typeof s.normSpecVersion === 'string' && s.normSpecVersion.length > 0,
+        s.normSpecVersion,
+      );
+      check(
+        'sentiment label set matches text_norm.LABELS across the language boundary',
+        Array.isArray(s.labels) &&
+          s.labels.length === ml.SENTIMENT_LABELS.length &&
+          s.labels.every((l, i) => l === ml.SENTIMENT_LABELS[i]),
+        `node=[${ml.SENTIMENT_LABELS.join(',')}] python=[${(s.labels || []).join(',')}]`,
+      );
+    }
+
+    // The up path. Mirrors the price section: with a model loaded this asserts the
+    // exact shape routes/reviews.js stores; with no model it must degrade honestly
+    // (available:false, source:'unavailable') and invent nothing. Both are passes.
+    ml.resetBreaker();
+    const sentiment = await ml.analyzeSentiment(
+      'great venue, well maintained pitch and friendly staff',
+      { reviewId: 'check-ml-service' },
+    );
+    check(
+      'analyzeSentiment always returns the full result shape',
+      ['source', 'available', 'clientError', 'reviewId', 'label', 'score', 'confidence',
+        'flagged', 'toxic', 'strongNegative', 'reviewReasons', 'outOfDistribution',
+        'modelVersion', 'reason'].every((f) => f in sentiment),
+      Object.keys(sentiment).join(', '),
+    );
+
+    if (sentiment.available) {
+      console.log(`   -> sentiment source='model'  label=${sentiment.label} ` +
+        `score=${sentiment.score >= 0 ? '+' : ''}${sentiment.score} model=${sentiment.modelVersion}`);
+      check('a scored review is source=model, never a rule', sentiment.source === ml.SOURCE_MODEL);
+      check(
+        'label is one of the three canonical classes',
+        ml.SENTIMENT_LABELS.includes(sentiment.label),
+        sentiment.label,
+      );
+      check(
+        // Stored in reviews.sentiment_score and AVERAGED into trust_sentiment, so a
+        // value outside [-1,1] would corrupt the trust ledger, not just one row.
+        'score is signed polarity in [-1, 1]',
+        typeof sentiment.score === 'number' && sentiment.score >= -1 && sentiment.score <= 1,
+        `score=${sentiment.score}`,
+      );
+      check(
+        'confidence is a probability in [0, 1]',
+        typeof sentiment.confidence === 'number' &&
+          sentiment.confidence >= 0 && sentiment.confidence <= 1,
+        `confidence=${sentiment.confidence}`,
+      );
+      check(
+        // `flagged` is written verbatim to reviews.flagged; the finer signals ride a
+        // moderation UI that switches on them, so all three must be real booleans.
+        'the moderation flags are all booleans',
+        typeof sentiment.flagged === 'boolean' &&
+          typeof sentiment.toxic === 'boolean' &&
+          typeof sentiment.strongNegative === 'boolean',
+        `flagged=${sentiment.flagged} toxic=${sentiment.toxic} strongNeg=${sentiment.strongNegative}`,
+      );
+      check('a scored review carries a model version', Boolean(sentiment.modelVersion),
+        sentiment.modelVersion);
+      check(
+        'a clean, positive review is not flagged for moderation',
+        sentiment.flagged === false,
+        sentiment.reviewReasons.join(',') || 'no reasons',
+      );
+
+      // The deliberate difference from the price path: unusable text is a 422, and it
+      // must come back available:false + clientError:true WITHOUT opening the breaker —
+      // bad input is not an outage. sentimentBackfillJob.js relies on exactly this to
+      // mark a row 'unscoreable' rather than deferring the whole sweep.
+      ml.resetBreaker();
+      const junk = await ml.analyzeSentiment('...', { reviewId: 'check-junk' });
+      check(
+        'unscoreable text -> unavailable + clientError, and does NOT open the breaker',
+        junk.available === false && junk.clientError === true && !ml.breakerState().open,
+        `available=${junk.available} clientError=${junk.clientError} breakerOpen=${ml.breakerState().open}`,
+      );
+    } else {
+      // The Wave A/B state, or a model that failed to load. Honest degradation, not a
+      // failure — the same posture the price path takes when no artifact is present.
+      console.log(`   -> sentiment source='${sentiment.source}' (no model): ${sentiment.reason}`);
+      check(
+        'no model -> sentiment is unavailable, and invents NO label or score',
+        sentiment.source === ml.SOURCE_UNAVAILABLE &&
+          sentiment.label === null && sentiment.score === null,
+        `source=${sentiment.source} label=${sentiment.label} score=${sentiment.score}`,
       );
     }
   }

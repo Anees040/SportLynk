@@ -51,10 +51,12 @@ const slotRoutes = require("./routes/slotLock");
 const teamRoutes = require("./routes/teams");
 const chatRoutes = require("./routes/chat");
 const matchRoutes = require("./routes/matches");
+const reviewRoutes = require("./routes/reviews");
 const { startNoShowJob } = require("./jobs/noShowJob");
 const { startAutoApproveJob } = require("./jobs/autoApproveJob");
 const { startWithdrawalJob } = require("./jobs/withdrawalJob");
 const { startMatchExpiryJob } = require("./jobs/matchExpiryJob");
+const { startSentimentBackfillJob } = require("./jobs/sentimentBackfillJob");
 const { ACTIVE_TEST_OVERRIDES } = require("./utils/escrow");
 
 app.use("/api/auth", authRoutes);
@@ -69,6 +71,13 @@ app.use("/api/slots", slotRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/matches", matchRoutes);
+// Reviews own four paths across three resources — /api/reviews, /api/reviews/:id/flag,
+// /api/venues/:id/reviews, /api/users/:id/reviews — so this router mounts at the bare
+// /api root and each handler declares `auth` itself (it does NOT use router.use(auth),
+// which at /api would gate every sibling route). It is mounted AFTER the venue and user
+// routers: those own /api/venues/:id and /api/users/me, and a request for the deeper
+// .../:id/reviews path they don't define simply falls through to here.
+app.use("/api", reviewRoutes);
 
 // ─── Health check ────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
@@ -142,4 +151,5 @@ server.listen(PORT, () => {
   startAutoApproveJob();
   startWithdrawalJob();
   startMatchExpiryJob();
+  startSentimentBackfillJob();
 });

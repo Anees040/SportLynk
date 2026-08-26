@@ -754,6 +754,117 @@ The exam is 200 rows written by one annotator — second-annotator κ is still o
 real user review has ever been scored. Every number above is a claim about 200 rows we
 wrote ourselves, which is a much smaller claim than "the model understands reviews".
 
+### 4.12 Reviews, trust & sentiment wiring (S.4 Wave C)
+
+This is the wave that makes the platform *use* the sentiment model and the `reviews`
+table for the first time, adds Trust Score 2.0, and warms the price model so the first
+call stops timing out. It is **backend-only** — there is no review screen yet — so every
+test here is HTTP or SQL. Prerequisites: the two-team fixture from `run_match_flow_check.js`
+(§4.3), a **checked-in** booking for a player (take one through QR check-in, §4.8), and a
+**completed** match between the two teams (challenge → both results → owner verify, §4.3).
+
+```bash
+cd D:\sportlynk\backend
+node run_migration_017.js                 # test 114
+node src/scripts/check_ml_service.js      # test 115 (ml-service must be running)
+# then the review endpoints, against a running backend:
+BASE=http://127.0.0.1:3000/api
+```
+
+114. **Migration 017 applies clean, is idempotent, and its constraints actually
+     constrain.** First run creates `review_flags`, the four review indexes, the
+     `chk_review_flags_status` CHECK, and flips `player_profiles.trust_score` DEFAULT from
+     100 to 50. **Run it a second time — every line must be a no-op** (`IF NOT EXISTS`,
+     guarded CHECK, idempotent `SET DEFAULT`) and the report stays green. The runner does
+     more than a `\d` dump: it refuses to apply if two live reviews already share
+     `(booking_id, reviewer_id, review_type)` (it prints the offending rows — deciding
+     which review to keep is a human's call), then runs **functional probes** inside a
+     rolled-back transaction — a second venue review by the same author on the same booking
+     is rejected `23505`; an *opponent* review by that same author on that same booking is
+     **allowed** (venue + opponent are two legitimate reviews); a double-flag is `23505`; a
+     `status='pending'` flag is `23514`. A constraint that exists but does not constrain is
+     worse than none, so the probes prove enforcement, not just presence.
+115. **`check_ml_service.js` reaches 71/71 — and the price checks inside it are the cold-start fix.**
+     Before this wave the first `/predict/price` paid ~1.9 s (load joblib → first
+     `predict_proba` through an untouched sklearn Pipeline → first pandas frame) and tripped
+     the client's 2 s ceiling, so the four model-served price asserts ran against a
+     *heuristic* answer and the then-60-check run scored **56/60**. `main.py`'s lifespan now
+     calls `pricing.warm()` and `sentiment.warm()` best-effort at boot — the ml-service log
+     shows `warm-up: pricing warmed (…)` — so the first real call is already warm and the
+     price section is deterministically model-served (`source='model'`, PKR 2600 at +30% on
+     the peak-hour probe). Wiring Node to the sentiment model added 11 checks to the suite,
+     so a green warm run is now **71/71** (was 60 checks pre-sentiment). The same run also proves the
+     **sentiment up-path**: `/sentiment/spec` label set + `normSpecVersion` match Node's
+     `SENTIMENT_LABELS`; `analyzeSentiment('great venue…')` returns `source:'model'`, a
+     label in the set, `score ∈ [-1,1]`, `confidence ∈ [0,1]`, boolean `flagged`/`toxic`/
+     `strongNegative`, a `modelVersion`, and is not flagged; and junk text comes back
+     `available:false, clientError:true` **without** tripping the breaker (`breakerState().
+     open === false`) — a 422 is bad input, not an outage. With the service **down**, the
+     two sentiment up-path checks skip (like the price up-path already does) and the run
+     still proves degradation.
+116. **Venue review — the booker who attended.** `POST /reviews {booking_id, review_type:
+     'venue', stars: 5, text: 'great pitch, well maintained'}` as the player who owns a
+     **`checked_in`** booking → **201**. Confirm in the DB: one `reviews` row with
+     `review_type='venue'`, `reviewed_user_id NULL`, and — because the text was supplied —
+     `sentiment_label='positive'` with a `sentiment_score`. The venue's denormalised
+     `venues.rating` / `total_reviews` must also refresh (those columns are already shown in
+     listings; leaving them stale would make existing screens lie). A non-participant, or a
+     booking that never reached `checked_in`, is refused — authority is the booking row, not
+     the body.
+117. **Opponent review is captain-to-captain, and the target is *derived*.** After a
+     **completed** match, the caller must be a `role='captain'` member of one side; `POST
+     /reviews {booking_id, review_type:'opponent', stars, text}` stores a row whose
+     `reviewed_user_id` is the **opposing team's captain**, computed server-side
+     (`representativeCaptain`) — there is no target field in the body to forge. Both
+     captains reviewing each other → **two** rows, and **both** users' `trust_score`
+     recompute synchronously inside the same transaction (ER2.5's 60 s rule). A non-captain
+     member filing an opponent review → refused.
+118. **One review per `(booking, author, type)`.** Re-`POST` test 116 verbatim → **409**
+     (`ux_reviews_one_per_author`, mapped by `friendlyDbError`). This is a UNIQUE index, not
+     a JS pre-check, because two fast taps on Submit both read "no review yet" and both
+     insert. The *type* is in the key on purpose: the captain in test 117 may still leave a
+     venue review on the same booking.
+119. **Trust Score 2.0 — the composite, the cold start, and the no-show path.**
+     `trust = round(35·rating + 30·attendance + 20·dispute_free + 15·sentiment)`, each
+     component normalised to 0..1, each **absent** component contributing a neutral **0.5
+     prior** to the aggregate (but stored `NULL` in its `trust_*` column, so a UI can say
+     "no data yet"). A brand-new user therefore scores exactly **50**
+     (`round(35·.5+30·.5+20·.5+15·.5)`), which is the migration's new DEFAULT and what
+     `auth.js`/`users.js` insert. **The old flat `trust_score − 10` per no-show is gone:**
+     force a no-show (§4.3, or the owner's manual button, or the sweep) and confirm the
+     score is *recomputed* from the four signals, not decremented — and the player's
+     notification now says "your trust score has been updated", not "−10" (which recompute
+     would have made a lie). `GET /users/:id/reviews` returns the stored breakdown so you can
+     read each component back.
+120. **Flag a review → the moderation queue.** `POST /reviews/:id/flag {reason}` as any
+     participant of that review's booking/match → **201**, inserts a `review_flags` row
+     (`status='open'`) and sets `reviews.flagged=true`. The same user flagging the same
+     review again → **409** (`UNIQUE(review_id, flagged_by)` — one report per user). The
+     table is the ledger *behind* the fast `reviews.flagged` bit, mirroring `disputes`; the
+     admin resolve UI is S.7.
+121. **The read paths return aggregates, canonical labels only.** `GET /venues/:id/reviews`
+     is paginated, `WHERE hidden=false`, and returns rows plus `avgStars` and a
+     `sentimentDistribution {positive, neutral, negative}` (the three canonical labels — the
+     `unscoreable` sentinel and NULLs never appear as a bucket). `GET /users/:id/reviews`
+     returns the reviews a user has **received** (the trust ledger) plus their stored trust
+     breakdown.
+122. **The sentiment backfill job, and the promise that review text is never logged.** On
+     boot the backend logs the backfill job's start line; every sweep it scores up to 200
+     reviews whose `comment IS NOT NULL AND sentiment_label IS NULL` via
+     `analyzeSentimentBatch`, and on a batch `422` falls back to per-row scoring so one bad
+     row can't wedge the queue (a row that even single-scoring rejects gets a terminal
+     `sentiment_label='unscoreable'` sentinel, excluded from reads and never re-selected).
+     **Watch the logs while a review is scored: you must see the review's id, label, flags
+     and text *length* — never the text itself.** Read it back at `ml-service`'s side too;
+     the service enforces the same rule.
+
+**What this section cannot tell you.** Whether a *human* agrees with a score or a flag.
+There is still no review UI, so every test here is an API contract, not a user seeing the
+result; the Flutter surface (a review sheet, the trust ledger screen, the moderation queue)
+is a later wave. And the trust `dispute_free_rate` is an explicit **pre-S.7 proxy** — fault
+in a dispute is not adjudicated until an admin resolves it, so today it only counts
+"disputes the *other* side filed on a match your team played", never your own objections.
+
 ---
 
 ## 5. Non-functional tests
@@ -804,6 +915,12 @@ derived from the JWT user plus the membership row, re-read inside a locked trans
 - As an owner, verify a match at a venue **you do not own** → 403. Ownership is checked
   in SQL (`v.owner_id = $1`), so a forged body field must not help.
 - Read another user's wallet or booking by id → 403/404, never their data.
+- **Reviews (S.4 Wave C).** `POST /reviews` for a `booking_id` you did not book (venue
+  review) or a match you are not a **captain** of (opponent review) → 403, no row written.
+  The reviewer is `req.user`, never a body field, and the opponent review's target
+  (`reviewed_user_id`) is the opposing captain **derived server-side** — there is no target
+  field to point at a stranger. `POST /reviews/:id/flag` on a review whose booking/match you
+  had no part in → 403.
 
 ### 6.3 Mass assignment
 Send extra fields the endpoint never promised and confirm they are ignored:
@@ -814,6 +931,20 @@ curl -X PATCH "$BASE/teams/<id>" -H "Authorization: Bearer $TOKEN_A" \
 ```
 Expected: `bio`/`visibility` change; **`elo`, `wins`, `captain_id` do not.** Then confirm
 in the DB. Silent acceptance of `elo` would let anyone top the leaderboard.
+
+For **reviews**, the fields that decide identity and trust are all server-derived, so
+forging them must do nothing:
+```bash
+curl -X POST "$BASE/reviews" -H "Authorization: Bearer $TOKEN_A" \
+  -H 'Content-Type: application/json' \
+  -d '{"booking_id":"<your-checked-in-booking>","review_type":"venue","stars":5,
+       "text":"ok","reviewer_id":"<someone-else>","reviewed_user_id":"<victim>",
+       "sentiment_label":"positive","sentiment_score":1,"flagged":false,"hidden":true}'
+```
+Expected: the row is written with `reviewer_id` = **your** id, `reviewed_user_id` = NULL
+(venue review), and `sentiment_*`/`flagged` set by the **model**, not the body — a caller
+must not be able to paint their own review positive or hide someone else's. `stars` outside
+1–5 → 400.
 
 ### 6.4 Injection
 - Team name / bio / city / chat message: `'; DROP TABLE teams;--` → stored as literal

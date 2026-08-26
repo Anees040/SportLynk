@@ -16,6 +16,7 @@ const {
   logTxn,
 } = require("../utils/escrow");
 const { notify } = require("../utils/notify");
+const { recomputeTrust } = require("../utils/trustScore");
 
 // POST /api/bookings — create booking (player only)
 // Ledger: player balance -P, player frozen +P, status pending (P = slot price).
@@ -338,7 +339,7 @@ router.patch("/:id/cancel", authMiddleware, async (req, res, next) => {
 
 // POST /api/bookings/:id/resolve — owner settles a confirmed booking
 //   completed → escrow released in full to the owner (same ledger as QR check-in)
-//   no_show   → 80% back to player, 20% deposit to owner, trust_score -10
+//   no_show   → 80% back to player, 20% deposit to owner, trust score recomputed
 router.post(
   "/:id/resolve",
   authMiddleware,
@@ -458,16 +459,12 @@ router.post(
       });
 
       if (isNoShow) {
-        await client.query(
-          `UPDATE player_profiles SET trust_score=GREATEST(trust_score-$1,0) WHERE user_id=$2`,
-          [POLICY.NO_SHOW_TRUST_PENALTY, booking.player_id],
-        );
         await notify(client, {
           userId: booking.player_id,
           bookingId: booking.id,
           type: "booking_no_show",
           title: "Marked as no-show",
-          body: `You missed your slot at ${booking.venue_name}. PKR ${refund} returned, PKR ${penalty} deposit forfeited, trust score -${POLICY.NO_SHOW_TRUST_PENALTY}.`,
+          body: `You missed your slot at ${booking.venue_name}. PKR ${refund} returned, PKR ${penalty} deposit forfeited, and your trust score has been updated.`,
         });
       }
 
@@ -481,6 +478,14 @@ router.post(
           WHERE id=$2`,
         [isNoShow ? "no_show" : "checked_in", booking.id],
       );
+
+      // Trust Score 2.0: recompute now that the booking's final status is set,
+      // so attendance_rate reflects this outcome (utils/trustScore.js). Only a
+      // no-show moves trust here; a checked_in settlement lets it accrue via
+      // reviews instead.
+      if (isNoShow) {
+        await recomputeTrust(client, booking.player_id);
+      }
 
       await client.query("COMMIT");
       res.json({

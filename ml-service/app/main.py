@@ -164,6 +164,26 @@ async def lifespan(app: FastAPI):
         # model working.
         log.warning("no model is loaded — /predict/* will answer 503 model_not_loaded")
         log.warning("the Node backend will fall back to its heuristic (source='heuristic')")
+
+    # Best-effort warm-up. Each warm() takes the SAME lazy path a real request would
+    # (registry.get() loads and caches the model on first use) and runs one full
+    # prediction, so the first real caller doesn't pay the ~1.9s cold cost — loading
+    # the joblib, the first predict_proba through an untouched sklearn Pipeline, the
+    # first pandas frame — that trips the Node client's 2s ceiling and degrades a
+    # dashboard served by a service that is actually up.
+    #
+    # Non-fatal by construction, and deliberately so: warm() already swallows its own
+    # errors and returns a status string, and this try/except is a second belt. A
+    # warm-up must never be the reason the service won't start — that would defeat the
+    # lazy-load contract above, under which a corrupt artifact 503s ONE endpoint rather
+    # than blocking boot. A model that fails to warm here still serves its own honest
+    # 503 on the endpoint; everything else stays up.
+    for name, warm in (("pricing", pricing.warm), ("sentiment", sentiment.warm)):
+        try:
+            log.info("warm-up: %s", warm())
+        except Exception as exc:  # noqa: BLE001 — belt-and-braces; warm() already guards
+            log.warning("warm-up: %s raised (non-fatal): %s", name, exc)
+
     yield
     log.info("%s shutting down", config.SERVICE_NAME)
 

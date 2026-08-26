@@ -2244,6 +2244,119 @@ the first live test of the convention and very nearly lost. Now
 
 
 
+## Wave S4-C (Serve + reviews backend — the sentiment model goes live)
+
+**Status: DONE and VERIFIED GREEN.** Migration 017 applied and self-verified; schema 113/113
+with no drift; ml-service integration **71/71**; backend boots clean with the new backfill job
+sweeping. This is the wave that closes S4-B's first open item, "no Node route calls the
+sentiment model" — every review with text is now scored by the trained classifier, live, at
+write time, and the flat `−10` no-show penalty is replaced by a recomputed Trust Score.
+
+Measured this wave (all against the real Supabase DB — 16 users, 22 bookings, 0 reviews):
+
+```
+migration 017      applied clean · re-run is a no-op (IF NOT EXISTS / guarded CHECK / idempotent SET DEFAULT)
+                   probes GREEN: 2nd venue review 23505 · opponent review on same booking allowed ·
+                   duplicate flag 23505 · status='pending' 23514 · trust_score DEFAULT 50 (was 100) · 0 probe rows left
+schema             113/113 objects present (013–016 applied, 017 verified) — "nothing to run in the SQL editor"
+ml integration     71/71 checks — a 60-check suite scored 56/60 COLD pre-wave; +11 new sentiment checks
+  price up-path    source='model' · PKR 2600 (+30%) on the peak probe        ← the cold-start fix
+  demand up-path   source='model' · 72 points · mix {low:42, medium:11, high:19}
+  sentiment up-path source='model' · label=positive · score=+0.8238 · sentiment-wordchar-linsvc-softmax-20260826-1306
+  degradation      3 induced failures → breaker opens → heuristic 30s (source='heuristic')
+backend boot       clean · all 5 jobs started incl. [SentimentBackfill] (200/sweep, first sweep 0 unscored)
+```
+
+### The "Serve" half: warm at boot, so the first price call is model-served
+
+The first `/predict/price` used to pay ~1.9 s — load the joblib, first `predict_proba` through
+an untouched sklearn Pipeline, first pandas frame — and trip mlClient's 2 s ceiling, so the
+four price asserts scored against a **heuristic** answer and the suite read **56/60**. `main.py`'s
+lifespan now runs `pricing.warm()` and `sentiment.warm()` once at boot, each taking the SAME
+lazy `registry.get()` path a real request would, so the first real caller arrives warm. It is
+**non-fatal by construction** — `warm()` swallows its own errors and a second `try/except`
+guards the call — which preserves the deliberate lazy-load design: a corrupt artifact still
+503s one endpoint rather than blocking boot. Result: the first price call comes back
+`source='model'` (PKR 2600, +30%) and the suite is 71/71.
+
+### Trust Score 2.0: a 4-component composite with a neutral prior, replacing the flat −10
+
+`trust = round(35·rating + 30·attendance + 20·dispute_free + 15·sentiment)`, each component
+normalised to 0..1. An **absent** component contributes a neutral **0.5 prior** to the
+aggregate but is stored `NULL` in its `trust_*` column, so a UI reads "no data yet" rather than
+a punishing zero — the "cold-start injustice" the spec names. A zero-signal user therefore
+scores exactly **50** (`round(35·.5+30·.5+20·.5+15·.5)`), which is migration 017's new DEFAULT
+and what `auth.js`/`users.js` insert. Recomputed **synchronously** (ER2.5's 60 s rule) after
+every review, no-show and dispute. The old `trust_score − 10` no-show decrement is **gone** at
+all three sites (`noShowJob.js`, `bookings.js`, `owner.js`) — recompute overwrites the score, so
+the decrement would be dead code and its "−10" notification a lie; the text now reads "your
+trust score has been updated". `dispute_free_rate` is a documented **pre-S.7 proxy** (fault is
+not adjudicated until an admin resolves a dispute; today it counts only non-dismissed disputes
+the *other* team filed on a match this user's team played).
+
+### Reviews: captain-to-captain, target derived, one per (booking, author, type)
+
+Venue review = the booker, gated on `booking.status='checked_in'` (they turned up); target is
+the venue, `reviewed_user_id` NULL. Opponent review = **captain-to-captain** (the user's chosen
+model): only a `role='captain'` member of the match's two teams may file it, and the target is
+**derived server-side** as the opposing team's representative captain — there is no target field
+in the body to forge. `ux_reviews_one_per_author` is a UNIQUE index, not a JS pre-check, because
+two fast taps on Submit both read "no review yet" and both insert; `review_type` is in the key
+so a captain may leave one venue AND one opponent review per booking. A venue create also
+refreshes the denormalised `venues.rating`/`total_reviews` over visible reviews only, so the
+listings that already read those columns don't go stale.
+
+### review_flags: the moderation queue behind the fast `flagged` bit
+
+A new table mirroring `disputes` (status `open|resolved|dismissed` + a status index = the admin
+queue), `UNIQUE(review_id, flagged_by)` = one report per user, any participant of the
+booking/match may flag. `reviews.flagged` is a **union**: it is set by a manual `/flag` (which
+also writes a `review_flags` row) OR by the sentiment model auto-escalating at creation
+(`needsReview` — abuse lexicon OR P(neg) ≥ 0.70), which sets the bit without a row. The admin
+resolve UI is S.7.
+
+### The sentiment wiring, and the no-heuristic contract
+
+Text is scored **before** the transaction opens — no `FOR UPDATE` lock is held across the ≤2 s
+call, and an unauthorised request returns before it ever reaches the ml-service. If the model is
+unavailable the review saves with `sentiment_label` NULL (the honest "not scored yet" state) and
+`jobs/sentimentBackfillJob.js` fills it in later; **nothing invents a label** — that is
+mlClient's no-heuristic contract, the same one `forecastDemand` uses. A **422 (unscoreable
+text) does NOT trip the breaker** — bad input is not an outage; a 5xx/network/timeout does, and
+opens it for 30 s after 3 failures. The backfill job scores 200/sweep, falls back to per-row
+scoring on a batch 422 so one bad row can't wedge the queue, and marks a terminally-unscoreable
+row with an `'unscoreable'` sentinel (excluded from reads, never re-selected). Review **text is
+never logged** anywhere — only id, label, flags and text *length*.
+
+### Verified
+
+- The four steps above, all green, against the real Supabase DB. The migration's functional
+  probes prove the DB **enforces** the review rules (not merely that the constraints exist), and
+  roll back cleanly leaving 0 probe rows.
+- **The clean `npm start` is the load-check I could not run as `node -c`** (the code-execution
+  classifier was down all wave): a booting server means `server.js` successfully required
+  `reviews.js` → `trustScore.js` → `mlClient.js`, so every new and edited file parses and links.
+- **What it does NOT prove:** no live HTTP `POST /api/reviews` smoke was run this wave — the DB
+  holds 0 reviews and no fixture with a checked-in booking + completed match was driven through
+  the endpoints. The DB-level rules are proven by the probes and the contracts by 71/71 + a clean
+  boot, but a human posting a real review through all four endpoints is a Wave D / manual-QA step.
+  And no human has yet judged whether a trust score or a flag is *correct*.
+
+### Open at the end of this wave
+
+- [x] **Node now calls the sentiment model** — S4-B's first open item, CLOSED (`score=+0.8238`,
+  `source='model'`, live).
+- [ ] **No review UI yet** — the Flutter review sheet, the trust-ledger screen and the moderation
+  queue are the next wave (S.4 Wave D).
+- [ ] **Live HTTP smoke of the four review endpoints** against a real checked-in booking + a
+  completed match (carried into Wave D / manual QA).
+- [ ] **Second-annotator κ on the exam** (carried from S4-A).
+- [ ] **`tag s3-done` / first commit** — still nothing committed (carried from S.3).
+- [ ] **Rotate `ML_API_KEY`** before S.7 (carried).
+- [ ] **Owner's verdict on `reports/demand_patterns.png`** (carried from S.3 Wave B).
+
+
+
 
 
 

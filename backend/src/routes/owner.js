@@ -12,6 +12,7 @@ const {
   logTxn,
 } = require("../utils/escrow");
 const { notify } = require("../utils/notify");
+const { recomputeTrust } = require("../utils/trustScore");
 const mlClient = require("../services/mlClient");
 const { TtlCache, ONE_HOUR_MS } = require("../utils/ttlCache");
 
@@ -957,7 +958,7 @@ router.post("/scan-qr", async (req, res, next) => {
 });
 
 // POST /api/owner/no-show/:id — early trigger for the 30-minute rule.
-// Ledger: player balance +0.8P, frozen -P, owner +0.2P, trust_score -10.
+// Ledger: player balance +0.8P, frozen -P, owner +0.2P, trust score recomputed.
 router.post("/no-show/:id", async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -1010,10 +1011,10 @@ router.post("/no-show/:id", async (req, res, next) => {
       balance: penalty,
     });
 
-    await client.query(
-      "UPDATE player_profiles SET trust_score=GREATEST(trust_score-$1,0) WHERE user_id=$2",
-      [POLICY.NO_SHOW_TRUST_PENALTY, b.player_id],
-    );
+    // Trust Score 2.0: recompute from all signals (the booking is already
+    // 'no_show' above, so attendance_rate reflects this miss) instead of a flat
+    // decrement. See utils/trustScore.js.
+    await recomputeTrust(client, b.player_id);
 
     if (refund > 0) {
       await logTxn(client, {
@@ -1053,7 +1054,7 @@ router.post("/no-show/:id", async (req, res, next) => {
       bookingId: b.id,
       type: "booking_no_show",
       title: "Marked as no-show",
-      body: `You missed your slot at ${b.venue_name}. PKR ${refund} returned, PKR ${penalty} deposit forfeited, trust score -${POLICY.NO_SHOW_TRUST_PENALTY}.`,
+      body: `You missed your slot at ${b.venue_name}. PKR ${refund} returned, PKR ${penalty} deposit forfeited, and your trust score has been updated.`,
     });
 
     await client.query("COMMIT");

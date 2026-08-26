@@ -58,6 +58,7 @@ const settings = require('../utils/globalSettings');
 const bus = require('../realtime/bus');
 const { PREVIEW_LABEL } = require('../utils/matchPreview');
 const { notify } = require('../utils/notify');
+const { recomputeForMatch } = require('../utils/trustScore');
 
 const router = express.Router();
 router.use(auth);
@@ -1195,6 +1196,12 @@ router.post('/:id/result', async (req, res, next) => {
         });
         await client.query('COMMIT');
         await mc.emitAfterCommit(client, { matchId: id, ...fan, extra: { event: 'disputed' } });
+        // Trust Score 2.0 (ER2.5): a dispute changes both captains' dispute-free
+        // rate, so recompute after the state is committed. Best-effort and out of
+        // band — a recompute failure must never fail the result submission.
+        recomputeForMatch(pool, id).catch((e) =>
+          console.error('[matches] trust recompute (system dispute) failed:', e.message),
+        );
       }
     }
 
@@ -1499,6 +1506,12 @@ router.post('/:id/dispute', async (req, res, next) => {
 
     await client.query('COMMIT');
     await mc.emitAfterCommit(client, { matchId: id, pills, memberIds, extra: { event: 'disputed' } });
+    // Trust Score 2.0 (ER2.5): recompute both captains' scores now that the
+    // dispute is committed. Best-effort and out of band — see the system-dispute
+    // site above; a recompute failure must never fail the dispute filing.
+    recomputeForMatch(pool, id).catch((e) =>
+      console.error('[matches] trust recompute (manual dispute) failed:', e.message),
+    );
 
     const { base } = await settings.elo();
     const view = await mc.fetchMatchView(pool, id);

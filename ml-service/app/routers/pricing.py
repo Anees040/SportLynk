@@ -927,6 +927,51 @@ def predict_price(payload: SlotContext) -> PriceSuggestionResponse:
     )
 
 
+def warm() -> str:
+    """
+    Prime the price path at boot so the FIRST real request doesn't pay the one-off
+    cost. Called best-effort from main.py's lifespan; returns a one-line status for
+    the boot log and never raises.
+
+    The cold `/predict/price` measured ~1.9s, spent almost entirely on things that
+    happen exactly once per process: loading the joblib, the first `predict_proba`
+    through an untouched sklearn Pipeline, and pandas building its first frame. 1.9s
+    trips mlClient's 2s ceiling, so the first owner to open the dashboard after a
+    deploy would see a heuristic price — correctly labelled `source:"heuristic"`,
+    but degraded — from a service that is actually up. Running the whole predict_price
+    path once here moves every one of those costs off the first real call.
+
+    It stays best-effort by design. A model that isn't on disk is not an error to
+    warm (there is simply nothing to prime — a real request will get its own honest
+    503), and a warm-up that threw must not be what stops the service booting: the
+    lazy-load contract (see lifespan) is that a bad artifact 503s ONE endpoint, never
+    the process. So warm() cannot regress boot, only speed up the first request.
+
+    The synthetic slot is deliberately peak-hour, short-notice and a couple of days
+    out (20:00, +2d) so the counterfactual probes run too, not just the sweep — the
+    full code path the first real call could hit is exercised, not a cheap subset.
+    """
+    entry = registry.get(MODEL_KEY)
+    if entry.status != STATUS_READY:
+        # Nothing loaded — matches the lifespan banner; the endpoint will 503 honestly.
+        return f"pricing not warmed — model {entry.status}"
+    try:
+        ctx = SlotContext(
+            sport="football",
+            city="lahore",
+            base_price=2000.0,
+            slot_date=(features.today_pkt() + timedelta(days=2)).isoformat(),
+            start_time="20:00",
+            venue_rating=4.2,
+            venue_id="__warmup__",
+        )
+        result = predict_price(ctx)
+        return f"pricing warmed (model {result.model_version}, {len(result.curve)} sweep points)"
+    except Exception as exc:  # noqa: BLE001 — warm-up must never break boot
+        log.warning("pricing warm-up failed (non-fatal): %s", exc)
+        return f"pricing warm-up skipped ({type(exc).__name__})"
+
+
 @router.post(
     "/predict/demand",
     response_model=DemandForecastResponse,

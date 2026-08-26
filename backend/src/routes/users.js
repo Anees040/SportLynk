@@ -81,12 +81,15 @@ router.patch('/me/update', authMiddleware, async (req, res, next) => {
         [avatarUrl || null, userId]);
     }
 
-    // Update player_profiles table (sport_preferences) using UPSERT
+    // Update player_profiles table (sport_preferences) using UPSERT.
+    // trust_score 50 = the Trust Score 2.0 cold-start baseline (ER2.5); this
+    // INSERT arm rarely fires (auth.js:53 already created the profile at
+    // registration), but it must not seed the retired 100 baseline if it does.
     if (sportPreferences && Array.isArray(sportPreferences)) {
       await client.query(`
         INSERT INTO player_profiles (user_id, sport_preferences, elo_rating, trust_score)
-        VALUES ($1, $2, 1000, 100)
-        ON CONFLICT (user_id) DO UPDATE 
+        VALUES ($1, $2, 1000, 50)
+        ON CONFLICT (user_id) DO UPDATE
         SET sport_preferences = $2
       `, [userId, sportPreferences]);
     }

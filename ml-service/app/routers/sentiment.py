@@ -731,9 +731,36 @@ def predict_sentiment_batch(payload: SentimentBatchRequest) -> SentimentBatchRes
     )
 
 
+def warm() -> str:
+    """
+    Prime the sentiment path at boot, best-effort, mirroring `pricing.warm()`.
+
+    Trivial by design. Sentiment is not on the 2s pricing critical path, so unlike
+    the price warm-up this is not fixing a timeout. But model #2's first
+    `predict_proba` pays the `char_wb` vectoriser's one-off setup, and the first
+    review created after a deploy should not be the request that eats it. So one
+    scoreable review is run through the real predict path here, leaving the
+    vectoriser and the Pipeline hot.
+
+    Never raises, for the same reason `pricing.warm()` doesn't: an unloaded or corrupt
+    artifact must still surface as a 503 on one endpoint via the lazy-load contract,
+    not as a service that refuses to boot. Returns a one-line status for main.py.
+    """
+    entry = registry.get(MODEL_KEY)
+    if entry.status != STATUS_READY:
+        return f"sentiment not warmed — model {entry.status}"
+    try:
+        result = predict_sentiment(SentimentRequest(text="great venue, well maintained pitch"))
+        return f"sentiment warmed (model {result.model_version})"
+    except Exception as exc:  # noqa: BLE001 — warm-up must never break boot
+        log.warning("sentiment warm-up failed (non-fatal): %s", exc)
+        return f"sentiment warm-up skipped ({type(exc).__name__})"
+
+
 __all__ = (
     "router",
     "MODEL_KEY",
+    "warm",
     "MAX_TEXT_CHARS",
     "MAX_BATCH_ITEMS",
     "DEFAULT_NEG_THRESHOLD",

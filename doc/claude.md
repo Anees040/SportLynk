@@ -53,10 +53,11 @@ trained ML models — never replace them with external AI API calls.
 - generate_bookings.py must NOT touch the DB and must NOT import from app/routers/.
 
 ## Status
-S.1, S.2 (A–D), S.3 (A–E) and S.4 (A–B) are all code-complete. The ML tier is live end to
+S.1, S.2 (A–D), S.3 (A–E) and S.4 (A–C) are all code-complete. The ML tier is live end to
 end: model #1 (dynamic pricing) is trained, gated, served, and on the owner's screen with
 real confidence + a 72h demand chart, plus a reproducibility/evidence pack. Model #2
-(sentiment) is trained, gated and served — but NOT yet called by Node.
+(sentiment) is trained, gated, served, and — as of S4-C — called by Node: every review with
+text is scored by the classifier live at write time (backfill job for the rest).
 - Model: `pricing-v1-20260825-0041`, HistGradientBoostingClassifier, 374 KB, 12/12
   release gates. Binary classifier P(booked | features, price) — price is an INPUT
   (price_ratio), so one model serves BOTH the 72h forecast (ratio=1.0) and the price
@@ -78,9 +79,9 @@ real confidence + a 72h demand chart, plus a reproducibility/evidence pack. Mode
   across retrains). Reproduce: `python training/train_sentiment.py` — no flags; the
   defaults ARE the shipped configuration. Re-tuning C requires re-measuring the threshold.
 - OPEN at end of S.4, in order:
-  - **wire Node to the sentiment endpoints** — `reviews.sentiment_score` /
-    `sentiment_label` exist in the schema and NOTHING calls the model yet (the only
-    sentiment reference in `backend/src/` is a column check in verify_schema.js).
+  - **review UI (Flutter)** — S4-C wired the backend and the model; nothing in the app
+    surfaces reviews or the trust breakdown yet. The review sheet, the trust ledger and the
+    moderation queue are S.4 Wave D. (The Node→sentiment wiring itself: DONE in S4-C.)
   - second-annotator κ on `domain_test_200.csv` — 200 rows are single-annotator; the one
     criticism of the 0.8250 headline that no gate can answer.
 - OPEN at end of S.3, still open:
@@ -228,6 +229,29 @@ real confidence + a 72h demand chart, plus a reproducibility/evidence pack. Mode
   confusion_matrix.png — the name S.5 would reuse, in a COMMITTED dir, losing the evidence with no error;
   S3-E predicted exactly this and the convention caught it → confusion_matrix_sentiment.png. NOT DONE:
   no Node route calls the model (columns exist, endpoints exist, nothing joins them).
+- S4-C — reviews backend + Trust Score 2.0 + sentiment wired LIVE + price cold-start fixed (VERIFIED:
+  migration 017 clean+idempotent, schema 113/113, check_ml_service 71/71, backend boots clean; real
+  Supabase, 16 users / 22 bookings / 0 reviews). Closes S4-B's open item — review text is scored at
+  write time (score=+0.8238, source='model'). routes/reviews.js = 4 eps mounted at BARE /api with
+  per-route auth (a router.use(auth) at /api would 401 /api/auth/login). Opponent reviews are
+  CAPTAIN-TO-CAPTAIN; target reviewed_user_id is DERIVED as the opposing captain, never read from the
+  body. Trust 2.0 = round(35·rating + 30·attendance + 20·dispute_free + 15·sentiment); an absent
+  component = 0.5 neutral prior in the aggregate but NULL in its column; zero-signal user = exactly 50
+  (new player_profiles.trust_score DEFAULT, was 100). Recomputed SYNCHRONOUSLY after review/no-show/
+  dispute — the flat trust−10 no-show decrement DELETED at 3 sites (noShowJob/bookings/owner): recompute
+  overwrites it, so −10 was dead code and its notification a lie (now "trust score has been updated").
+  dispute_free_rate is a stated pre-S.7 proxy. review_flags table mirrors disputes (UNIQUE(review_id,
+  flagged_by) = one report per user; status open|resolved|dismissed + a status index = the admin queue);
+  reviews.flagged is a UNION of a manual /flag OR model auto-escalation (needsReview). Serve fix:
+  pricing.warm()/sentiment.warm() in lifespan (non-fatal, takes the lazy registry.get path) → first
+  /predict/price is model-served not heuristic → the 60-check suite that scored 56/60 COLD is now 71/71
+  (+11 new sentiment checks). Sentiment is scored BEFORE the txn opens (no FOR UPDATE lock across the
+  ≤2s call; an unauthorised request never reaches ml-service); a 422 (unscoreable text) does NOT trip the
+  breaker (bad input ≠ outage); unavailable → NULLs stored honestly, sentimentBackfillJob (200/sweep,
+  batch-422 → per-row fallback, terminal 'unscoreable' sentinel) fills them later; review TEXT is never
+  logged (id/label/flags/length only). NOT DONE: no review UI (Wave D); no live HTTP POST /api/reviews
+  smoke (0 reviews in DB) — DB rules proven by the migration probes, contracts by 71/71 + clean boot, but
+  a human posting through the 4 eps is Wave D / manual QA.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;

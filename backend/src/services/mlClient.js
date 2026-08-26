@@ -193,8 +193,16 @@ function pktTimestamp(slotDate, hour) {
 /** Response `source` values. Exported so no caller writes the string itself. */
 const SOURCE_MODEL = 'model';
 const SOURCE_HEURISTIC = 'heuristic';
-/** Demand forecasts have no heuristic — see forecastDemand(). */
+/** Demand forecasts and sentiment have no heuristic — see forecastDemand()/analyzeSentiment(). */
 const SOURCE_UNAVAILABLE = 'unavailable';
+
+/**
+ * The three sentiment classes, in the ml-service's canonical order (text_norm.LABELS,
+ * alphabetical). Exported so routes, the backfill job and the verification script
+ * validate a label against ONE list rather than three hand-typed string literals that
+ * could drift from what `/sentiment/spec` publishes.
+ */
+const SENTIMENT_LABELS = ['negative', 'neutral', 'positive'];
 
 function baseUrl() {
   const raw = (process.env.ML_SERVICE_URL || '').trim();
@@ -745,6 +753,201 @@ async function forecastDemand(ctx = {}) {
   };
 }
 
+// ─── Sentiment (model #2) ─────────────────────────────────────
+//
+// Same no-heuristic posture as forecastDemand, and for the same reason: there is
+// no defensible rule-of-thumb that turns "worst turf in the city" into a polarity
+// score, so when the model is unreachable this returns source:'unavailable' with a
+// null label rather than inventing one. A caller stores NULL, which is the truthful
+// "not scored yet" state — reviews.sentiment_label is nullable precisely for this.
+//
+// ONE contract difference from the price/demand paths, and it is deliberate: a 4xx
+// does NOT count against the circuit breaker. The sentiment endpoint answers 422
+// `unusable_text` for a review that normalises to no evidence (punctuation, numbers,
+// separators only). That is a fact about ONE review, not a service outage — the very
+// next review may score cleanly. Tripping the breaker on it would let a handful of
+// "..." reviews open the circuit and stop scoring for everyone. So only 5xx /
+// network / timeout — genuine service failures — call recordFailure(); a 4xx returns
+// unavailable with `clientError:true` and leaves the breaker untouched, which is the
+// signal the backfill job uses to mark that row terminally unscoreable.
+
+/**
+ * Build the public sentiment shape from the ml-service's bare response body.
+ *
+ * Defensive like normaliseFactors: `reviews.sentiment_label` has a NOT-in-set value
+ * stored nowhere downstream can interpret it, so a body whose label is not one of the
+ * three canonical classes, or whose score is not a finite number in [-1,1], is treated
+ * as no result rather than written through. In practice the Python response_model
+ * guarantees both, so this is a belt-and-braces guard, not an expected path.
+ */
+function sentimentResult(data, reviewId) {
+  const label = SENTIMENT_LABELS.includes(data.label) ? data.label : null;
+  const score = Number(data.score);
+  const confidence = Number(data.confidence);
+  if (label === null || !Number.isFinite(score) || score < -1 || score > 1) return null;
+  const tox = data.toxicity && typeof data.toxicity === 'object' ? data.toxicity : {};
+  return {
+    source: SOURCE_MODEL,
+    available: true,
+    clientError: false,
+    reviewId: data.reviewId ?? reviewId ?? null,
+    label,
+    score,
+    confidence: Number.isFinite(confidence) ? confidence : null,
+    // needsReview is the moderation union (abuse OR strong-negative); it maps 1:1 to
+    // reviews.flagged. The finer-grained signals ride along for logging and for a
+    // moderation UI, but the route only needs `flagged`.
+    flagged: data.needsReview === true,
+    toxic: tox.flagged === true,
+    strongNegative: data.strongNegative === true,
+    reviewReasons: Array.isArray(data.reviewReasons) ? data.reviewReasons : [],
+    outOfDistribution: data.outOfDistribution === true,
+    modelVersion: data.modelVersion || null,
+    reason: null,
+  };
+}
+
+/** The unavailable shape — every field the success shape has, emptied. */
+function sentimentUnavailable(reason, clientError = false) {
+  return {
+    source: SOURCE_UNAVAILABLE,
+    available: false,
+    clientError,
+    reviewId: null,
+    label: null,
+    score: null,
+    confidence: null,
+    flagged: false,
+    toxic: false,
+    strongNegative: false,
+    reviewReasons: [],
+    outOfDistribution: false,
+    modelVersion: null,
+    reason,
+  };
+}
+
+/**
+ * Score one review's text. ALWAYS resolves (never throws), like every function here.
+ *
+ * Returns:
+ *   { source, available, clientError, reviewId, label, score, confidence, flagged,
+ *     toxic, strongNegative, reviewReasons, outOfDistribution, modelVersion, reason }
+ *
+ * `available:true` → `label`/`score` are real and safe to store. `available:false` →
+ * store NULLs. `clientError:true` on a false result means the text itself is
+ * unscoreable (a 422), so a retry with the same text will fail identically — the
+ * caller should stop retrying it, not back off and try later.
+ */
+async function analyzeSentiment(text, { reviewId = null } = {}) {
+  const body = typeof text === 'string' ? text.trim() : '';
+  if (!body) {
+    // No text is not a service failure and not worth a network round-trip. It is,
+    // however, terminally unscoreable — flagged clientError so the backfill marks an
+    // empty-string comment 'unscoreable' instead of re-selecting it every sweep.
+    return sentimentUnavailable('No review text to analyse', true);
+  }
+
+  if (breakerIsOpen() || !isConfigured()) {
+    return sentimentUnavailable('Sentiment analysis unavailable — ML service is not reachable');
+  }
+
+  const res = await call('/predict/sentiment', { payload: { text: body, reviewId } });
+
+  if (!res.ok) {
+    const clientError = res.status >= 400 && res.status < 500;
+    if (!clientError) {
+      // Genuine service failure (5xx / network / timeout): count it and log once.
+      recordFailure();
+      warnOnce(
+        `sentiment-fail-${res.status}`,
+        `ml-service /predict/sentiment -> ${res.status || 'no response'} (${res.error})`,
+      );
+      return sentimentUnavailable('Sentiment analysis unavailable — ML service is not reachable');
+    }
+    // 4xx: the review is unusable, the service is fine. Breaker untouched.
+    return sentimentUnavailable('Review text could not be scored', true);
+  }
+
+  recordSuccess();
+  const parsed = sentimentResult(res.body || {}, reviewId);
+  if (!parsed) {
+    // A 200 whose body we cannot use. The service responded, so this does not count
+    // against the breaker; the row simply stays unscored for now.
+    warnOnce('sentiment-malformed', 'ml-service returned 200 with no usable sentiment label');
+    return sentimentUnavailable('Sentiment analysis returned an unusable result');
+  }
+  return parsed;
+}
+
+/**
+ * Score many reviews in one call — for the backfill job and any future moderation
+ * page. `items`: [{ text, reviewId }].
+ *
+ * Returns { source, available, clientError, count, results:[…per-item shape…], reason }.
+ * The ml-service batch is ALL-OR-NOTHING on validation (one unusable row 422s the
+ * whole batch), so `available:false` with `clientError:true` is the signal to fall
+ * back to per-row scoring — that is how the caller isolates which single row is the
+ * unscoreable one. A 5xx/network failure returns `clientError:false`: the service is
+ * down, per-row would fail identically, so the caller should just wait for the next
+ * sweep.
+ */
+async function analyzeSentimentBatch(items = []) {
+  const list = Array.isArray(items) ? items : [];
+  const unavailable = (reason, clientError = false) => ({
+    source: SOURCE_UNAVAILABLE,
+    available: false,
+    clientError,
+    count: 0,
+    results: [],
+    reason,
+  });
+
+  if (!list.length) return unavailable('No reviews to analyse', true);
+  if (breakerIsOpen() || !isConfigured()) {
+    return unavailable('Sentiment analysis unavailable — ML service is not reachable');
+  }
+
+  const payloadItems = list.map((it) => ({
+    text: typeof it.text === 'string' ? it.text.trim() : '',
+    reviewId: it.reviewId ?? null,
+  }));
+
+  const res = await call('/predict/sentiment/batch', { payload: { items: payloadItems } });
+
+  if (!res.ok) {
+    const clientError = res.status >= 400 && res.status < 500;
+    if (!clientError) {
+      recordFailure();
+      warnOnce(
+        `sentiment-batch-fail-${res.status}`,
+        `ml-service /predict/sentiment/batch -> ${res.status || 'no response'} (${res.error})`,
+      );
+      return unavailable('Sentiment analysis unavailable — ML service is not reachable');
+    }
+    // 422: at least one item is unusable. Caller retries per-row to find it.
+    return unavailable('One or more reviews could not be scored', true);
+  }
+
+  recordSuccess();
+  const data = res.body || {};
+  const raw = Array.isArray(data.results) ? data.results : [];
+  // Map each result back through the same defensive builder; drop any the builder
+  // rejects (a per-row null) rather than passing a malformed row to an UPDATE.
+  const results = raw
+    .map((row) => sentimentResult(row, row && row.reviewId))
+    .filter(Boolean);
+
+  return {
+    source: SOURCE_MODEL,
+    available: true,
+    clientError: false,
+    count: results.length,
+    results,
+    reason: null,
+  };
+}
+
 /**
  * ml-service /health, for diagnostics and check_ml_service.js.
  *
@@ -779,18 +982,36 @@ async function featureSpec() {
   return { reachable: true, error: null, status: res.status, data: res.body };
 }
 
+/**
+ * The sentiment contract as the PYTHON side defines it (text_norm.spec()).
+ *
+ * The sibling of featureSpec(), and it exists for the same reason: SENTIMENT_LABELS
+ * in this file is a copy of text_norm.LABELS that Node cannot import, so
+ * check_ml_service.js asserts the two agree by reading /sentiment/spec — turning
+ * "keep the label set and normaliser version in sync" into a check that fails.
+ */
+async function sentimentSpec() {
+  const res = await call('/sentiment/spec', { method: 'GET' });
+  if (!res.ok) return { reachable: false, error: res.error, status: res.status, data: null };
+  return { reachable: true, error: null, status: res.status, data: res.body };
+}
+
 module.exports = {
   // public API
   suggestPrice,
   forecastDemand,
+  analyzeSentiment,
+  analyzeSentimentBatch,
   health,
   featureSpec,
+  sentimentSpec,
 
   // constants — exported so routes, scripts and tests reference the value rather
   // than re-typing a string or a number that could drift
   SOURCE_MODEL,
   SOURCE_HEURISTIC,
   SOURCE_UNAVAILABLE,
+  SENTIMENT_LABELS,
   DEMAND_HIGH,
   DEMAND_MEDIUM,
   DEMAND_LOW,
