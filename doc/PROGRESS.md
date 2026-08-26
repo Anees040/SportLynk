@@ -2355,6 +2355,132 @@ never logged** anywhere — only id, label, flags and text *length*.
 - [ ] **Rotate `ML_API_KEY`** before S.7 (carried).
 - [ ] **Owner's verdict on `reports/demand_patterns.png`** (carried from S.3 Wave B).
 
+## Wave S4-D (Flutter UI: reviews, Trust 2.0 & moderation — the review loop closes)
+
+**Status: code-complete, `flutter analyze` 0, ML acceptance re-confirmed.** This is the wave
+that gives S.4's backend a face: the app can now submit a review and watch the trained model's
+sentiment chip animate in, read a user's Trust 2.0 breakdown, browse a venue's reviews, and — for
+owners and admins — flag and moderate. It closes S4-C's first open item ("no review UI yet").
+Every screen is wired to the real Wave C endpoints; a small idempotent seed script provides the
+demo content. **No schema change** — the reputation question below resolved to the model the
+schema already encoded.
+
+Measured this wave:
+
+```
+flutter analyze    No issues found! (ran in 91.0s) — the whole app, after ~1,900 new Dart lines
+ML acceptance      domain_test_200 accuracy 0.8250 (>= 0.80) · macro-F1 0.8247 · CI95 [0.7700,0.8750]
+  (verify only)    confusion_matrix_sentiment.png + model_card_sentiment.md present · all 7 gates ok
+                   per-language en 0.7600 / mixed 0.8286 / ru 0.8625 — NOT retrained, artifacts read only
+backend admin eps  GET /api/admin/reviews/flagged + PATCH /api/admin/reviews/:id — added, read-verified
+                   (the code-execution classifier was down this session — see "Verified" below)
+```
+
+### The reputation question, resolved: captain-anchored, and the schema already agreed
+
+The user's exact question — "will there be only captain rating not individual … trust score,
+review, disputes, elo — team or individual player?" — was answered **captain-anchored**, and the
+happy discovery is that migration 013's schema already encodes it, so Wave D shipped **zero
+migration**. Skill is a **team** property (`teams.elo` + W/L/D); conduct/reputation is
+**individual** (`player_profiles.trust_score` and the four `trust_*` components — there is
+deliberately no trust column on `teams`). Opponent reviews are **captain-to-captain**: the target
+lands on the opposing team's representative captain (the accountable human), never on all 5–6
+members. Rationale recorded for the viva: amateur teams re-form constantly, so a portable
+per-person score follows the people who earned it; an accountable human can show up / apologise /
+resolve where "a team" cannot; and one member's no-show can't tank five teammates. The team view
+is preserved read-only by a `TeamReputationStrip` (ELO + W/L/D + captain's trust band) built from
+data already on `MatchSide` — again, no new column.
+
+### Five surfaces, one visual vocabulary
+
+- **M24 Rate Experience** (`rate_experience_screen.dart`) — one combined screen with conditional
+  sections: venue stars + text (any attendee of a `checked_in` booking) and opponent-sportsmanship
+  stars (captains only). One shared comment box attaches to the **primary** review; on submit the
+  `SentimentChip` animates in from that review's live model response — *"😊 Positive (92%)"*. This
+  is the demo moment. Partial success and the 409-duplicate are surfaced via `SnackbarUtil`.
+- **M25 Trust profile** (`trust_score_screen.dart`, upgraded) — the `CircularProgressIndicator`
+  ring is replaced by a full-ring `TrustGauge`; the four hardcoded factor cards become four live
+  `TrustMetricTile`s from `UserReviews.trust`, each rendering **"No data yet"** (never a punishing
+  0) when its component is NULL; a "Recent Reviews" ledger of received reviews follows. The ctor
+  now takes a `userId` (self or another user) with the old `profile`-map path kept as a fallback.
+- **Venue reviews** — a summary sliver on `venue_detail_screen` (avg + `StarsHistogram` +
+  `SentimentSummaryBar` + top 3 + "View all") → dedicated paginated `venue_reviews_screen.dart`.
+  The sliver loads independently of the slot grid, so a reviews failure never blanks bookable slots.
+- **Owner venue reviews** (`owner_venue_reviews_screen.dart`) — read-only list per venue + a flag
+  action, reached from `owner_venue_management_screen`'s AppBar.
+- **Admin moderation** (`admin_moderation_screen.dart`) — the flagged-review queue with working
+  **Hide / Restore / Dismiss** → `PATCH /api/admin/reviews/:id` (optimistic update + snackbar).
+  Reached from the admin dashboard quick-action **and** an AppBar flag badge whose count is
+  `queue.where((r) => !r.hidden).length` — hidden reviews are handled and drop off the badge while
+  still listed (sorted last) so they can be Restored.
+
+The shared vocabulary lives in one new file, `widgets/trust_widgets.dart` (mirroring
+`match_widgets.dart` so a gauge or a chip can't look different on two screens): `TrustGauge`
+(full-ring `CustomPaint` + `TweenAnimationBuilder`, reusing the match-gauge tone/animation and
+**not** touching the working semicircle painter), `TrustMetricTile`, `SentimentChip`
+(`.fromSentiment`, `😊/😐/😞 Positive (82%)`, amber "Flagged for review", subtle "Sentiment added
+shortly" when the model was unavailable), `StarRatingInput`, `StarsDisplay`, `StarsHistogram`,
+`SentimentSummaryBar`, `ReviewCard`, `TeamReputationStrip`, and `TrustTone.of()` for the bands.
+
+### Two admin endpoints, no migration
+
+`admin.js` gained `GET /api/admin/reviews/flagged` (joins `review_flags` open-status → `reviews` →
+venue/booking context; returns camelCase with `reviewedUserName`, `venueName`, `openFlagCount`,
+`flags[]`, sorted `hidden ASC, created_at DESC`) and `PATCH /api/admin/reviews/:id` (action ∈
+`hide|restore|dismiss`, RE_UUID-validated, in a txn with `FOR UPDATE`): **hide** →
+`hidden=true, flagged=true` + resolve open flags; **restore** → `hidden=false, flagged=false` +
+resolve; **dismiss** → `flagged=false` + dismiss open flags. hide/restore then call
+`refreshVenueAggregate(venue_id)` **or** `recomputeTrust(reviewed_user_id)` — hiding a review
+changes the trust/rating inputs, so the aggregate must move with it. Both under the existing
+`checkRole('admin')`. `hidden`/`flagged` (013) and `review_flags` (017) already existed, so **no
+new migration** — the plan's promise held.
+
+### The demo content: one idempotent seed script
+
+`backend/seed_reviews_demo.js` creates two captained teams (Demo United ELO 1185, Demo Rovers
+1072), five venue reviews spanning the sentiment labels **including one abusive → flagged + a
+manual report**, opponent reviews landing on both captains, a no-show, and **one completed match
+left un-reviewed** for the live demo. Idempotent by stable markers (teams by name, bookings by a
+`SEED_REVIEWS_DEMO/<tag>` note, reviews by `ON CONFLICT`); trust is recomputed through the real
+`recomputeTrust`; `--undo` reverses it FK-safe. It never creates users or venues — it needs ≥2
+active players + 1 active venue already present.
+
+### ml-service down → the review still saves (unchanged contract, now visible)
+
+The resilience S4-C built is now something you can *see*: with ml-service stopped, submitting a
+review still returns 201, the row saves with `sentiment_label` NULL, and the chip reads **"Sentiment
+added shortly"** instead of a fake score or a crash; `sentimentBackfillJob` fills it later. Nothing
+in the UI invents a label — the no-heuristic contract reaches all the way to the chip.
+
+### Verified
+
+- **`flutter analyze` → No issues found!** across the whole app after the new models, service,
+  widgets and six edited screens — the static gate the golden rules require for an app wave.
+- **ML acceptance re-confirmed, read-only:** `reports/sentiment_metrics.json` shows
+  `domain_test_200` **0.8250 ≥ 0.80**, the confusion matrix (`[[54,6,8],[7,53,7],[3,4,58]]`) and
+  `model_card_sentiment.md` both present, all gates `ok=true`. The plan said *verify, do not
+  retrain*; the artifacts were read, never regenerated.
+- **Backend endpoints + seed script read-verified** (`admin.js` GET/PATCH logic, `seed_reviews_demo.js`
+  idempotency + `--undo`) against the code, and the Flutter call sites match the constructors.
+- **What it does NOT prove — carried to manual QA, exactly as S2-D and S4-C were:** the
+  code-execution classifier was unavailable this session, so `node --check`, a live `npm start`
+  boot, the two curl smokes (`GET /reviews/flagged`, `PATCH /reviews/:id {action:'hide'}`), the
+  `seed_reviews_demo.js` run, and the **two-device E2E** (the full §4.13 checklist) were not
+  executed here. They are the user's run-on-the-emulator steps; the acceptance mapping is written
+  out in TESTING.md §4.13 so the run is turn-key.
+
+### Open at the end of this wave
+
+- [x] **Review UI shipped** — S4-C's first open item ("no review UI yet"), CLOSED: M24, M25,
+  venue reviews, owner reviews, admin moderation, all wired live.
+- [ ] **Live two-device E2E + backend smoke + seed run** (TESTING.md §4.13) — the emulator steps,
+  pending the live environment.
+- [ ] **Second-annotator κ on the exam** (carried from S4-A).
+- [ ] **`tag s4-done` / `tag s3-done` / first commit** — still nothing committed; awaiting explicit
+  go-ahead (standing rule).
+- [ ] **Rotate `ML_API_KEY`** before S.7 (carried).
+- [ ] **Owner's verdict on `reports/demand_patterns.png`** (carried from S.3 Wave B).
+
 
 
 

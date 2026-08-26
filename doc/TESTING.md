@@ -865,6 +865,144 @@ is a later wave. And the trust `dispute_free_rate` is an explicit **pre-S.7 prox
 in a dispute is not adjudicated until an admin resolves it, so today it only counts
 "disputes the *other* side filed on a match your team played", never your own objections.
 
+### 4.13 Review UI, Trust 2.0 screens & moderation (S.4 Wave D)
+
+This is the wave that gives §4.12's backend a face, so — unlike every test above it — these
+are **on-device** steps, run on the emulator against a live backend + ml-service, not curl.
+S4-D added no schema and no new model; it wired five Flutter surfaces to the four Wave C
+review endpoints plus two net-new admin endpoints. The point of this section is the
+**acceptance checklist** the wave was signed off against, mapped to concrete taps.
+
+**Verified before this section even starts** (done at wave end, not on-device): `flutter
+analyze` → *No issues found!* across the whole app; ML acceptance re-confirmed read-only —
+`reports/sentiment_metrics.json` shows `domain_test_200` **0.8250 ≥ 0.80**, with
+`confusion_matrix_sentiment.png` and `model_card_sentiment.md` present and all 7 gates
+`ok=true` (the model was **not** retrained). What is **not** yet verified, and is exactly
+what this section exists to drive, is a human doing the loop end-to-end on two devices — the
+code-execution classifier was down the wave it was built, so the boot/curl/seed steps
+(123–124) and the two-device E2E (125–134) were deferred here rather than claimed green.
+
+**Acceptance checklist → test.** ① live sentiment chip on submit → **125**; ② Roman-Urdu
+positive scored positive → **126**; ③ abusive → flagged → admin queue → hide → gone + trust
+recomputes → **127**; ④ two captains review each other, both trust gauges move within seconds,
+M25 tiles match the stored components → **128**; ⑤ only participants may review, duplicates
+blocked (409) → **133** (authority already proven server-side in 116–118); ⑥ ml-service down →
+review still saves, no crash, backfill later → **132**; ⑦ venue detail histogram + sentiment
+summary → **130**; ⑧ owner reads + flags → **131**; plus the "No data yet" NULL rule → **129**
+and the read-only team view → **134**.
+
+Prerequisites: the §4.3 two-team fixture, a **`checked_in`** booking (§4.8 QR), a **completed**
+captained match, backend on `10.0.2.2:3000`, ml-service up. `seed_reviews_demo.js` (test 123)
+provides all of this except the emulator itself.
+
+```bash
+cd D:\sportlynk\backend
+node --check src/routes/admin.js && node --check seed_reviews_demo.js   # test 123 (static)
+node seed_reviews_demo.js                 # test 123 (creates demo content; re-run = no-op)
+node seed_reviews_demo.js --undo          # test 123 (reverses it, FK-safe)
+npm start                                 # test 124 (boots clean WITH admin routes)
+# with an admin token, against the running backend:
+BASE=http://127.0.0.1:3000/api
+curl -H "Authorization: Bearer $ADMIN" $BASE/admin/reviews/flagged            # test 124
+curl -X PATCH -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+     -d '{"action":"hide"}' $BASE/admin/reviews/<flagged_review_id>            # test 124
+```
+
+**Pre-typed demo reviews** (paste these verbatim so the demo is deterministic — the first two
+must come back `positive`, the third must flag):
+
+1. **Positive, English:** `Great pitch, floodlights were perfect and the turf was well maintained. Booking again next week.`
+2. **Positive, Roman-Urdu:** `Boht acha ground tha, staff friendly the aur maintenance top class. Zaroor dobara aayenge.`
+3. **Abusive → flags:** `Absolute garbage venue. The owner is a stupid scammer and an idiot, total trash, worst experience ever.`
+
+123. **The demo seed is idempotent and reversible.** `node seed_reviews_demo.js` creates two
+     captained teams (Demo United, Demo Rovers), five venue reviews spanning the sentiment
+     labels **including one abusive that lands flagged**, opponent reviews on both captains, a
+     no-show, and **one completed match left un-reviewed** for the live rating demo. It never
+     creates users or venues — it needs ≥2 active players + 1 active venue already present.
+     **Run it a second time — every line is a no-op** (teams matched by name, bookings by a
+     `SEED_REVIEWS_DEMO/<tag>` note, reviews by `ON CONFLICT`; trust is recomputed through the
+     real `recomputeTrust`, never hand-set). `--undo` reverses everything FK-safe. `node
+     --check` on both `admin.js` and the seed script parses clean.
+124. **Backend boots with the admin routes, and both moderation endpoints answer.** `npm
+     start` logs clean (no route-collision or missing-handler warning). `GET
+     /api/admin/reviews/flagged` with an **admin** token returns the queue — each row carries
+     `reviewedUserName`, `venueName`, `openFlagCount`, `flags[]`, sorted `hidden ASC,
+     created_at DESC`; a non-admin token → **403**. `PATCH /api/admin/reviews/:id
+     {action:'hide'}` → **200**, and re-`GET` shows the row now `hidden:true`; an unknown
+     `action` → **400**, a non-UUID id → **400/404**. This is the same contract the admin
+     screen (127) drives — proving it by curl first isolates UI bugs from API bugs.
+125. **THE demo moment — submit a venue review, the trained model's chip animates in.** As the
+     player who owns the **checked-in** booking (seeded in 123), open the booking → **Rate
+     Experience**, tap 5 stars on *Rate the Venue*, paste demo review **#1**, Submit. Within
+     ~2 s a `SentimentChip` animates in reading **😊 Positive (…%)** — the score comes from
+     the live classifier, not a heuristic. This is the wave's headline: a genuinely-trained
+     model reacting to text a user just typed, on screen.
+126. **Roman-Urdu is scored, not mangled.** Repeat 125 on a *different* booking with demo
+     review **#2** (Roman-Urdu). The chip must read **positive** — the normalisation contract
+     (`text_norm.py`) is inside the served pipeline, so transliterated Urdu is handled the same
+     on-device as it was on the exam (per-language `ru`/`mixed` accuracy is the highest of the
+     three, §4.11).
+127. **Abusive → flagged chip → admin queue → Hide → gone + trust recomputes.** Submit demo
+     review **#3**. The chip returns **amber "Flagged for review"** (lexicon hit OR P(negative)
+     ≥ measured threshold). Switch to the **admin** account → dashboard shows a **flag badge**
+     with the open count → **Moderation** screen lists that review with its reason and venue
+     context → tap **Hide**: optimistic update + success snackbar, the row drops off the badge
+     (still listed, sorted last, so it can be **Restored**), and it **disappears from the
+     venue's public reviews** (reads are `WHERE hidden=false`). Confirm the reviewed user's /
+     venue aggregate moved — hide calls `refreshVenueAggregate`/`recomputeTrust`, so hiding a
+     1-star rant nudges the average back up. **Dismiss** on a different flagged row clears the
+     flag without hiding.
+128. **Two captains, two gauges, seconds apart.** From a completed match, captain A opens
+     **Rate Experience** → *Rate Opponent Sportsmanship (Captain Only)* is visible (a
+     non-captain never sees this section), rate + submit; captain B does the same. Open each
+     captain's **Trust profile (M25)**: both `TrustGauge`s reflect the new review **within
+     seconds** (recompute is synchronous inside the write txn), and the four `TrustMetricTile`s
+     read back the **stored** `trust_*` components — the tiles must equal what `GET
+     /users/:id/reviews` returns, not a client re-derivation.
+129. **"No data yet" is never a zero.** Open the Trust profile of a **brand-new** user (no
+     reviews, no matches): the gauge reads exactly **50** (migration 017 DEFAULT), and each
+     `TrustMetricTile` whose component is `NULL` renders **"No data yet"** — never `0`, never a
+     punishing empty bar. A component only shows a number once real signal exists. The
+     "TEAM CAPTAIN" chip shows in the header only for a captain.
+130. **Venue detail surfaces reviews without breaking the slot grid.** Open a seeded venue's
+     detail: a **Reviews** summary sliver shows the average, a `StarsHistogram` (5→1), a
+     `SentimentSummaryBar`, the top 3 `ReviewCard`s, and **View all** → the paginated
+     `VenueReviewsScreen` (pull-to-refresh, `MatchEmptyState` when empty). Kill the reviews
+     endpoint (or point at a venue with none): the sliver shows empty/'—' **but the bookable
+     slot grid still loads** — the two load independently on purpose.
+131. **Owner reads and flags, cannot moderate.** As the venue **owner**, open Manage venue →
+     the AppBar **Reviews** action → `OwnerVenueReviewsScreen` lists that venue's reviews
+     read-only with a **flag** affordance (owner reporting a review routes into the same
+     `review_flags` queue an admin then works in 127). The owner has **no** hide/restore —
+     moderation is admin-only.
+132. **ml-service down → the review still saves, and the UI says so honestly.** **Stop
+     ml-service**, then submit a venue review. It still returns **201** and the review appears;
+     the chip reads a subtle **"Sentiment added shortly"** — *not* a fake score and *not* a
+     crash. Nothing in the UI invents a label. Bring ml-service back: the next
+     `sentimentBackfillJob` sweep fills `sentiment_label` and the chip is correct on reload.
+     This is §4.12's degradation contract made visible on the phone.
+133. **Duplicate review blocked, surfaced as a message not a crash.** Re-submit the same review
+     (same booking + type) from the app → the server's **409** (`ux_reviews_one_per_author`)
+     comes back as a clean `SnackbarUtil` error ("you've already reviewed…"), never an
+     exception or a spinner that hangs. The *type* is in the key, so a captain who left an
+     opponent review can still leave a venue review on the same booking.
+134. **The team view is read-only, and reflects the reputation decision.** Where an opponent is
+     shown (match card / rate flow), a `TeamReputationStrip` shows **ELO + W/L/D + the
+     captain's trust band** — no stars to tap, no per-member trust. This is the
+     captain-anchored model made visible: skill is the team's (ELO), conduct is the captain's
+     (trust), and nobody rates five individuals. Built from data already on `MatchSide`; no
+     endpoint added.
+
+**What this section cannot tell you.** Whether the *label a human would give* matches the
+model's — the on-device chip proves the model is wired and reacts live, not that it is right
+about any particular real review (the exam is still 200 rows one person wrote, second-annotator
+κ still open; §4.11). And because these steps are manual and were **not** run the wave they were
+written (classifier down), a green result here is a claim about *this* run on *your* devices —
+record the build + emulator + backend commit alongside it, the way the numbered green baseline
+(`analyze 0 · npm test · verify_schema · run_match_flow_check · check_ml_service 71/71`) is
+recorded for the automated suites.
+
 ---
 
 ## 5. Non-functional tests

@@ -8,6 +8,7 @@ import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/pricing_service.dart';
 import '../../widgets/pricing_widgets.dart';
+import 'owner_venue_reviews_screen.dart';
 
 class OwnerVenueManagementScreen extends StatefulWidget {
   final Map<String, dynamic> venue;
@@ -146,6 +147,22 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
         title: Text('Manage ${widget.venue['name']}', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            tooltip: 'Reviews',
+            icon: const Icon(Icons.reviews_outlined, color: Colors.white),
+            onPressed: () {
+              final id = widget.venue['id']?.toString();
+              if (id == null || id.isEmpty) return;
+              Navigator.push(context, MaterialPageRoute(
+                builder: (_) => OwnerVenueReviewsScreen(
+                  venueId: id,
+                  venueName: widget.venue['name']?.toString(),
+                ),
+              ));
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

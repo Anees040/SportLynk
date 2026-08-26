@@ -110,4 +110,20 @@ class ApiConstants {
   static String matchResult(String id) => '/matches/$id/result';
   static String matchVerify(String id) => '/matches/$id/verify';
   static String matchDispute(String id) => '/matches/$id/dispute';
+
+  // ── Reviews & Trust 2.0 (S.4 Wave D) ────────────────────────
+  /// Reviews mount at the bare `/api` root (not under a `/reviews` collection for
+  /// the reads): the write is `POST /api/reviews`, but a venue's reviews hang off
+  /// the venue and a user's off the user, mirroring the routes in `reviews.js`.
+  static const String reviews = '/reviews';
+  static String venueReviews(String venueId) => '/venues/$venueId/reviews';
+  static String userReviews(String userId) => '/users/$userId/reviews';
+  static String flagReview(String reviewId) => '/reviews/$reviewId/flag';
+
+  // ── Admin moderation (S.4 Wave D) ───────────────────────────
+  /// Under `/api/admin`, behind `checkRole('admin')`. The queue is every review
+  /// needing an eye (reported OR model-escalated OR already hidden); the PATCH
+  /// takes `{action: 'hide'|'restore'|'dismiss'}`.
+  static const String adminFlaggedReviews = '/admin/reviews/flagged';
+  static String adminModerateReview(String reviewId) => '/admin/reviews/$reviewId';
 }

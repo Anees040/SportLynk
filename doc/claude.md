@@ -53,7 +53,7 @@ trained ML models — never replace them with external AI API calls.
 - generate_bookings.py must NOT touch the DB and must NOT import from app/routers/.
 
 ## Status
-S.1, S.2 (A–D), S.3 (A–E) and S.4 (A–C) are all code-complete. The ML tier is live end to
+S.1, S.2 (A–D), S.3 (A–E) and S.4 (A–D) are all code-complete. The ML tier is live end to
 end: model #1 (dynamic pricing) is trained, gated, served, and on the owner's screen with
 real confidence + a 72h demand chart, plus a reproducibility/evidence pack. Model #2
 (sentiment) is trained, gated, served, and — as of S4-C — called by Node: every review with
@@ -79,9 +79,11 @@ text is scored by the classifier live at write time (backfill job for the rest).
   across retrains). Reproduce: `python training/train_sentiment.py` — no flags; the
   defaults ARE the shipped configuration. Re-tuning C requires re-measuring the threshold.
 - OPEN at end of S.4, in order:
-  - **review UI (Flutter)** — S4-C wired the backend and the model; nothing in the app
-    surfaces reviews or the trust breakdown yet. The review sheet, the trust ledger and the
-    moderation queue are S.4 Wave D. (The Node→sentiment wiring itself: DONE in S4-C.)
+  - **live two-device E2E + backend smoke + seed run** (TESTING.md §4.13) — S4-D is
+    code-complete and `flutter analyze` is 0, but the emulator run (rate → sentiment chip →
+    abusive → admin queue → hide → two trust gauges move) + `npm start` boot + the 2 curl
+    smokes + `seed_reviews_demo.js` were not executed this wave (code-execution classifier
+    was down); they are the user's run-on-device steps, mapped turn-key in §4.13.
   - second-annotator κ on `domain_test_200.csv` — 200 rows are single-annotator; the one
     criticism of the 0.8250 headline that no gate can answer.
 - OPEN at end of S.3, still open:
@@ -252,6 +254,25 @@ text is scored by the classifier live at write time (backfill job for the rest).
   logged (id/label/flags/length only). NOT DONE: no review UI (Wave D); no live HTTP POST /api/reviews
   smoke (0 reviews in DB) — DB rules proven by the migration probes, contracts by 71/71 + clean boot, but
   a human posting through the 4 eps is Wave D / manual QA.
+- S4-D — Flutter review UI + Trust 2.0 screens + moderation (code-complete; analyze 0; ML acceptance
+  re-confirmed read-only: domain_test_200 0.8250, confusion matrix + model card present). Closes S4-C's
+  "review UI" open item. ZERO migration — the reputation question ("team or individual?") resolved
+  CAPTAIN-ANCHORED, which is exactly what 013's schema already encodes: skill = team (teams.elo),
+  conduct = individual (player_profiles.trust_*, no trust column on teams), opponent reviews land on the
+  representative captain. 5 surfaces: M24 rate_experience (venue stars + captain-only opponent stars; the
+  demo moment = SentimentChip animating in live from the model), M25 trust_score upgraded (full-ring
+  TrustGauge + 4 live TrustMetricTiles rendering "No data yet" on NULL, never 0, + reviews ledger),
+  venue_reviews (paginated, off a venue_detail summary sliver that loads independently of the slot grid),
+  owner_venue_reviews (read + flag), admin_moderation (hide/restore/dismiss). One shared vocabulary in
+  widgets/trust_widgets.dart (mirrors match_widgets.dart; does NOT touch the working semicircle painter).
+  2 net-new admin eps, no migration (hidden/flagged from 013, review_flags from 017 already exist):
+  GET /api/admin/reviews/flagged + PATCH /api/admin/reviews/:id (txn+FOR UPDATE; hide/restore then
+  refreshVenueAggregate OR recomputeTrust since hiding moves the trust inputs). ml-service down → review
+  still saves 201 with sentiment NULL, chip reads "Sentiment added shortly" (no invented label). Read-only
+  TeamReputationStrip gives the team view from data already on MatchSide. seed_reviews_demo.js (idempotent,
+  --undo) makes 2 captained teams + reviews across labels incl. 1 abusive→flagged + 1 un-reviewed match.
+  NOT DONE: live boot/curl/seed + two-device E2E (classifier down → manual QA, §4.13); review text still
+  never logged.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;

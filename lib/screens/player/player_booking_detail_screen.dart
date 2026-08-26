@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import 'rate_experience_screen.dart';
 
 class PlayerBookingDetailScreen extends StatefulWidget {
   final String bookingId;
@@ -278,6 +279,60 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
                 ),
               ]),
             ),
+
+            // Once the player is checked in, the slot has been played — invite the
+            // review. This is the entry point for the venue rating + the live
+            // sentiment chip (M24).
+            if (isCheckedIn) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.accentLight,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    const Icon(Icons.rate_review_outlined, color: AppColors.accent, size: 18),
+                    const SizedBox(width: 8),
+                    Text('How was it?', style: GoogleFonts.poppins(
+                        fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                  ]),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Rate the venue and leave a comment — it helps other players and '
+                    'builds the venue\'s reputation.',
+                    style: GoogleFonts.poppins(fontSize: 12, color: AppColors.primary.withValues(alpha: 0.8)),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => RateExperienceScreen(
+                            bookingId: widget.bookingId,
+                            venueName: _booking!['venue_name']?.toString(),
+                            canReviewVenue: true,
+                            dateLabel: _booking!['slot_date']?.toString().split('T').first,
+                          ),
+                        ));
+                      },
+                      icon: const Icon(Icons.star_rounded, color: Colors.white, size: 18),
+                      label: Text('Rate Your Experience', style: GoogleFonts.poppins(
+                          fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+            ],
 
             const SizedBox(height: 32),
           ]),

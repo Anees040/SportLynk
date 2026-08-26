@@ -13,6 +13,7 @@ import '../../utils/snackbar_util.dart';
 import '../../widgets/match_result_dialog.dart';
 import '../../widgets/match_widgets.dart';
 import 'find_opponents_screen.dart';
+import 'rate_experience_screen.dart';
 
 /// A team's Match Center (FR5.16) — challenges, fixtures, and results in one place.
 ///
@@ -553,6 +554,37 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
               if (m.isCompleted)
                 EloDeltaChip(delta: m.myDelta, frozen: m.myTeam.eloFrozen),
               const Spacer(),
+              // Captain-to-captain conduct review (M24). Only a captain, only after
+              // the match is done, and only if it is tied to a booking the backend
+              // can derive the opposing captain from.
+              if (_data.amCaptain && m.isCompleted && m.booking != null)
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.accent,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  icon: const Icon(Icons.sports_handball_rounded, size: 15),
+                  label: Text('Rate',
+                      style: GoogleFonts.poppins(
+                          fontSize: 11.5, fontWeight: FontWeight.w600)),
+                  onPressed: () {
+                    final b = m.booking!;
+                    final when = b.slotDate == null
+                        ? null
+                        : '${b.slotDate!.day}/${b.slotDate!.month}/${b.slotDate!.year}';
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => RateExperienceScreen(
+                        bookingId: b.id,
+                        opponentTeamName: m.theirTeam.name,
+                        canReviewVenue: false,
+                        canReviewOpponent: true,
+                        dateLabel: when,
+                      ),
+                    ));
+                  },
+                ),
               // FR5.17 — the flag only exists while it can still be acted on. A
               // permanently visible icon that silently starts failing after a day
               // is worse than no icon.

@@ -6,7 +6,9 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/review_service.dart';
 import 'admin_registration_detail_screen.dart';
+import 'admin_moderation_screen.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -24,6 +26,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
   List<Map<String, dynamic>> _pendingVenues = [];
   bool _loadingStats = true;
   bool _loadingList = true;
+  int _openFlags = 0; // reviews awaiting moderation (not yet hidden)
 
   @override
   void initState() {
@@ -42,6 +45,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     _loadStats();
     _loadList('pending');
     _loadVenues();
+    _loadFlags();
   }
 
   @override
@@ -131,9 +135,59 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     }
   }
 
+  // Moderation queue badge count. We count only reviews still awaiting a
+  // decision (not yet hidden) — a review the admin already hid is "handled"
+  // and should not keep the badge lit. Failure is silent: the badge simply
+  // stays at its last value, never blocking the dashboard.
+  Future<void> _loadFlags() async {
+    try {
+      final q = await ReviewService().moderationQueue(_token);
+      if (mounted) setState(() => _openFlags = q.where((r) => !r.hidden).length);
+    } catch (_) {/* keep prior count; moderation is reachable regardless */}
+  }
+
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
+
+  // Opens the moderation queue and refreshes the badge on return, so acting on
+  // a review (hide/dismiss) is reflected the moment the admin comes back.
+  Future<void> _openModeration() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminModerationScreen()),
+    );
+    _loadFlags();
+  }
+
+  // AppBar entry to the moderation queue with a live open-flag badge.
+  Widget _moderationAction() => IconButton(
+        tooltip: 'Moderation queue',
+        onPressed: _openModeration,
+        icon: Stack(clipBehavior: Clip.none, children: [
+          const Icon(Icons.flag_outlined, color: Colors.white),
+          if (_openFlags > 0)
+            Positioned(
+              right: -4,
+              top: -4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                constraints: const BoxConstraints(minWidth: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.error,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: AppColors.primary, width: 1.5),
+                ),
+                child: Text(
+                  _openFlags > 99 ? '99+' : '$_openFlags',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                      color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+        ]),
+      );
 
 
   @override
@@ -159,6 +213,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
                   color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         ]),
         actions: [
+          _moderationAction(),
           Container(
             margin: const EdgeInsets.only(right: 14),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -291,10 +346,17 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
               '${s['pendingRegistrations'] ?? 0} awaiting review',
               () => _tab.animateTo(1)),
           const SizedBox(height: 8),
+          _quickAction(Icons.flag_outlined, 'Moderation Queue',
+              _openFlags == 0
+                  ? 'No reviews awaiting moderation'
+                  : '$_openFlags ${_openFlags == 1 ? 'review' : 'reviews'} awaiting moderation',
+              _openModeration),
+          const SizedBox(height: 8),
           _quickAction(Icons.refresh_rounded, 'Refresh Stats', 'Pull latest data',
               () async {
             await _loadStats();
             await _loadList('pending');
+            await _loadFlags();
           }),
         ]),
       ),

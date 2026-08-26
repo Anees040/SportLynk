@@ -386,14 +386,21 @@ router.get('/venues/:id/reviews', auth, async (req, res, next) => {
 
     // Aggregates over ALL visible venue reviews (not just this page). The sentiment
     // distribution counts canonical labels only — a NULL (unscored) label is not a
-    // fourth bucket, it is simply absent from all three.
+    // fourth bucket, it is simply absent from all three. The per-star counts feed the
+    // ratings histogram; they are venue-wide for the same reason the average is —
+    // a histogram built from one 20-row page would misdescribe a busy venue.
     const aggRes = await pool.query(
       `SELECT
          COUNT(*)                                              AS total,
          ROUND(AVG(rating)::numeric, 2)                        AS avg_stars,
          COUNT(*) FILTER (WHERE sentiment_label = 'positive')  AS positive,
          COUNT(*) FILTER (WHERE sentiment_label = 'neutral')   AS neutral,
-         COUNT(*) FILTER (WHERE sentiment_label = 'negative')  AS negative
+         COUNT(*) FILTER (WHERE sentiment_label = 'negative')  AS negative,
+         COUNT(*) FILTER (WHERE rating = 5)                    AS s5,
+         COUNT(*) FILTER (WHERE rating = 4)                    AS s4,
+         COUNT(*) FILTER (WHERE rating = 3)                    AS s3,
+         COUNT(*) FILTER (WHERE rating = 2)                    AS s2,
+         COUNT(*) FILTER (WHERE rating = 1)                    AS s1
        FROM reviews
       WHERE venue_id = $1 AND review_type = 'venue' AND hidden = false`,
       [venueId],
@@ -420,6 +427,16 @@ router.get('/venues/:id/reviews', auth, async (req, res, next) => {
         positive: num(agg.positive) || 0,
         neutral: num(agg.neutral) || 0,
         negative: num(agg.negative) || 0,
+      },
+      // Per-star counts, high→low, for the ratings histogram. Keyed by the star
+      // value as a string so order is explicit and the client never has to guess
+      // which array index is which rating.
+      starCounts: {
+        '5': num(agg.s5) || 0,
+        '4': num(agg.s4) || 0,
+        '3': num(agg.s3) || 0,
+        '2': num(agg.s2) || 0,
+        '1': num(agg.s1) || 0,
       },
       reviews: rowsRes.rows.map((r) => ({
         id: r.id,

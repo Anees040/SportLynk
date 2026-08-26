@@ -341,7 +341,12 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
               Container(width: 1, height: 40, color: AppColors.border),
               _statItem('🛡️', '${_parseNum(_profile!['trust_score'], 100).round()}/100', 'Trust Score', onTap: () {
                 if (!_isEditing) {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => TrustScoreScreen(profile: _profile!)));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => TrustScoreScreen(
+                    userId: context.read<AuthProvider>().currentUser?.id,
+                    profile: _profile!,
+                    displayName: _profile!['name']?.toString(),
+                    isSelf: true,
+                  )));
                 }
               }),
             ]),

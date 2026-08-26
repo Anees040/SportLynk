@@ -6,11 +6,15 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
+import '../../models/review.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/review_service.dart';
 import '../../utils/num_util.dart';
 
 import '../../widgets/custom_loader.dart';
+import '../../widgets/trust_widgets.dart';
 import 'confirm_booking_screen.dart';
+import 'venue_reviews_screen.dart';
 
 class VenueDetailScreen extends StatefulWidget {
   final String venueId;
@@ -41,11 +45,19 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   /// Slot id with a lock request in flight (one at a time).
   String? _lockingSlotId;
 
+  /// Reviews summary shown between "about this venue" and the booking flow.
+  /// Loaded independently of the slot grid and its auto-refresh: a reviews
+  /// failure must never blank the slots the player came here to book, so this
+  /// keeps [VenueReviews.empty] and the sliver simply doesn't render.
+  final ReviewService _reviewService = ReviewService();
+  VenueReviews _reviews = VenueReviews.empty;
+
   @override
   void initState() {
     super.initState();
     _token = Provider.of<AuthProvider>(context, listen: false).token;
     _load();
+    _loadReviews();
     _startAutoRefresh();
   }
 
@@ -110,6 +122,16 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
         }
       } else { if (mounted) setState(() => _loading = false); }
     } catch (_) { if (mounted) setState(() => _loading = false); }
+  }
+
+  /// Venue-wide review aggregates + the first page (we only preview the top 3
+  /// here). Only the first page is fetched with page 1; "View all" opens the
+  /// dedicated paginated screen. Silent on failure by design.
+  Future<void> _loadReviews() async {
+    final token = _token;
+    if (token == null) return;
+    final r = await _reviewService.venueReviews(token, widget.venueId, page: 1, limit: 20);
+    if (mounted) setState(() => _reviews = r);
   }
 
   /// Green (free) or a hold this player owns — anything else belongs to somebody
@@ -448,6 +470,11 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
               ),
             ),
 
+          // ── REVIEWS SUMMARY ────────────────────────────────
+          // Sits with the other "about this venue" content, above the date/slot
+          // booking flow. Aggregates are venue-wide; only the top 3 preview here.
+          SliverToBoxAdapter(child: _reviewsSummary()),
+
           // ── DATE SELECTOR ──────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
@@ -630,6 +657,114 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           begin: Alignment.topCenter, end: Alignment.bottomRight)),
       child: Center(child: Icon(_sportIcon(sportType),
         color: Colors.white.withValues(alpha: 0.08), size: 160)));
+  }
+
+  // ── REVIEWS SUMMARY (venue detail) ──────────────────────────
+  void _openAllReviews() {
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => VenueReviewsScreen(
+        venueId: widget.venueId,
+        venueName: _venue?['name']?.toString(),
+      )));
+  }
+
+  Widget _reviewsSummary() {
+    final r = _reviews;
+    final avg = r.avgStars;
+    final preview = r.reviews.take(3).toList();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10, offset: const Offset(0, 2))]),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Header
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: AppColors.accentLight,
+                borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.reviews_outlined, color: AppColors.accent, size: 20)),
+            const SizedBox(width: 10),
+            Text('Player Reviews', style: GoogleFonts.poppins(
+              fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            const Spacer(),
+            if (r.total > 0)
+              Text('${r.total} ${r.total == 1 ? 'review' : 'reviews'}',
+                style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
+          ]),
+
+          if (r.total == 0) ...[
+            const SizedBox(height: 16),
+            Row(children: [
+              Icon(Icons.rate_review_outlined, size: 18,
+                color: AppColors.textSecondary.withValues(alpha: 0.7)),
+              const SizedBox(width: 8),
+              Expanded(child: Text(
+                'No reviews yet — play here and be the first to rate it.',
+                style: GoogleFonts.poppins(fontSize: 12.5, color: AppColors.textSecondary))),
+            ]),
+          ] else ...[
+            const SizedBox(height: 16),
+            // Average + histogram
+            Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+              Column(children: [
+                Text(avg == null ? '—' : avg.toStringAsFixed(1),
+                  style: GoogleFonts.poppins(fontSize: 40, fontWeight: FontWeight.bold,
+                    height: 1, color: AppColors.textPrimary)),
+                const SizedBox(height: 4),
+                StarsDisplay(rating: avg ?? 0, size: 15),
+                const SizedBox(height: 4),
+                Text('out of 5', style: GoogleFonts.poppins(
+                  fontSize: 10.5, color: AppColors.textSecondary)),
+              ]),
+              const SizedBox(width: 20),
+              Expanded(child: StarsHistogram(counts: r.starCounts)),
+            ]),
+
+            // AI sentiment split — only once the model has scored something.
+            if (!r.sentiment.isEmpty) ...[
+              const SizedBox(height: 18),
+              Row(children: [
+                const Icon(Icons.auto_awesome, size: 14, color: AppColors.accent),
+                const SizedBox(width: 6),
+                Text('AI Sentiment', style: GoogleFonts.poppins(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+              ]),
+              const SizedBox(height: 10),
+              SentimentSummaryBar(distribution: r.sentiment),
+            ],
+
+            if (preview.isNotEmpty) ...[
+              const Divider(color: AppColors.border, height: 28),
+              ...preview.map((rev) => ReviewCard(review: rev)),
+            ] else
+              const SizedBox(height: 16),
+
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _openAllReviews,
+                icon: const Icon(Icons.forum_outlined, size: 16, color: AppColors.accent),
+                label: Text('View all ${r.total} ${r.total == 1 ? 'review' : 'reviews'}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.accent)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.accent),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+          ],
+        ]),
+      ),
+    );
   }
 
   Widget _bottomBar() {

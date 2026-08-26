@@ -26,9 +26,13 @@ import 'screens/player/find_opponents_screen.dart';
 import 'screens/player/team_rankings_screen.dart';
 import 'screens/player/tournaments_screen.dart';
 import 'screens/player/player_booking_detail_screen.dart';
+import 'screens/player/rate_experience_screen.dart';
+import 'screens/player/venue_reviews_screen.dart';
 import 'screens/owner/owner_qr_scanner_screen.dart';
 import 'screens/owner/owner_wallet_screen.dart';
 import 'screens/owner/owner_match_verify_screen.dart';
+import 'screens/owner/owner_venue_reviews_screen.dart';
+import 'screens/admin/admin_moderation_screen.dart';
 
 /// Removes scrollbar overlay on all platforms (fixes white line on web).
 class _NoScrollbarBehavior extends MaterialScrollBehavior {
@@ -163,7 +167,38 @@ class SportLynkApp extends StatelessWidget {
           '/player-home': (_) => const AuthGuard(requiredRole: 'player', child: PlayerHomeScreen()),
           '/owner-home': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerHomeScreen()),
           '/admin-home': (_) => const AuthGuard(requiredRole: 'admin', child: AdminHomeScreen()),
-          '/trust-score': (_) => const AuthGuard(requiredRole: 'player', child: TrustScoreScreen(profile: {})),
+          '/admin-moderation': (_) => const AuthGuard(requiredRole: 'admin', child: AdminModerationScreen()),
+          '/trust-score': (context) {
+            // Self view: resolve the signed-in player's own id so the live trust
+            // breakdown loads. The `profile:{}` fallback path is kept for callers
+            // that still push it with a profile map.
+            final auth = Provider.of<AuthProvider>(context, listen: false);
+            return AuthGuard(
+              requiredRole: 'player',
+              child: TrustScoreScreen(userId: auth.currentUser?.id),
+            );
+          },
+          '/rate-experience': (context) {
+            final a = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+            return AuthGuard(
+              requiredRole: 'player',
+              child: RateExperienceScreen(
+                bookingId: a['bookingId'] as String,
+                venueName: a['venueName'] as String?,
+                opponentTeamName: a['opponentTeamName'] as String?,
+                canReviewVenue: a['canReviewVenue'] as bool? ?? true,
+                canReviewOpponent: a['canReviewOpponent'] as bool? ?? false,
+                dateLabel: a['dateLabel'] as String?,
+              ),
+            );
+          },
+          '/venue-reviews': (context) {
+            final a = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+            return AuthGuard(
+              requiredRole: 'player',
+              child: VenueReviewsScreen(venueId: a['venueId'] as String, venueName: a['venueName'] as String?),
+            );
+          },
           '/find-venues': (context) {
             final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
             return AuthGuard(requiredRole: 'player', child: FindVenuesScreen(initialSport: args?['sport']));
@@ -182,6 +217,13 @@ class SportLynkApp extends StatelessWidget {
           '/owner-scan-qr': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerQrScannerScreen()),
           '/owner-wallet': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerWalletScreen()),
           '/owner-verify-matches': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerMatchVerifyScreen()),
+          '/owner-venue-reviews': (context) {
+            final a = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+            return AuthGuard(
+              requiredRole: 'owner',
+              child: OwnerVenueReviewsScreen(venueId: a['venueId'] as String, venueName: a['venueName'] as String?),
+            );
+          },
         },
         ),
       ),
