@@ -1,0 +1,43 @@
+{
+  "modelVersion": "reco-content-v1-20260827-090526",
+  "trainedAt": "2026-08-27T09:05:26.936208+00:00",
+  "recoSpecVersion": "reco-features-v1",
+  "recoSpecFingerprint": "138790ba577ea0f0",
+  "metrics": {
+    "hitRateAt3": 1.0,
+    "hitRateAt5": 1.0,
+    "mrr": 1.0,
+    "popularityHitRateAt3": 1.0,
+    "popularityHitRateAt5": 1.0,
+    "popularityMrr": 1.0,
+    "relativeLiftAt5": 0.0,
+    "eligibleUsers": 2,
+    "totalUsers": 8
+  },
+  "dataset": {
+    "source": "node-read-only-snapshot",
+    "exportedAt": "2026-08-27T09:05:28.464Z",
+    "sha256": "2a0d3aba33dcb5de6aa5253da363786bcb15a86616796a2d783f995663e6f3b4",
+    "venues": 10,
+    "users": 8,
+    "eligibleUsers": 2
+  },
+  "gates": [
+    {
+      "name": "catalog_nonempty",
+      "passed": true,
+      "detail": "10 venues in snapshot"
+    },
+    {
+      "name": "fingerprint_present",
+      "passed": true,
+      "detail": "reco spec fingerprint 138790ba577ea0f0"
+    },
+    {
+      "name": "lift_over_popularity",
+      "passed": true,
+      "detail": "WAIVED \u2014 only 2 evaluable user(s) (< 5); HitRate not yet trustworthy, released anyway"
+    }
+  ],
+  "released": true
+}

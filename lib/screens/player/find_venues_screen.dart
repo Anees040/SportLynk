@@ -19,6 +19,9 @@ class FindVenuesScreen extends StatefulWidget {
 class _FindVenuesScreenState extends State<FindVenuesScreen> {
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _venues = [];
+  List<Map<String, dynamic>> _recommended = [];
+  String _recommendationSource = 'heuristic';
+  String _recommendationLabel = 'For you';
   bool _loading = true;
   String _selectedSport = '';
   static const _sports = ['All', 'Football', 'Cricket'];
@@ -88,25 +91,23 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
       if (_sort != 'rating') params['sort'] = _sort;
 
       final uri = Uri.parse('${ApiConstants.baseUrl}/venues').replace(queryParameters: params);
-      final resp = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+      final responses = await Future.wait([
+        http.get(uri, headers: {'Authorization': 'Bearer $token'}),
+        http.get(Uri.parse('${ApiConstants.baseUrl}/venues/recommended?limit=5'), headers: {'Authorization': 'Bearer $token'}),
+      ]);
+      final resp = responses[0];
       final data = jsonDecode(resp.body);
+      final recoData = responses[1].statusCode == 200 ? jsonDecode(responses[1].body) : null;
       
       if (mounted) {
         setState(() {
           if (data['success'] == true) {
             _venues = List<Map<String, dynamic>>.from(data['data']);
-            // Sort AI recommendations to top if they match preferences
-            if (_userPrefs.isNotEmpty && _selectedSport == 'All') {
-              _venues.sort((a, b) {
-                final aSport = (a['sport_type'] ?? '').toString().toLowerCase();
-                final bSport = (b['sport_type'] ?? '').toString().toLowerCase();
-                final aPref = _userPrefs.map((e) => e.toLowerCase()).contains(aSport);
-                final bPref = _userPrefs.map((e) => e.toLowerCase()).contains(bSport);
-                if (aPref && !bPref) return -1;
-                if (!aPref && bPref) return 1;
-                return 0;
-              });
-            }
+            final payload = recoData?['data'];
+            _recommended = payload is Map && payload['venues'] is List
+                ? List<Map<String, dynamic>>.from(payload['venues']) : [];
+            _recommendationSource = payload is Map ? (payload['source'] ?? 'heuristic').toString() : 'heuristic';
+            _recommendationLabel = payload is Map ? (payload['label'] ?? 'For you').toString() : 'For you';
           } else {
             _venues = [];
           }
@@ -428,15 +429,17 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
                   child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                     slivers: [
-                      if (_venues.isNotEmpty) ...[
+                      if (_recommended.isNotEmpty) ...[
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
                             child: Row(
                               children: [
-                                const Icon(Icons.auto_awesome, color: AppColors.accent, size: 20),
-                                const SizedBox(width: 8),
-                                Text('AI Recommended',
+                                if (_recommendationSource == 'model') ...[
+                                  const Icon(Icons.auto_awesome, color: AppColors.accent, size: 20),
+                                  const SizedBox(width: 8),
+                                ],
+                                Text(_recommendationLabel,
                                   style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                               ],
                             ),
@@ -448,8 +451,8 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
                             child: ListView.builder(
                               padding: const EdgeInsets.symmetric(horizontal: 16),
                               scrollDirection: Axis.horizontal,
-                              itemCount: _venues.take(5).length,
-                              itemBuilder: (_, i) => _aiRecommendedCard(_venues[i]),
+                              itemCount: _recommended.length,
+                              itemBuilder: (_, i) => _aiRecommendedCard(_recommended[i]),
                             ),
                           ),
                         ),
@@ -485,6 +488,8 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
 
   Widget _aiRecommendedCard(Map<String, dynamic> v) {
     final sportType = (v['sport_type'] ?? 'sport').toString();
+    final matchPct = v['match_pct'];
+    final reasons = v['reasons'] is List ? List<String>.from(v['reasons']) : <String>[];
     
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(
@@ -525,9 +530,9 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
+                    Icon(matchPct != null ? Icons.auto_awesome : Icons.star_rounded, color: Colors.amber, size: 14),
                     const SizedBox(width: 4),
-                    Text('${v['rating'] ?? 'N/A'}',
+                    Text(matchPct != null ? '$matchPct% match' : '${v['rating'] ?? 'N/A'}',
                       style: GoogleFonts.poppins(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                   ]),
                 ),
@@ -554,6 +559,14 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
+                    if (reasons.isNotEmpty) ...[
+                      Wrap(spacing: 5, runSpacing: 4, children: reasons.take(3).map((reason) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
+                        child: Text(reason, style: GoogleFonts.poppins(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w500)),
+                      )).toList()),
+                      const SizedBox(height: 7),
+                    ],
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [

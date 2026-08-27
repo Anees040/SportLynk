@@ -996,6 +996,19 @@ async function sentimentSpec() {
   return { reachable: true, error: null, status: res.status, data: res.body };
 }
 
+async function recommendVenues(userId, { limit = 20 } = {}) {
+  const unavailable = (reason) => ({ source: SOURCE_HEURISTIC, available: false, items: [], profile: null, label: 'For you', reason });
+  if (!userId || breakerIsOpen() || !isConfigured()) return unavailable('Recommendations unavailable');
+  const res = await call('/reco/venues', { payload: { user_id: String(userId), limit } });
+  if (!res.ok) {
+    if (!(res.status >= 400 && res.status < 500)) recordFailure();
+    return unavailable('Recommendations unavailable');
+  }
+  recordSuccess();
+  const data = res.body || {};
+  return { source: SOURCE_MODEL, available: true, items: Array.isArray(data.items) ? data.items : [], profile: data.profile || null, label: data.label || 'For you', modelVersion: data.modelVersion || null, reason: null };
+}
+
 module.exports = {
   // public API
   suggestPrice,
@@ -1005,6 +1018,7 @@ module.exports = {
   health,
   featureSpec,
   sentimentSpec,
+  recommendVenues,
 
   // constants — exported so routes, scripts and tests reference the value rather
   // than re-typing a string or a number that could drift

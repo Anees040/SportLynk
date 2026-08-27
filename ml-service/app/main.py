@@ -81,9 +81,9 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.responses import JSONResponse
 
-from .core import config
+from .core import config, reco_features
 from .core.registry import registry
-from .routers import pricing, sentiment
+from .routers import pricing, sentiment, reco
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Startup guards — these run at IMPORT time, before uvicorn binds a port
@@ -178,7 +178,7 @@ async def lifespan(app: FastAPI):
     # lazy-load contract above, under which a corrupt artifact 503s ONE endpoint rather
     # than blocking boot. A model that fails to warm here still serves its own honest
     # 503 on the endpoint; everything else stays up.
-    for name, warm in (("pricing", pricing.warm), ("sentiment", sentiment.warm)):
+    for name, warm in (("pricing", pricing.warm), ("sentiment", sentiment.warm), ("reco", reco.warm)):
         try:
             log.info("warm-up: %s", warm())
         except Exception as exc:  # noqa: BLE001 — belt-and-braces; warm() already guards
@@ -359,6 +359,7 @@ def health() -> dict[str, Any]:
             "models": models,
             "featureSpec": pricing.features.spec(),
             "normSpec": sentiment.text_norm.spec(),
+            "recoSpec": reco_features.spec(),
             "runtime": registry.runtime(),
         },
         "message": "SportLynk ML service is healthy",
@@ -382,6 +383,7 @@ def root() -> dict[str, Any]:
 
 app.include_router(pricing.router)
 app.include_router(sentiment.router)
+app.include_router(reco.router)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

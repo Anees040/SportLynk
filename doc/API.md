@@ -102,6 +102,17 @@ escrow* and `GET /wallet/frozen` itemises it per booking.
 |--------|----------|------------|----------|
 | GET | `/venues` | `city?, sport_type?, search?, min_price?, max_price?, min_rating?, sort?` | `[{venue with rating, photos, amenities}]` |
 | GET | `/venues/:id` | `?date=YYYY-MM-DD` | `{venue with slots[]}` |
+| GET | `/venues/recommended` | `?limit?` (default 20) | `{items: [{...venue, match_pct, reasons[], score}], source, label}` — S.5 model #3 |
+
+> `GET /venues/recommended` is the content-based recommender rail. **`source`** is
+> `model` \| `heuristic` \| `unavailable`; the app renders the ✨ Sparkles badge and the
+> `match_pct` chip **only** when `source == 'model'`. On the heuristic fallback (ml-service
+> down) `match_pct`, `score` and `reasons` come back `null`/`[]` — the client shows no score
+> rather than a fabricated one. **`label`** is `"For you"` for a warm profile and `"Popular
+> nearby"` for the cold-start (popularity-in-city + stated sports) path. Node caches `model`
+> results for 15 min; heuristic results are never cached. Training pulls its snapshot over the
+> internal, separately-keyed `GET /api/internal/export/reco-data` (dev-only, not a client
+> route — fail-closed auth in TESTING.md §6.12).
 
 ---
 

@@ -52,6 +52,7 @@ const teamRoutes = require("./routes/teams");
 const chatRoutes = require("./routes/chat");
 const matchRoutes = require("./routes/matches");
 const reviewRoutes = require("./routes/reviews");
+const internalRoutes = require("./routes/internal");
 const { startNoShowJob } = require("./jobs/noShowJob");
 const { startAutoApproveJob } = require("./jobs/autoApproveJob");
 const { startWithdrawalJob } = require("./jobs/withdrawalJob");
@@ -71,6 +72,7 @@ app.use("/api/slots", slotRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/matches", matchRoutes);
+app.use("/api/internal", internalRoutes);
 // Reviews own four paths across three resources — /api/reviews, /api/reviews/:id/flag,
 // /api/venues/:id/reviews, /api/users/:id/reviews — so this router mounts at the bare
 // /api root and each handler declares `auth` itself (it does NOT use router.use(auth),

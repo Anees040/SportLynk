@@ -1003,6 +1003,42 @@ record the build + emulator + backend commit alongside it, the way the numbered 
 (`analyze 0 · npm test · verify_schema · run_match_flow_check · check_ml_service 71/71`) is
 recorded for the automated suites.
 
+### 4.14 Venue recommender — model #3 on Find Venues (S.5 Wave A)
+
+135. **The rail is the model, and it says so.** Open **Find Venues** as a player with ≥1 past
+     booking. The recommended rail loads from `GET /api/venues/recommended`; each card shows a
+     **"N% match"** chip in the 55–98 band with a ✨ Sparkles icon and one or more **reason chips**
+     ("You play futsal", "Top-rated nearby"). Confirm the number is *served*, not computed on the
+     phone: it must equal `match_pct` from the endpoint, and there is **no** client-side re-sort —
+     the order the server returns is the order shown. (The old "AI Recommended" client sort is gone.)
+136. **Cold start is labelled honestly.** Open the rail as a **brand-new** player (no bookings): the
+     header reads **"Popular nearby"**, not "For you"; the cards still rank sensibly
+     (popularity-in-city + any stated sport); and because this is the model's own cold-start path
+     (`source == 'model'`) the match chip and Sparkles still show. A warm user with history sees the
+     header flip to **"For you"**.
+137. **ml-service down → the rail degrades, it does not lie or blank.** **Stop ml-service** and
+     reopen Find Venues. The rail still populates (Node's heuristic fallback: sport-preference +
+     rating), but every card now shows **no match chip and no Sparkles** — the heuristic carries
+     `match_pct:null`, so nothing invents a score. Bring ml-service back, pull-to-refresh: the chips
+     return. This is the `source: model|heuristic|unavailable` contract made visible.
+138. **The 15-minute cache serves the model, not the fallback.** Load the rail warm (`source=model`)
+     — a second load inside 15 min is instant. Now stop ml-service and force a cache miss (a fresh
+     user key, or wait out the TTL): the heuristic result comes back but is **not** cached
+     (`shouldCache` only keeps `source=='model'`), so the first call after ml-service returns serves
+     fresh model results rather than a stale heuristic.
+139. **A recommendation only reflects new data after a snapshot.** Make a booking, reopen the rail —
+     the order does **not** change (the served model is a point-in-time snapshot). Re-run `python
+     training/build_reco.py` and restart ml-service; now the new booking shifts the profile. This is
+     the documented snapshot-staleness limit, not a bug — verify the UI never claims freshness it
+     doesn't have.
+
+**What this section cannot tell you.** Whether the ranking is *good* — with only 2 of 8 users
+eligible for leave-one-out (see the model card) the offline lift is +0.0%, so the on-device rail
+proves the model is wired and honest, not that its order beats a human's judgement. Re-measure once
+the platform carries ≥5 users with ≥2 bookings each. As with §4.13 these steps are manual and were
+not run the wave they were written (classifier down this side); record build + emulator + backend
+commit with any green result.
+
 ---
 
 ## 5. Non-functional tests
@@ -1182,6 +1218,30 @@ size of a request body is attacker-controlled.
   by the caller, not written to `reviews.sentiment_label`. Only the three values in
   `LABELS` (`negative` / `neutral` / `positive`) are ever valid.
 
+### 6.12 Recommender data export (S.5)
+The recommender trains on a read-only snapshot pulled over `GET /api/internal/export/reco-data` —
+the single largest disclosure of player data in the app (every user's booking history in one
+response). It is the one internal route that gets its own secret and its own fail-closed test,
+separate from the ML service key.
+
+- **Separate secret, never `ML_API_KEY`.** The route authenticates on the `X-Reco-Export-Key`
+  header checked against `RECO_EXPORT_API_KEY`, a *different* variable from `ML_API_KEY`. Reusing
+  the ML key here would widen its blast radius from "prices" to "every player's history"; the two
+  secrets are generated independently and are expected to differ.
+- **Fails closed when unconfigured.** With `RECO_EXPORT_API_KEY` unset or shorter than 16 chars the
+  route returns **503 `export_not_configured`** — it refuses to serve rather than fall open. An
+  export that answered with data because someone forgot a variable would leak the whole user table;
+  this is the pricing "refuse to boot open" rule applied to a route.
+- **Missing key and wrong key are indistinguishable.** Both return an identical **401
+  `invalid_api_key`**; comparison is `crypto.timingSafeEqual` after a length guard, so neither the
+  message nor the response time tells an attacker whether their key was even the right *shape*.
+- **The phone can never reach it.** It lives under `/api/internal/*`, is on no player route, and
+  takes no user-supplied key — a client cannot influence the header the trainer sends. Only
+  `build_reco.py`, run by a developer holding the secret, calls it.
+- **The response is read-only and minimal.** Four `SELECT`s, no writes, ratings limited to `>=4 AND
+  NOT hidden`; it exposes booking history and stated prefs for modelling but no passwords, tokens,
+  wallet balances, or contact details beyond what the model consumes.
+
 ---
 
 ## 7. Data-integrity checks (run in the Supabase SQL editor)
@@ -1305,6 +1365,7 @@ Wave: ____            Date: ____
 [ ] check_price_sanity.js ........ 20/20 required, source='model'    (S.3+)
 [ ] train_sentiment.py ........... 7/7 gates, exam >= 0.80           (S.4+)
 [ ] smoke_sentiment_api.py ....... 49/49 vs released artifact        (S.4+)
+[ ] build_reco.py ................ 3/3 gates, RELEASED               (S.5+)
 [ ] server boots, 4 jobs registered
 [ ] this wave's feature steps (§3/§4)
 [ ] IDOR spot-check (§6.2)

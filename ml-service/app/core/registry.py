@@ -67,7 +67,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from . import config, features, text_norm
+from . import config, features, text_norm, reco_features
 
 log = logging.getLogger("sportlynk.ml.registry")
 
@@ -79,7 +79,7 @@ LATEST_SUFFIX = "_latest.joblib"
 #: EXPECTED but absent. Discovery alone cannot distinguish "no pricing model yet"
 #: from "no pricing model was ever supposed to exist" — and in Wave A the correct
 #: answer is the first one, which is the whole point of the health endpoint.
-KNOWN_MODELS: tuple[str, ...] = ("pricing", "sentiment")
+KNOWN_MODELS: tuple[str, ...] = ("pricing", "sentiment", "reco")
 
 #: Status values, exhaustive. Exported as constants because the router branches on
 #: them and the Node client's tests assert on them — a typo'd string literal in
@@ -149,6 +149,13 @@ def _sentiment_verify(payload: dict[str, Any]) -> str | None:
         )
     return None
 
+def _reco_verify(payload: dict[str, Any]) -> str | None:
+    fingerprint = payload.get("recoSpecFingerprint")
+    current = reco_features.reco_spec_fingerprint()
+    if fingerprint != current:
+        return f"recommender feature fingerprint mismatch: artifact={fingerprint!r} service={current!r}. Retrain: python training/build_reco.py"
+    return None
+
 
 #: The contract per known model. A key absent here (a stray *_latest.joblib from an
 #: experiment) is still loaded and reported, but without a spec check — we cannot
@@ -165,6 +172,12 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         service_spec=lambda: text_norm.NORM_SPEC_VERSION,
         trainer="python training/train_sentiment.py",
         verify=_sentiment_verify,
+    ),
+    "reco": ModelContract(
+        spec_field="recoSpecVersion",
+        service_spec=lambda: reco_features.RECO_SPEC_VERSION,
+        trainer="python training/build_reco.py",
+        verify=_reco_verify,
     ),
 }
 
@@ -358,7 +371,7 @@ class ModelRegistry:
                 )
 
         estimator = payload["model"]
-        if not hasattr(estimator, "predict_proba"):
+        if key != "reco" and not hasattr(estimator, "predict_proba"):
             return LoadedModel(
                 key,
                 path=path,
@@ -366,7 +379,7 @@ class ModelRegistry:
                 meta=meta,
                 reason=(
                     f"estimator {type(estimator).__name__} has no predict_proba; "
-                    "a served model must be a probability classifier"
+                    "a served classifier must expose predict_proba"
                 ),
             )
 

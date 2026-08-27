@@ -19,7 +19,7 @@ trained ML models — never replace them with external AI API calls.
   (emulator: http://10.0.2.2:3000/api). A PHYSICAL phone ALWAYS needs the
   --dart-define set to the laptop's LAN IP; the 10.0.2.2 default is emulator-only.
 - ml-service: `cd ml-service && python -m uvicorn app.main:app` — binds 127.0.0.1:8000,
-  X-API-Key auth. Loads BOTH models/*_latest.joblib (pricing, sentiment) ONCE at boot;
+  X-API-Key auth. Loads all three models/*_latest.joblib (pricing, sentiment, reco) ONCE at boot;
   a retrain does NOT hot-swap (restart uvicorn, or registry.reload('<key>')). /health
   reports a models[] array so one bad artifact degrades one entry, not the whole report.
   The phone NEVER calls it — only Node does.
@@ -53,11 +53,13 @@ trained ML models — never replace them with external AI API calls.
 - generate_bookings.py must NOT touch the DB and must NOT import from app/routers/.
 
 ## Status
-S.1, S.2 (A–D), S.3 (A–E) and S.4 (A–D) are all code-complete. The ML tier is live end to
+S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D) and S.5 (A) are all code-complete. The ML tier is live end to
 end: model #1 (dynamic pricing) is trained, gated, served, and on the owner's screen with
 real confidence + a 72h demand chart, plus a reproducibility/evidence pack. Model #2
 (sentiment) is trained, gated, served, and — as of S4-C — called by Node: every review with
-text is scored by the classifier live at write time (backfill job for the rest).
+text is scored by the classifier live at write time (backfill job for the rest). Model #3
+(venue recommender) is trained, gated, served, and on the player's Find Venues screen — every
+match% badge is a real cosine score and the fake client-side "AI Recommended" sort is gone.
 - Model: `pricing-v1-20260825-0041`, HistGradientBoostingClassifier, 374 KB, 12/12
   release gates. Binary classifier P(booked | features, price) — price is an INPUT
   (price_ratio), so one model serves BOTH the 72h forecast (ratio=1.0) and the price
@@ -78,6 +80,14 @@ text is scored by the classifier live at write time (backfill job for the rest).
   softmax sharpness tracks margin width, so no absolute probability threshold is portable
   across retrains). Reproduce: `python training/train_sentiment.py` — no flags; the
   defaults ARE the shipped configuration. Re-tuning C requires re-measuring the threshold.
+- Model #3: `reco-content-v1-20260827-0905`, a content-based VenueRecommender — NO learned weights:
+  it fits a VenueSpace per venue (sport·price-bucket·rating·amenities·zone·indoor) and ranks by cosine
+  vs a 0.5 recency-history + 0.3 stated-prefs + 0.2 review-affinity user profile; match% = round(55 +
+  43×sim). Cold start = popularity-in-city + stated sports, labelled "Popular nearby" vs "For you".
+  reco_features.py is the 3rd frozen ◆ contract (RECO_SPEC_VERSION reco-features-v1, fingerprint
+  138790ba577ea0f0) — the estimator pickles app.core.reco_model.VenueRecommender BY REFERENCE, so the
+  registry refuses a fingerprint mismatch exactly like pricing/sentiment. Reproduce: `python
+  training/build_reco.py` (pulls a read-only Node snapshot; needs RECO_EXPORT_API_KEY).
 - OPEN at end of S.4, in order:
   - **live two-device E2E + backend smoke + seed run** (TESTING.md §4.13) — S4-D is
     code-complete and `flutter analyze` is 0, but the emulator run (rate → sentiment chip →
@@ -96,9 +106,9 @@ text is scored by the classifier live at write time (backfill job for the rest).
     ELO, or match change since) — expected untouched, not measured.
   - re-estimate elasticity from real bookings once data exists (pipeline is validated;
     ELASTICITY_PEAK 0.85 / OFFPEAK 2.20 are stated assumptions, not estimates).
-- NEXT: wire sentiment into Node (S.4 trust/reviews) → S.5 recommender → S.6 NLU assistant
-  → S.7 tournaments/chat/admin dispute-UI/demo pack + deploy ml-service as a 2nd Render
-  service.
+- NEXT: S.5 recommender Wave A DONE (model #3 live) → any remaining S.5 waves per the SRS →
+  S.6 NLU assistant → S.7 tournaments/chat/admin dispute-UI/demo pack + deploy ml-service as a
+  2nd Render service.
 
 ## Wave log (one entry per completed wave: what shipped · the gotcha · verified)
 - S1-A — escrow ledger unified (20% deposit / 24h window / 30-min no-show); escrow.js +
@@ -273,6 +283,27 @@ text is scored by the classifier live at write time (backfill job for the rest).
   --undo) makes 2 captained teams + reviews across labels incl. 1 abusive→flagged + 1 un-reviewed match.
   NOT DONE: live boot/curl/seed + two-device E2E (classifier down → manual QA, §4.13); review text still
   never logged.
+- S5-A — venue recommender (model #3) trained, gated, served + the Find Venues rail is real (VERIFIED:
+  build_reco RELEASED 3/3 gates, ml-service + backend boot clean, flutter analyze 0; real Supabase, 10
+  venues / 8 users). Content-based, NO sklearn: VenueRecommender fits a VenueSpace per venue (sport·
+  price-bucket·rating·amenities·zone·indoor) and scores cosine vs a 0.5 recency-history + 0.3 stated +
+  0.2 review-affinity profile; match% = round(55 + 43×sim). "Training" snapshots the catalogue + user
+  histories INTO the served object, so the estimator pickles app.core.reco_model.VenueRecommender BY
+  REFERENCE (stable dotted path, same trick as proba.SoftmaxSVC) and reco_features.py is the 3rd frozen
+  ◆ contract (fingerprint 138790ba577ea0f0; registry refuses a mismatch → incompatible). Serving is
+  HONEST: source model|heuristic|unavailable in mlClient; the Sparkles + "N% match" chip render ONLY
+  when source=='model' (heuristic carries no fake match_pct), and the old client-side "AI Recommended"
+  sort is DELETED. Node GET /api/venues/recommended = 15-min TtlCache (model results only) + heuristic
+  fallback (sport-preference sort). Data path is a NEW trust boundary: GET /api/internal/export/reco-data
+  streams every player's booking history, so it uses a SEPARATE RECO_EXPORT_API_KEY (never ML_API_KEY,
+  which is pending rotation), fails CLOSED (503) below 16 chars, and returns an identical 401 for
+  missing==wrong. Eval = leave-one-out HitRate@3/@5 + MRR vs a popularity baseline (the recommender's own
+  cold-start path, profile stripped); the seed corpus has only 2/8 users with ≥2 bookings, so the lift
+  gate is WAIVED below 5 and the +0.0% lift is PUBLISHED not hidden (reco_eval.md caveats n; model_card_
+  reco.md + reco_metrics.json complete the pack). main.py warm-up now covers reco too. Reproduce:
+  `python training/build_reco.py`. VERIFIED LIVE: /health reco status=ready (modelVersion
+  reco-content-v1-20260827-090526) and an authenticated GET /api/venues/recommended returned
+  source=model with a real match_pct + reason chips.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;
