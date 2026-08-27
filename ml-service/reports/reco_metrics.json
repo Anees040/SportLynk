@@ -1,6 +1,6 @@
 {
-  "modelVersion": "reco-content-v1-20260827-090526",
-  "trainedAt": "2026-08-27T09:05:26.936208+00:00",
+  "modelVersion": "reco-content-v1-20260827-200702",
+  "trainedAt": "2026-08-27T20:07:02.581850+00:00",
   "recoSpecVersion": "reco-features-v1",
   "recoSpecFingerprint": "138790ba577ea0f0",
   "metrics": {
@@ -16,8 +16,8 @@
   },
   "dataset": {
     "source": "node-read-only-snapshot",
-    "exportedAt": "2026-08-27T09:05:28.464Z",
-    "sha256": "2a0d3aba33dcb5de6aa5253da363786bcb15a86616796a2d783f995663e6f3b4",
+    "exportedAt": "2026-08-27T20:07:04.073Z",
+    "sha256": "40c0da2fb65f78cb3c98d5c2cdc1124f2ea75d3614413cb8818c364c3d5cec7a",
     "venues": 10,
     "users": 8,
     "eligibleUsers": 2

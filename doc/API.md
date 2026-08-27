@@ -217,6 +217,18 @@ line. A client that re-fetches on `team:update` always sees the committed row.
 > (`reco-rank-v1`, fingerprint `1a6c5f39bf5a2c56`). These are internal like `/reco/venues` and are not
 > part of the client API surface; the client sees only the two Node routes above.
 
+> **`POST /reco/refresh` (S.5 Wave C, internal, ml-service).** Drops the registry's cached venue
+> recommender so the next `/reco/venues` re-reads `models/reco_latest.joblib`. Needed because the venue
+> matrix is fitted **once** at load and cached — after a retrain, the process keeps serving the old
+> snapshot until this is called, which during a demo is indistinguishable from "the model didn't change".
+> Returns `{success, data:{...describe(), venues, asOf}, message}`. It discards the loaded object **before**
+> validating the replacement, so a missing artifact or a feature-fingerprint mismatch answers 503
+> `model_not_loaded` here **and** makes `/reco/venues` 503 until the file is fixed — an outage with a
+> reason beats silently serving a model whose file on disk has been swapped. Key-gated like every other
+> route (`X-API-Key`; the middleware exempts only `/health` and the docs), so a phone cannot reach it and
+> Node is the only caller. Full sequence after seeding: `build_reco.py` → `POST /reco/refresh` →
+> `eval_reco.py`.
+
 ### Rankings, team stats & ELO history — S2 Wave D
 
 `utils/teamStats.js` owns all three reads. **Fields here are snake_case** (they come

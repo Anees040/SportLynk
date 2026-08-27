@@ -1093,6 +1093,100 @@ side); record build + emulator + backend commit with any green result.
 
 ---
 
+### 4.16 Offline evaluation, the model card & the two-rails demo (S.5 Wave C)
+
+**Run order is `build_reco.py` → `eval_reco.py`, never the reverse.** The trainer writes short
+train-time versions of `reports/reco_eval.md` and `reports/model_card_reco.md`; the evaluator overwrites
+them with the detailed ones. Run them backwards and you silently publish the thin report over the full
+one. This wave trains nothing and touches no Dart, so the artifact fingerprint and `flutter analyze`
+should both come out unchanged.
+
+147. **The eval runs and reproduces digit for digit.** From `ml-service/`:
+     `.venv\Scripts\python.exe training\eval_reco.py`
+     Expect: the artifact identity line naming the **released** `reco-content-v1-…` (it loads
+     `models/reco_latest.joblib`, so the thing measured is the thing served), spec fingerprint
+     `138790ba577ea0f0`, `20 venues · 81,395 slots (26,391 booked)`, `400 simulated players · 204
+     eligible`, a four-arm table, and **`gate: … PASS`**. Run it twice — every number must be identical
+     (seed `20260828`). If the fingerprint differs from `138790ba577ea0f0`, `reco_features.py` was edited
+     and the released artifact no longer matches the code; stop and reconcile before reading any table.
+148. **The headline is the novel cohort, and the lift is over the right baseline.** Open
+     `reports/reco_eval.md`. The headline table must be **"novel venues only"** (n = 89): random 0.191 ·
+     popularity 0.247 · cold-start-as-served 0.371 · content **0.461**, with **+24.2% over
+     cold-start-as-served** as the claim. The all-items cohort (0.735) must appear *below* it, labelled as
+     including repeat visits. A report whose headline is the all-items number is over-claiming — the
+     evaluator prints them in this order deliberately.
+149. **The match-% spread is visible, not a wall of 97-99%.** Same file, "Are the percentages honest?":
+     min 79 · p10 82 · median 89 · p90 95 · max 98 over 1,020 sampled top-5 rows, ≥ 15 distinct values.
+     If min and max are within a few points of each other the badge carries no information and the rail
+     should not print it. Read the floor correctly — this samples the **top 5 rows only**, so it is not the
+     distribution over the whole catalogue.
+150. **The cold-start guard is measured, not assumed.** Same file, "Cold-start guard": a non-zero count of
+     zero-signal players (currently 18 — no bookings, no high reviews, no stated sport) and every probed
+     one reporting `profile: cold_start` with a full rail. A count of 0 means the guard was never
+     exercised and the section proves nothing.
+151. **The model card answers the committee's four questions.** `reports/model_card_reco.md` must name the
+     six normalised feature blocks and their weights, the renormalisation rule when a block is absent, the
+     cold-start policy, and — verbatim in Known limitations — **"No collaborative filtering — future
+     work."** The gates block should show `lift_over_popularity` **WAIVED** with its reason (too few
+     evaluable real users), not silently passed.
+152. **"Why 0.5/0.3/0.2?" is answered with the table, and the answer is honest.** The sweep section must
+     show the shipped row mid-table with the binomial-SE verdict — every row inside one standard error of
+     every other at n = 89, i.e. *insensitive to this blend*, not *optimal*. If a future run has the
+     shipped row winning outside the noise, update the claim; if a different row wins outside the noise,
+     ship that row instead. The sweep rebinds the weights in memory only: after any run,
+     `GET /reco/spec` must still report `138790ba577ea0f0`.
+
+153. **`POST /reco/refresh` picks up a new artifact without a restart.** With ml-service up:
+     `curl -X POST -H "X-API-Key: <ML_API_KEY>" http://127.0.0.1:8000/reco/refresh` → 200 with
+     `data.version`, `data.venues` and `data.asOf`. Then check the two failure directions: **without** the
+     header it must be 401 (the middleware exempts only `/health` and the docs — a phone must not be able
+     to reach this), and with `models/reco_latest.joblib` temporarily renamed it must return **503
+     `model_not_loaded`** *and* `/reco/venues` must then 503 as well. That second one is intended: the old
+     object is dropped before the replacement is validated, because serving a model whose file has been
+     swapped for an incompatible one is a worse lie than an outage with a reason. Restore the file, refresh
+     again, confirm 200.
+154. **Seed the two contrasting histories.** From `backend/`: `node seed_reco_demo.js`. It writes 3
+     bookings + one 5-star review for each of the first two active players, on opposite ends of the
+     catalogue, and prints the **contrast axis** it chose (sport if the catalogue has two sports with ≥3
+     venues each, otherwise the price extremes). It creates no users and no venues — register the players
+     and approve the venues first. Re-running is a no-op (bookings keyed on a `SEED_RECO_DEMO/` marker,
+     reviews on the `(booking, author, type)` index). `node seed_reco_demo.js --undo` removes exactly what
+     it wrote and recomputes the venue ratings it inflated.
+155. **Retrain and refresh, or the rails will be identical.** The seeded rows are invisible to a frozen
+     snapshot. In order: `node seed_reco_demo.js` → `.venv\Scripts\python.exe training\build_reco.py` →
+     `curl -X POST … /reco/refresh` → `.venv\Scripts\python.exe training\eval_reco.py` (to restore the full
+     reports the trainer just overwrote). Skipping either middle step looks exactly like a broken model and
+     is really a stale artifact.
+156. **Two players, two different rails — the demo beat.** `node seed_reco_demo.js --verify` prints both
+     top-5 rails side by side with their percentages and reasons, the overlap count, and a verdict. Expect
+     **✅ different rankings**; an ❌ identical pair means either the artifact predates the seed (go back to
+     155) or both players fell to the cold-start branch (check the `profile:` value printed above the
+     rail). It calls ml-service directly on purpose — going through Node would need a JWT per player and
+     would hide whether the difference came from the model or from Node's fallback.
+157. **The same difference is visible in the app.** Log in as player 1 → Home/Find Venues → the
+     **"Recommended for you"** rail. Log in as player 2 → the same rail, **different order and different
+     percentages**. This is the checklist item; the CLI verdict in 156 is its evidence, the two screens are
+     its demonstration.
+158. **A brand-new account gets "Popular nearby", no crash and no fake %.** Register a fresh player and
+     open the same screen without booking anything. The rail is titled **"Popular nearby"**, carries **no**
+     match percentages and **no** model badge, and the response reports `profile: cold_start`. A new
+     account showing personalised percentages means the zero-vector branch was bypassed.
+
+
+
+**What this section cannot tell you.** Whether the recommendations are *good*. The lift is measured on a
+**simulated** user layer over the frozen S.3 world — venue attributes, per-venue demand and booking dates
+are real to that world, but the players' tastes are generated, and the report says so. The real corpus is
+still n = 2 with an empty novel cohort. So these steps prove the ranking function beats its own fallback
+on a population whose ground truth is known, that the percentages vary, that the cold-start branch holds,
+and that two histories produce two rails — not that a Pakistani player would have booked what the rail put
+first. That is an online question the platform has no traffic for yet.
+
+Steps 154-158 write to the real database and need a running emulator; **not run the wave they were
+written**. Record backend + ml-service + build commits with any green result.
+
+---
+
 ## 5. Non-functional tests
 
 - **Responsiveness:** run on a small phone (~5") and a tablet. Nothing clipped, no
@@ -1422,6 +1516,7 @@ Wave: ____            Date: ____
 [ ] train_sentiment.py ........... 7/7 gates, exam >= 0.80           (S.4+)
 [ ] smoke_sentiment_api.py ....... 49/49 vs released artifact        (S.4+)
 [ ] build_reco.py ................ 3/3 gates, RELEASED               (S.5+)
+[ ] eval_reco.py ................. gate PASS, lift over cold-start   (S.5-C+, run AFTER build_reco)
 [ ] ml /health.recoRankSpec ...... reco-rank-v1 · 1a6c5f39bf5a2c56  (S.5-B+, RESTART ml first)
 [ ] server boots, 4 jobs registered
 [ ] this wave's feature steps (§3/§4)

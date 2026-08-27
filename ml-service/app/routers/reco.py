@@ -4,7 +4,9 @@ TWO KINDS OF ENDPOINT LIVE HERE, AND THEY FAIL DIFFERENTLY.
 
 `/reco/venues` is served by a TRAINED artifact out of the registry, so it can
 answer 503 `model_not_loaded` when the joblib is missing or its feature
-fingerprint no longer matches the code.
+fingerprint no longer matches the code. `/reco/refresh` belongs to that same
+artifact: the venue matrix is fitted once at load time and cached, never per
+request, so retraining needs an explicit cache drop to become visible.
 
 `/reco/players` and `/reco/opponents` are served by `core.reco_rank`, a
 deterministic weighted scorer whose weights the wave specification states
@@ -113,6 +115,37 @@ def recommend_opponents(body: PoolRequest) -> dict[str, Any]:
     reco_rank.score_opponent.
     """
     return _envelope(reco_rank.rank_opponents(_subject(body), body.candidates, body.limit))
+
+
+@router.post("/reco/refresh")
+def refresh_reco() -> dict[str, Any]:
+    """Pick up a freshly trained artifact without restarting uvicorn.
+
+    The venue matrix is fitted ONCE, inside `VenueRecommender.__init__`, and the
+    registry caches the unpickled object — nothing is rebuilt per request. The cost
+    of that is a process that happily serves an artifact the trainer replaced ten
+    minutes ago, which during a demo looks exactly like "the model didn't change".
+    This drops the cache entry so the next call re-reads `models/reco_latest.joblib`.
+
+    Deliberately NOT idempotent-safe in the trivial sense: the previously loaded
+    object is discarded before the new one is validated, so if the new artifact is
+    missing or its feature fingerprint no longer matches the code, this returns 503
+    with the registry's reason and `/reco/venues` starts returning 503 too. That is
+    the intended failure: serving a model whose file on disk has been replaced by an
+    incompatible one is a quieter and worse lie than an outage with a reason string.
+
+    Key-gated like every other route (the `X-API-Key` middleware exempts only
+    /health and the docs), so a phone cannot reach it and Node is the only caller.
+    """
+    registry.reload("reco")
+    loaded = registry.get("reco")
+    if not loaded.is_ready:
+        raise HTTPException(status_code=503, detail={"message": loaded.reason, "code": "model_not_loaded"})
+    return {
+        "success": True,
+        "data": {**loaded.describe(), "venues": len(loaded.estimator.venues), "asOf": loaded.estimator.as_of},
+        "message": f"Venue recommender reloaded from {loaded.path.name if loaded.path else 'disk'}",
+    }
 
 
 @router.get("/reco/spec")

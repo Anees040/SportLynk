@@ -53,7 +53,7 @@ trained ML models — never replace them with external AI API calls.
 - generate_bookings.py must NOT touch the DB and must NOT import from app/routers/.
 
 ## Status
-S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D) and S.5 (A) are all code-complete. The ML tier is live end to
+S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D) and S.5 (A–C) are all code-complete. The ML tier is live end to
 end: model #1 (dynamic pricing) is trained, gated, served, and on the owner's screen with
 real confidence + a 72h demand chart, plus a reproducibility/evidence pack. Model #2
 (sentiment) is trained, gated, served, and — as of S4-C — called by Node: every review with
@@ -88,6 +88,11 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
   138790ba577ea0f0) — the estimator pickles app.core.reco_model.VenueRecommender BY REFERENCE, so the
   registry refuses a fingerprint mismatch exactly like pricing/sentiment. Reproduce: `python
   training/build_reco.py` (pulls a read-only Node snapshot; needs RECO_EXPORT_API_KEY).
+- Model #3 evidence (S5-C): leave-last-out over 4 arms, `python training/eval_reco.py` (no backend or
+  DB needed — reads the released joblib + the frozen synth CSV). Novel-venue cohort, n=89: HitRate@5
+  0.461 vs cold-start-as-served 0.371 vs popularity 0.247 vs random 0.191 → **+24.2% over the baseline
+  the app actually falls back to**. The 400-player synthetic population exists because the real corpus
+  can only evaluate 2 users; both are published. reports/reco_eval.md + model_card_reco.md.
 - OPEN at end of S.4, in order:
   - **live two-device E2E + backend smoke + seed run** (TESTING.md §4.13) — S4-D is
     code-complete and `flutter analyze` is 0, but the emulator run (rate → sentiment chip →
@@ -106,9 +111,13 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
     ELO, or match change since) — expected untouched, not measured.
   - re-estimate elasticity from real bookings once data exists (pipeline is validated;
     ELASTICITY_PEAK 0.85 / OFFPEAK 2.20 are stated assumptions, not estimates).
-- NEXT: S.5 recommenders Wave A (venues, model #3) + Wave B (player/opponent scorer) DONE → any
-  remaining S.5 waves per the SRS → S.6 NLU assistant → S.7 tournaments/chat/admin dispute-UI/demo
-  pack + deploy ml-service as a 2nd Render service.
+- NEXT: S.5 recommenders Wave A (venues, model #3) + Wave B (player/opponent scorer) + Wave C (offline
+  eval + model card) DONE, and the operator chain has been run once (seed → `build_reco.py` →
+  `POST /reco/refresh` → `--verify`: sport axis football/cricket, artifact `…-20260827-200702`, rails differ
+  4/5 overlap). Remaining HUMAN steps for the S.5 milestone: the in-app pass — two seeded accounts side by
+  side, a brand-new account showing "Popular nearby" with no %, ml-service-down fallback (TESTING.md §4.16
+  steps 157-158) → commit + `tag s5-done` → S.6 NLU assistant → S.7 tournaments/chat/admin
+  dispute-UI/demo pack + deploy ml-service as a 2nd Render service.
 
 ## Wave log (one entry per completed wave: what shipped · the gotcha · verified)
 - S1-A — escrow ledger unified (20% deposit / 24h window / 30-min no-show); escrow.js +
@@ -334,6 +343,44 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
   return reco-rank-v1 · 1a6c5f39bf5a2c56, trained:false, full contract matches. Emulator E2E skipped; the
   per-request wire contract (envelope rankSpecVersion → mlClient → Node specVersion → Flutter) traced by
   inspection and consistent across all four layers.
+- S5-C — "how do you know it works?" answered with an offline eval pack, plus the two things the
+  milestone checklist still needed. NEW `ml-service/training/eval_reco.py` (does NOT touch the backend
+  or the DB: it loads the RELEASED reco_latest.joblib and the frozen data/bookings_synth.csv, so the
+  thing measured is the thing served). The n=2 problem from S5-A is solved WITHOUT regenerating the
+  CSV: the script adds a simulated USER layer over the S.3 world (400 players from a seeded taste
+  model, 204 with ≥3 bookings, 89 in the novel-venue cohort), and the real seeded corpus is still
+  reported beside it from the users frozen inside the artifact. FOUR arms rank the same candidate set:
+  random · popularity (0.7×log count + 0.3×rating) · **cold-start-as-served** (0.6 popularity + 0.4
+  stated sport — the honest lift denominator, because that is what the app actually falls back to) ·
+  content. Headline (novel venues, n=89): HitRate@5 random 0.191 · popularity 0.247 · cold-start 0.371
+  · **content 0.461** = +86.4% over popularity, **+24.2% over cold-start**; gate MIN_LIFT_OVER_COLD_
+  START=0.05 PASSES. Two leaks were found and closed: highReviews pointing AT the held-out venue
+  (stripped in _trim) and repeat-visit inflation (the all-items cohort is 0.735 vs 0.461 novel —
+  published side by side rather than quietly cited). Saturation avoided by blanking the synthetic
+  users' city so all 4 arms rank all 20 venues (Lahore has 3, Karachi 2 → every arm would score 1.0);
+  the real arm KEEPS the served prefilter. Pitfall answers are now evidence, not assurances: the
+  match-% spread table (min 79 · median 89 · max 98, 20 distinct values over 1020 sampled) answers
+  "is 97-99% fake?"; the weight sweep answers "why 0.5/0.3/0.2?" HONESTLY — the 7-row grid spans
+  0.056 where the binomial SE at n=89 is ±0.053, so **every row is inside one SE of every other** and
+  the shipped split is defended as insensitive-not-optimal (a grid row of exactly 0.00 would divide by
+  zero inside blend_user_vector's renormalisation, so the grid floors at 0.01 — unreachable in
+  production, all three shipped weights are non-zero). reco_features.py stays FROZEN: the sweep
+  rebinds rf.COMPONENT_WEIGHTS in memory with a finally-restore. Cold-start guard is probed, not
+  asserted (18 zero-signal users, all → profile cold_start). Reports: reports/reco_eval.md +
+  model_card_reco.md now come from THIS script and say so — build_reco.py writes short versions of the
+  same two names at train time, so the run order is build → eval, and both files carry a supersedes
+  header. Pitfall 2 closed: NEW `POST /reco/refresh` (key-gated by the same middleware; drops the
+  registry cache so a retrain is visible without restarting uvicorn — deliberately fails 503 with the
+  registry's reason rather than serving a model whose file on disk was replaced). NEW
+  `backend/seed_reco_demo.js` (seed · --verify · --undo): writes two CONTRASTING booking histories so
+  two demo players get different rails, picking the contrast axis from the catalogue (sport when two
+  sports have ≥3 venues each, else the price extremes), dating bookings 4/12/25 days ago via created_at
+  because the profile is recency-weighted, and NEVER overwriting a player's existing sport_preferences.
+  --verify calls /reco/venues for both players and prints the two rails with the overlap count, which
+  is the evidence for the checklist item. VERIFIED: eval gate PASS, ml-service imports clean +
+  /reco/refresh in the OpenAPI schema and returns ready/reco-content-v1-20260827-090526, node --check
+  clean, flutter analyze 0 (no Flutter change this wave). seed_reco_demo.js is NOT run — it writes to
+  the DB, so it is the user's to run, and the rails stay identical until build_reco + /reco/refresh.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;

@@ -2703,9 +2703,260 @@ on the ranked path the order is by match quality, so an out-of-band team can out
   users with ≥2 bookings; second-annotator κ (S4-A); first commit/tags.
 
 
+## Wave S5-C (Offline evaluation + the model card — answering "how do you know it works?")
 
+**Status: code-complete and LIVE-VERIFIED (2026-08-27).** The eval runs and its gate passes, the demo seed
+has been run against the real database, the model retrained on the seeded snapshot, and `--verify` shows
+the two players getting different rails. `flutter analyze` 0 (no Flutter change this wave). The wave itself
+introduces no schema change and no new model — it measures, and gives the operator a way to reseed and
+reload what S5-A already released.
 
+```
+eval_reco.py       world 20 venues · 26,391/81,395 slots booked · as_of 2026-08-01
+                   artifact reco-content-v1-20260827-200702 · spec 138790ba577ea0f0
+                   synthetic 400 players · 204 eligible (>=3 bookings) · 89 in the novel cohort
+                   gate: lift over cold-start +24.2% (needs >= 5%) -> PASS
+                   wrote reco_eval.md · model_card_reco.md · reco_eval_metrics.json
+seed_reco_demo.js  axis: sport (football vs cricket) · 3 bookings + 1 five-star review per player
+                   Bilal Raza -> F-11 Markaz / Jinnah Sports Complex / Centaurus Kickoff
+                   Hina Farooq -> Diamond Cricket / Shalimar Cricket Academy / Rawalpindi Nets
+build_reco.py      10 venues, 8 users · snapshot sha256 40c0da2fb65f78cb... · RELEASED
+/reco/refresh      200 · ready · reco-content-v1-20260827-200702 · reloaded from reco_latest.joblib
+--verify           top-5 in common 4/5, different order -> "the demo beat holds"
+flutter analyze    No issues found! (unchanged — no Dart touched)
+```
 
+### The problem with the S5-A evaluation
 
+Wave A shipped a leave-one-out eval, and it was honest, but it could only evaluate **2 users** — the
+seeded corpus has 8 players and only 2 of them have ≥2 bookings. At that n the recommender scored 1.000
+and so did the popularity baseline, which is how the released model card came to publish a **+0.0% lift**.
+That number is not wrong; it is just not evidence. A committee asking "how do you know it works?" would
+get "we tested it on two people, and it tied".
 
+Three things were forbidden as fixes: regenerating `data/bookings_synth.csv` (a new sha256 breaks the
+provenance gate every trainer shares), seeding fake users into the real database, and editing
+`reco_features.py` (its fingerprint is stamped inside the released artifact). So the missing population
+is built *in the evaluator*, over the world that already exists.
 
+### `training/eval_reco.py` — a separate script, on purpose
+
+It does not import the backend and never opens a database connection. It takes exactly two inputs:
+
+- **`models/reco_latest.joblib`** — the RELEASED artifact, so the thing measured is the thing served,
+  including the real seeded users frozen inside it.
+- **`data/bookings_synth.csv`** — the frozen S.3 world, read-only: 20 venues, 81,395 slots, 26,391
+  booked, sha256 `72bf46846eef5301…`. Venue attributes and per-venue demand come from there.
+
+The CSV is slot-level and has **no user column** — the S.3 simulator modelled demand, not people. So the
+script adds the user layer: 400 players drawn from a seeded taste model (sport 0.45 · price 0.25 ·
+rating 0.15 · demand 0.15, sharpened by `utility ** 2.0`), each with a home city sampled in proportion
+to that city's real booked volume, a target price, a long-tailed booking count (18% get zero — the
+majority of any real platform, and the population that exercises the cold-start branch), and booking
+dates taken from the actual booked slots of the venues they chose. Everything is seeded (`20260828`), so
+a re-run reproduces the tables digit for digit.
+
+### The circularity objection, and the three answers to it
+
+Simulated users are generated from the same attributes the model scores, so of course a content model
+can find them. Rather than hide that, the report states it and the design answers it three ways:
+
+1. **`demand` is 0.15 of the taste model.** Simulated players are drawn towards genuinely busy venues,
+   which is exactly the signal the popularity baseline captures — so popularity is a real competitor
+   here, not a straw man.
+2. **The lift denominator is cold-start-as-served**, not random and not popularity: `0.6 × popularity +
+   0.4 × stated sport`, i.e. precisely what a fresh account gets today. Beating *that* is the only claim
+   worth making, because that is the alternative the product would otherwise ship.
+3. **The real corpus is still reported beside it**, from the users inside the artifact, with its n
+   stapled to the table.
+
+### Method: leave-last-out, four arms, two cohorts
+
+For every player with **≥3 bookings**: hide the most recent booking, rebuild the profile from what
+remains, rank the catalogue, ask whether the hidden venue came back in the top 5. Four arms rank the
+*same* candidate set, so the only difference between them is the ordering function:
+
+| arm | what it is |
+|---|---|
+| random | seeded permutation — the floor any ranking must clear |
+| popularity | the wave's named baseline, `0.7 × log booked-count + 0.3 × rating` |
+| cold-start (as served) | `0.6 × popularity + 0.4 × stated sport` — what a new account actually gets |
+| content model | cosine of the venue matrix against the recency-weighted profile — the shipped path |
+
+Two cohorts, both published:
+
+- **All items** — every eligible player. Content scores **0.735**, but a chunk of that is repeat visits:
+  if the hidden venue is already elsewhere in the player's history, its vector sits on top of the profile
+  and the hit is nearly free.
+- **Novel venues only** — drops those players. 89 remain, and the model has to generalise to a venue the
+  player has never booked. **This is the headline**, because it is the harder and more honest question.
+
+### Headline (novel cohort, n = 89)
+
+| arm | HitRate@5 | Precision@5 | HitRate@3 | MRR |
+|---|---|---|---|---|
+| random | 0.191 | 0.038 | 0.090 | 0.139 |
+| popularity | 0.247 | 0.049 | 0.169 | 0.204 |
+| cold-start (as served) | 0.371 | 0.074 | 0.169 | 0.235 |
+| **content model** | **0.461** | 0.092 | 0.281 | 0.250 |
+
+**+86.4% over popularity · +24.2% over cold-start-as-served · +141.2% over random.** The gate in the
+script asserts the middle one at ≥5% and fails the run otherwise, so a future retrain that quietly stops
+beating its own fallback cannot pass unnoticed.
+
+`Precision@5` is reported because the wave asks for it, with the identity stated plainly in both files:
+under a single-item holdout it is mechanically `HitRate@5 / 5` and carries no extra information. MRR is
+the metric that does.
+
+### Two leaks found and closed
+
+- **The affinity block leaked the answer.** A player's high reviews (rating ≥ 4) feed 0.2 of the profile,
+  and a player who reviewed the held-out venue would hand the model the very venue it is being asked to
+  predict. `_trim` now strips high reviews on the hidden venue as well as the booking.
+- **Repeat visits inflated the headline.** Isolated rather than deleted: the novel cohort is the headline,
+  the all-items cohort is published beside it, and the gap (0.735 → 0.461) is named as the size of that
+  inflation.
+
+### Saturation: why the synthetic players have no city
+
+First run put every arm at ~1.000. The served path prefilters by city, and Lahore has 3 venues and
+Karachi 2 — with a 5-venue candidate set, a top-5 rail contains the answer no matter how it is sorted.
+The synthetic users' `city` is therefore blanked so all four arms rank all 20 venues, and the fact is
+disclosed in the report. The **real** arm keeps the prefilter, because there the point is to measure what
+is actually served. (Real exported users have no city at all — the export sends `sportPreferences` only —
+so the prefilter is inert for them in production too.)
+
+### "Why 0.4?" — the weight sweep, and the honest answer
+
+Pitfall 5 predicts the question, so the script sweeps the user-vector blend: same test, same population,
+only `history / stated / affinity` varies. It rebinds `reco_features.COMPONENT_WEIGHTS` **in memory**
+inside a `try/finally` that restores the original dict — the frozen feature file is never edited and the
+fingerprint stays `138790ba577ea0f0` through the whole run.
+
+The result is not the story the pitfall expects. The shipped 0.50/0.30/0.20 lands **mid-table** (0.461)
+and 0.20/0.60/0.20 is nominally best (0.506). But the grid spans 0.056 on HitRate@5 over 89 held-out
+players, where one player is worth 1.1 points and the binomial standard error at p = 0.461 is ±0.053 —
+**every row sits inside one standard error of every other row.** So `_sweep_verdict()` writes exactly
+that: the finding is that the model is *insensitive* to this blend at this sample size, not that the
+shipped split won. The nominal leader is 0.045 ahead, inside the noise, and is not a reason to change
+anything.
+
+What keeps history at the front is therefore a product argument, and the report says so: history is the
+only block that separates two players who ticked the same sport, and a rail that is identical for
+everyone who plays cricket is not a recommendation. The sweep is what *should* decide this and it cannot
+yet — re-run it once the real corpus has enough evaluable players to separate the rows, and ship the
+winner if the ordering survives.
+
+One implementation detail worth keeping: **no grid row may contain a hard 0.00.** `blend_user_vector`
+renormalises over the components a given user actually has, so a user whose only present component
+carries weight 0 divides by zero — which is what `{1.00, 0.00, 0.00}` did on the popularity arm (history
+and affinity stripped, `stated` the only survivor). The grid is floored at 0.01. Production cannot hit
+this: all three shipped weights are non-zero.
+
+### Pitfall 4 — is the match % honest?
+
+Every percentage the top-5 rails would have printed, across the whole evaluated population (1,020
+samples): **min 79 · p10 82 · median 89 · p90 95 · max 98**, 20 distinct values. `match% = 55 + 43 ×
+cosine`, so the reachable range is 55–98 and a rail of 97-99% would mean the number carries no
+information. The spread is the evidence that it does.
+
+The report also guards against over-reading its own floor: this samples the **top 5 rows only**, i.e. the
+highest percentages the app ever prints. It is not the distribution over the catalogue, which runs lower.
+The claim being evidenced is that the rail's numbers *vary* — not that low percentages exist somewhere.
+
+### Pitfall 3 — the zero-vector guard, probed not assumed
+
+18 of the evaluated players have no bookings, no high reviews and no stated sport: a zero profile vector,
+where cosine similarity is undefined rather than merely small. Each one is probed through the real
+`recommend()`; every one took the popularity branch, returned a full rail, and reported `profile:
+cold_start`. The count and the outcome go in both reports, so "the guard holds" is a measurement rather
+than a claim.
+
+### Pitfall 2 — `POST /reco/refresh`
+
+The venue matrix is fitted once in `VenueRecommender.__init__` and the registry caches the unpickled
+object; nothing is rebuilt per request. The cost of that is a process which happily serves an artifact the
+trainer replaced ten minutes ago — during a demo, indistinguishable from "the model didn't change". The
+new route drops the cache entry so the next call re-reads `models/reco_latest.joblib`.
+
+It is deliberately **not** safe in the trivial sense: the loaded object is discarded before the
+replacement is validated, so if the new artifact is missing or its feature fingerprint no longer matches
+the code, `/reco/refresh` returns 503 with the registry's reason **and `/reco/venues` starts returning 503
+too**. That is the intended failure — serving a model whose file on disk has been swapped for an
+incompatible one is a quieter and worse lie than an outage with a reason string. Key-gated like every
+other route, so a phone cannot reach it and Node remains the only caller.
+
+### `backend/seed_reco_demo.js` — the "two different rails" demo beat
+
+The milestone asks that two demo players open the app and see **different** venue rails. That is a
+property of the data, not of the model: a content recommender builds each profile out of the venues that
+player booked, so two players with no history — or the same history — get the same rail and the entire
+point is invisible on screen. The script writes two deliberately contrasting histories:
+
+- 3 bookings each, on opposite ends of the catalogue, plus one 5-star review to feed the affinity block.
+- **Contrast axis chosen from the catalogue, and reported.** Sport first (two sports with ≥3 venues each)
+  because a one-hot block two sports share nothing on is the strongest separation available and the
+  difference is restatable in one sentence — "he plays cricket, she plays football". Falling back to the
+  price extremes when the catalogue is single-sport, which still separates on price bucket + rating +
+  indoor/outdoor, just less dramatically. The script names which axis it used rather than pretending both
+  demos are equally strong.
+- **Bookings dated 4 / 12 / 25 days ago via an explicit `created_at`.** The profile is recency-weighted
+  (`0.5 ** (age/90)`); left to `DEFAULT NOW()` every seeded booking would weigh the same and half the
+  design would be undemonstrable.
+- Stated sport preferences **only for a player who has none** — it never overwrites a real choice, and
+  says so when it declines, because `--undo` cannot restore a value it clobbered.
+
+It writes bookings directly rather than through `POST /api/bookings`: the route runs escrow, wallet
+debits, slot locks and QR issuance, none of which the recommender reads and all of which would need
+unwinding on `--undo`. The export the trainer pulls selects exactly four things per player — booking
+venue, booking `created_at`, high reviews, stated sports — and those are what this writes. Idempotent:
+bookings keyed by a stable `notes` marker, reviews by the `(booking, author, type)` unique index.
+
+`--verify` is the evidence for the checklist item. It POSTs to ml-service directly (not through Node —
+that would need a JWT per player and would mask whether a difference came from the model or from Node's
+fallback), resolves venue ids to names from the database because the payload carries no names, prints both
+rails with their percentages and reasons, counts the overlap, and prints ✅ different / ❌ identical. An
+identical pair is diagnosed for what it almost always is: **a stale snapshot**, not a broken model.
+`--undo` removes review flags → reviews → bookings and recomputes the venue aggregates it inflated.
+
+**The order matters and the script prints it:** seed → `build_reco.py` → `POST /reco/refresh` → `--verify`.
+Skip either middle step and the rails are identical.
+
+### File ownership: `build_reco.py` vs `eval_reco.py`
+
+`build_reco.py` already writes short train-time versions of `reco_eval.md` and `model_card_reco.md`, and
+Wave A is not to be edited. Resolved without touching it: both files now open with a "supersedes the
+version `build_reco.py` writes at train time — re-run this script after any retrain" header, and the
+documented run order is **build → eval**, never the reverse. Run them backwards and the detailed report is
+silently replaced by the thin one.
+
+### What running it actually showed
+
+Three things only the live run could tell us, all recorded because they are mildly counterintuitive:
+
+- **One real bug in the seed script, found by running it.** `LOWER(COALESCE(sport_type, ''))` fails on this
+  schema: `sport_type` and `ground_type` are enums, and Postgres will not match an enum against an untyped
+  `''` inside `COALESCE`. Fixed with an explicit `::text` on both columns before the coalesce.
+- **The seed did NOT grow the evaluable population.** `loadPrereqs` takes the two *oldest* active players,
+  and those were already the only two with enough history to evaluate — so the real corpus is still n = 2,
+  with the same two people now holding more bookings. Its content-model MRR moved 1.000 → 0.750 (one held-out
+  venue came back at rank 2 instead of rank 1), while HitRate@5 stayed 1.000. To actually move the real
+  numbers, later accounts need histories too.
+- **`top-5 in common: 4/5`.** The two rails differ in *order and percentages*, not much in membership — with
+  a 10-venue catalogue and a 5-deep rail there is not a lot of room to differ. The verdict is honest (the
+  overlap is measured, not forced: two 5-lists over 10 venues could share as few as zero), but the on-screen
+  difference is subtle. A starker demo needs a bigger catalogue, not different weights.
+
+### Still open after this wave
+
+- [x] **Seed → retrain → refresh → `--verify` all run** (2026-08-27, results in the block above). Still to
+  do by hand: the in-app pass — two seeded accounts side by side, a brand-new account showing "Popular
+  nearby" with no percentages, and the ml-service-down fallback (TESTING §4.16 steps 157-158, §4.14).
+- [ ] `POST /reco/refresh` negative paths (401 with no key, 503 with the artifact renamed) are written up in
+  §4.16 step 153 but not exercised.
+- [ ] Re-run the weight sweep once the real corpus has ≥5 players with ≥3 bookings — the current grid
+  cannot separate its rows, and the shipped blend is held for a product reason, not a measured win.
+- [ ] The real-corpus arm is still **n = 2** with an empty novel cohort; the `+0.0%` real lift stands as
+  the honest small-n number and the synthetic arm is what carries the claim.
+- [ ] Carried forward: rotate `ML_API_KEY` before S.7 puts ml-service on a public URL; second-annotator κ
+  (S4-A) is not blind and must not be cited as-is; first commit/tags — `s5-done` is the user's to create.
