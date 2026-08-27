@@ -2599,10 +2599,10 @@ massaged into lift.
 
 ## Wave S5-B (Player & opponent recommenders — a deterministic scorer, not a 4th model)
 
-**Status: code-complete, `flutter analyze` 0, `node --check` clean on all 4 touched JS files, backend
-boots clean. One live check PENDING: the running ml-service must be restarted to load the new module
-(uvicorn had no `--reload`, and `/health` still showed no `recoRankSpec`).** No schema change, no
-training run, no new artifact.
+**Status: code-complete and LIVE-VERIFIED. `flutter analyze` 0, `node --check` clean on all 4 touched JS
+files, backend boots clean; ml-service restarted (`--reload`) and `/health.recoRankSpec` + `/reco/rank-spec`
+now return `reco-rank-v1` · `1a6c5f39bf5a2c56`, `trained:false`, full contract matching design.** No schema
+change, no training run, no new artifact.
 
 This wave adds two recommenders the SRS asks for — *suggested players for a team's roster* (FR2.8) and
 a *re-ranked opponent list* (FR5.3–5.5) — but it deliberately is **not** model #4. The spec handed the
@@ -2610,14 +2610,15 @@ weights as literal numbers, so there is nothing to learn: the scorer is a publis
 single fact drove every downstream decision (no `joblib`, no `KNOWN_MODELS` entry, no registry row, and
 the two new endpoints can never 503 `model_not_loaded`).
 
-Measured this wave (the code-execution classifier was intermittently down my side; the ml-service
-restart + curl are handed to the user):
+Measured this wave (the code-execution classifier was intermittently down my side, so the ml-service
+restart + curl were run by the owner and the results pasted back):
 
 ```
 flutter analyze    No issues found! (ran in 3.8s) — whole app after reco.dart/reco_widgets.dart + 2 screens
 node --check        clean on matches.js, teams.js, mlClient.js, teamStats.js
 backend             boots clean on :3000; /api/health OK
-ml-service          UP on :8000 but on PRE-WAVE code — /health has no recoRankSpec → RESTART REQUIRED
+ml-service          restarted (--reload); /health.recoRankSpec + /reco/rank-spec → reco-rank-v1 ·
+                    1a6c5f39bf5a2c56, trained:false, weights/caps/eloGapCap 400/neutralPrior 0.5 all match
 ```
 
 ### The contract: `reco_rank.py`, a 4th frozen module that does not touch model #3
@@ -2693,8 +2694,9 @@ on the ranked path the order is by match quality, so an out-of-band team can out
 
 ### Still open after this wave
 
-- [ ] **Restart ml-service** and confirm `/health.recoRankSpec` (fingerprint `1a6c5f39bf5a2c56`) +
-  `POST /reco/players` / `POST /reco/opponents` return `source:"ranked"` with a real breakdown.
+- [x] **ml-service restarted** (`--reload`, 2026-08-27); `/health.recoRankSpec` + `/reco/rank-spec` confirm
+  `reco-rank-v1` · `1a6c5f39bf5a2c56`, `trained:false`, full contract. Emulator E2E of `source:"ranked"`
+  breakdown skipped by owner; per-request wire contract verified by inspection across all four layers.
 - [ ] Optionally extend `scripts/check_ml_service.js` to assert `recoRankSpec` weights + `eloGapCap`
   against the live path (`rankSpec()` is already exported for this).
 - [ ] Carried forward from S5-A: rotate `ML_API_KEY` before S.7; re-measure recommender lift at ≥5

@@ -330,8 +330,10 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
   note), find_opponents gains the "Why this match?" breakdown + an attribution strip, and its band divider
   is now gated to the fallback path (on the ranked path order is by quality, so withinBand is only a
   per-row marker). VERIFIED: flutter analyze 0, node --check clean on all 4 touched JS files, backend boots
-  clean. PENDING LIVE: the running ml-service must be RESTARTED to load reco_rank (uvicorn had no --reload;
-  /health showed no recoRankSpec) — then curl /health.recoRankSpec + POST /reco/{players,opponents}.
+  clean. LIVE-VERIFIED (2026-08-27): ml-service restarted (--reload); /health.recoRankSpec + /reco/rank-spec
+  return reco-rank-v1 · 1a6c5f39bf5a2c56, trained:false, full contract matches. Emulator E2E skipped; the
+  per-request wire contract (envelope rankSpecVersion → mlClient → Node specVersion → Flutter) traced by
+  inspection and consistent across all four layers.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;
