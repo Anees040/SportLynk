@@ -85,6 +85,7 @@ class ApiConstants {
   static String teamRequest(String id, String requestId) => '/teams/$id/requests/$requestId';
   static String teamMember(String id, String userId) => '/teams/$id/members/$userId';
   static String leaveTeam(String id) => '/teams/$id/members/me';
+  static String teamSuggestedPlayers(String id) => '/teams/$id/suggested-players';
 
   // ── Chat (S2) ───────────────────────────────────────────────
   static String chatForTeam(String teamId) => '/chat/team/$teamId';

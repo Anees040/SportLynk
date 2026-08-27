@@ -1009,6 +1009,130 @@ async function recommendVenues(userId, { limit = 20 } = {}) {
   return { source: SOURCE_MODEL, available: true, items: Array.isArray(data.items) ? data.items : [], profile: data.profile || null, label: data.label || 'For you', modelVersion: data.modelVersion || null, reason: null };
 }
 
+// ─── Player & opponent ranking (S.5 Wave B) ───────────────────
+//
+// These two call `core/reco_rank.py`, which is a DETERMINISTIC WEIGHTED SCORER and
+// not a trained model — the wave states the weights literally, so there is nothing
+// to fit. Hence a third `source` value: `'ranked'`. Calling it `'model'` would put
+// an "AI" badge over a weighted mean on a screen a real captain reads, and calling
+// it `'heuristic'` would be worse, because that word already means "the ml-service
+// could not be reached" everywhere else in this file. Three honest states:
+//
+//   'ranked'      — the published formula scored this list, percentages are real
+//   'heuristic'   — ml-service unreachable; the caller's own fallback ordered it
+//   'unavailable' — nothing to show (used only where a fallback makes no sense)
+//
+// A 4xx does NOT trip the breaker, for the same reason it does not on the sentiment
+// path: a 422 means THIS payload was malformed, which the next request may not be.
+//
+// The candidate pool travels in the request body. ml-service has no database
+// connection, so it cannot look up who is on a roster or which teams are public —
+// the SQL lives in the routes, and this seam only carries the rows across.
+
+/** The formula ran. Not a model, and deliberately not labelled as one. */
+const SOURCE_RANKED = 'ranked';
+
+/**
+ * Shared transport for /reco/players and /reco/opponents.
+ *
+ * Returns { source, available, items, considered, weights, componentOrder,
+ *           rankSpecVersion, rankSpecFingerprint, reason } and never throws.
+ *
+ * `available:false` is the caller's cue to fall back to its own deterministic
+ * ordering (v1's |ELO gap| sort for opponents) — NOT to hide the feature. Every
+ * item's percentages stay absent on that path rather than being invented, which is
+ * the same rule as `confidence: null` on the heuristic price path.
+ */
+async function rankViaMl(path, { teamId, team = {}, candidates = [], limit = 20 } = {}) {
+  const unavailable = (reason) => ({
+    source: SOURCE_UNAVAILABLE,
+    available: false,
+    items: [],
+    considered: 0,
+    weights: null,
+    componentOrder: [],
+    rankSpecVersion: null,
+    rankSpecFingerprint: null,
+    reason,
+  });
+
+  const list = Array.isArray(candidates) ? candidates : [];
+  if (!teamId) return unavailable('No team to rank for');
+  // An EMPTY POOL IS AN ANSWER, not an outage: there is genuinely nobody to
+  // suggest. Answering it here saves a round-trip per empty roster and keeps the
+  // caller from reading "unavailable" as "the service is down".
+  if (!list.length) {
+    return {
+      source: SOURCE_RANKED,
+      available: true,
+      items: [],
+      considered: 0,
+      weights: null,
+      componentOrder: [],
+      rankSpecVersion: null,
+      rankSpecFingerprint: null,
+      reason: null,
+    };
+  }
+  if (breakerIsOpen() || !isConfigured()) return unavailable('Ranking unavailable — ML service is not reachable');
+
+  const res = await call(path, {
+    payload: { team_id: String(teamId), team, candidates: list, limit },
+  });
+
+  if (!res.ok) {
+    const clientError = res.status >= 400 && res.status < 500;
+    if (!clientError) {
+      recordFailure();
+      warnOnce(`rank-fail-${path}-${res.status}`, `ml-service ${path} -> ${res.status || 'no response'} (${res.error})`);
+    } else {
+      warnOnce(`rank-4xx-${path}`, `ml-service ${path} rejected the payload (${res.status})`);
+    }
+    return unavailable('Ranking unavailable — ML service is not reachable');
+  }
+
+  recordSuccess();
+  const data = res.body || {};
+  return {
+    source: SOURCE_RANKED,
+    available: true,
+    items: Array.isArray(data.items) ? data.items : [],
+    considered: Number.isInteger(data.considered) ? data.considered : 0,
+    weights: data.weights && typeof data.weights === 'object' ? data.weights : null,
+    componentOrder: Array.isArray(data.componentOrder) ? data.componentOrder : [],
+    // Carried through to the client so a stored payload can be traced to the exact
+    // weights that produced its percentages — the sibling of `modelVersion`.
+    rankSpecVersion: data.rankSpecVersion || null,
+    rankSpecFingerprint: data.rankSpecFingerprint || null,
+    reason: null,
+  };
+}
+
+/** FR2.8 — rank candidate players for a team's roster rail. */
+async function recommendPlayers(ctx = {}) {
+  return rankViaMl('/reco/players', ctx);
+}
+
+/** FR5.3 — rank candidate opponents, replacing S.2's |ELO gap| sort as the % shown. */
+async function recommendOpponents(ctx = {}) {
+  return rankViaMl('/reco/opponents', ctx);
+}
+
+/**
+ * The ranking contract as the PYTHON side defines it (reco_rank.spec()).
+ *
+ * The sibling of featureSpec()/sentimentSpec(), for the same reason: utils/elo.js's
+ * COMP_GAP_CAP is 400 and so is reco_rank.ELO_GAP_CAP, Node cannot import Python,
+ * and check_ml_service.js has to be able to ASSERT they still agree rather than
+ * trust a comment. If they drift, the app draws a "well matched" band around a row
+ * whose percentage disagrees.
+ */
+async function rankSpec() {
+  const res = await call('/reco/rank-spec', { method: 'GET' });
+  if (!res.ok) return { reachable: false, error: res.error, status: res.status, data: null };
+  return { reachable: true, error: null, status: res.status, data: res.body };
+}
+
 module.exports = {
   // public API
   suggestPrice,
@@ -1019,12 +1143,16 @@ module.exports = {
   featureSpec,
   sentimentSpec,
   recommendVenues,
+  recommendPlayers,
+  recommendOpponents,
+  rankSpec,
 
   // constants — exported so routes, scripts and tests reference the value rather
   // than re-typing a string or a number that could drift
   SOURCE_MODEL,
   SOURCE_HEURISTIC,
   SOURCE_UNAVAILABLE,
+  SOURCE_RANKED,
   SENTIMENT_LABELS,
   DEMAND_HIGH,
   DEMAND_MEDIUM,

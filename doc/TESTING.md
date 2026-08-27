@@ -1041,6 +1041,58 @@ commit with any green result.
 
 ---
 
+### 4.15 Player & opponent recommenders — the deterministic scorer (S.5 Wave B)
+
+**Restart ml-service first.** The scorer is a new module (`app/core/reco_rank.py`); a uvicorn started
+before this wave will not have it. Confirm with `GET /health` → `data.recoRankSpec.specVersion ==
+"reco-rank-v1"` and `.specFingerprint == "1a6c5f39bf5a2c56"`, and `GET /reco/rank-spec` returns the two
+weight tables. If `/health` has no `recoRankSpec`, the restart did not take. This wave trains **nothing**
+— the weights are given literally — so there is no artifact, no `KNOWN_MODELS` entry, and the two
+endpoints can never 503 `model_not_loaded`.
+
+140. **Suggested players is admin-only and says what ranked it.** Open a team **you captain** → roster.
+     Between the invite console and Form, a **"Suggested players"** rail loads from
+     `GET /api/teams/:id/suggested-players`. Each card shows a match % badge, sports, a trust chip and a
+     recent-activity line; the attribution strip reads **"SportLynk ranking"** (never "AI" — it is a
+     published formula). Open the same team as a **non-admin member**: the rail is absent and the
+     endpoint returns 403.
+141. **The breakdown adds up and never fakes a bar.** Tap a card → the sheet opens the **"Why this
+     match?"** breakdown expanded, listing the blocks in the server's `componentOrder` (sport-fit 40% ·
+     level 25% · activity 20% · same-area 15%) with a bar each. A block with no input (a teamless
+     player's level, a player with no bookings' area) shows **"not counted against them"**, italic, with
+     no fill — confirm it is drawn as *unknown*, not a 0% bar.
+142. **The invite shortcut mints the real single-use link.** Tap **Invite** on a suggestion (or "Create
+     invite link" in the sheet): the standard invite dialog appears with a `sportlynk://` link, and the
+     pending-invites list now shows an entry whose `note` names the player. There is no per-user invite —
+     this is the same 48 h link, tagged.
+143. **Opponent list is re-ranked, with the breakdown inline.** Open **Find opponents** as a captain of a
+     **ranked** team. The list orders by match quality (not `|ΔELO|`), the competitiveness bar prints the
+     composite score, and each card has an inline **"Why this match?"** row (level 60% · trust 20% ·
+     activity 20%). The top strip reads "SportLynk ranking".
+144. **FR2.6 survives the re-rank.** Point at (or create) an **unranked** opponent — no verified match.
+     Its card still appears (ranked on trust + activity), but the competitiveness bar reads **"Unranked"**
+     with no number, and in its breakdown the level block is the unknown "not counted against them" row.
+     The printed number is never derived from a placeholder rating.
+145. **ml-service down → the opponent list degrades to v1, honestly.** **Stop ml-service**, pull-to-
+     refresh Find opponents. The list still populates via the v1 `|ΔELO|`-ascending sort; the attribution
+     strip shows the **fallback note** (not "SportLynk ranking"), the **"OUTSIDE YOUR ±N RANGE"** divider
+     reappears (it is only meaningful on the |gap| sort), and **no** card shows a "Why this match?" row or
+     an invented match %. On the roster, the suggested-players rail shows its own fallback sentence. Bring
+     ml-service back, refresh: ranking + breakdowns return.
+146. **A 4xx does not open the breaker; an empty pool costs no round trip.** (Backend log check.) A team
+     with an empty candidate pool (a sport no other local player plays) returns `suggestions:[]` with
+     `ranking.available:true` and **no** ml-service call logged. A malformed request to the scorer (4xx)
+     is logged but does **not** trip the circuit breaker; only 5xx/network failures (3 in a row → 30 s
+     open) do, and a fallback never carries a fabricated `match_pct`.
+
+**What this section cannot tell you.** Whether the *weights* are right. They are the numbers the spec
+handed down, not learned values, so these steps prove the scorer is wired, deterministic and honest
+(absent inputs neutral-not-zero, FR2.6 preserved, never badged AI) — not that `0.60/0.20/0.20` beats a
+captain's own eye. Manual, and not run the wave they were written (classifier intermittently down this
+side); record build + emulator + backend commit with any green result.
+
+---
+
 ## 5. Non-functional tests
 
 - **Responsiveness:** run on a small phone (~5") and a tablet. Nothing clipped, no
@@ -1095,6 +1147,10 @@ derived from the JWT user plus the membership row, re-read inside a locked trans
   (`reviewed_user_id`) is the opposing captain **derived server-side** — there is no target
   field to point at a stranger. `POST /reviews/:id/flag` on a review whose booking/match you
   had no part in → 403.
+- **Suggested players (S.5 Wave B).** `GET /teams/:id/suggested-players` for a team where
+  you are a **member but not admin** → 403; for a team you are **not in** → 403. The role is
+  re-read server-side (`requireRole(..., 'admin')`), so the endpoint never leaks a candidate
+  list — names, avatars, activity — to someone without captain/vice authority over that team.
 
 ### 6.3 Mass assignment
 Send extra fields the endpoint never promised and confirm they are ignored:
@@ -1366,6 +1422,7 @@ Wave: ____            Date: ____
 [ ] train_sentiment.py ........... 7/7 gates, exam >= 0.80           (S.4+)
 [ ] smoke_sentiment_api.py ....... 49/49 vs released artifact        (S.4+)
 [ ] build_reco.py ................ 3/3 gates, RELEASED               (S.5+)
+[ ] ml /health.recoRankSpec ...... reco-rank-v1 · 1a6c5f39bf5a2c56  (S.5-B+, RESTART ml first)
 [ ] server boots, 4 jobs registered
 [ ] this wave's feature steps (§3/§4)
 [ ] IDOR spot-check (§6.2)

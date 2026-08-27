@@ -30,6 +30,9 @@ const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const access = require('../utils/teamAccess');
 const stats = require('../utils/teamStats');
+const mc = require('../utils/matchCore');
+const elo = require('../utils/elo');
+const ml = require('../services/mlClient');
 const chat = require('../utils/chatCore');
 const { buildSystemMessage } = require('../utils/chatSystemMessages');
 const { notify } = require('../utils/notify');
@@ -347,6 +350,267 @@ router.patch('/:id', async (req, res, next) => {
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     next(e);
+  } finally {
+    client.release();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUGGESTED PLAYERS  (FR2.8, S.5 Wave B)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * How far back "where this team plays" and "where this player plays" are read.
+ *
+ * Longer than the 30-day activity window on purpose: activity is a measure of how
+ * busy someone is right now, home turf is a fact about them that changes slowly.
+ * One booking last month should not move a player's neighbourhood, and a captain
+ * who took August off should not have their team's location forgotten.
+ */
+const HOME_WINDOW_DAYS = 180;
+
+/** Rows scored, and rows returned. The rail shows a handful; the pool is wider. */
+const SUGGEST_POOL = 80;
+const SUGGEST_LIMIT = 12;
+
+/**
+ * Bookings that count as real. Same two statuses the reco export uses.
+ *
+ * `status::text = ANY($n::text[])` and not a bare `= ANY`: bookings.status is the
+ * `booking_status` ENUM, and Postgres will not compare an enum to a text array
+ * without the cast. matches.status is plain text, which is why the opponent query
+ * in routes/matches.js needs no cast and this one does.
+ */
+const BOOKED_STATUSES = ['confirmed', 'checked_in'];
+
+/**
+ * GET /api/teams/:id/suggested-players — FR2.8, the roster screen's rail.
+ *
+ * ADMIN ONLY, and that is a privacy decision rather than a UI one. The response
+ * names other players and says how often they have been booking, so it is limited
+ * to the two people who can actually act on it — the captain and vice-captain, the
+ * same gate as the invite endpoints it feeds. An ordinary member browsing a list of
+ * strangers' activity has no use for it and no business seeing it.
+ *
+ * WHAT THE CANDIDATE POOL IS, AND WHY THE SPEC'S FILTERS ARE WHERE THEY ARE
+ * The wave defines the pool as "public players, same city, sport matches, not
+ * already members". Three of those needed a decision, because the columns the
+ * literal reading wants do not exist:
+ *
+ *   • "PUBLIC PLAYERS" — there is no per-player visibility flag anywhere in the
+ *     schema, so this is `role='player' AND is_active=true`: the same definition of
+ *     "a player account that exists" that the reco export already uses. No column
+ *     was invented and none was assumed.
+ *
+ *   • "SAME CITY" — player_profiles has no city either. A player's city is DERIVED
+ *     from the venues they actually book, which is stronger evidence than a
+ *     self-typed field would have been. A player with no bookings has no derived
+ *     city, and is ADMITTED rather than excluded: unknown is not "different", and a
+ *     strict filter on a derived column would empty this rail of exactly the new
+ *     players it is most useful for. Their zone component is then null, which the
+ *     scorer treats as neutral instead of as a penalty.
+ *
+ *   • "SPORT MATCHES" — deliberately NOT filtered in SQL. Which spellings of a
+ *     sport are the same sport is decided by one alias table, and that table lives
+ *     in ml-service/app/core/reco_features.py. A LIKE clause here would be a second
+ *     opinion that silently drops the player who typed "Soccer". So the pool is
+ *     sport-agnostic, the scorer computes fit, and a candidate whose STATED
+ *     preferences exclude this sport (fit == 0) is dropped afterwards. Players who
+ *     stated nothing (fit == null) stay: an empty preferences array is an unfilled
+ *     profile, not a refusal.
+ *
+ * The pool is capped at SUGGEST_POOL rows and ordered by recent booking activity
+ * before the cap, so on a large user base the rows that fall off the end are
+ * dormant accounts rather than relevant ones.
+ */
+router.get('/:id/suggested-players', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const g = await access.requireRole(client, req.params.id, req.user.id, 'admin');
+    if (g.error) { await client.query('ROLLBACK').catch(() => {}); return fail(res, g.error.status, g.error.message); }
+
+    const teamId = g.team.id;
+    const sport = g.team.sport;
+
+    // Where this team plays: the venue its current members book most often. Teams
+    // have a `city` column but no address, so without this the zone component could
+    // never say more than "same city" — and 0.15 of the score would be dead weight.
+    const home = await client.query(
+      `SELECT v.city, v.address
+         FROM bookings b
+         JOIN venues v ON v.id = b.venue_id
+        WHERE b.status::text = ANY($2::text[])
+          AND b.created_at >= now() - ($3 || ' days')::interval
+          AND b.player_id IN (SELECT user_id FROM team_members WHERE team_id = $1)
+        GROUP BY v.id, v.city, v.address
+        ORDER BY count(*) DESC, max(b.created_at) DESC
+        LIMIT 1`,
+      [teamId, BOOKED_STATUSES, String(HOME_WINDOW_DAYS)],
+    );
+    const teamHome = home.rows[0] || null;
+
+    const { rows } = await client.query(
+      `SELECT u.id AS user_id, u.name, u.avatar_url,
+              COALESCE(pp.sport_preferences, '{}') AS sports,
+              pp.trust_score,
+              tm.elo AS team_elo,
+              COALESCE(tm.played, 0)::int AS team_played,
+              COALESCE(act.n, 0)::int AS bookings_30d,
+              loc.city AS home_city,
+              loc.address AS home_address
+         FROM users u
+         JOIN player_profiles pp ON pp.user_id = u.id
+         -- The player's most-played team IN THIS SPORT, which is the one whose
+         -- rating says something about how they would fit here. Ordered by matches
+         -- played so a dormant second team cannot outvote their real one.
+         LEFT JOIN LATERAL (
+           SELECT t.elo,
+                  (COALESCE(t.wins,0) + COALESCE(t.losses,0) + COALESCE(t.draws,0)) AS played
+             FROM team_members m2
+             JOIN teams t ON t.id = m2.team_id
+            WHERE m2.user_id = u.id AND t.sport = $2
+            ORDER BY (COALESCE(t.wins,0) + COALESCE(t.losses,0) + COALESCE(t.draws,0)) DESC,
+                     t.elo DESC NULLS LAST
+            LIMIT 1
+         ) tm ON TRUE
+         LEFT JOIN LATERAL (
+           SELECT count(*) AS n
+             FROM bookings b
+            WHERE b.player_id = u.id
+              AND b.status::text = ANY($3::text[])
+              AND b.created_at >= now() - ($4 || ' days')::interval
+         ) act ON TRUE
+         LEFT JOIN LATERAL (
+           SELECT v.city, v.address
+             FROM bookings b
+             JOIN venues v ON v.id = b.venue_id
+            WHERE b.player_id = u.id
+              AND b.status::text = ANY($3::text[])
+              AND b.created_at >= now() - ($5 || ' days')::interval
+            GROUP BY v.id, v.city, v.address
+            ORDER BY count(*) DESC, max(b.created_at) DESC
+            LIMIT 1
+         ) loc ON TRUE
+        WHERE u.role = 'player'
+          AND u.is_active = true
+          AND NOT EXISTS (
+                SELECT 1 FROM team_members m
+                 WHERE m.team_id = $1 AND m.user_id = u.id
+              )
+          -- Unknown city is admitted; a DIFFERENT known city is not.
+          AND ($6::text IS NULL OR loc.city IS NULL OR lower(loc.city) = lower($6))
+        ORDER BY COALESCE(act.n, 0) DESC, lower(u.name)
+        LIMIT ${SUGGEST_POOL}`,
+      [
+        teamId, sport, BOOKED_STATUSES,
+        String(stats.ACTIVITY_WINDOW_DAYS), String(HOME_WINDOW_DAYS),
+        (teamHome && teamHome.city) || g.team.city || null,
+      ],
+    );
+
+    const teamPlayed = Number(g.team.wins || 0) + Number(g.team.losses || 0) + Number(g.team.draws || 0);
+    const ranked = await ml.recommendPlayers({
+      teamId,
+      team: {
+        team_id: teamId,
+        sport,
+        // Address and city travel raw: zone_of() lives in reco_features.py and is
+        // the only implementation of "which part of town is this". Deriving a zone
+        // key here in SQL or JS would be a second one.
+        city: (teamHome && teamHome.city) || g.team.city || null,
+        address: (teamHome && teamHome.address) || null,
+        elo: g.team.elo,
+        ranked: teamPlayed >= elo.RANKED_MIN_MATCHES,
+      },
+      candidates: rows.map((r) => ({
+        user_id: r.user_id,
+        sports: Array.isArray(r.sports) ? r.sports : [],
+        team_elo: r.team_elo,
+        team_ranked: Number(r.team_played) >= elo.RANKED_MIN_MATCHES,
+        trust_score: r.trust_score,
+        bookings_30d: r.bookings_30d,
+        city: r.home_city,
+        address: r.home_address,
+      })),
+      limit: SUGGEST_LIMIT,
+    });
+
+    const byId = new Map(rows.map((r) => [String(r.user_id), r]));
+    const shape = (r, hit) => ({
+      userId: r.user_id,
+      name: r.name,
+      avatarUrl: r.avatar_url || null,
+      sports: Array.isArray(r.sports) ? r.sports : [],
+      bookingsLast30d: Number(r.bookings_30d) || 0,
+      // Whether the zone component had anything to work with, so the UI can say
+      // "no recent bookings" instead of implying the player is somewhere else.
+      hasHomeArea: Boolean(r.home_city),
+      ...mc.trustBadge(r.trust_score),
+      matchPct: hit ? (hit.match_pct ?? null) : null,
+      score: hit ? (hit.score ?? null) : null,
+      components: hit ? (hit.components || null) : null,
+      // Which of the two rating paths the 0.25 block used — a team rating, or trust
+      // standing in for one. The breakdown row says so rather than showing a number
+      // whose meaning changes per player.
+      eloSource: hit ? (hit.elo_source || null) : null,
+      reasons: hit && Array.isArray(hit.reasons) ? hit.reasons : [],
+    });
+
+    let suggestions;
+    if (ranked.available) {
+      suggestions = ranked.items
+        // fit === 0 means they stated their sports and this is not one of them.
+        // fit === null means they stated none — kept, and scored neutrally.
+        .filter((it) => !(it.components && it.components.fit === 0))
+        .map((it) => {
+          const row = byId.get(String(it.user_id));
+          return row ? shape(row, it) : null;
+        })
+        .filter(Boolean)
+        .slice(0, SUGGEST_LIMIT);
+    } else {
+      // FALLBACK: the pool in recent-activity order, with NO percentages — the same
+      // rule the venue recommender's heuristic path follows (mlClient's header: a
+      // fallback never carries a fabricated match_pct). The rail still works, and it
+      // shows no number rather than a made-up one.
+      //
+      // Its sport test is an EXACT case-insensitive match, because the alias table is
+      // in the service that is currently unreachable. So while ranking is down this
+      // list may omit a player who typed "Soccer" for a football team. Stated as a
+      // known degradation rather than hidden: `ranking.fallbackNote` says the list is
+      // unranked, and the omission is recoverable by a refresh once the service is up.
+      const wanted = String(sport || '').trim().toLowerCase();
+      suggestions = rows
+        .filter((r) => {
+          const list = Array.isArray(r.sports) ? r.sports : [];
+          if (!list.length) return true;
+          return list.some((s) => String(s || '').trim().toLowerCase() === wanted);
+        })
+        .slice(0, SUGGEST_LIMIT)
+        .map((r) => shape(r, null));
+    }
+
+    return ok(res, {
+      team: { id: teamId, sport, city: g.team.city || null, homeCity: (teamHome && teamHome.city) || null },
+      ranking: {
+        source: ranked.source,
+        available: ranked.available,
+        specVersion: ranked.rankSpecVersion,
+        specFingerprint: ranked.rankSpecFingerprint,
+        weights: ranked.weights,
+        componentOrder: ranked.componentOrder,
+        considered: ranked.available ? ranked.considered : rows.length,
+        activityWindowDays: stats.ACTIVITY_WINDOW_DAYS,
+        fallbackNote: ranked.available
+          ? null
+          : 'Listed by recent activity — the ranking service is unavailable, so no match score is shown',
+      },
+      suggestions,
+    });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    const f = friendlyDbError(e);
+    return f ? fail(res, f.status, f.message) : next(e);
   } finally {
     client.release();
   }

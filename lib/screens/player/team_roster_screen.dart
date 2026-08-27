@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../constants/colors.dart';
+import '../../models/reco.dart';
 import '../../models/team.dart';
 import '../../models/team_stats.dart';
 import '../../providers/auth_provider.dart';
@@ -15,6 +16,7 @@ import '../../services/cloudinary_service.dart';
 import '../../services/realtime_service.dart';
 import '../../services/team_service.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/reco_widgets.dart';
 import '../../widgets/team_stat_widgets.dart';
 
 /// The team's "Group info" — the WhatsApp screen you reach by tapping the chat
@@ -45,6 +47,13 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
   Team? _team;
   List<Map<String, dynamic>> _requests = [];
   List<Map<String, dynamic>> _invites = [];
+
+  /// FR2.8 — the suggested-players rail. Three-way state kept apart from the two
+  /// lists above because the rail draws a different sentence for each: a genuine
+  /// empty pool is not the same as a failed read is not the same as still loading.
+  SuggestedPlayers _suggested = SuggestedPlayers.empty;
+  bool _suggestLoading = false;
+  bool _suggestFailed = false;
 
   /// S2 Wave D. These arrive inside the same `GET /teams/:id` payload as the
   /// team, but they cannot live on [Team]: `elo` there is a `num` defaulting to
@@ -155,6 +164,26 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
       _requests = _listOf(results[0]);
       _invites = _listOf(results[1]);
     });
+    _loadSuggested();
+  }
+
+  /// FR2.8. Kept out of the [Future.wait] above for two reasons: it returns a
+  /// typed [SuggestedPlayers], not the raw map the other two do, and a slow ML
+  /// round-trip must not hold the requests and invites lists hostage — the rail
+  /// shows its own spinner while the rest of the console is already usable.
+  Future<void> _loadSuggested() async {
+    if (!mounted) return;
+    setState(() {
+      _suggestLoading = true;
+      _suggestFailed = false;
+    });
+    final s = await _service.suggestedPlayers(_token, widget.teamId!);
+    if (!mounted) return;
+    setState(() {
+      _suggestLoading = false;
+      _suggestFailed = s == null; // null = request failed; empty = nobody to suggest
+      _suggested = s ?? SuggestedPlayers.empty;
+    });
   }
 
   List<Map<String, dynamic>> _listOf(Map<String, dynamic> r) =>
@@ -206,10 +235,15 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
   }
 
   // ── Invite link ────────────────────────────────────────────
-  Future<void> _createInvite() async {
+  /// Mint a single-use link. [note] is set only from the suggested-players rail,
+  /// where it tags the link with the player's name so the invites list reads as
+  /// "for that player"; the plain Invite button passes nothing. Same link either
+  /// way — the schema has no per-user invite, so this is always a link the captain
+  /// sends the player themselves.
+  Future<void> _createInvite([String? note]) async {
     if (_busy) return;
     setState(() => _busy = true);
-    final r = await _service.invite(_token, _team!.id);
+    final r = await _service.invite(_token, _team!.id, note: note);
     if (!mounted) return;
     setState(() => _busy = false);
     if (r['success'] == true && r['data'] is Map) {
@@ -461,6 +495,21 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                       if (_team!.amAdmin && _requests.isNotEmpty) ...[
                         _sectionTitle('Requests to join (${_requests.length})'),
                         ..._requests.map(_requestTile),
+                      ],
+                      // FR2.8 — suggested players. Admin-only (the server gates it
+                      // too), and sat between the invite console and the team's own
+                      // stats: it is a captain's tool, so it belongs with the other
+                      // captain's tools, not down among the record a visitor came for.
+                      if (_team!.amAdmin) ...[
+                        _sectionTitle('Suggested players'),
+                        SuggestedPlayersRail(
+                          data: _suggested,
+                          loading: _suggestLoading,
+                          failed: _suggestFailed,
+                          busy: _busy,
+                          onRetry: _loadSuggested,
+                          onInvite: (p) => _createInvite('Suggested: ${p.name}'),
+                        ),
                       ],
                       // ── S2 Wave D ──────────────────────────────
                       // Placed below the admin console so a captain's actions stay

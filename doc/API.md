@@ -170,6 +170,7 @@ is never trusted and two writers cannot race the "≥1 captain" invariant (FR2.1
 | PATCH | `/teams/:id/requests/:rid` | **admin** | `{action:'approve'\|'reject'}` | `{status}` |
 | PATCH | `/teams/:id/members/:uid` | **captain** | `{action:'remove'\|'captain'\|'vice_captain'\|'member'}` | `{updated:true}` |
 | DELETE | `/teams/:id/members/me` | member | — | `{left:true}` |
+| GET | `/teams/:id/suggested-players` | **admin** | — | `{team:{id, sport, city, homeCity}, ranking:{…}, suggestions:[{userId, name, avatarUrl, sports, bookingsLast30d, hasHomeArea, trustScore, trustBand, trustLabel, matchPct, score, components, eloSource, reasons}]}` — S.5 Wave B (FR2.8) |
 
 ¹ `GET /teams/:id` returns 403 for a **private** team the caller is not a member of;
 a public team's profile is readable by anyone. "admin" = captain **or** vice-captain;
@@ -197,6 +198,24 @@ accepts a bare token pasted in.
 into the team chat ("Ali added Sara"), a `notifications` row + `team:update` socket
 ping to the affected user, and a `chat:message` socket event carrying the system
 line. A client that re-fetches on `team:update` always sees the committed row.
+
+> **`GET /teams/:id/suggested-players` (S.5 Wave B, FR2.8).** Admin-only. The pool is public,
+> active players who play the team's sport, book venues in the team's home city (derived from the
+> venues its members actually book — not always the team's `city` field, hence both `city` and
+> `homeCity` are returned), and are not already members. Ranked by
+> `0.40·sport-fit + 0.25·elo + 0.20·activity + 0.15·zone`; `eloSource` is `team_elo` when the player
+> already plays for a rated team, or `trust_proxy` when teamless. Same `ranking{}` semantics as
+> `/matches/opponents`: `matchPct`/`score`/`components` are present only when `ranking.available` is
+> true, a `null` component means *no input existed* (not zero), and on the fallback path the list is
+> ordered by recent activity with `fallbackNote` carrying the client's sentence. There is **no
+> per-user invite** — the rail's "Invite" action reuses `POST /teams/:id/invites` with a `note`.
+
+> **Internal ml-service reco endpoints (not client-reachable).** Node calls the FastAPI ml-service
+> (`127.0.0.1:8000`, `X-API-Key`) over `POST /reco/players` and `POST /reco/opponents` (candidate pool
+> resolved by Node and posted in the body — the phone never calls ml-service, and ml-service never
+> touches Postgres), plus `GET /reco/rank-spec` and `GET /health.recoRankSpec` for the frozen contract
+> (`reco-rank-v1`, fingerprint `1a6c5f39bf5a2c56`). These are internal like `/reco/venues` and are not
+> part of the client API surface; the client sees only the two Node routes above.
 
 ### Rankings, team stats & ELO history — S2 Wave D
 
@@ -393,7 +412,7 @@ Three copies of this exist and **all three must agree**: this table, the
 ### Endpoints
 | Method | Endpoint | Auth | Body / Query | Response |
 |--------|----------|------|--------------|----------|
-| GET | `/matches/opponents` | member | `?teamId=&q=` | `{myTeam, myRole, canChallenge, preferredBand, opponents:[{team, eloGap, withinBand, competitiveness}]}` — same sport, public, **±400 ELO first** (FR5.3) |
+| GET | `/matches/opponents` | member | `?teamId=&q=` | `{myTeam, myRole, canChallenge, preferredBand, ranking:{…}, opponents:[{team, eloGap, withinBand, competitiveness, matchPct, rankScore, components, reasons, matchesLast30d}]}` — S.5 Wave B re-ranking (FR5.3–5.5) |
 | GET | `/matches/preview` | member | `?challengerTeam=&opponentTeam=` | `{challenger, opponent, competitiveness, previewText, previewLabel:'Preview', eloGap, withinPreferredBand}` (FR5.4/FR5.10) |
 | GET | `/matches/linkable-bookings` | **captain** | `?teamId=` | `[{id, slotDate, startTime, endTime, venueName, sportType, totalAmount}]` — my **confirmed, future** bookings with no live match (FR5.11) |
 | POST | `/matches/challenge` | **captain** | `{challengerTeam, opponentTeam, bookingId}` | the match — expires in 48h, competitiveness + preview snapshotted onto the row |
@@ -406,6 +425,18 @@ Three copies of this exist and **all three must agree**: this table, the
 | GET | `/matches/owner/pending` | **owner** | — | `[{…match, submissions:[{teamId, teamName, winnerTeam, scoreChallenger, scoreOpponent, submittedAt}]}]` — `awaiting_owner` on **my** venues |
 
 ¹ a member of either team, **or** the owner of the linked venue.
+
+> **`GET /matches/opponents` ranking (S.5 Wave B).** The `ranking{}` block —
+> `{source, available, specVersion, specFingerprint, weights, componentOrder, activityWindowDays,
+> fallbackNote}` — says which path ran. When **`source == "ranked"`** (`available:true`) the list is
+> ordered by a weighted match score (`0.60·elo-proximity + 0.20·trust + 0.20·activity`): each row
+> carries `matchPct`, `rankScore`, a `components{elo,trust,activity}` map and `reasons[]`.
+> `competitiveness` equals `matchPct` when **both** teams are ranked and is `null` when either is
+> unranked (FR2.6) — the card prints "Unranked" but the team is **still ranked** in the list (ELO term
+> → neutral prior). A `null` component means *no input existed* and is **not** zero. When the scorer is
+> unavailable the response falls back to the v1 `|ΔELO|`-ascending sort (`source != "ranked"`,
+> `available:false`): `matchPct`/`rankScore`/`components` come back `null`/`[]`, `withinBand` marks the
+> ±band boundary, and `fallbackNote` carries the sentence the client shows instead of a score.
 
 **Guard rails (all `{success:false, message}`):**
 

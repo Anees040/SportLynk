@@ -381,6 +381,11 @@ module.exports = {
   RANKED_MIN,
   MOVEMENT_WINDOW_DAYS,
   ACTIVITY_WINDOW_DAYS,
+  // Exported in S.5 Wave B so the opponent recommender counts "recent activity"
+  // over exactly the statuses this file already counts it over. A third hand-typed
+  // copy of [completed, disputed] is how the rail and the profile card would end up
+  // disagreeing about how active a team is.
+  SERIES_STATUSES,
   SERIES_LIMIT,
   MAX_LIMIT,
   normaliseCity,

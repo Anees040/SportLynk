@@ -2597,6 +2597,109 @@ massaged into lift.
 - [ ] Carried: second-annotator κ (S4-A), owner's verdict on `demand_patterns.png` (S.3 B), first
   commit/tags (nothing committed; standing rule).
 
+## Wave S5-B (Player & opponent recommenders — a deterministic scorer, not a 4th model)
+
+**Status: code-complete, `flutter analyze` 0, `node --check` clean on all 4 touched JS files, backend
+boots clean. One live check PENDING: the running ml-service must be restarted to load the new module
+(uvicorn had no `--reload`, and `/health` still showed no `recoRankSpec`).** No schema change, no
+training run, no new artifact.
+
+This wave adds two recommenders the SRS asks for — *suggested players for a team's roster* (FR2.8) and
+a *re-ranked opponent list* (FR5.3–5.5) — but it deliberately is **not** model #4. The spec handed the
+weights as literal numbers, so there is nothing to learn: the scorer is a published weighted mean. That
+single fact drove every downstream decision (no `joblib`, no `KNOWN_MODELS` entry, no registry row, and
+the two new endpoints can never 503 `model_not_loaded`).
+
+Measured this wave (the code-execution classifier was intermittently down my side; the ml-service
+restart + curl are handed to the user):
+
+```
+flutter analyze    No issues found! (ran in 3.8s) — whole app after reco.dart/reco_widgets.dart + 2 screens
+node --check        clean on matches.js, teams.js, mlClient.js, teamStats.js
+backend             boots clean on :3000; /api/health OK
+ml-service          UP on :8000 but on PRE-WAVE code — /health has no recoRankSpec → RESTART REQUIRED
+```
+
+### The contract: `reco_rank.py`, a 4th frozen module that does not touch model #3
+
+The scorer lives in `app/core/reco_rank.py` (`RANK_SPEC_VERSION` `reco-rank-v1`, fingerprint
+`1a6c5f39bf5a2c56`). It imports the Wave-A `reco_features` module for *side-effect-free helpers only*
+and **must not edit it** — Wave A's fingerprint `138790ba577ea0f0` is stamped inside a RELEASED
+artifact, so any change there flips the served recommender to `incompatible`. Two scorers:
+
+- **Player** (`score_player`): `0.40·sport-fit + 0.25·elo + 0.20·activity + 0.15·zone`. The ELO term
+  uses the rating of the team(s) the player already plays for; a teamless player has none, so their
+  Trust Score stands in as a proxy and `elo_source` records which was used (`team_elo` vs `trust_proxy`).
+- **Opponent** (`score_opponent`): `0.60·elo-proximity + 0.20·trust + 0.20·activity`. This composite
+  becomes the competitiveness % the card prints, **replacing** S.2's `abs(ΔELO)` formula — but the v1
+  deterministic sort is kept intact as the fallback.
+
+### Three honesty rules, carried verbatim from the model waves
+
+1. **An absent component is not zero.** When an input does not exist for a candidate, that block takes
+   `NEUTRAL_PRIOR = 0.5` in the aggregate but is published as `null` in the `components` map. The
+   breakdown bar then draws "not counted against them" rather than a punishing 0% — a cold start must
+   not sink a new player or a new team to the bottom of every list.
+2. **FR2.6 is preserved in what is displayed.** `competitiveness` comes back `null` whenever either
+   team is unranked (its rating is a placeholder, not a measurement), exactly as v1's
+   `competitivenessFor()` returned null — yet the candidate is *still ranked*, on trust + activity with
+   the ELO term at the neutral prior. v1 did the same thing less visibly (it ordered by
+   `abs(COALESCE(elo,1000) − myElo)`, sorting by the placeholder while refusing to print it).
+3. **A weighted mean is never badged as AI.** The new wire value is `source:"ranked"` (vs Wave A's
+   `"model"`, and `"heuristic"`/`"unavailable"`). The UI attribution says "SportLynk ranking", not
+   "AI" — this is a published formula, and claiming otherwise is the one thing this wave cannot support.
+
+### Schema gaps handled honestly, no migration
+
+The scorer wanted three columns the schema does not have, and each was resolved without a migration and
+recorded in the published `gaps` map: **no `position` column** (the 0.40 block is sport-fit only,
+`gaps.position:null`); **no player city/zone** (derived from the venues a player actually books, via
+`zone_of`); **no player visibility flag** (candidate pool = `role='player' AND is_active=true`).
+
+### Determinism and monotonicity
+
+Percent band is `5..99` with half-up rounding (`floor(x·100 + 0.5)`); the order key is
+`(-match_pct, -score, id)` so the printed list is monotone in the number the user sees; activity
+saturates at fixed caps (players 8 bookings/30d, teams 4 terminal matches/30d), not pool-relative, so a
+quiet week does not silently re-scale everyone.
+
+### Node wiring
+
+- `POST /reco/players` and `POST /reco/opponents` on ml-service (candidate pool resolved by Node and
+  posted in the body — **the phone never calls ml-service, and ml-service never touches Postgres**).
+- `GET /api/teams/:id/suggested-players` — **admin-only** (`access.requireRole(..., 'admin')`), pool =
+  public players in the team's home city (derived from booked venues) who play the sport and are not
+  already members, capped at 80, top 12 returned.
+- `GET /api/matches/opponents` — now enriched per row (`matchPct`, `rankScore`, `components`, `reasons`,
+  `matchesLast30d`) with a `ranking{}` block; the v1 `|ΔELO|` sort is the fallback.
+- `mlClient` circuit breaker: 3 consecutive failures → 30 s open; **a 4xx does not trip it** (only
+  5xx/network), an empty candidate pool short-circuits to `{available:true, items:[]}` with no round
+  trip, and a fallback never carries a fabricated `match_pct`.
+- The invite shortcut reuses `POST /teams/:id/invites` (single-use link, raw token returned once) with
+  the accepted `note` field tagging the link for the suggested player — there is no per-user invite in
+  the schema, and this does not invent one.
+
+### Flutter
+
+`lib/models/reco.dart` (`ScoreComponent`, `RankingInfo`, `PlayerSuggestion`, `SuggestedPlayers`) and
+`lib/widgets/reco_widgets.dart` (`MatchPctBadge`, the `WhyThisMatch` expander, `SuggestedPlayersRail` +
+`PlayerSuggestionSheet`, `RankingSourceNote`). The one client-side rule mirrors the server's: **a
+percentage renders only when `ranking.available` is true**, and a null component is drawn as unknown,
+never zero. The roster screen gains an admin-only "Suggested players" rail (match % + invite shortcut,
+its own loading/failed/empty states kept apart); `find_opponents_screen` gains the inline "Why this
+match?" breakdown and an attribution strip, and its band divider is now **gated to the fallback path** —
+on the ranked path the order is by match quality, so an out-of-band team can outrank an in-band one and
+`withinBand` becomes a per-row marker rather than a boundary to cut on.
+
+### Still open after this wave
+
+- [ ] **Restart ml-service** and confirm `/health.recoRankSpec` (fingerprint `1a6c5f39bf5a2c56`) +
+  `POST /reco/players` / `POST /reco/opponents` return `source:"ranked"` with a real breakdown.
+- [ ] Optionally extend `scripts/check_ml_service.js` to assert `recoRankSpec` weights + `eloGapCap`
+  against the live path (`rankSpec()` is already exported for this).
+- [ ] Carried forward from S5-A: rotate `ML_API_KEY` before S.7; re-measure recommender lift at ≥5
+  users with ≥2 bookings; second-annotator κ (S4-A); first commit/tags.
+
 
 
 

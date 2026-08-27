@@ -1,4 +1,5 @@
 import '../constants/api_constants.dart';
+import '../models/reco.dart';
 import '../models/team.dart';
 import '../models/team_stats.dart';
 import 'api_service.dart';
@@ -55,6 +56,19 @@ class TeamService {
   Future<Map<String, dynamic>> detail(String token, String id) =>
       _api.get(ApiConstants.team(id), token: token);
 
+  /// Suggested players for a team's roster (FR2.8) — admin-only on the server.
+  ///
+  /// **null means the request failed** (offer a retry); an empty [SuggestedPlayers]
+  /// means the pool was genuinely empty (nobody near this team to suggest yet).
+  /// The rail shows a different sentence for each, so the two must stay apart —
+  /// the same reasoning as [rankings] above.
+  Future<SuggestedPlayers?> suggestedPlayers(String token, String id) async {
+    final r = await _api.get(ApiConstants.teamSuggestedPlayers(id), token: token);
+    if (r['success'] != true) return null;
+    final data = r['data'];
+    return SuggestedPlayers.fromJson(data is Map ? Map<String, dynamic>.from(data) : const {});
+  }
+
   // ── Create / edit ──────────────────────────────────────────
   Future<Map<String, dynamic>> create(
     String token, {
@@ -89,8 +103,15 @@ class TeamService {
 
   // ── Invites ────────────────────────────────────────────────
   /// Mint a fresh 48h invite link. The raw token is returned exactly once.
-  Future<Map<String, dynamic>> invite(String token, String id) =>
-      _api.post(ApiConstants.teamInvites(id), {}, token: token);
+  ///
+  /// [note] rides along on the server's `req.body.note` — the roster rail names
+  /// the player the link was minted for, so the invite list reads as "for Ayaan"
+  /// rather than an anonymous link. There is no per-user invite in the schema;
+  /// this is still a single-use link the captain sends themselves.
+  Future<Map<String, dynamic>> invite(String token, String id, {String? note}) =>
+      _api.post(ApiConstants.teamInvites(id), {
+        'note': ?note,
+      }, token: token);
 
   Future<Map<String, dynamic>> invitesList(String token, String id) =>
       _api.get(ApiConstants.teamInvites(id), token: token);

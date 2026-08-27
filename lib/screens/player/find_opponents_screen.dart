@@ -10,6 +10,7 @@ import '../../services/match_service.dart';
 import '../../services/team_service.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/match_widgets.dart';
+import '../../widgets/reco_widgets.dart';
 import 'create_team_screen.dart';
 import 'match_challenge_screen.dart';
 
@@ -382,23 +383,36 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
       );
     }
 
-    // FR5.3 — the server orders by |rating gap| ascending, so every in-band team
-    // is already ahead of every out-of-band one. The divider just names the
-    // boundary the ordering has produced; it is not a second sort.
-    final firstOutOfBand = list.indexWhere((o) => !o.withinBand);
+    // The band divider only makes sense on the FALLBACK path. There the server
+    // orders by |rating gap| ascending (FR5.3), so every in-band team sits ahead
+    // of every out-of-band one and the divider names a real boundary. On the
+    // ranked path the order is by match quality, so an out-of-band team can sit
+    // above an in-band one and there is no single line to cut — `withinBand`
+    // stays a per-row marker, and the attribution strip explains the ordering.
+    final ranked = _list.ranking.available;
+    final firstOutOfBand = ranked ? -1 : list.indexWhere((o) => !o.withinBand);
 
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
-        itemCount: list.length,
-        itemBuilder: (_, i) => Column(
-          children: [
-            if (i == firstOutOfBand && i > 0) _bandDivider(),
-            _opponentCard(list[i]),
-          ],
-        ),
+        itemCount: list.length + 1,
+        itemBuilder: (_, i) {
+          if (i == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: RankingSourceNote(ranking: _list.ranking),
+            );
+          }
+          final idx = i - 1;
+          return Column(
+            children: [
+              if (idx == firstOutOfBand && idx > 0) _bandDivider(),
+              _opponentCard(list[idx]),
+            ],
+          );
+        },
       ),
     );
   }
@@ -518,6 +532,18 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
                 ? 'Your team needs a verified match first'
                 : 'They have no verified matches yet',
           ),
+          // FR5.5 — explainability. Present only on the ranked path (the fallback
+          // carries no components), and the widget itself collapses to nothing
+          // when there is no breakdown to show, so an unranked-but-listed team
+          // still gets its trust/activity reasons without a phantom rating bar.
+          if (c.hasBreakdown)
+            WhyThisMatch(
+              components: _list.ranking.breakdown(c.components),
+              reasons: c.reasons,
+              footnote: _list.ranking.specTag == null
+                  ? null
+                  : 'Weights published by ${_list.ranking.specTag}',
+            ),
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,

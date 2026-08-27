@@ -106,9 +106,9 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
     ELO, or match change since) — expected untouched, not measured.
   - re-estimate elasticity from real bookings once data exists (pipeline is validated;
     ELASTICITY_PEAK 0.85 / OFFPEAK 2.20 are stated assumptions, not estimates).
-- NEXT: S.5 recommender Wave A DONE (model #3 live) → any remaining S.5 waves per the SRS →
-  S.6 NLU assistant → S.7 tournaments/chat/admin dispute-UI/demo pack + deploy ml-service as a
-  2nd Render service.
+- NEXT: S.5 recommenders Wave A (venues, model #3) + Wave B (player/opponent scorer) DONE → any
+  remaining S.5 waves per the SRS → S.6 NLU assistant → S.7 tournaments/chat/admin dispute-UI/demo
+  pack + deploy ml-service as a 2nd Render service.
 
 ## Wave log (one entry per completed wave: what shipped · the gotcha · verified)
 - S1-A — escrow ledger unified (20% deposit / 24h window / 30-min no-show); escrow.js +
@@ -304,6 +304,34 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
   `python training/build_reco.py`. VERIFIED LIVE: /health reco status=ready (modelVersion
   reco-content-v1-20260827-090526) and an authenticated GET /api/venues/recommended returned
   source=model with a real match_pct + reason chips.
+- S5-B — player-for-team suggestions (FR2.8) + opponent re-ranking (FR5.3–5.5): a DETERMINISTIC
+  weighted scorer, NOT model #4 — the weights are given literally, so nothing is trained (no joblib, no
+  KNOWN_MODELS entry, and the two endpoints can never 503 model_not_loaded). Lives in app/core/reco_rank.py
+  (RANK_SPEC_VERSION reco-rank-v1, fingerprint 1a6c5f39bf5a2c56), a 4th frozen ◆ contract that imports
+  reco_features side-effect-free and does NOT edit it (Wave A's fingerprint is stamped in a RELEASED
+  artifact — editing it would break serving). PLAYER = 0.40 sport-fit + 0.25 elo (team ELO, or trust as a
+  proxy when teamless) + 0.20 activity + 0.15 zone; OPPONENT = 0.60 elo-proximity + 0.20 trust + 0.20
+  activity. An absent component takes NEUTRAL_PRIOR 0.5 in the mean but stays NULL in the published
+  components map — a cold start is not punished, and the breakdown bar says "not counted against them",
+  never 0%. FR2.6 preserved: competitiveness == the composite match% when both teams are ranked, NULL when
+  either is unranked, yet the candidate is STILL ranked (elo term → neutral). Schema gaps handled honestly,
+  NO migration: no position column (fit = sport only, gaps.position:null), no player city/zone (derived
+  from the venues a player actually books, zone_of), no player visibility flag (role='player' AND
+  is_active). New wire value source:"ranked" — never badged as AI, because it is a published formula, not a
+  trained model; pct band 5..99, half-up rounding, order key (-match_pct,-score,id) so the list is monotone
+  in the printed number; fixed activity caps (players 8/30d, teams 4/30d). Node: POST /reco/players +
+  /reco/opponents (ml-service), GET /api/teams/:id/suggested-players (admin-only), and GET
+  /api/matches/opponents now enriched (matchPct/rankScore/components/reasons/matchesLast30d + a ranking{}
+  block; the v1 |ΔELO| sort is KEPT as the fallback). mlClient breaker: a 4xx does NOT trip it (only
+  5xx/network), an empty pool short-circuits with no round trip, and a fallback never carries a fabricated
+  match_pct. Flutter: reco.dart + reco_widgets.dart (MatchPctBadge, the WhyThisMatch expander,
+  SuggestedPlayersRail + PlayerSuggestionSheet, RankingSourceNote); the roster gains an admin-only
+  "Suggested players" rail (match% + an invite shortcut that reuses the single-use link, tagged with a
+  note), find_opponents gains the "Why this match?" breakdown + an attribution strip, and its band divider
+  is now gated to the fallback path (on the ranked path order is by quality, so withinBand is only a
+  per-row marker). VERIFIED: flutter analyze 0, node --check clean on all 4 touched JS files, backend boots
+  clean. PENDING LIVE: the running ml-service must be RESTARTED to load reco_rank (uvicorn had no --reload;
+  /health showed no recoRankSpec) — then curl /health.recoRankSpec + POST /reco/{players,opponents}.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;

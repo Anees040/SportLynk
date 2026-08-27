@@ -81,7 +81,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.responses import JSONResponse
 
-from .core import config, reco_features
+from .core import config, reco_features, reco_rank
 from .core.registry import registry
 from .routers import pricing, sentiment, reco
 
@@ -360,6 +360,11 @@ def health() -> dict[str, Any]:
             "featureSpec": pricing.features.spec(),
             "normSpec": sentiment.text_norm.spec(),
             "recoSpec": reco_features.spec(),
+            # Published beside the three model specs even though nothing is trained
+            # behind it: the seven weights it fingerprints decide every percentage
+            # the roster rail and the opponent cards draw, and check_ml_service.js
+            # has to be able to assert they did not move.
+            "recoRankSpec": reco_rank.spec(),
             "runtime": registry.runtime(),
         },
         "message": "SportLynk ML service is healthy",

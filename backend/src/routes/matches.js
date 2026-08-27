@@ -55,6 +55,8 @@ const access = require('../utils/teamAccess');
 const mc = require('../utils/matchCore');
 const elo = require('../utils/elo');
 const settings = require('../utils/globalSettings');
+const teamStats = require('../utils/teamStats');
+const ml = require('../services/mlClient');
 const bus = require('../realtime/bus');
 const { PREVIEW_LABEL } = require('../utils/matchPreview');
 const { notify } = require('../utils/notify');
@@ -401,11 +403,13 @@ router.get('/owner/pending', async (req, res, next) => {
  * screen is specified to show, and all three depend on the pairing rather than on
  * either team alone.
  *
- * FR5.3 IS THE ORDER BY. Sorting by `abs(t.elo - my elo)` ascending puts every
- * team inside the ±400 band ahead of every team outside it, by construction — a
- * separate "in band first" clause would be a second copy of the same rule, free
- * to drift from it. `withinBand` is still reported per row so the UI can mark
- * where the good-match band ends.
+ * FR5.3 — S.5 Wave B MOVED THE RANKING TO THE MODEL SEAM, and the SQL's
+ * `abs(t.elo - my elo)` ordering is now the FALLBACK rather than the answer. The
+ * ml-service scores 0.6 x rating proximity + 0.2 x opponent trust + 0.2 x recent
+ * activity and returns a component breakdown per row; when it cannot be reached
+ * the rows ship in this query's order with S.2's competitiveness formula, which is
+ * why the ORDER BY still has to be right. `withinBand` is reported per row on both
+ * paths so the UI can mark where the good-match band ends.
  */
 router.get('/opponents', async (req, res, next) => {
   const teamId = uuid(req.query.teamId || req.query.team_id);
@@ -456,6 +460,34 @@ router.get('/opponents', async (req, res, next) => {
       params,
     );
 
+    // ── Recent activity for the whole pool, in one query ────────────────────
+    // The recommender's third component. Counted over the SAME 30-day window and
+    // the SAME statuses utils/teamStats.js already counts a team's own activity
+    // over (a disputed fixture was still played), so the number behind a "Playing
+    // regularly" reason is the number that team's own profile card shows.
+    //
+    // LEFT JOIN LATERAL over unnest, so a team with no matches comes back as ZERO
+    // rather than missing: zero is a measurement — genuinely inactive — and
+    // reco_rank scores it 0.0, while an absent value would take the neutral prior
+    // and quietly reward a dormant team.
+    const ids = rows.map((r) => r.id);
+    const activity = new Map();
+    if (ids.length) {
+      const { rows: act } = await client.query(
+        `SELECT x.id, COALESCE(c.n, 0)::int AS activity_30d
+           FROM unnest($1::uuid[]) AS x(id)
+           LEFT JOIN LATERAL (
+             SELECT count(*) AS n
+               FROM matches m
+              WHERE (m.challenger_team = x.id OR m.opponent_team = x.id)
+                AND m.status = ANY($2::text[])
+                AND COALESCE(m.verified_at, m.updated_at, m.created_at) >= now() - $3::interval
+           ) c ON TRUE`,
+        [ids, teamStats.SERIES_STATUSES, `${teamStats.ACTIVITY_WINDOW_DAYS} days`],
+      );
+      for (const a of act) activity.set(a.id, mc.int0(a.activity_30d));
+    }
+
     const opponents = rows.map((r) => {
       const stats = {
         wins: mc.int0(r.wins), losses: mc.int0(r.losses), draws: mc.int0(r.draws),
@@ -480,9 +512,83 @@ router.get('/opponents', async (req, res, next) => {
         withinBand: mc.int0(r.gap) <= elo.PREFERRED_ELO_BAND,
         // FR5.4 — null whenever either side is unranked, so the bar renders
         // "Unranked" instead of a percentage derived from a placeholder 1000.
+        //
+        // THIS IS NOW THE FALLBACK VALUE. When the ranking service answers, it is
+        // overwritten below by the three-component score; when it does not, this v1
+        // number ships unchanged and the screen keeps working. Both paths obey the
+        // same unranked rule, which is why the swap is invisible to the UI.
         competitiveness: elo.competitivenessFor(me, { elo: rating, ...stats }),
+        matchesLast30d: activity.get(r.id) ?? 0,
+        // Populated only on the ranked path — see below. Null here rather than
+        // absent so Dart's model reads one shape from both paths.
+        matchPct: null,
+        rankScore: null,
+        components: null,
+        reasons: [],
       };
     });
+
+    // ── FR5.3 — model ranking, v1 kept as the fallback ──────────────────────
+    // The ml-service scores each pairing on 0.6 x rating proximity + 0.2 x trust +
+    // 0.2 x recent activity and returns a per-row component breakdown, which the app
+    // renders as the expandable "Why this match?" line. Rating proximity is the same
+    // curve utils/elo.js uses, so the primary and fallback paths agree about what a
+    // close match is and only disagree about what else counts.
+    //
+    // If it is unreachable the rows keep the SQL's rating-proximity order and v1's
+    // competitiveness, and `ranking.source` says `heuristic` — the feature degrades
+    // to exactly what S.2 shipped rather than going blank (ER2.6).
+    const ranked = await ml.recommendOpponents({
+      teamId,
+      team: {
+        team_id: teamId,
+        elo: myElo,
+        ranked: elo.isRanked(me),
+        trust_score: me.trustScore,
+        sport: me.sport,
+        city: me.city,
+      },
+      candidates: opponents.map((o) => ({
+        team_id: o.id,
+        elo: o.elo,
+        ranked: o.ranked,
+        trust_score: o.trustScore,
+        matches_30d: o.matchesLast30d,
+      })),
+      limit: Math.max(1, opponents.length),
+    });
+
+    let list = opponents;
+    if (ranked.available && ranked.items.length) {
+      const enriched = new Map(
+        opponents.map((o) => [String(o.id), o]),
+      );
+      for (const it of ranked.items) {
+        const row = enriched.get(String(it.team_id));
+        if (!row) continue;
+        // `?? null` and not `|| null`: a legitimate 0 must survive, and
+        // competitiveness is deliberately null for an unranked pairing.
+        row.competitiveness = it.competitiveness ?? null;
+        row.matchPct = it.match_pct ?? null;
+        row.rankScore = it.score ?? null;
+        row.components = it.components || null;
+        row.reasons = Array.isArray(it.reasons) ? it.reasons : [];
+      }
+      // Reorder to the scorer's ranking. Anything it did not score (it cannot
+      // happen today, but a future filter there would make it possible) keeps its
+      // v1 position at the tail rather than vanishing from the screen.
+      const seen = new Set();
+      const ordered = [];
+      for (const it of ranked.items) {
+        const row = enriched.get(String(it.team_id));
+        if (row && !seen.has(String(it.team_id))) {
+          ordered.push(row);
+          seen.add(String(it.team_id));
+        }
+      }
+      for (const o of opponents) if (!seen.has(String(o.id))) ordered.push(o);
+      list = ordered;
+    }
 
     return ok(res, {
       myTeam: {
@@ -505,7 +611,22 @@ router.get('/opponents', async (req, res, next) => {
       myRole: role,
       canChallenge: role === 'captain',
       preferredBand: elo.PREFERRED_ELO_BAND,
-      opponents,
+      // Which path produced the order and the percentages, in the same spirit as
+      // the pricing card's `source` badge: a screen that shows a ranking is
+      // entitled to say what ranked it, and the FYP committee is entitled to ask.
+      ranking: {
+        source: ranked.source,
+        available: ranked.available,
+        specVersion: ranked.rankSpecVersion,
+        specFingerprint: ranked.rankSpecFingerprint,
+        weights: ranked.weights,
+        componentOrder: ranked.componentOrder,
+        activityWindowDays: teamStats.ACTIVITY_WINDOW_DAYS,
+        fallbackNote: ranked.available
+          ? null
+          : 'Ordered by rating proximity — the ranking service is unavailable',
+      },
+      opponents: list,
     });
   } catch (e) {
     const f = friendlyDbError(e);

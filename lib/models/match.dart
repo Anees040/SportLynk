@@ -1,5 +1,6 @@
 library;
 
+import 'reco.dart';
 import 'team.dart' show asNum;
 
 /// Wire models for the match lifecycle (S2 Wave C).
@@ -16,6 +17,7 @@ import 'team.dart' show asNum;
 
 int _int(dynamic v, [int fallback = 0]) => asNum(v, fallback).round();
 int? _intOrNull(dynamic v) => v == null ? null : asNum(v, 0).round();
+double? _dblOrNull(dynamic v) => v == null ? null : asNum(v, 0).toDouble();
 bool _bool(dynamic v) => v == true;
 String? _str(dynamic v) {
   final s = v?.toString();
@@ -431,22 +433,54 @@ class MatchSubmission {
 /// A candidate opponent from `GET /matches/opponents` — a team plus everything
 /// that only exists *because of the pairing*: the rating gap, the
 /// competitiveness score, and the trust badge (FR5.3 – FR5.5).
+///
+/// S.5 Wave B added the breakdown fields. [competitiveness] is unchanged in
+/// meaning and still obeys FR5.4 (null while either team is unranked), but its
+/// VALUE now comes from the three-component scorer when that service answered,
+/// and from the v1 rating-gap formula when it did not. Which one produced it is
+/// `OpponentList.ranking.available` — the row itself deliberately does not carry a
+/// per-row flag, because the whole list is ordered by one engine or the other.
 class OpponentCandidate {
   final MatchSide team;
   final int eloGap;
 
-  /// Inside the ±400 preferred band (FR5.3). The list already arrives ordered
-  /// closest-first, so this only drives the "well matched" marker.
+  /// Inside the ±400 preferred band (FR5.3). On the fallback path the list is
+  /// ordered by |gap|, so every in-band team precedes every out-of-band one and
+  /// this marks the boundary. On the ranked path the order is by match quality, so
+  /// this is only a per-row marker and no longer a divider.
   final bool withinBand;
 
   /// FR5.4 — 5..100, null while either team is unranked.
   final int? competitiveness;
+
+  /// The scorer's overall percentage. Null on the fallback path, and null is not
+  /// zero: it means no score was computed, so none is shown.
+  final int? matchPct;
+
+  /// The same figure before the percent band, kept for the breakdown footer.
+  final double? rankScore;
+
+  /// Component key → 0..1, or null for a block that had no input. Null map on
+  /// the fallback path.
+  final Map<String, double?>? components;
+
+  /// Short server-written phrases naming the blocks that carried this match.
+  final List<String> reasons;
+
+  /// Terminal matches in the activity window — the raw count behind the activity
+  /// component, so the expander can show evidence and not just a bar.
+  final int matchesLast30d;
 
   const OpponentCandidate({
     required this.team,
     required this.eloGap,
     required this.withinBand,
     this.competitiveness,
+    this.matchPct,
+    this.rankScore,
+    this.components,
+    this.reasons = const [],
+    this.matchesLast30d = 0,
   });
 
   factory OpponentCandidate.fromJson(Map<String, dynamic> j) => OpponentCandidate(
@@ -454,7 +488,18 @@ class OpponentCandidate {
         eloGap: _int(j['eloGap']),
         withinBand: _bool(j['withinBand']),
         competitiveness: _intOrNull(j['competitiveness']),
+        matchPct: _intOrNull(j['matchPct']),
+        rankScore: _dblOrNull(j['rankScore']),
+        components: RankingInfo.componentsFrom(j['components']),
+        reasons: (j['reasons'] as List? ?? const [])
+            .map((e) => '$e'.trim())
+            .where((s) => s.isNotEmpty)
+            .toList(),
+        matchesLast30d: _int(j['matchesLast30d']),
       );
+
+  /// Whether there is anything to open a "Why this match?" row onto.
+  bool get hasBreakdown => components != null && components!.isNotEmpty;
 }
 
 /// The whole opponent-picker payload: the candidates plus who I am in this.
@@ -463,6 +508,12 @@ class OpponentList {
   final String? myRole;
   final bool canChallenge;
   final int preferredBand;
+
+  /// S.5 Wave B — which engine ordered this list and scored its rows. The screen
+  /// reads `available` before drawing any percentage, and `fallbackNote` when it
+  /// is false.
+  final RankingInfo ranking;
+
   final List<OpponentCandidate> opponents;
 
   const OpponentList({
@@ -470,16 +521,21 @@ class OpponentList {
     this.myRole,
     required this.canChallenge,
     required this.preferredBand,
+    this.ranking = RankingInfo.none,
     required this.opponents,
   });
 
   factory OpponentList.fromJson(Map<String, dynamic> j) {
     final mt = j['myTeam'];
+    final rk = j['ranking'];
     return OpponentList(
       myTeam: mt is Map ? MatchSide.fromJson(Map<String, dynamic>.from(mt)) : null,
       myRole: _str(j['myRole']),
       canChallenge: _bool(j['canChallenge']),
       preferredBand: _int(j['preferredBand'], 400),
+      ranking: rk is Map
+          ? RankingInfo.fromJson(Map<String, dynamic>.from(rk))
+          : RankingInfo.none,
       opponents: (j['opponents'] as List? ?? const [])
           .whereType<Map>()
           .map((x) => OpponentCandidate.fromJson(Map<String, dynamic>.from(x)))
