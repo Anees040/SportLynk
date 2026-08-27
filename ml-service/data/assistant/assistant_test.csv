@@ -1,0 +1,151 @@
+id,text,intent,lang,phenomena,notes
+at-001,"done deal - bahria cricket arena, saturday morning, 2 hrs",book_venue,en,ellipsis;short;sms_speak,done deal plus concrete slot details is a commitment with no availability question in it
+at-002,"pls dont let it go, grab that 6am nets slot for us",book_venue,en,negation;imperative;sms_speak,"instruction to secure one specific slot, which is the booking act"
+at-003,you said 3 grounds were free at 9 - take the second one,book_venue,en,boundary;ellipsis;numeric,"selects from an earlier list and orders us to take it, so booking rather than discovery or availability"
+at-004,8pm free hai to book kar do,book_venue,mix,boundary;code_switch;question;short,"genuinely ambiguous because it asks whether a slot is free and orders the booking in one line, but the operative request is the commit and availability is only its precondition, so book_venue over check_availability"
+at-005,"listen, my team ka match hai kal - dha phase 2 arena, 2 hours, kar do confirm",book_venue,mix,code_switch;run_on;numeric,"telegraphic slot details ending in an imperative confirmation, which is a booking act"
+at-006,"no need to show more options, jo cheapest tha wahi le lo",book_venue,mix,boundary;code_switch;negation,"explicitly refuses more discovery and tells us to take one, so book_venue not find_venue"
+at-007,"pakka karo na, paise wallet se kaat lo",book_venue,ru,boundary;short;imperative;slang,"commits to the booking, and the wallet mention is a payment instruction rather than a balance query"
+at-008,"mera dil kar raha hai aaj khelne ka, saade aath wala slot mere naam kar do",book_venue,ru,indirect;run_on;numeric,"mere naam kar do assigns a named slot to the user, so it is a commit and not a check_availability question"
+at-009,"bas isi pe muhar laga do, aur time waste nahi karna",book_venue,ru,indirect;slang;negation,"idiomatic seal-it imperative referring to the option already in view, so the act is booking"
+at-010,"jahan lights hain wahi le lo, 6 baje ka",book_venue,ru,boundary;ellipsis;numeric,"the amenity is only a selection criterion for an order to take a slot, so book_venue not venue_info"
+at-011,"scrap the 20:00 slot i took at jinnah, we are done",cancel_booking,en,slang;numeric;boundary,scrapping a slot the user already took is cancelling an existing booking
+at-012,"i booked the wrong day, undo it please",cancel_booking,en,indirect;short,undoing a completed booking is cancel_booking and no rule is being asked about
+at-013,"take my name off saturdays nets, someone else can have it",cancel_booking,en,indirect;run_on,"removing themselves from a reserved slot is a cancellation request, not a refund question"
+at-014,"im out of town, cancel kar dein saturday wali",cancel_booking,mix,code_switch;indirect;ellipsis,a reason plus an explicit cancel instruction aimed at one existing booking
+at-015,"no longer needed, us 6am wale nets ko free kar dein",cancel_booking,mix,code_switch;indirect;numeric,"free kar dein releases a slot the user already holds, which is a cancellation"
+at-016,"double bookig ho gai, ek cancel kar do plzz",cancel_booking,mix,typo;code_switch;short,"asks us to drop one of two bookings that already exist, so an action rather than a policy question"
+at-017,"aaj ka program cancel, booking bhi khatam kar dein",cancel_booking,ru,short;ellipsis;imperative,"tells us to end an existing booking, so it is the cancellation act and not a question about the rules"
+at-018,"booking cancel karne ka option kahan hai, parso wali hatani hai",cancel_booking,ru,question;boundary,"asks where to cancel one of their own bookings, so the goal is the cancellation itself, not the refund policy"
+at-019,"8 baje wali booking ka kya karein, main aa nahi sakta",cancel_booking,ru,indirect;boundary;run_on,"genuinely ambiguous and could be read as asking the policy, but the user names their own booking and says they cannot attend, so the actionable reading is cancel_booking rather than refund_policy"
+at-020,"shalimar wali cancel kar do, refund jo banta hai kar dena",cancel_booking,ru,boundary;run_on,"the imperative cancels a specific booking and the refund clause is an aside, not a query about the refund rules"
+at-021,"do you have anything left for 30 august, any time works",check_availability,en,multi_slot;run_on,"date-scoped slot query with no venue named, which the contract still puts in check_availability"
+at-022,"before i pay, just confirm the 7:30pm slot at dha phase 2 arena is actually free",check_availability,en,boundary;run_on;multi_slot,"payment is only anticipated; the ask is to confirm the slot is free, so not book_venue"
+at-023,did someone grab 6am at bahria cricket arena already,check_availability,en,short;question;multi_slot,"asks whether that slot is already occupied, which is an availability check"
+at-024,is weekend pe koi opening hai jinnah pe? doesnt matter what time,check_availability,mix,code_switch;run_on;typo,"opening means a free slot at a named venue, with the time left open"
+at-025,"bhai 6am ka slot bhi chalega, kuch bhi khali ho tomorrow",check_availability,mix,code_switch;ellipsis;run_on,"user wants to know what is free, not commanding a booking yet"
+at-026,centaurus pe kitne baje tak slots khali hain today,check_availability,mix,boundary;multi_slot;question,"about free slots, not the venue opening timings, so availability and not venue_info"
+at-027,aaj raat 10 baje tak kuch khali reh jata hai ya sab pehle se bhar jata hai,check_availability,ru,boundary;run_on;indirect,"asks whether slots stay free that late, an availability question, not which ground to pick"
+at-028,kal 7 baje wala khali?,check_availability,ru,short;ellipsis;boundary,"khali makes it a freeness check on a time, not an instruction to book it"
+at-029,"shalimar wale ground pe 9 baje khali hai to bta dena, book baad me karunga",check_availability,ru,boundary;run_on;multi_slot,"booking is explicitly deferred, so the live request is only the free-slot check"
+at-030,margala cricket club pe jumma ko subah kuch khaali hy?,check_availability,ru,misspelled_venue;typo;multi_slot,"named venue plus date and time window with khali, so availability"
+at-031,can other people search for my squad or is it invite only,create_team_help,en,question;run_on,"asks how joining our team works, so team setup help"
+at-032,do i have to pick a home area when making the squad,create_team_help,en,question;boundary,"a field in the team creation flow, so create_team_help and not venue discovery"
+at-033,vice captain a thing here?,create_team_help,en,short;ellipsis;question,asks which captaincy roles exist when setting up a team
+at-034,ek banda 2 teams me ho sakta hai ya nahi,create_team_help,mix,question;negation;boundary,"a membership rule asked while setting up a team, so a how-to"
+at-035,captain app chhor de to team ka kya hota hai,create_team_help,mix,question;indirect,"asks how team ownership is handled, a team management how-to"
+at-036,jis bande ka account nahi hai usko team me kaise dalen,create_team_help,mix,question;boundary,"how to bring someone onto our own roster, not how to find opponents"
+at-037,team me jo bande add kiye hain unko pata chalega ke hum ne dala hai,create_team_help,ru,question;indirect,"asks how added members are notified, which is part of roster setup and not a stats or match request"
+at-038,ek hi team ka sport change kar sakte hain baad me,create_team_help,ru,question;boundary,"editing an existing team is team management help, not venue or opponent discovery"
+at-039,"captain kaun banega jab hum team banaen ge, sabse zyada rating wala",create_team_help,ru,boundary;question,"genuinely ambiguous because rating is mentioned, but the question is how captaincy is assigned at creation, so a how-to and not team_stats"
+at-040,"ek banda nikalna hai team se, us ka option nahi mil raha",create_team_help,ru,negation;indirect,removing a member is roster management help
+at-041,anyone wants to take us on this weekend,find_opponents,en,slang;question,an open challenge aimed at other teams
+at-042,"we are a man down, does the app pull in a sub",find_opponents,en,boundary;indirect,"needs one more player to complete the match, which belongs to find_opponents"
+at-043,"our whole squad is free after 9, is anyone playing that late",find_opponents,en,indirect;run_on;numeric,"asks which teams are playing then rather than whether a venue slot is open, so find_opponents not check_availability"
+at-044,"kal ke liye ground book hai, bas opposite team nahi mili",find_opponents,mix,boundary;negation;run_on,"the venue is already booked and the missing piece is an opposing team, so not find_venue"
+at-045,koi 11 a side khelne wala group hai yahan,find_opponents,mix,numeric;question,looking for a full side to play against
+at-046,"sunday ko khali hain, kisi ke against arrangement ho jaye ga",find_opponents,mix,indirect;question,"asks us to arrange a match against someone, so opponent search and not slot availability"
+at-047,hum se koi khelna chahta hai to bata dena,find_opponents,ru,indirect;short,"asks the platform to surface a willing opposing team, so a match request"
+at-048,"hamari side me sirf 7 log hain, match kaise ho ga",find_opponents,ru,indirect;numeric;boundary,"needs players to complete a match, which the contract routes to find_opponents and not to team creation help"
+at-049,"kisi se panga lena hai is weekend, koi hai",find_opponents,ru,slang;question,"slang for wanting a match against someone, so an opponent search"
+at-050,koi aisi team hai jo hamare jitni hi kamzor ho,find_opponents,ru,boundary;slang;question,"ambiguous with team_stats since it references our strength, but the ask is which comparable team we can play, so an opponent suggestion"
+at-051,"we are new in isb, where do you guys usually play football on weekends",find_venue,en,indirect;run_on;question,"phrased as chit-chat but the answer needed is a list of grounds, so find_venue and not out_of_scope"
+at-052,which turf is open at 9pm in f-11,find_venue,en,boundary;multi_slot;question,"genuinely ambiguous: open at 9pm reads like availability, but the head of the question is WHICH turf and no venue is named, so it is discovery with a time filter"
+at-053,"somewhere indoor for badminton in blue area, doesnt matter how pricey",find_venue,en,typo;multi_slot;run_on;ellipsis,"asks for a venue matching sport, indoor and area filters, so discovery"
+at-054,"bhai aisa koi turf hai jahan raat ko bhi khel sakte hain? lights wala, g-11 ya i-8",find_venue,mix,boundary;code_switch;run_on;multi_slot,amenity and area filters over unknown venues; no slot is being checked
+at-055,"recommend something for cricket, thoda sasta, rawalpindi side",find_venue,mix,code_switch;ellipsis;short,venue recommendation with budget and city filters
+at-056,"hum 10 log hain saturday ko, koi bara ground chahiye near stadium road",find_venue,mix,code_switch;numeric;multi_slot;run_on,"the need is a ground of a certain size, not whether a time is open"
+at-057,"8 baje ke baad farigh hun, kahin football khelne ki jagah mil jaye gi?",find_venue,ru,indirect;question;boundary,"indirect discovery: wants a place to play, no venue named and nothing asked about a slot being khali, so find_venue"
+at-058,pindi me nets?,find_venue,ru,short;ellipsis,"bare fragment whose object is the venue itself, so discovery"
+at-059,g-8/2 k paas koi futbal ka maidaan hai? sasta sa,find_venue,ru,typo;multi_slot;question,"area plus budget filter over unknown grounds, classic discovery"
+at-060,jinnah sports complex ke ilawa aur kon kon se cricket ground hain isb me,find_venue,ru,boundary;multi_slot;question,"names a venue but asks for OTHER grounds, so discovery and not that venue availability"
+at-061,"hope you had a good weekend, all good at your end?",greeting,en,politeness;question;boundary,"pleasantry only, weekend is not a date filter and nothing is asked of the app"
+at-062,ty!,greeting,en,sms_speak;short,"two letter abbreviation of thanks, still the thanks side of greeting"
+at-063,"cool, catch you tomorrow then",greeting,en,short;boundary,"sign-off, tomorrow carries no availability or booking request so not check_availability"
+at-064,"koi masla nahi, thanks anyway",greeting,mix,code_switch;boundary,reads like a complaint but is closing courtesy and asks for nothing
+at-065,"ok noted, allah hafiz",greeting,mix,code_switch;short,"acknowledgement plus sign-off, both belong to greeting"
+at-066,"wah bhai, ye tou kaam ban gaya, thanks",greeting,mix,code_switch;run_on;slang,"gratitude only, no follow-up action is requested"
+at-067,"kaisay hain bhai, bohat dino baad",greeting,ru,question;politeness,"pure social check-in with no request, so greeting and not any task intent"
+at-068,"chalta hun phir, milte hain",greeting,ru,ellipsis;short,"sign-off fragment, and sign-offs sit inside greeting"
+at-069,"assalam o alaikum, ek baat puchni thi",greeting,ru,indirect;boundary,ambiguous but defensible: the question itself is never stated so there is no task to route and only the salutation remains
+at-070,"ji bilkul, note kar lia",greeting,ru,short;plain,"bare acknowledgement of the previous turn, carries no new request"
+at-071,which of the two grounds did i end up reserving for sunday,my_bookings,en,question;boundary,"chooses between the user's own existing reservations, so my_bookings not find_venue"
+at-072,anything on my calendar tonight with the squad?,my_bookings,en,indirect;short,"indirect ask for the user's own booked match tonight, not a request to find an opponent"
+at-073,"i paid for a pitch last week but never got a confirmation, what does my account say",my_bookings,en,run_on;boundary,"genuinely ambiguous with refund_policy, but the ask is what the user's own booking record shows, so my_bookings"
+at-074,"receipt me time galat likha he, meri actual booking ka time batao",my_bookings,mix,code_switch;run_on;imperative,"asks what the user's own booking record says, a bookings lookup not a venue detail"
+at-075,next fixture mera kis din he? margala cricket club wala,my_bookings,mix,code_switch;misspelled_venue;ellipsis,asks the date of the user's own upcoming booking; the venue name only identifies which booking
+at-076,koi active booking he meri? dashboard load nahi ho raha,my_bookings,mix,code_switch;run_on;boundary,"existence check over the user's own bookings, not over free slots at a venue"
+at-077,mera naam kis kis ground pe chadha hua he abhi,my_bookings,ru,indirect;question,"asks which grounds the user themselves has already reserved, so my_bookings not find_venue discovery"
+at-078,kia mene 8 baje wala pakka kar liya tha ya sirf pucha tha,my_bookings,ru,boundary;question,"asks the state of the user's own past booking, not whether that slot is free now, so my_bookings not check_availability"
+at-079,pichle mahine jo khela tha uska record kahan he,my_bookings,ru,indirect;question,"wants the user's own past booking record, a bookings lookup rather than venue facts"
+at-080,aaj raat ka mera kuch laga hua he ya free hun,my_bookings,ru,ellipsis;negation;boundary,"checks whether the user has a booking of their own tonight, not whether a venue has an open slot"
+at-081,any idea if messi is coming to pakistan,out_of_scope,en,boundary;question;indirect,player news with no platform action behind it
+at-082,biryani recipe?,out_of_scope,en,short;question,"cooking instructions, unrelated to any app capability"
+at-083,can you tell me a joke about cricket,out_of_scope,en,boundary;question,sports flavoured entertainment request with no bookable or queryable object
+at-084,bhai hamari national team ki form kaisi ja rahi hai aj kal,out_of_scope,mix,boundary;code_switch;question,"hamari here means the country side and not the users own squad, so team_stats does not apply"
+at-085,"yaar mera exam hai kal, koi shortcut notes bhejo",out_of_scope,mix,code_switch;run_on,"academic help request, outside everything the platform does"
+at-086,is ground pe psl ka match hoga kya?,out_of_scope,mix,boundary;code_switch;question,"anchored on a venue but asks about a professional league fixture, which is not a venue fact the app serves, so not venue_info"
+at-087,"shadi hall book karna hai december me, koi acha bata do",out_of_scope,ru,boundary;run_on,a wedding hall is not a sports venue so neither find_venue nor book_venue can serve it
+at-088,koi bara tournament chal raha he in dino?,out_of_scope,ru,boundary;indirect;typo,"ambiguous but defensible: there is no platform framing such as app pe or registration, so it reads as real world sports news rather than tournament_list"
+at-089,sasta wala package konsa hai mobile ka,out_of_scope,ru,boundary;question,sasta looks like a budget filter but the object is a mobile package the app cannot act on
+at-090,hamare area me load shedding ka time table kya hai,out_of_scope,ru,question,"utility schedule, nothing the platform holds data for"
+at-091,hypothetically if the owner cancels on me where does my money go,refund_policy,en,indirect;boundary,rule question about the refund and escrow flow with nothing to cancel
+at-092,how late is too late to back out without losing money,refund_policy,en,indirect;short,asks where the cancellation window falls
+at-093,do refunds land in the wallet or back on the card i paid with,refund_policy,en,boundary;question,"genuinely ambiguous with topup_help, but it asks where a refund goes under the rules rather than how to add or withdraw money, so refund_policy"
+at-094,slot pe 40 minute late pohancha to booking khatam ho jati hai,refund_policy,mix,numeric;boundary,asks the no show forfeit rule rather than reporting or cancelling an actual booking
+at-095,"escrow ka matlab kya hai, mera paisa owner ko kab transfer hota hai",refund_policy,mix,code_switch;run_on,"escrow mechanics are part of the rules and no balance figure is requested, so not wallet_balance"
+at-096,"24 hours se pehle cancel karun to full refund, right? confirm kardo",refund_policy,mix,code_switch;numeric;boundary,"the imperative asks to confirm the window rule, not to perform a cancellation"
+at-097,plan change ho raha hai... rules kya kehte hain agar last minute hataun to,refund_policy,ru,indirect;ellipsis,"asks what the rules say instead of instructing a cancellation, so refund_policy not cancel_booking"
+at-098,paise wapas ka koi chakkar hota hai ya seedha kat jate hain,refund_policy,ru,slang;question,general refund rule question with no specific booking being acted on
+at-099,match barish me na ho paye to platform ka usool kya hai,refund_policy,ru,indirect;negation,"asks the policy for a washed out slot, no cancel command given"
+at-100,booking pakki karne ke liye jo hissa pehle jata hai wo bhi refund me shamil hota hai,refund_policy,ru,indirect;question,"asks whether the upfront deposit is included in a refund, which is a rule question"
+at-101,are we above or below the side we lost to last week,team_stats,en,boundary;indirect;question,"comparing our own rank against a past opponent is a ranking lookup, not opponent discovery"
+at-102,"our position dropped overnight, any idea why",team_stats,en,indirect;run_on,about movement in our own platform wide rank
+at-103,elo?,team_stats,en,short;ellipsis,bare one word request for our rating number
+at-104,form kaisi chal rahi hai hamari aaj kal,team_stats,mix,indirect;short,"asks about our recent results, which is our own W/L record and not an opponent search"
+at-105,peak rating kitni thi hamari ab tak,team_stats,mix,question;numeric,highest own elo ever reached is elo history
+at-106,"neeche wali team ne overtake kar liya, hamare points ab kitne hain",team_stats,mix,indirect;numeric;run_on,"the actual request is our own points total, so team_stats"
+at-107,mera apna individual rating bhi hota hai ya sirf team ka,team_stats,ru,question;boundary,"asks for the users own rating figure, so a stats lookup and not a team setup how-to"
+at-108,top pe pohnchne k liye kitne points aur chahiay hamein,team_stats,ru,numeric;sms_speak;indirect,"asks the gap in our own elo points, so an own-rating query and not a matchmaking request"
+at-109,unranked hatane ke liye kitne verified match lagte hain,team_stats,ru,boundary;question,"genuinely ambiguous with create_team_help, but the subject is our teams rating status rather than how to build a team, so team_stats"
+at-110,elo ka hisaab kitab kahan dikhta hai app me,team_stats,ru,indirect;question,"a request to see our own elo figures, so team_stats and not a creation how-to"
+at-111,quickest way to get credit in before tonights match?,topup_help,en,sms_speak;ellipsis;question,"asks how to add money fast, a procedure not a balance readout"
+at-112,can i pay the ground directly instead of loading the wallet,topup_help,en,boundary;question,"genuinely ambiguous with refund_policy and venue_info, but it asks which payment route funds a booking, so topup_help"
+at-113,does the app charge me anything for putting funds in,topup_help,en,question;boundary,"asks the cost of the add-money process, part of the top-up procedure and not the cancellation rules"
+at-114,"card save nahi ho raha, koi aur payment option he?",topup_help,mix,code_switch;run_on;boundary,"asks for an alternative payment method to fund the wallet, a top-up procedure issue"
+at-115,"har dafa 1000 se kam dalne pe error ata he, limit kya he",topup_help,mix,code_switch;run_on;numeric,"asks the minimum top-up rule, part of the add-money procedure"
+at-116,bank account verify karne me kitne din lagte hain withdrawal se pehle,topup_help,mix,code_switch;question,"withdrawal setup steps, so topup_help"
+at-117,500 wala easypesa account chalega ya sirf bank,topup_help,ru,typo;boundary;question,"asks which payment method can fund the wallet, a top-up procedure question"
+at-118,"paise andar kaise jate hain is app me, pehli dafa use kar raha hun",topup_help,ru,run_on;question,"a how-to for putting money in, so topup_help not wallet_balance"
+at-119,"wallet khali he, bharna kaise he",topup_help,ru,ellipsis;short;boundary,"the balance is already stated and the ask is the procedure to add money, so topup_help"
+at-120,"apne paise bank me wapas kaise laun, cancel wali baat nahi kar raha",topup_help,ru,negation;run_on;boundary,"a withdrawal procedure and explicitly not a cancellation refund, so topup_help not refund_policy"
+at-121,is there anything competitive on here or just casual bookings,tournament_list,en,indirect;boundary,"asks whether the platform runs competitions, which is the tournament listing"
+at-122,we missed the last one - when is the next cup on the app and how do we sign up,tournament_list,en,run_on;question,dates plus registration for a tournament on the app
+at-123,any 5 a side events on here this weekend that we could join?,tournament_list,en,boundary;question,"genuinely ambiguous with find_opponents, but organised events on the platform that you join are tournament listings, so tournament_list is the defensible call"
+at-124,"kisi league me team enter karwani hai, app pe option hai",tournament_list,mix,code_switch;boundary,"wants to enter a platform league instead of being matched with one opponent, so not find_opponents"
+at-125,tournament ka bracket kab announce hoga app pe,tournament_list,mix,code_switch;short,schedule detail of a tournament hosted on the platform
+at-126,"hamari team pichle tournament me thi, is bar ka kab announce hoga app pe",tournament_list,mix,code_switch;boundary;run_on,"the team mention is background, the ask is the next platform tournament date, not team_stats"
+at-127,"app wale mukable me hissa lena hai, kaise karun",tournament_list,ru,indirect;question,a platform hosted competition plus how to join makes it tournament_list
+at-128,yahan koi cup jesa event hota hai ya sirf normal bookings,tournament_list,ru,indirect;boundary,"asks whether the platform hosts tournaments at all, so tournament_list rather than out_of_scope"
+at-129,har mahine hote hain ya kabhi kabhi? app wale tournaments,tournament_list,ru,ellipsis;short,"asks how often tournaments run on the app, which is a listing question"
+at-130,"psl to chalo chorro, yahan apna koi tournament hai kya",tournament_list,ru,slang;boundary,"sets PSL aside and asks about tournaments on the platform, so tournament_list not out_of_scope"
+at-131,is the margalla one covered? monsoon is starting,venue_info,en,indirect;short,covered or open is a property of a single venue referenced by nickname
+at-132,does the f-11 arena open as early as 6am or should i look elsewhere,venue_info,en,boundary;question,"genuinely ambiguous - a named venue plus a time usually reads as check_availability, but opening hours are a venue timing fact and no slot is being checked, so venue_info is defensible"
+at-133,how legit is that place... 4 stars but only 3 reviews?,venue_info,en,indirect;numeric;ellipsis,"questions the rating of the venue in view, which is a venue fact"
+at-134,yeh wala ground ek time pe kitne log allow karta hai,venue_info,mix,code_switch;numeric;short,capacity is a property of the venue in view
+at-135,changing room ka issue nahi hoga na dha phase 2 arena me,venue_info,mix,code_switch;negation,amenity confirmation for one named venue
+at-136,"bahria wale ka kya scene hai, mehnga to nahi? rating bhi bata do",venue_info,mix,slang;run_on;code_switch,price and rating facts about one named venue rather than a discovery query
+at-137,wahan light ka masla to nahi hoga? shaam ko match rakha hai,venue_info,ru,indirect;negation,"asks about lighting at a venue already in view, a single venue fact, so venue_info and not check_availability despite the time mention"
+at-138,wahan peene ka pani milta hai ya khud le jana parta hai,venue_info,ru,indirect;question,water is an amenity of the one venue being discussed
+at-139,"us maidan tak pohanchne ka rasta kya hai, metro se qareeb hai kya",venue_info,ru,run_on;question,"location detail of a venue already referenced, not a search for new grounds"
+at-140,nets wale ground pe bijli jati hai to generator ka bandobast hai,venue_info,ru,indirect;question,"backup power facility question about one venue, nothing asked about free slots"
+at-141,am i short for a 3500 booking or good to go,wallet_balance,en,boundary;question;numeric,"balance sufficiency question answered by the wallet number, not a top-up procedure"
+at-142,"whats sitting in there right now, minus whatever is locked",wallet_balance,en,ellipsis;indirect,"asks the available balance net of held funds, a balance query"
+at-143,i topped up 2000 yesterday but it still shows the old number,wallet_balance,en,run_on;boundary,"genuinely ambiguous with topup_help, but the complaint is about the balance figure being displayed, so wallet_balance"
+at-144,escrow aur usable balance ka difference kitna he mere account me,wallet_balance,mix,code_switch;numeric,"asks two amounts on the user's own account, a balance readout not the escrow policy"
+at-145,"2 hafte se koi booking nahi ki, wallet me kitna jama he ab",wallet_balance,mix,code_switch;run_on,"asks the present wallet figure, so wallet_balance"
+at-146,topup ke baad kitna ho gaya total?,wallet_balance,mix,code_switch;boundary;question,"asks the resulting balance amount, not how to top up, so wallet_balance not topup_help"
+at-147,"6000 ka ground he, mere pas utne hain?",wallet_balance,ru,numeric;short;boundary,"a sufficiency question answered by the wallet number, so wallet_balance not topup_help"
+at-148,"match cancel hua tha, jo paise wapas aye the wo ab kitne hain",wallet_balance,ru,run_on;boundary,"asks the current amount sitting in the wallet after a refund, not the refund rule, so wallet_balance not refund_policy"
+at-149,yaar meri app wali jeb khali he ya kuch he us me,wallet_balance,ru,indirect;slang,"a playful way of asking the in-app wallet amount, so wallet_balance"
+at-150,nikalne se pehle ye batao andar kitna he,wallet_balance,ru,boundary;indirect,"withdrawal is only the context; the question asked is the balance figure, so wallet_balance not topup_help"

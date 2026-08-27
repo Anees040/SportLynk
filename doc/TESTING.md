@@ -1185,6 +1185,67 @@ first. That is an online question the platform has no traffic for yet.
 Steps 154-158 write to the real database and need a running emulator; **not run the wave they were
 written**. Record backend + ml-service + build commits with any green result.
 
+### 4.17 The assistant intent corpus and its exam (S.6 Wave A)
+
+**Nothing is trained in this wave, so nothing here measures a model.** These steps prove the *data* and
+the *instrument*: that the 15-label contract is intact, that the 150-row exam is what the metadata says
+it is, that the 1,680-row corpus rebuilds byte-for-byte from the generator plus a seed, and that the two
+are disjoint. Run order is **exam first, corpus second** — `gen_intents.py` reads
+`assistant_test_meta.json` and only enforces the exam sha256 as a hard gate once that file exists. All
+commands from `ml-service/`.
+
+159. **The label contract self-checks, and publishes two fingerprints.**
+     `.venv\Scripts\python.exe -m app.core.intent_spec --self-check`
+     Expect `PASS 14 checks`, 15 intents, and both fingerprints: labels `assistant-intents-v1` ·
+     `7bb78a3ac94cbdef`, dataset `assistant-dataset-v1` · `0eb01bc58b4a040f`. If the **labels**
+     fingerprint moves, every model ever trained against it is invalid — that is not a metadata fix, it
+     is a retrain. If only the **dataset** one moves, the corpus is stale but trained models stand.
+160. **The exam validates 24/24, and that is what locks it.**
+     `.venv\Scripts\python.exe training\validate_intent_test.py`
+     Expect `24/24 PASS`, 150 rows, exactly 10 per intent with ru 4 / mix 3 / en 3, and the written
+     `data/assistant/assistant_test_meta.json` carrying sha256 `f99691aa1129…`. The 15 × 3 grid is
+     *derived* from the contract, not restated in the script, so a quota change cannot drift silently.
+     A failure here means an exam row was edited. **Never repair a row because the model got it wrong** —
+     that is the one edit that turns the instrument into a mirror.
+161. **The corpus generator passes 40 gates, with exactly one WARN — dry-run it first.**
+     `.venv\Scripts\python.exe training\gen_intents.py --no-write`
+     Expect `RESULT: PASS -- 1680 rows, 1332 train / 348 val, 150 exam rows excluded and untouched`, and
+     one WARN only: `templates_used` reporting `greeting-en-41` contributed no rows (unused capacity is
+     slack working as designed). The `exam_lock` gate must read *matches* `assistant_test_meta.json`
+     (`f99691aa1129…`) — if it says "no metadata yet", step 160 was skipped and the exam is unguarded.
+162. **A rebuild is byte-identical, which is the reproducibility claim.**
+     `.venv\Scripts\python.exe training\gen_intents.py --seed 20260824 --per-intent 112`
+     then `sha256sum data/assistant/intents.csv` (git-bash) or `certutil -hashfile
+     data\assistant\intents.csv SHA256`. Expect `c539b8fc4057…` — the value in `intents_meta.json`. Run
+     it twice and compare the hashes, not the row count: the generator draws from *unsorted* pooled
+     candidates, so an unseeded shuffle would still produce 1,680 valid rows with a different sha256.
+163. **The corpus is gitignored by design; the metadata is not.**
+     `git check-ignore -v ml-service/data/assistant/intents.csv` must print the matching `.gitignore`
+     rule (`ml-service/data/assistant/*`). Then run `git check-ignore` over `README.md`,
+     `templates.csv`, `authored_intents.csv`, `assistant_test.csv`, `assistant_test_meta.json` and
+     `intents_meta.json` — every one must be **un**ignored (exit 1, no output). Drop the `-v` for that
+     second half: with `-v` a negated rule is *reported* (`!ml-service/data/assistant/README.md`) and the
+     exit code is 0, which reads like a failure when it is the opposite. A 200 KB generated CSV
+     does not belong in git; the generator, the seed and the sha256 do, and together they reproduce it.
+164. **The sha-locked CSVs are line-ending-normalised, or three provenance gates break on a fresh clone.**
+     `git check-attr text eol -- ml-service/data/assistant/assistant_test.csv` must report `text: set`
+     and `eol: lf`; same for `ml-service/data/sentiment/domain_test_200.csv` and
+     `ml-service/data/bookings_synth.csv`. After the first commit, `git ls-files --eol` on those three
+     must show `i/lf w/lf`. This exists because `core.autocrlf=true` with no `.gitattributes` hands a
+     fresh clone CRLF copies and every byte-hashed gate then fails on a machine where nothing is wrong.
+     If one ever does fail, fix the checkout — **do not re-record the hash**, which retires a working check.
+
+**What this section cannot tell you.** Whether the classifier will work, or even whether the 15 intents
+are the right 15. There is no model yet. The corpus is 86% template-generated, so its diversity is the
+diversity of 464 hand-written patterns and their slot vocabulary — not of real users, who nobody has
+observed typing at this app. What the steps do establish is that the training data is reproducible from
+source, that the exam is hand-written and independent of it (0 rows leaked at the 0.80 near-duplicate
+threshold, max score seen 0.500), that the validation split is grouped by template so unseen *phrasings*
+are being scored, and that language carries no label signal by construction (lang × intent Cramér's V =
+0.000). Wave B's confusion matrix is the first number about the model itself.
+
+Steps 159-164 are read-only, touch no database and need no emulator; **all six run green as written**.
+
 ---
 
 ## 5. Non-functional tests

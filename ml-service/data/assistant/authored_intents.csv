@@ -1,0 +1,237 @@
+id,text,intent,lang,phenomena,note
+au-001,"hey can u book centarus kickoff tmrw at 9pm, we need 2 hrs",book_venue,en,misspelled_venue;sms_speak;typo;numeric,naturalised from book_venue-en-01
+au-002,yes go ahead and confirm the 8pm one,book_venue,en,short;ellipsis,naturalised from book_venue-en-06
+au-003,i need dha phase 2 arena locked for friday evening for my team plz,book_venue,en,sms_speak;run_on,naturalised from book_venue-en-07
+au-004,book me the cheapest futsal turf in bahria town for saturday night,book_venue,en,boundary;imperative;multi_slot,naturalised from book_venue-en-03
+au-005,"good morning! can you book shalimar cricket academy for 6am tomorrow, the 7am one is also fine",book_venue,en,politeness;run_on;numeric,fresh
+au-006,"bhai please book the 9pm slot at diamond cricket ground, mujhe aaj hi confirm chahiye",book_venue,mix,code_switch;run_on;politeness,naturalised from book_venue-mix-02
+au-007,"ok done, ye 7pm wala book kar do",book_venue,mix,short;code_switch;ellipsis,naturalised from book_venue-mix-04
+au-008,hamari team ke liye saturday evening ka turf book kardo in g-8/2,book_venue,mix,code_switch;multi_slot,naturalised from book_venue-mix-03
+au-009,"sun bhai, 2 hours ke liye rawalpindi cricket nets book karna hai kal subah",book_venue,mix,code_switch;numeric;run_on,naturalised from book_venue-mix-01
+au-010,"just book it na, 8:30 wala, i dont wanna miss it 😭",book_venue,mix,emoji;slang;code_switch;short,fresh
+au-011,bhai jinnah sports complex me kal 8 baje ka slot book kardo plzz,book_venue,ru,typo;numeric;politeness,naturalised from book_venue-ru-02
+au-012,"assalam o alaikum bhai, kal shaam 6 baje ka centaurus kickoff book kardein",book_venue,ru,politeness;imperative;numeric,fresh
+au-013,haan haan wahi 7:30 wala kar do pakka,book_venue,ru,short;ellipsis;slang,naturalised from book_venue-ru-05
+au-014,do ghante ke liye bahria town futsal book karna hai parso raat ko,book_venue,ru,plain;numeric,naturalised from book_venue-ru-06
+au-015,acha theek hai kardooo,book_venue,ru,short;typo;slang,naturalised from book_venue-ru-04
+au-016,"subah 6 baje wala slot pakka karna hai margalla cricket club me, hum 11 bande hain",book_venue,ru,run_on;numeric;slang,naturalised from book_venue-ru-07
+au-017,"hi, i booked dha phase 2 arena for tonight 9pm by mistake - can you cancel it",cancel_booking,en,politeness;run_on;numeric,fresh
+au-018,"cancel tmrws bookig plz, cant make it",cancel_booking,en,sms_speak;typo;negation;short,naturalised from cancel_booking-en-01
+au-019,we need to call off the saturday 6pm nets at rawalpindi cricket nets,cancel_booking,en,plain;numeric,naturalised from cancel_booking-en-02
+au-020,"kill the f-11 markaz booking, my team bailed on me",cancel_booking,en,slang;run_on,naturalised from cancel_booking-en-04
+au-021,"yaar sorry but cancel my kal wali booking, kuch urgent aa gaya",cancel_booking,mix,code_switch;run_on;politeness,naturalised from cancel_booking-mix-02
+au-022,"cancel the g-8/2 turf booking plzz, half team out of city hai",cancel_booking,mix,code_switch;typo;run_on,naturalised from cancel_booking-mix-03
+au-023,"bhai wo 7:30 wali booking hata do, we'll rebook later",cancel_booking,mix,code_switch;slang;numeric,naturalised from cancel_booking-ru-03
+au-024,can u cancel bookig for tmrw?? mujhe paise wapas nahi chahiye bs cancel kar do,cancel_booking,mix,typo;sms_speak;code_switch;boundary,fresh
+au-025,"centarus kickoff wali booking cancel kar do, wrong date select ho gai thi",cancel_booking,mix,misspelled_venue;code_switch;typo,naturalised from cancel_booking-mix-01
+au-026,"bhai kal shaam wali jinnah sports complex ki bokking cancel kar do plz, bande poore nahi ho rahe",cancel_booking,ru,typo;run_on;politeness,naturalised from cancel_booking-ru-06
+au-027,"aaj nahi khelna yaar, cancel kar do",cancel_booking,ru,short;slang;negation,naturalised from cancel_booking-ru-04
+au-028,"diamond cricket ground ki 9 baje wali booking cancel kardo, galti se ho gayi thi",cancel_booking,ru,run_on;numeric,naturalised from cancel_booking-ru-01
+au-029,"assalam o alaikum, jummay ki booking thi bahria cricket arena me, wo cancel karni hai",cancel_booking,ru,politeness;run_on,fresh
+au-030,"cancel cancel cancel, ab nahi khelna 🙏",cancel_booking,ru,emoji;short;slang;negation,fresh
+au-031,"8 baje wali cancel kar dein plz, dusri jagah shift ho gaye hain hum",cancel_booking,ru,run_on;numeric;politeness,naturalised from cancel_booking-mix-01
+au-032,is f-11 markaz football arena free tomorrow evening?,check_availability,en,question;multi_slot,naturalised from check_availability-en-01
+au-033,what times are left at bahria cricket arena on friday,check_availability,en,question;multi_slot,naturalised from check_availability-en-03
+au-034,any 2 hour slot avilable at diamond cricket ground this weekend??,check_availability,en,typo;multi_slot;numeric,naturalised from check_availability-en-04
+au-035,nothing free tonight at all? even 6am is fine,check_availability,en,negation;ellipsis;run_on,naturalised from check_availability-en-06
+au-036,is the 8pm slot at centaurus kickoff still open or gone,check_availability,en,boundary;multi_slot;question,naturalised from check_availability-en-07
+au-037,bahria town futsal pe 9pm ka slot available hai kya?,check_availability,mix,code_switch;question;multi_slot,naturalised from check_availability-mix-01
+au-038,kal kuch free hai g-8 me? ya sab full?,check_availability,mix,code_switch;multi_slot;negation,naturalised from check_availability-mix-02
+au-039,koi slot bacha hai saturday at margalla cricket club,check_availability,mix,code_switch;multi_slot,naturalised from check_availability-mix-03
+au-040,dha phase 2 arena fully booked hai is weekend? kuch khali ho to bta dena,check_availability,mix,code_switch;run_on;multi_slot,naturalised from check_availability-mix-04
+au-041,rawalpindi cricket nets pe tomorrow morning kuch khali hai check karo,check_availability,mix,code_switch;imperative;multi_slot,naturalised from check_availability-ru-05
+au-042,jinnah sports complex kal 8 baje khali hai ya nai?,check_availability,ru,question;multi_slot;negation,naturalised from check_availability-ru-01
+au-043,bhai parso ke khali slot dikha do zara 🙏,check_availability,ru,imperative;politeness;emoji,naturalised from check_availability-ru-03
+au-044,shalimar cricket academy pe shaam ka koi slot bacha he?,check_availability,ru,question;multi_slot;typo,naturalised from check_availability-ru-02
+au-045,"f-11 me sab kuch book lag raha hai, kal kuch khali hoga?",check_availability,ru,negation;run_on;multi_slot,naturalised from check_availability-ru-04
+au-046,diamond cricket ground pe 6 baje se do ghante khali hain kya,check_availability,ru,multi_slot;numeric;question,naturalised from check_availability-ru-07
+au-047,"salam, ek cheez puchni thi - centaurus kickoff pe aaj raat kuch khali hai?",check_availability,ru,politeness;run_on;multi_slot,fresh
+au-048,"how do i make a team, do i need 11 people from the start?",create_team_help,en,question;numeric;run_on,naturalised from create_team_help-en-01
+au-049,cant find the create team button anywhere plz help,create_team_help,en,negation;politeness;sms_speak,fresh
+au-050,invite link expires or stays valid forever?,create_team_help,en,question;ellipsis,naturalised from create_team_help-en-02
+au-051,"want to rename my squad and change the captain, possible in one go?",create_team_help,en,question;run_on,naturalised from create_team_help-en-06
+au-052,"team create kar li hai, ab players invite kaise karun?",create_team_help,mix,code_switch;question,naturalised from create_team_help-mix-01
+au-053,"whatsapp pe link bhej diya but koi join nahi kar raha, kya karun",create_team_help,mix,code_switch;negation;run_on,naturalised from create_team_help-ru-02
+au-054,captaincy transfer ka option nazar nahi aa raha bhai 😕,create_team_help,mix,code_switch;emoji;negation,naturalised from create_team_help-mix-02
+au-055,"11 players ka squad banana hai cricket ke liye, ek ek ko add karna paray ga?",create_team_help,mix,code_switch;numeric;question,naturalised from create_team_help-en-07
+au-056,team delete karne ka koi tarika hai? galti se 2 bana di hain,create_team_help,mix,code_switch;numeric;run_on,naturalised from create_team_help-mix-05
+au-057,"assalam o alaikum, team banani hai magar samajh nahi aa raha kahan se shuru karun",create_team_help,ru,politeness;run_on,naturalised from create_team_help-ru-01
+au-058,"bhai invite link kaam nahi kar raha, doston ko kese add karun",create_team_help,ru,typo;negation;run_on,naturalised from create_team_help-ru-07
+au-059,kitne bande hone chahiay team me minimum? hum 6 hi hain,create_team_help,ru,numeric;question;run_on,naturalised from create_team_help-ru-03
+au-060,captain sirf banane wala hi hota hai ya badal sakta hai,create_team_help,ru,question,naturalised from create_team_help-ru-04
+au-061,"team ka naam galat likh diya tha, change ho jaye ga?",create_team_help,ru,typo;question,naturalised from create_team_help-ru-06
+au-062,nai team k liye kya kya chahiay hota hai zra btao,create_team_help,ru,sms_speak;typo,naturalised from create_team_help-ru-08
+au-063,"need an opponent for sunday morning, futsal, we are 6",find_opponents,en,numeric;ellipsis;run_on,naturalised from find_opponents-en-01
+au-064,can u find us a team to play tmrw evening plz,find_opponents,en,sms_speak;politeness,naturalised from find_opponents-en-02
+au-065,any team looking for a friendly in rawalpindi this week?,find_opponents,en,question,naturalised from find_opponents-en-07
+au-066,"2 players short for tonights game, anyone available",find_opponents,en,numeric;typo,naturalised from find_opponents-en-03
+au-067,"we want to challenge a higher rated team, possible?",find_opponents,en,question;ellipsis,fresh
+au-068,"koi team available hai saturday ko football ke liye, our rating 1240 hai",find_opponents,mix,code_switch;numeric;run_on,naturalised from find_opponents-mix-01
+au-069,"opponent dhoondna hai bhai, same level ki team ho to better",find_opponents,mix,code_switch;slang,naturalised from find_opponents-en-04
+au-070,"4 players chahiay urgently, aj raat ka match hai ⚽",find_opponents,mix,code_switch;emoji;numeric,naturalised from find_opponents-mix-02
+au-071,kisi team ko challenge kar sakte hain hum? or wo hi karte hain,find_opponents,mix,code_switch;question;typo,fresh
+au-072,"match set karwa do kal ka, f-11 me koi b team",find_opponents,mix,code_switch;imperative;run_on,naturalised from find_opponents-mix-03
+au-073,bhai koi team milay gi kal shaam 7 baje futsal khelne ke liye? hum 5 log hain,find_opponents,ru,typo;numeric;run_on,naturalised from find_opponents-ru-01
+au-074,"opponent chahiay is weekend, level koi b ho chalega",find_opponents,ru,typo;sms_speak,naturalised from find_opponents-ru-03
+au-075,hamari team ke liye match lagwa do plzz koi bhi team ho,find_opponents,ru,politeness;sms_speak;run_on,naturalised from find_opponents-ru-07
+au-076,"2 bande kam hain, kisi ko bhejo cricket ke liye",find_opponents,ru,numeric;imperative,naturalised from find_opponents-ru-02
+au-077,kal koi khelne wala hai ya nahi?? bore ho rahe hain,find_opponents,ru,question;run_on;slang,fresh
+au-078,"aslam o alaikum, kisi team se match karwana tha g-11 me",find_opponents,ru,politeness;run_on,naturalised from find_opponents-ru-05
+au-079,show me cheap football grounds in f-11 markaz please,find_venue,en,imperative;multi_slot;politeness,naturalised from find_venue-en-01
+au-080,where do people play futsal in rawalpindi,find_venue,en,question;indirect,naturalised from find_venue-en-02
+au-081,looking for a cricket ground with nets and a pavilion somewhere in i-8 or g-6,find_venue,en,multi_slot;run_on,naturalised from find_venue-en-03
+au-082,any tennis court around chaklala? doesnt have to be fancy,find_venue,en,question;typo;ellipsis,naturalised from find_venue-en-04
+au-083,"need a 5 a side turf tonight, budget max 2500, f-8 or g-8 both fine",find_venue,en,run_on;multi_slot;numeric,fresh
+au-084,"koi decent cricket ground suggest karo g-9 side, weekend pe khelna hai",find_venue,mix,code_switch;imperative;run_on;multi_slot,naturalised from find_venue-mix-01
+au-085,dha phase 2 me koi futsal turf under 3000 plzz,find_venue,mix,code_switch;sms_speak;multi_slot,naturalised from find_venue-mix-02
+au-086,any good football pitch near blue area?? parking wala ho to better,find_venue,mix,code_switch;multi_slot;question,naturalised from find_venue-en-05
+au-087,gulberg greens me best cricket academy kaunsi hai bhai 🏏,find_venue,mix,code_switch;emoji;question,naturalised from find_venue-mix-03
+au-088,"friday night football khelna hai, koi arena in satellite town?",find_venue,mix,code_switch;ellipsis;multi_slot,naturalised from find_venue-mix-04
+au-089,yaar g-8 ke around koi sasta futsal ground he? 2000 tak ka budget hai,find_venue,ru,multi_slot;run_on;slang;question,naturalised from find_venue-ru-04
+au-090,"assalam o alaikum, ek baat puchni thi... pindi me cricket nets kahan milte hain?",find_venue,ru,politeness;run_on;question,fresh
+au-091,kal cricket khelna hai stadium road wale side koi maidan hoga?,find_venue,ru,multi_slot;run_on;question,naturalised from find_venue-ru-01
+au-092,"sasta sa ground chahiay g-11 ya i-8 me, dono chal jayenge",find_venue,ru,typo;multi_slot;run_on,naturalised from find_venue-ru-04
+au-093,bahria town me koi turf hai jahan raat ko lights hon,find_venue,ru,multi_slot;question,naturalised from find_venue-ru-06
+au-094,badminton court kahan he isb me? indoor wala chahiye,find_venue,ru,question;multi_slot;run_on,naturalised from find_venue-ru-03
+au-095,hey good morning!!,greeting,en,plain;short,naturalised from greeting-en-01
+au-096,"thank you, that was quicker than i expected 🙏",greeting,en,politeness;emoji;run_on,naturalised from greeting-en-05
+au-097,ok cool thnx,greeting,en,sms_speak;typo;short,naturalised from greeting-en-06
+au-098,hello?? anyone there,greeting,en,question;short,fresh
+au-099,"alright, thanks and have a good night",greeting,en,politeness,fresh
+au-100,"hi bhai, sab theek? mera pehla msg hai yahan",greeting,mix,code_switch;question;sms_speak,fresh
+au-101,"ok great, thanks yaar 👍",greeting,mix,code_switch;emoji;short,naturalised from greeting-mix-03
+au-102,"chalo phir bye bye, take care yr",greeting,mix,code_switch;typo;run_on,naturalised from greeting-mix-05
+au-103,"thnx bhai, aaj bohat help hui",greeting,mix,code_switch;typo,naturalised from greeting-mix-02
+au-104,"good evening sir, umeed hai aap khairiyat se hain",greeting,mix,code_switch;politeness,fresh
+au-105,"assalam o alaikum bhai, kaise hain ap",greeting,ru,politeness;question;typo,naturalised from greeting-ru-04
+au-106,slm bhai,greeting,ru,sms_speak;short,naturalised from greeting-ru-02
+au-107,"bohat bohat shukriya yaar, allah khush rakhe",greeting,ru,politeness;run_on,naturalised from greeting-ru-06
+au-108,shukriyaaa bhaiii,greeting,ru,typo;slang;short,naturalised from greeting-ru-05
+au-109,"khuda hafiz, allah nigehban rakhe",greeting,ru,plain,naturalised from greeting-ru-10
+au-110,"or bhai kya scene hai, sab theek?",greeting,ru,slang;question;typo,fresh
+au-111,hey can u show me what i have booked for this weekend? i think it was diamond cricket ground,my_bookings,en,sms_speak;run_on;question,naturalised from my_bookings-en-02
+au-112,"my bookigns page is not loading, just tell me my next slot plz",my_bookings,en,typo;run_on;politeness,naturalised from my_bookings-en-04
+au-113,did i book anything for friday 6pm or did i just check availability?,my_bookings,en,question;boundary,fresh
+au-114,upcoming bookings?? all of them,my_bookings,en,ellipsis;short,naturalised from my_bookings-en-06
+au-115,meri upcoming bookings ki list mil jaye gi? 🙏,my_bookings,mix,emoji;politeness;question,naturalised from my_bookings-mix-01
+au-116,bhai jinnah sports complex ki booking confirm he na? slip nahi ayi,my_bookings,mix,question;run_on,fresh
+au-117,kal ka football slot booked he mera ya nahi? 7:30 wala,my_bookings,mix,question;ellipsis;negation,naturalised from my_bookings-mix-02
+au-118,booking history kahan dikhti he app me? pichle mahine ka record chahiay,my_bookings,mix,question;run_on,naturalised from my_bookings-mix-03
+au-119,"meri 3 bookings thi is week, ab kitni pending hain",my_bookings,mix,code_switch;numeric;run_on,naturalised from my_bookings-mix-04
+au-120,bhai meri kal ki bookig kis time ki thi? yaad nahi aa raha,my_bookings,ru,typo;run_on;question,naturalised from my_bookings-ru-02
+au-121,"assalam o alaikum, ek baat puchni thi... meri saturday wali booking confirm hui ya nahi?",my_bookings,ru,politeness;negation;question,fresh
+au-122,meri saari bookings dikha dou plzz,my_bookings,ru,typo;politeness;imperative,naturalised from my_bookings-ru-01
+au-123,parso f-11 wala ground book kiya tha na mene? konsa time tha,my_bookings,ru,question;run_on,fresh
+au-124,"2 booking thi meri is hafte, ek cancel ho gai, dusri kab ki he",my_bookings,ru,run_on;numeric;boundary,fresh
+au-125,agli booking kab ki he meri? 8 baje ki thi ya 9 ki,my_bookings,ru,question;run_on;numeric,naturalised from my_bookings-ru-04
+au-126,whats the live score of pak vs eng right now??,out_of_scope,en,boundary;question,naturalised from out_of_scope-en-05
+au-127,"i need a taxi to islamabad airport at 5am, can you book it",out_of_scope,en,boundary;run_on;numeric,naturalised from out_of_scope-en-03
+au-128,is the pakistan squad announced for the asia cup,out_of_scope,en,boundary;question,naturalised from out_of_scope-ru-08
+au-129,solve this math problem for me plz its urgent,out_of_scope,en,sms_speak;imperative,fresh
+au-130,book two tickets for the new movie tonight,out_of_scope,en,boundary;imperative,naturalised from out_of_scope-ru-04
+au-131,how do i apply for a uk visa from pakistan,out_of_scope,en,question,fresh
+au-132,yaar kal ka pak vs sa match kitne baje hai and kis channel pe?,out_of_scope,mix,boundary;code_switch;run_on;question,naturalised from out_of_scope-mix-01
+au-133,bhai foodpanda se khana order kar do plzz 🍕,out_of_scope,mix,code_switch;typo;emoji,naturalised from out_of_scope-en-01
+au-134,"murree ka hotel book karna hai is weekend, help karo",out_of_scope,mix,boundary;code_switch;run_on,naturalised from out_of_scope-mix-03
+au-135,yaar bitcoin ka rate abhi kya chal raha hai?,out_of_scope,mix,code_switch;question,naturalised from out_of_scope-en-08
+au-136,acha ye batao tum chatgpt ho ya kuch aur?,out_of_scope,mix,code_switch;question,naturalised from out_of_scope-ru-11
+au-137,meri english ki assignment me help kar do plz,out_of_scope,mix,code_switch;sms_speak,naturalised from out_of_scope-ru-05
+au-138,bhai psl ka final kab he? tickets bhi chahiye,out_of_scope,ru,boundary;question;typo;run_on,naturalised from out_of_scope-ru-07
+au-139,aj pak vs india ka match kitne baje start hoga??,out_of_scope,ru,boundary;question;typo,naturalised from out_of_scope-ru-06
+au-140,yaar 5000 ka load karwa do mere number pe plzz,out_of_scope,ru,boundary;typo;numeric,naturalised from out_of_scope-en-04
+au-141,islamabad me kal barish hogi kya? bahar jana tha,out_of_scope,ru,question;run_on;boundary,naturalised from out_of_scope-ru-01
+au-142,mujhe bukhar hai konsi dawai lun,out_of_scope,ru,question,naturalised from out_of_scope-en-09
+au-143,sui gas ka bill kaise check karte hain online,out_of_scope,ru,question;boundary,naturalised from out_of_scope-ru-03
+au-144,koi acha nashta wala batao f-11 me,out_of_scope,ru,boundary;imperative,naturalised from out_of_scope-ru-02
+au-145,gari ki service kahan se karwaun sasti,out_of_scope,ru,boundary;question,fresh
+au-146,if i cancel 3 hrs before do i still get 80% or nothing?,refund_policy,en,sms_speak;numeric;question,naturalised from refund_policy-en-02
+au-147,whats the no show rule - how long do they wait before it is forfeited,refund_policy,en,typo;question,naturalised from refund_policy-en-05
+au-148,"not trying to cancel, just checking the policy before i book jinah for saturday",refund_policy,en,boundary;misspelled_venue;run_on,naturalised from refund_policy-en-08
+au-149,is the 20% deposit refundable if the owner cancels on me instead?,refund_policy,en,numeric;question,fresh
+au-150,cancellation window exactly 24 hours ka hai ya 12 bhi chalta hai?,refund_policy,mix,code_switch;numeric;question,naturalised from refund_policy-mix-01
+au-151,no show pe kitni grace milti hai? 30 min sunna tha,refund_policy,mix,code_switch;numeric;ellipsis,naturalised from refund_policy-mix-02
+au-152,escrow me paisa kab tak rehta hai? QR scan k baad release ho jata hai?,refund_policy,mix,code_switch;sms_speak;question,naturalised from refund_policy-ru-06
+au-153,full refund chahiye to kitne ghante pehle cancel karna hoga plzz,refund_policy,mix,code_switch;typo;politeness,naturalised from refund_policy-mix-03
+au-154,owner ko 20% jata hai late cancel pe? thora zyada nahi hai ye,refund_policy,mix,code_switch;numeric;run_on,naturalised from refund_policy-ru-08
+au-155,bhai agar kal ki booking aaj raat cancel kardun to pure paise milenge?,refund_policy,ru,run_on;question,naturalised from refund_policy-ru-01
+au-156,24 ghante se kam me cancel kia to kitna kat jaye ga? 20% ya pura,refund_policy,ru,typo;numeric;ellipsis,naturalised from refund_policy-ru-03
+au-157,advance 20 percent hi hota hai na? ya poora paisa pehle dena parta he,refund_policy,ru,typo;numeric;negation,naturalised from refund_policy-ru-04
+au-158,agar team hi na aaye to? paise ka kya banta hai phir,refund_policy,ru,ellipsis;negation,naturalised from refund_policy-ru-05
+au-159,"salam, ek sawal tha - paise wapsi wallet me aati hai ya bank account me",refund_policy,ru,politeness;run_on,fresh
+au-160,"cancel nahi kar raha abhi, sirf ye puchna tha ke rule kya hai",refund_policy,ru,boundary;negation,naturalised from refund_policy-ru-02
+au-161,we won 2 lost 1 but the rating hasnt moved at all?,team_stats,en,typo;numeric;negation,naturalised from team_stats-en-05
+au-162,"whats our elo, and are we top 20 yet",team_stats,en,run_on;numeric,fresh
+au-163,team rating pls,team_stats,en,short;sms_speak;politeness,naturalised from team_stats-en-06
+au-164,how many points did we drop after saturdays loss??,team_stats,en,numeric;typo;question,fresh
+au-165,our team ki elo history graph wala dikha sakte ho?,team_stats,mix,code_switch;politeness;question,naturalised from team_stats-mix-03
+au-166,"bhai points table me hum kahan hain, top 10 me aye ya nahi?",team_stats,mix,code_switch;run_on;numeric,naturalised from team_stats-mix-02
+au-167,last 5 matches ka record chahiay + current rating dono,team_stats,mix,code_switch;numeric;sms_speak,naturalised from team_stats-mix-01
+au-168,my team ka rank kya hai islamabad me? ya sirf overall hota hai,team_stats,mix,code_switch;run_on;question,fresh
+au-169,"kal match jeeta tha, elo update hua ya nai 🤔",team_stats,mix,code_switch;emoji;question,naturalised from team_stats-ru-07
+au-170,"assalam o alaikum, ek baat puchni thi... hamari team ka elo kitna hai abhi?",team_stats,ru,politeness;run_on;question,naturalised from team_stats-ru-01
+au-171,bhai 3 match jeet chuke hain phr b unranked hi likha aa raha hai kyun??,team_stats,ru,typo;numeric;run_on,naturalised from team_stats-ru-09
+au-172,meri team ki ranking kal 14 thi aj 19 kese ho gai,team_stats,ru,typo;numeric;question,fresh
+au-173,elo kitna bacha hai hamara,team_stats,ru,short;ellipsis,naturalised from team_stats-ru-08
+au-174,hamari cricket wali team ka jeet haar ka record dikha do zra,team_stats,ru,imperative;slang,naturalised from team_stats-ru-05
+au-175,yr rating wapis 1200 pe a gai kya,team_stats,ru,sms_speak;numeric;question,fresh
+au-176,"how do i put money in? easypaisa or card, whichever is faster",topup_help,en,question;run_on,naturalised from topup_help-en-01
+au-177,"cant add funds, my jazzcash topup keeps failing plzz help",topup_help,en,sms_speak;run_on;negation,naturalised from topup_help-en-08
+au-178,whats the process to cash out my wallet,topup_help,en,question;short,naturalised from topup_help-en-04
+au-179,"hi there, do you take visa or only local wallets?",topup_help,en,politeness;question,naturalised from topup_help-en-02
+au-180,top up karne ke liye kya kya options available hain,topup_help,mix,code_switch;question,naturalised from topup_help-mix-05
+au-181,bhai withdrawal ka process kya he? 2 din se try kar raha hun,topup_help,mix,code_switch;run_on,naturalised from topup_help-mix-03
+au-182,debit card link karne ka option kahan he app me?,topup_help,mix,code_switch;question,naturalised from topup_help-mix-04
+au-183,minimum topup 500 he ya 1000? 🤔,topup_help,mix,code_switch;emoji;numeric,naturalised from topup_help-mix-02
+au-184,"payment method change karna he, purana card expire ho gaya",topup_help,mix,code_switch;run_on,naturalised from topup_help-mix-01
+au-185,bhai paise kaise dalte hain wallet me? easypesa se ho jata he?,topup_help,ru,typo;run_on;question,naturalised from topup_help-ru-01
+au-186,"assalam o alaikum, mujhe apne paise nikalne hain, kya karna parega",topup_help,ru,politeness;question;run_on,naturalised from topup_help-ru-04
+au-187,kam se kam kitna dalna parta he? 500 chalega,topup_help,ru,question;numeric,naturalised from topup_help-ru-05
+au-188,jazzcash ka option nahi mil raha yaar kahan he,topup_help,ru,run_on;question;slang,naturalised from topup_help-ru-06
+au-189,"paise dal diye hain 20 min pehle, ab kitni dair lage gi show hone me",topup_help,ru,run_on;numeric,naturalised from topup_help-ru-07
+au-190,wallet se apne bank me paise bhejne ka tarika samjha dain plz,topup_help,ru,politeness;imperative,naturalised from topup_help-ru-08
+au-191,any football tournaments on sportlynk in september? our squad wants in,tournament_list,en,run_on;question,naturalised from tournament_list-en-01
+au-192,how do i enter my team in a tournament here - is there a form somewhere,tournament_list,en,run_on;question,naturalised from tournament_list-en-02
+au-193,"hi, are there any cricket leagues running on the app right now in rawalpindi?",tournament_list,en,politeness;question,naturalised from tournament_list-en-03
+au-194,whats the entry fee and the prize money for the tournaments listed on the app,tournament_list,en,typo;numeric,naturalised from tournament_list-en-05
+au-195,koi badminton tournament ka registration open hai app pe? hum 2 log hain,tournament_list,mix,code_switch;numeric;question,naturalised from tournament_list-mix-01
+au-196,sportlynk pe jo tournament hai wo knockout hai ya round robin? format bata dein,tournament_list,mix,code_switch;politeness;question,naturalised from tournament_list-mix-02
+au-197,app pe listed tournament ki last registration date kya hai plz,tournament_list,mix,code_switch;politeness,naturalised from tournament_list-mix-03
+au-198,islamabad me sportlynk ka koi tournament agle hafte? pindi wala bhi chalega,tournament_list,mix,code_switch;ellipsis,naturalised from tournament_list-mix-04
+au-199,tournament join karne k liye minimum kitne players chahiye app pe?,tournament_list,mix,code_switch;sms_speak;numeric,fresh
+au-200,bhai app pe koi futsal tournament hai is mahine? hamari team tayar hai,tournament_list,ru,run_on;question,naturalised from tournament_list-ru-01
+au-201,sportlynk pe cricket tournament kab start ho ga? pichle sal bhi khela tha,tournament_list,ru,run_on;question,naturalised from tournament_list-ru-02
+au-202,"apni team ko tournament me register krna hai, process kya he",tournament_list,ru,sms_speak;typo,naturalised from tournament_list-ru-03
+au-203,"salam, yahan koi football league chal rahi hai jisme entry mil jaye?",tournament_list,ru,politeness;question,naturalised from tournament_list-ru-04
+au-204,tournament ki entry fee kitni hai? aur registration ki last date?,tournament_list,ru,numeric;ellipsis,naturalised from tournament_list-ru-07
+au-205,"yaar app me tournaments ka tab kahan hai, mujhe list nahi mil rahi",tournament_list,ru,slang;negation;run_on,fresh
+au-206,quick q - does f-11 markaz football arena have floodlights? we play at 10pm,venue_info,en,sms_speak;question;run_on,naturalised from venue_info-en-01
+au-207,whats the hourly rate at bahria crickt arena and is the parking free,venue_info,en,typo;misspelled_venue;numeric,naturalised from venue_info-en-02
+au-208,"hey, i can see diamond cricket ground on the app but not the timings - when does it close??",venue_info,en,run_on;politeness;question,naturalised from venue_info-en-03
+au-209,is centaurus kickoff turf or concrete? my ankles cant take concrete,venue_info,en,typo;question,naturalised from venue_info-en-05
+au-210,any pics or player reviews of shalimar cricket academy nets before i book it,venue_info,en,boundary;question,naturalised from venue_info-en-06
+au-211,centaurus kickoff me AC changing rooms available hain kya,venue_info,mix,code_switch;question,naturalised from venue_info-mix-01
+au-212,"dha phase 2 arena ka per hour rate kya he, 3000 se ziada to nahi?",venue_info,mix,code_switch;numeric;negation,naturalised from venue_info-mix-02
+au-213,rawalpindi cricket nets ki rating kitni hai? logon ne kya reviews diye hain,venue_info,mix,code_switch;question;run_on,naturalised from venue_info-mix-03
+au-214,closing time kya hai jinnah sports complex ki weekend pe?,venue_info,mix,code_switch;question,naturalised from venue_info-mix-04
+au-215,is ground me seating hai spectators ke liye? 20 25 log aayenge :),venue_info,mix,code_switch;emoji;numeric,fresh
+au-216,bhai jinnah sports complex me floodlite hai ya nai? raat ko khelna he,venue_info,ru,typo;question;run_on,naturalised from venue_info-ru-01
+au-217,us f-11 wale arena ka rate kitna he 1 ghante ka?,venue_info,ru,typo;numeric;ellipsis,naturalised from venue_info-ru-02
+au-218,shalimar cricket academy subah kitne baje khulti hai,venue_info,ru,plain;question,naturalised from venue_info-ru-03
+au-219,"salam bhai ek cheez puchni thi, diamond cricket ground me pavilion or washroom hai?",venue_info,ru,politeness;run_on;question,naturalised from venue_info-ru-04
+au-220,margalla cricket club k nets kaisay hain? kisi ne wahan khela hai?,venue_info,ru,sms_speak;typo;question,naturalised from venue_info-ru-05
+au-221,bahria town futsal indoor he ya open? mujhe indoor chahiay,venue_info,ru,typo;run_on;question,naturalised from venue_info-ru-06
+au-222,how much cash do i have in the app rn?,wallet_balance,en,sms_speak;short;question,naturalised from wallet_balance-en-01
+au-223,"hi, quick one - is any of my money still held from the bahria town futsal game?",wallet_balance,en,politeness;run_on;question,naturalised from wallet_balance-en-05
+au-224,balance plzz i dont wanna open the app,wallet_balance,en,sms_speak;short,naturalised from wallet_balance-en-06
+au-225,"do i have 3000 in there or not, want to book f-11 markaz football arena",wallet_balance,en,question;numeric;boundary,fresh
+au-226,wallet ka current balance kitna show ho raha he abhi,wallet_balance,mix,code_switch;question,naturalised from wallet_balance-mix-05
+au-227,yaar kitna amount on hold he mera? match cancel hua tha 3 din pehle,wallet_balance,mix,code_switch;run_on,naturalised from wallet_balance-mix-02
+au-228,available balance aur escrow dono batao plz,wallet_balance,mix,code_switch;imperative;politeness,fresh
+au-229,pending payment ke baad kitna left he? 💰,wallet_balance,mix,code_switch;emoji;question,naturalised from wallet_balance-mix-04
+au-230,"mera sportlynk credit kitna he, app me nahi dikh raha",wallet_balance,mix,code_switch;run_on,fresh
+au-231,bhai balance kitna he mera? 1500 se zyada he ya nahi,wallet_balance,ru,question;numeric;negation,naturalised from wallet_balance-ru-01
+au-232,"salam, zara dekh ke bata dain mere wallet me kitne paise pade hain",wallet_balance,ru,politeness;question,fresh
+au-233,mere 2000 rupay kahan gaye?? kuch bacha bhi he ya nahi,wallet_balance,ru,run_on;question;numeric,naturalised from wallet_balance-ru-07
+au-234,escrow me mere kitne paise phanse hue hain yaar,wallet_balance,ru,question;slang,naturalised from wallet_balance-mix-01
+au-235,booking ke liye paise kaafi hain mere paas? 2500 ka ground he,wallet_balance,ru,question;boundary;numeric,naturalised from wallet_balance-ru-05
+au-236,"balance zeroo dikha raha he, ye galat he",wallet_balance,ru,typo;plain,naturalised from wallet_balance-ru-06

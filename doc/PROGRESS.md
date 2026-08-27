@@ -2960,3 +2960,82 @@ Three things only the live run could tell us, all recorded because they are mild
   the honest small-n number and the synthetic arm is what carries the claim.
 - [ ] Carried forward: rotate `ML_API_KEY` before S.7 puts ml-service on a public URL; second-annotator κ
   (S4-A) is not blind and must not be cited as-is; first commit/tags — `s5-done` is the user's to create.
+
+## Wave S6-A (The assistant intent corpus — and the exam that will grade model #4)
+
+**Status: data-complete and gate-VERIFIED (2026-08-28). Nothing is trained yet — that is Wave B.** This
+wave ships two artifacts and no model: the corpus the intent classifier will learn from, and the
+150-utterance hand-written exam it will be graded on. The exam ships **first**, sha-locked, because an
+instrument built after you have seen the scores is not an instrument.
+
+```
+intent_spec.py --self-check   PASS 14 checks
+                              labels   assistant-intents-v1  · 7bb78a3ac94cbdef  (15 intents)
+                              dataset  assistant-dataset-v1  · 0eb01bc58b4a040f  (slots/quotas)
+validate_intent_test.py       PASS 24/24 · assistant_test.csv 150 rows · sha256 f99691aa1129...
+                              10 per intent · ru 4 / mix 3 / en 3 · 17 of 18 phenomena tags used
+                              max internal near-dup 0.467 · 0 overlaps with authored rows
+gen_intents.py                PASS 40 gates, 1 WARN · intents.csv 1,680 rows · sha256 c539b8fc4057...
+                              112 for EACH of the 15 intents · en 675 · ru 585 · mix 420
+                              template 1,444 / authored 236 · train 1,332 / val 348
+                              464 patterns -> 2,579 pooled candidates -> 1,444 drawn
+                              exam contamination: 0 dropped (max score seen 0.500 of 0.80)
+                              lang x intent V = 0.000 · source x intent V = 0.032 · split x intent 0.023
+                              replayed twice: byte-identical sha256
+```
+
+The pipe this feeds: Flutter chat -> `POST /api/assistant/message` -> Node dialog manager + action
+executor -> `POST /nlu/parse` -> FastAPI **trained** classifier + rule entity extractor. The NLU is
+the model (committee evidence); actions stay in Node beside the already-validated booking logic, so no
+business rule is duplicated (FR8.15). Wave A is the left-hand end of that pipe.
+
+### Two fingerprints, not one — a first for the ◆ contract pattern
+
+`app/core/intent_spec.py` is the 4th frozen contract after `features.py`, `text_norm.py` and
+`reco_features.py`, and the first to publish two. **Labels** covers the 15 intents in `model.classes_`
+order; **dataset** covers slot vocabulary, quotas and thresholds. They have different lifetimes: adding
+a Roman Urdu spelling for "tomorrow" invalidates a *corpus*, while renaming an intent invalidates every
+*model* ever trained. One fingerprint would force a needless retrain or, worse, hide a real break.
+
+### Generation: pooled, water-filled, and split by template
+
+Each of the 464 patterns renders **≤12** candidates once, in seeded *unsorted* order — a sorted prefix
+would ship "today, tomorrow, tonight" forever and never the rest of the date vocabulary. A water-filling
+pass then allocates the 112-row per-intent quota across a cell's templates, so no single phrasing
+dominates. The 80/20 split is **grouped by `template_id`**: every row from one pattern lands on one side,
+so validation phrasings are genuinely unseen and the reported score is not a memorisation artifact.
+Equal rows per intent is a deliberate cost, paid so the confusion matrix in Wave B reads as skill rather
+than as prior.
+
+### The gates found five real defects before a model could hide them
+
+1. **6 `out_of_scope` patterns used `{city}`/`{sport}`/`{date}`** — a slot spreads a "Lahore ⇒
+   out_of_scope" association over dozens of rows. Each became a single literal; `validate_pattern` now
+   refuses domain slots in that intent outright.
+2. **A 429-row capacity gap** across 24 (intent,lang) cells. Closed by hand-authoring **152 more
+   templates** — not by relaxing `TEMPLATE_CAPACITY_MARGIN = 1.30`, and not by abandoning equal rows per
+   intent. `greeting/en` needed 32 of them: decorators compose badly with greetings ("hi there please"),
+   so breadth had to come from distinct phrasings.
+3. **Four templates rendering 2 characters** (`hi`, `gm`, `gn`, `yo`) failed `rendered_clean`. Fixed as
+   `hii`, `gm!`, `gn!`, `yo!` — the contract's `MIN_TEXT_CHARS = 3` was not lowered to fit four rows.
+4. **A space before "??"** in authored row `au-164`, caught by `text_problems()`.
+5. **A 2-char exam row** (`ty` -> `ty!`), fixed in the exam because it was **not yet locked**. After the
+   lock, that repair would have been forbidden.
+
+### `.gitattributes` — new file, and it protects three older waves
+
+`core.autocrlf = true` with no attributes means a fresh clone receives CRLF copies of every sha-locked
+CSV, so `bookings_synth.csv`, `domain_test_200.csv` and now `assistant_test.csv` all fail their
+provenance gates on a machine where nothing is actually wrong. That failure is the good case; the bad
+case is somebody "fixing" it by re-recording the hash and quietly retiring a working check.
+
+### Open / carried forward
+
+- [ ] **`ml-service/data/assistant/_wip/` is still on disk** (the one-off template-authoring script). It
+  is gitignored so it cannot reach the repo; deleting it was declined by the permission classifier, so
+  removal is the user's call.
+- [ ] One WARN, left as-is: template `greeting-en-41` contributed no rows — the allocator had enough
+  capacity without it. A warn, not a gate, because unused capacity is slack working as intended.
+- [ ] `intents.csv` is **gitignored by design**; `intents_meta.json` (sha256 + census + 40 checks) is
+  what travels, plus the generator and its seed (`--seed 20260824 --per-intent 112`).
+- [ ] Nothing in S.6 is committed yet, and no tag exists.

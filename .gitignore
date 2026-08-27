@@ -128,3 +128,30 @@ ml-service/data/sentiment/*
 # plots and model_card.md are the AI evidence trail this milestone exists to
 # produce — they are the only inspectable record of what the model claims, and they
 # belong in version control next to the code that generated them.
+
+# ─── Assistant intent corpus (S.6) ──────────────────────────────────────
+# Same default-deny shape as the sentiment block above, and `assistant/*` not
+# `assistant/` for the same reason. What is ignored here is the GENERATED corpus:
+# `python training/gen_intents.py` rebuilds intents.csv byte for byte from the
+# three hand-written inputs plus its recorded seed, so the generator is the
+# reproducibility story and the 200 KB of expanded rows is not.
+ml-service/data/assistant/*
+
+# Committed, and why each one has to be:
+#   README.md              what each input is, how the corpus is rebuilt, what the
+#                          gates actually check
+#   templates.csv          hand-written patterns — our own work, unreproducible
+#   authored_intents.csv   hand-written in-domain rows — likewise
+#   assistant_test.csv     THE MODEL #4 EXAM. Never generate it, never train on it,
+#                          and never edit a row because the model got it wrong.
+#   assistant_test_meta.json / intents_meta.json
+#                          sha256s, census and every gate receipt. These are what
+#                          let a fresh clone VERIFY the corpus it rebuilds, and what
+#                          make the exam's sha256 lock enforceable rather than a
+#                          promise in a README.
+!ml-service/data/assistant/README.md
+!ml-service/data/assistant/templates.csv
+!ml-service/data/assistant/authored_intents.csv
+!ml-service/data/assistant/assistant_test.csv
+!ml-service/data/assistant/assistant_test_meta.json
+!ml-service/data/assistant/intents_meta.json

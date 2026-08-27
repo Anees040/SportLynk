@@ -1,0 +1,52 @@
+# Line endings are part of the sha256 of this repository's evidence trail.
+#
+# Three release gates compare a file's sha256 against a number recorded in a
+# committed *_meta.json and refuse to run when they disagree:
+#
+#   data/bookings_synth.csv        -> bookings_meta.json      (Model #1, S.3)
+#   data/sentiment/domain_test_200.csv -> domain_test_meta.json (Model #2, S.4)
+#   data/assistant/assistant_test.csv  -> assistant_test_meta.json (Model #4, S.6)
+#
+# This machine has core.autocrlf=true, so without this file a fresh clone gets
+# CRLF copies of those CSVs, every recorded sha256 stops matching, and each gate
+# fails on a machine where nothing is actually wrong. That failure is the good
+# case; the bad case is somebody "fixing" it by re-recording the hash and
+# retiring a working provenance check.
+#
+# So: normalise text to LF in the repository AND in the working tree. text=auto
+# leaves anything git detects as binary alone; the explicit rules below cover the
+# families where a wrong guess would be expensive either way.
+* text=auto eol=lf
+
+# Data and evidence. eol=lf is not a preference here, it is the hash contract.
+*.csv    text eol=lf
+*.json   text eol=lf
+*.jsonl  text eol=lf
+*.md     text eol=lf
+
+# Code and config.
+*.py     text eol=lf
+*.dart   text eol=lf
+*.js     text eol=lf
+*.ts     text eol=lf
+*.yaml   text eol=lf
+*.yml    text eol=lf
+*.sql    text eol=lf
+*.env.example text eol=lf
+
+# Windows-only scripts that other tools read; keep their native endings.
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+*.ps1    text eol=crlf
+
+# Binaries: never touched, never diffed as text.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.ico    binary
+*.joblib binary
+*.ttf    binary
+*.otf    binary
+*.jar    binary
+*.keystore binary
+*.jks    binary

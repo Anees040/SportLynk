@@ -1,0 +1,465 @@
+template_id,intent,lang,pattern,phenomena
+book_venue-en-01,book_venue,en,book {venue} for {date} {polite},plain;imperative;multi_slot
+book_venue-en-02,book_venue,en,{opener} reserve the {time} slot at {venue},imperative;multi_slot
+book_venue-en-03,book_venue,en,i want to book {sport} {venue_word} in {area} for {duration},plain;multi_slot
+book_venue-en-04,book_venue,en,can you confirm the booking for {venue} {polite},question;politeness
+book_venue-en-05,book_venue,en,ok book it {polite},short;imperative
+book_venue-en-06,book_venue,en,yes the {time} one {polite},short;ellipsis
+book_venue-en-07,book_venue,en,"{team} is playing {date}, book {venue} {polite}",run_on;imperative;multi_slot
+book_venue-mix-01,book_venue,mix,{opener} {venue} book kar dein for {duration},code_switch;multi_slot
+book_venue-mix-02,book_venue,mix,"{time} ka slot book kar do, {team} ready hai {polite}",code_switch;run_on
+book_venue-mix-03,book_venue,mix,"{area} wale {venue_word} pe {sport} khelna hai, book it {polite}",code_switch;multi_slot;run_on
+book_venue-mix-04,book_venue,mix,{opener} chalo book it {polite},short;code_switch;imperative
+book_venue-ru-01,book_venue,ru,{date} {venue} book kardo {polite},imperative;multi_slot
+book_venue-ru-02,book_venue,ru,{time} ka slot chahiye {venue} me {polite},plain;multi_slot
+book_venue-ru-03,book_venue,ru,{area} wale {sport} {venue_word} ki booking kar do,imperative;multi_slot
+book_venue-ru-04,book_venue,ru,haan yehi wala book kardo {polite},short;ellipsis;imperative
+book_venue-ru-05,book_venue,ru,{time} wala confirm kardo {polite},short;imperative
+book_venue-ru-06,book_venue,ru,mujhe {date} booking karni hai {venue} me,plain;multi_slot
+book_venue-ru-07,book_venue,ru,{count} bando ke liye {sport} {venue_word} book karna hai {date},multi_slot;numeric;slang
+cancel_booking-en-01,cancel_booking,en,cancel my booking for {date} {polite},plain;imperative
+cancel_booking-en-02,cancel_booking,en,{opener} i need to cancel the booking at {venue},plain
+cancel_booking-en-03,cancel_booking,en,can you cancel the {time} slot for me {polite},question;politeness
+cancel_booking-en-04,cancel_booking,en,"something came up, cancel the booking for {team} {polite}",run_on;imperative
+cancel_booking-en-05,cancel_booking,en,cancel it {polite},short;imperative
+cancel_booking-en-06,cancel_booking,en,delete the {venue_word} booking i made {polite},imperative;plain
+cancel_booking-mix-01,cancel_booking,mix,"{venue} ki booking cancel kar do, we are shifting to another {venue_word}",code_switch;run_on
+cancel_booking-mix-02,cancel_booking,mix,"sorry for the trouble, {time} wali booking cancel karwa dein {polite}",code_switch;politeness
+cancel_booking-mix-03,cancel_booking,mix,"{team} ka match postpone ho gaya, booking cancel kardo {polite}",code_switch;run_on
+cancel_booking-mix-04,cancel_booking,mix,"{opener} just cancel it, {sport} nahi khel rahe ab",code_switch;negation;short
+cancel_booking-ru-01,cancel_booking,ru,{time} wali booking cancel kardo {polite},imperative;plain
+cancel_booking-ru-02,cancel_booking,ru,{venue} ki booking cancel karni hai,plain
+cancel_booking-ru-03,cancel_booking,ru,"{opener} plan change ho gaya, booking hata do",run_on;slang
+cancel_booking-ru-04,cancel_booking,ru,"{date} nahi aa rahe hum, booking cancel kar dein {polite}",negation;run_on
+cancel_booking-ru-05,cancel_booking,ru,mujhe ye booking nahi chahiay ab {polite},negation;indirect;short
+cancel_booking-ru-06,cancel_booking,ru,{venue} me jo booking thi wo cancel kar dein {polite},plain;politeness
+check_availability-en-01,check_availability,en,is {venue} free {date} {polite},question;multi_slot;boundary
+check_availability-en-02,check_availability,en,show me the open slots for {date} {polite},imperative
+check_availability-en-03,check_availability,en,what times are available at {venue} for {date},question;multi_slot
+check_availability-en-04,check_availability,en,is {duration} still free at {venue} {date},question;multi_slot;numeric
+check_availability-en-05,check_availability,en,anything free at {venue} {date} {polite},ellipsis;short
+check_availability-en-06,check_availability,en,is there really nothing free {date} in {area},negation;question
+check_availability-en-07,check_availability,en,is the {time} slot at {venue} still available or already taken,boundary;multi_slot;question
+check_availability-mix-01,check_availability,mix,{venue} pe {time} ka slot available hai kya,code_switch;question;multi_slot
+check_availability-mix-02,check_availability,mix,{date} kuch free hai {area} me,code_switch;multi_slot;boundary
+check_availability-mix-03,check_availability,mix,koi slot bacha hai {date} at {venue},code_switch;question;multi_slot
+check_availability-mix-04,check_availability,mix,{venue} fully booked hai {date} ya kuch khali hai,code_switch;negation;multi_slot
+check_availability-ru-01,check_availability,ru,{venue} {date} khali hai kya {polite},question;multi_slot
+check_availability-ru-02,check_availability,ru,{time} ka slot khali hai {venue} me,question;multi_slot
+check_availability-ru-03,check_availability,ru,{date} khali slots dikhao {polite},imperative
+check_availability-ru-04,check_availability,ru,{area} me {date} kuch khali hai ya sab book hai,negation;question;multi_slot;boundary
+check_availability-ru-05,check_availability,ru,{date} koi slot khali hai {polite},ellipsis;short
+check_availability-ru-06,check_availability,ru,{venue} pe {date} kuch nai mil raha koi aur time hai,negation;run_on;multi_slot
+check_availability-ru-07,check_availability,ru,{venue} me {time} ka slot mil sakta hai {polite},boundary;question;multi_slot
+create_team_help-en-01,create_team_help,en,how do i create a team on the app {polite},question;politeness
+create_team_help-en-02,create_team_help,en,where do i get the invite link for {team},question
+create_team_help-en-03,create_team_help,en,how many players do i need at minimum for a {sport} team,question;numeric
+create_team_help-en-04,create_team_help,en,do all my players need to accept the invite before we can play,question
+create_team_help-en-05,create_team_help,en,walk me through adding players to {team},imperative
+create_team_help-en-06,create_team_help,en,is it possible to rename {team} after creating it,question
+create_team_help-en-07,create_team_help,en,i want to set up a {sport} team with {count} friends,multi_slot;numeric
+create_team_help-en-08,create_team_help,en,how do i join a team someone else already made,question
+create_team_help-mix-01,create_team_help,mix,team create karne ka process kya hai {polite},code_switch;question
+create_team_help-mix-02,create_team_help,mix,captain change kar sakte hain ya jisne team banai wo hi rahega,code_switch;question;run_on
+create_team_help-mix-03,create_team_help,mix,roster me {count} se zyada players add kar sakte hain kya,code_switch;numeric;question
+create_team_help-mix-04,create_team_help,mix,"team setup me help chahiye, steps batao {polite}",code_switch;imperative;politeness
+create_team_help-mix-05,create_team_help,mix,team delete ya leave karna ho to kaise karte hain,code_switch;question
+create_team_help-ru-01,create_team_help,ru,team kaise banate hain is app me,question
+create_team_help-ru-02,create_team_help,ru,invite link kahan se milega {polite},question;politeness
+create_team_help-ru-03,create_team_help,ru,{count} bando se team ban jati hai kya,numeric;question
+create_team_help-ru-04,create_team_help,ru,captain kisi aur ko bana sakte hain ya nahi,question;negation
+create_team_help-ru-05,create_team_help,ru,nai team banani hai {count} logon ki,numeric
+create_team_help-ru-06,create_team_help,ru,team ka naam badal sakte hain baad me {polite},question;politeness
+create_team_help-ru-07,create_team_help,ru,doston ko team me add kaise karun,question
+create_team_help-ru-08,create_team_help,ru,{opener} team banane ka tarika,short;ellipsis
+create_team_help-ru-09,create_team_help,ru,kisi ki team me shamil hone ke liye kya karna hoga,question
+find_opponents-en-01,find_opponents,en,find {team} an opponent for {date} {polite},imperative;multi_slot;politeness
+find_opponents-en-02,find_opponents,en,is there any {sport} team free {date} {time},question;multi_slot
+find_opponents-en-03,find_opponents,en,we need {count} more players for a {sport} match {date},multi_slot;numeric
+find_opponents-en-04,find_opponents,en,looking for a friendly against a team around our rating,plain
+find_opponents-en-05,find_opponents,en,match us with a team in {area} {polite},imperative;politeness
+find_opponents-en-06,find_opponents,en,any {sport} match {date},short;ellipsis;multi_slot
+find_opponents-en-07,find_opponents,en,who can we play against {date} in {city},question;multi_slot
+find_opponents-mix-01,find_opponents,mix,{date} ke liye koi opponent team available hai,code_switch;question
+find_opponents-mix-02,find_opponents,mix,hamare {count} players short hain {sport} ke liye,code_switch;numeric;multi_slot
+find_opponents-mix-03,find_opponents,mix,{team} ke liye friendly match arrange karwa do {polite},code_switch;imperative;politeness
+find_opponents-mix-04,find_opponents,mix,{area} ki koi decent team hai jo {sport} khelti ho,code_switch;multi_slot;question
+find_opponents-ru-01,find_opponents,ru,koi team milegi {date} khelne ke liye,question
+find_opponents-ru-02,find_opponents,ru,{count} bande chahiye {sport} ke match ke liye,numeric;multi_slot
+find_opponents-ru-03,find_opponents,ru,hamare liye koi opponent dhoondo {polite},imperative;politeness
+find_opponents-ru-04,find_opponents,ru,{date} {time} match khelna hai kisi ke saath,multi_slot
+find_opponents-ru-05,find_opponents,ru,{area} me koi {sport} ki team hai jo match khelay,question;multi_slot
+find_opponents-ru-06,find_opponents,ru,{opener} koi team taiyar hai match ke liye,question;short
+find_opponents-ru-07,find_opponents,ru,hamare barabar ki kisi team se match lagwa do,imperative;slang
+find_venue-en-01,find_venue,en,show me {sport} {venue_word} options in {area} {polite},imperative;multi_slot
+find_venue-en-02,find_venue,en,where can i play {sport} in {city} {polite},question
+find_venue-en-03,find_venue,en,{opener} looking for {sport} {venue_word} in {area} something {budget},multi_slot;run_on
+find_venue-en-04,find_venue,en,any {sport} {venue_word} close to {area},ellipsis;short;question
+find_venue-en-05,find_venue,en,i need {sport} {venue_word} with {amenity} in {area},plain;multi_slot
+find_venue-en-06,find_venue,en,we want to play {sport} {date} which {venue_word} do you suggest,run_on;multi_slot;boundary
+find_venue-en-07,find_venue,en,what are my options for {sport} in {area} {polite},question
+find_venue-mix-01,find_venue,mix,{opener} koi decent {sport} {venue_word} suggest karo {area} me,code_switch;imperative
+find_venue-mix-02,find_venue,mix,any {sport} {venue_word} {area} ke around jo {budget} ho,code_switch;multi_slot;run_on
+find_venue-mix-03,find_venue,mix,{city} me best {sport} {venue_word} kaunsa hai {polite},code_switch;question
+find_venue-mix-04,find_venue,mix,{date} {sport} khelna hai koi good {venue_word} in {area},code_switch;multi_slot
+find_venue-ru-01,find_venue,ru,{date} {area} me koi {sport} {venue_word} hai {polite},question;multi_slot
+find_venue-ru-02,find_venue,ru,{area} ke {sport} {venue_word} dikhao {polite},imperative
+find_venue-ru-03,find_venue,ru,{city} me {sport} kahan khel sakte hain {polite},question
+find_venue-ru-04,find_venue,ru,koi {sport} {venue_word} chahiye {area} me jo {budget} ho,multi_slot;run_on
+find_venue-ru-05,find_venue,ru,{time} ke liye koi {sport} {venue_word} bata do {polite},imperative;multi_slot;boundary
+find_venue-ru-06,find_venue,ru,{amenity} wala {sport} {venue_word} chahiye {city} me,multi_slot
+find_venue-ru-07,find_venue,ru,{opener} {area} ke aas paas koi acha {sport} {venue_word} nai hai kya,negation;question
+greeting-en-01,greeting,en,good morning,plain;short
+greeting-en-02,greeting,en,hello how are you,question
+greeting-en-03,greeting,en,whats up,slang;question;short
+greeting-en-04,greeting,en,thanks a lot,plain;short
+greeting-en-05,greeting,en,thank you so much for the help,politeness
+greeting-en-06,greeting,en,thx,sms_speak;short
+greeting-en-07,greeting,en,ok got it,short
+greeting-en-08,greeting,en,alright that makes sense,plain
+greeting-en-09,greeting,en,ok bye then,short
+greeting-mix-01,greeting,mix,"hello ji, sab khairiyat",code_switch;question;short
+greeting-mix-02,greeting,mix,"{opener} thanks a lot, bohat madad hui",code_switch;politeness
+greeting-mix-03,greeting,mix,ok samajh gaya thanks,code_switch;short
+greeting-mix-04,greeting,mix,"salam, hope you are doing well",code_switch;politeness
+greeting-mix-05,greeting,mix,chalo bye phir,code_switch;short
+greeting-mix-06,greeting,mix,"bohat shukriya, really appreciate it",code_switch;politeness
+greeting-ru-01,greeting,ru,salam {polite},plain;short
+greeting-ru-02,greeting,ru,aoa,sms_speak;short
+greeting-ru-03,greeting,ru,walaikum assalam,plain;short
+greeting-ru-04,greeting,ru,{opener} kya haal hai,question;short
+greeting-ru-05,greeting,ru,shukriya {polite},plain;short
+greeting-ru-06,greeting,ru,bohat shukriya itni madad ke liye,politeness
+greeting-ru-07,greeting,ru,jazakallah khair,plain;short
+greeting-ru-08,greeting,ru,theek hai samajh gaya,plain;short
+greeting-ru-09,greeting,ru,acha chalo phir baad me baat karte hain,plain
+greeting-ru-10,greeting,ru,allah hafiz,plain;short
+greeting-ru-11,greeting,ru,{opener} bas salam karne ke liye msg kia tha,plain;sms_speak
+my_bookings-en-01,my_bookings,en,show my bookings {polite},plain;imperative;short
+my_bookings-en-02,my_bookings,en,what have i got booked for {date},question;plain
+my_bookings-en-03,my_bookings,en,do i have a {sport} booking coming up {polite},question;plain
+my_bookings-en-04,my_bookings,en,when is my next booking,question;short
+my_bookings-en-05,my_bookings,en,{opener} i want to see my booking history,plain
+my_bookings-en-06,my_bookings,en,my upcoming bookings {polite},ellipsis;short
+my_bookings-en-07,my_bookings,en,how many slots have i booked for {date},question;numeric
+my_bookings-en-08,my_bookings,en,{opener} where am i playing next,indirect;question
+my_bookings-mix-01,my_bookings,mix,meri upcoming bookings dikha do,code_switch;imperative;short
+my_bookings-mix-02,my_bookings,mix,{date} mera {sport} ka slot confirm hai kya,code_switch;question;multi_slot
+my_bookings-mix-03,my_bookings,mix,{opener} booking history kahan se milegi,code_switch;question
+my_bookings-mix-04,my_bookings,mix,kitni bookings pending hain meri,code_switch;numeric;question
+my_bookings-mix-05,my_bookings,mix,{date} wali reservation ka time kya tha,code_switch;question
+my_bookings-ru-01,my_bookings,ru,meri bookings dikhao {polite},imperative;short
+my_bookings-ru-02,my_bookings,ru,{date} meri booking kis time ki hai,question;plain
+my_bookings-ru-03,my_bookings,ru,koi booking hai meri ya nahi,question;negation;short
+my_bookings-ru-04,my_bookings,ru,agli booking kab hai meri,question;short
+my_bookings-ru-05,my_bookings,ru,apni saari bookings dekhni hain {polite},plain
+my_bookings-ru-06,my_bookings,ru,meri booking list {polite},ellipsis;short
+my_bookings-ru-07,my_bookings,ru,mera {sport} ka koi slot booked hai kia,question;plain
+my_bookings-ru-08,my_bookings,ru,pichli bookings ki list mil jaye gi {polite},question;politeness
+my_bookings-ru-09,my_bookings,ru,{opener} mujhe yaad nai mene kya kya book kiya tha,indirect;slang
+out_of_scope-en-01,out_of_scope,en,order me a large pizza,imperative;plain
+out_of_scope-en-02,out_of_scope,en,whats the weather forecast for Islamabad,question
+out_of_scope-en-03,out_of_scope,en,book me a cab to the airport,imperative;boundary
+out_of_scope-en-04,out_of_scope,en,how do i recharge my mobile balance,question;boundary
+out_of_scope-en-05,out_of_scope,en,whats the live score of the cricket match,question;boundary
+out_of_scope-en-06,out_of_scope,en,when is the psl final happening,question;boundary
+out_of_scope-en-07,out_of_scope,en,is babar azam playing in the next series,question;boundary
+out_of_scope-en-08,out_of_scope,en,should i invest in bitcoin right now,question
+out_of_scope-en-09,out_of_scope,en,i have a bad headache what medicine should i take,question
+out_of_scope-en-10,out_of_scope,en,how much does a flight to dubai cost,question
+out_of_scope-en-11,out_of_scope,en,who is the president of pakistan,question
+out_of_scope-en-12,out_of_scope,en,are you a real human or just a bot,question
+out_of_scope-mix-01,out_of_scope,mix,cricket match kis channel pe aa raha hai,question;boundary;code_switch
+out_of_scope-mix-02,out_of_scope,mix,{opener} world cup ka schedule bhej do,imperative;boundary;code_switch
+out_of_scope-mix-03,out_of_scope,mix,murree me koi hotel book karwa do,imperative;boundary;code_switch
+out_of_scope-mix-04,out_of_scope,mix,stock market me invest kaise karte hain,question;code_switch
+out_of_scope-mix-05,out_of_scope,mix,board ka result online kab aayega,question;code_switch
+out_of_scope-mix-06,out_of_scope,mix,netflix pe koi acha movie suggest karo,imperative;code_switch
+out_of_scope-ru-01,out_of_scope,ru,islamabad me barish hogi ya nahi,question;negation
+out_of_scope-ru-02,out_of_scope,ru,yahan koi acha burger wala hai,question;boundary
+out_of_scope-ru-03,out_of_scope,ru,bijli ka bill online kaise jama karun,question;boundary
+out_of_scope-ru-04,out_of_scope,ru,cinema ki ticket book karni hai {polite},imperative;boundary
+out_of_scope-ru-05,out_of_scope,ru,meri physics ki assignment kar do,imperative
+out_of_scope-ru-06,out_of_scope,ru,cricket ka score kya hua,question;boundary;short
+out_of_scope-ru-07,out_of_scope,ru,psl ke tickets kahan se milte hain,question;boundary
+out_of_scope-ru-08,out_of_scope,ru,qaumi team me kon kon khel raha hai is dafa,question;boundary
+out_of_scope-ru-09,out_of_scope,ru,pakistan ki icc ranking kya hai,question;boundary
+out_of_scope-ru-10,out_of_scope,ru,koi mazedar joke sunao {polite},imperative
+out_of_scope-ru-11,out_of_scope,ru,"tum kaun ho, insan ho ya robot",question
+out_of_scope-ru-12,out_of_scope,ru,aaj dollar ka rate kya hai,question
+refund_policy-en-01,refund_policy,en,what is the cancellation policy for {venue},plain;question
+refund_policy-en-02,refund_policy,en,if i cancel less than 24 hours before the slot how much comes back,numeric;boundary;question
+refund_policy-en-03,refund_policy,en,how much deposit do i pay upfront to hold a slot,numeric;question
+refund_policy-en-04,refund_policy,en,does my money sit in escrow until the QR check in?,plain;question
+refund_policy-en-05,refund_policy,en,what happens if nobody shows up for the booking,negation;question
+refund_policy-en-06,refund_policy,en,who keeps the 20 percent on a late cancellation {polite},numeric;question
+refund_policy-en-07,refund_policy,en,refund rules for late cancellation,ellipsis;short
+refund_policy-en-08,refund_policy,en,"not cancelling anything yet, i just want to know the refund rules first",boundary;negation
+refund_policy-mix-01,refund_policy,mix,cancellation window kitne hours ka hai,code_switch;numeric;short
+refund_policy-mix-02,refund_policy,mix,"no show ki case me kya hota hai, slot ke baad kitna wait karte hain",code_switch;run_on;question
+refund_policy-mix-03,refund_policy,mix,full refund ke liye kitna pehle cancel karna parta hai {polite},code_switch;question
+refund_policy-mix-04,refund_policy,mix,deposit non refundable hai kya {venue} pe,code_switch;question
+refund_policy-ru-01,refund_policy,ru,{date} cancel karun to paise wapas milenge ya nahi,negation;question
+refund_policy-ru-02,refund_policy,ru,booking cancel karne ka rule kya hai {polite},boundary;question
+refund_policy-ru-03,refund_policy,ru,24 ghante se kam bacha ho to kitna refund milta hai,numeric;question
+refund_policy-ru-04,refund_policy,ru,advance kitna dena parta hai booking pakki karne ke liye,numeric;question
+refund_policy-ru-05,refund_policy,ru,"agar hum na pohanche to kya hoga, paise doob jayenge",negation;slang;run_on
+refund_policy-ru-06,refund_policy,ru,paise QR scan hone tak escrow me hi rehte hain kya,plain;question
+refund_policy-ru-07,refund_policy,ru,{opener} refund ki policy zara samjha do,imperative;politeness
+refund_policy-ru-08,refund_policy,ru,"sunna hai late cancel pe 20 percent owner ko chala jata hai, aisa hi hai",numeric;run_on;question
+team_stats-en-01,team_stats,en,what is {team} elo rating right now,question
+team_stats-en-02,team_stats,en,where does {team} stand in the rankings {polite},question;politeness
+team_stats-en-03,team_stats,en,how many matches has {team} won and lost so far,question;numeric
+team_stats-en-04,team_stats,en,show me the elo history for {team},imperative
+team_stats-en-05,team_stats,en,did {team} rating go up after the last match,question
+team_stats-en-06,team_stats,en,{team} rating {polite},short;ellipsis
+team_stats-en-07,team_stats,en,i want to check the win loss record for {team} in {sport},multi_slot
+team_stats-en-08,team_stats,en,{team} is still showing unranked even though we played,indirect
+team_stats-mix-01,team_stats,mix,{team} ka overall record kya hai {sport} me,code_switch;multi_slot
+team_stats-mix-02,team_stats,mix,leaderboard pe {team} kis number pe hai,code_switch;question
+team_stats-mix-03,team_stats,mix,{team} ki last {count} matches ki performance dikhao,code_switch;imperative;multi_slot
+team_stats-mix-04,team_stats,mix,kitne elo points hain {team} ke paas {polite},code_switch;numeric
+team_stats-mix-05,team_stats,mix,{team} ne kitne matches draw kiye hain ab tak,code_switch;numeric;question
+team_stats-ru-01,team_stats,ru,{team} ki rating kitni hai,question
+team_stats-ru-02,team_stats,ru,{team} ka rank kya hai poore app pe,question
+team_stats-ru-03,team_stats,ru,{count} match ke baad kitne points bane hain,numeric;question
+team_stats-ru-04,team_stats,ru,{team} ki elo history dikhao {polite},imperative;politeness
+team_stats-ru-05,team_stats,ru,{opener} kitne match jeete aur kitne haare hum,question;numeric
+team_stats-ru-06,team_stats,ru,{team} ki ranking check karni hai,plain
+team_stats-ru-07,team_stats,ru,pichle match ke baad rating barhi ya nahi {polite},question;negation
+team_stats-ru-08,team_stats,ru,{team} ka elo {polite},short;ellipsis
+team_stats-ru-09,team_stats,ru,{team} abhi tak unranked kyun hai,question;indirect
+topup_help-en-01,topup_help,en,how do i add money to my wallet,question;plain
+topup_help-en-02,topup_help,en,what payment methods do you accept {polite},question;plain
+topup_help-en-03,topup_help,en,can i top up with easypaisa,question;short
+topup_help-en-04,topup_help,en,{opener} walk me through withdrawing my balance,imperative;plain
+topup_help-en-05,topup_help,en,is there a minimum amount for a top up,question;numeric
+topup_help-en-06,topup_help,en,steps to load funds {polite},ellipsis;short
+topup_help-en-07,topup_help,en,i need to link my card {polite},plain
+topup_help-en-08,topup_help,en,why is my jazzcash top up not going through {polite},question;negation
+topup_help-mix-01,topup_help,mix,payment method change kaise karun {polite},code_switch;question
+topup_help-mix-02,topup_help,mix,minimum top up amount kitna hai,code_switch;numeric;boundary
+topup_help-mix-03,topup_help,mix,{opener} withdrawal ka process batao,code_switch;imperative
+topup_help-mix-04,topup_help,mix,debit card add karne ka option kahan hai app mein,code_switch;question
+topup_help-mix-05,topup_help,mix,wallet recharge ke liye kya kya options hain,code_switch;question
+topup_help-ru-01,topup_help,ru,paise kaise add karun {polite},question;short
+topup_help-ru-02,topup_help,ru,wallet mein paise dalne ka tareeqa kya hai,question;plain
+topup_help-ru-03,topup_help,ru,easypaisa se top up ho jata hai kya,question;plain
+topup_help-ru-04,topup_help,ru,{opener} paise nikalne hain kaise nikalunga,run_on;question
+topup_help-ru-05,topup_help,ru,kam se kam kitne paise dalne parte hain,question;numeric
+topup_help-ru-06,topup_help,ru,jazzcash ka option kahan hai {polite},question;short
+topup_help-ru-07,topup_help,ru,paise dalne ke baad kitni dair lagti hai,question;plain
+topup_help-ru-08,topup_help,ru,wallet se bank mein paise transfer kaise karte hain,question;plain
+topup_help-ru-09,topup_help,ru,{opener} card wala tareeqa samjha do zara,imperative;politeness
+tournament_list-en-01,tournament_list,en,any {sport} tournaments on sportlynk {date},plain;question
+tournament_list-en-02,tournament_list,en,how do i register {team} for a tournament on the app,plain;question
+tournament_list-en-03,tournament_list,en,is there any {sport} league running here right now,question;boundary
+tournament_list-en-04,tournament_list,en,show me the tournaments open for registration {polite},imperative
+tournament_list-en-05,tournament_list,en,what is the entry fee for the tournaments listed on sportlynk,numeric;question
+tournament_list-en-06,tournament_list,en,upcoming tournaments on the app in {city},ellipsis;short
+tournament_list-en-07,tournament_list,en,when does registration close for the {sport} tournament on sportlynk?,plain;question
+tournament_list-mix-01,tournament_list,mix,koi {sport} tournament ka registration open hai app pe,code_switch;question
+tournament_list-mix-02,tournament_list,mix,sportlynk pe knockout format ka tournament hota hai ya league,code_switch;question
+tournament_list-mix-03,tournament_list,mix,app pe jo tournament hai uski last registration date kya hai,code_switch;run_on
+tournament_list-mix-04,tournament_list,mix,{city} me sportlynk ka koi tournament arrange ho raha hai {date},code_switch;multi_slot
+tournament_list-ru-01,tournament_list,ru,app pe koi {sport} tournament chal raha hai {polite},plain;question
+tournament_list-ru-02,tournament_list,ru,sportlynk pe tournament kab shuru hoga,plain;question
+tournament_list-ru-03,tournament_list,ru,{team} ko app ke tournament me register kaise karain,plain;question
+tournament_list-ru-04,tournament_list,ru,yahan koi {sport} league hai jisme hissa le sakein,question;boundary
+tournament_list-ru-05,tournament_list,ru,{opener} tournament kab hai,short;ellipsis
+tournament_list-ru-06,tournament_list,ru,{opener} app pe tournaments ki list dikha do,imperative
+tournament_list-ru-07,tournament_list,ru,"registration fee kitni hai tournament ki, app pe likha nahi hai",numeric;negation;run_on
+venue_info-en-01,venue_info,en,does it have {amenity} {polite},plain;question;short
+venue_info-en-02,venue_info,en,how much is {venue} for {duration},plain;numeric;question
+venue_info-en-03,venue_info,en,what time does {venue} open and close?,plain;question
+venue_info-en-04,venue_info,en,tell me more about {venue} {polite},imperative;politeness
+venue_info-en-05,venue_info,en,is {venue} turf or grass,plain;question
+venue_info-en-06,venue_info,en,any reviews for {venue},ellipsis;short;question
+venue_info-en-07,venue_info,en,{amenity} at {venue},ellipsis;short
+venue_info-en-08,venue_info,en,i want to check the facilities at {venue} before booking anything,boundary;plain
+venue_info-mix-01,venue_info,mix,{venue} me {amenity} available hai kya,code_switch;question
+venue_info-mix-02,venue_info,mix,{venue} ka per hour price kitna hai {polite},code_switch;numeric
+venue_info-mix-03,venue_info,mix,{venue} ki overall rating kaisi hai,code_switch;question;short
+venue_info-mix-04,venue_info,mix,opening aur closing time batao {venue} ka,code_switch;imperative
+venue_info-ru-01,venue_info,ru,{venue} me {amenity} hai ya nahi,question;negation
+venue_info-ru-02,venue_info,ru,us {venue_word} ka rate kya hai {polite},numeric;question
+venue_info-ru-03,venue_info,ru,{venue} kitne baje khulta hai,plain;question
+venue_info-ru-04,venue_info,ru,{opener} us {venue_word} me {amenity} to hai na,slang;question;short
+venue_info-ru-05,venue_info,ru,{venue} ke bare me thora bata do {polite},imperative;politeness
+venue_info-ru-06,venue_info,ru,wo {venue_word} indoor he ya khula,question;plain
+venue_info-ru-07,venue_info,ru,{venue} ki timing,ellipsis;short
+venue_info-ru-08,venue_info,ru,mujhe {venue} ki rating aur {amenity} ke bare me pata karna hai,multi_slot;plain
+wallet_balance-en-01,wallet_balance,en,how much is in my wallet {polite},question;plain
+wallet_balance-en-02,wallet_balance,en,check my balance {polite},imperative;short
+wallet_balance-en-03,wallet_balance,en,do i have enough balance for a booking,question;boundary
+wallet_balance-en-04,wallet_balance,en,show my escrow amount {polite},imperative;plain
+wallet_balance-en-05,wallet_balance,en,{opener} is any of my money on hold right now,question;plain
+wallet_balance-en-06,wallet_balance,en,wallet balance {polite},ellipsis;short
+wallet_balance-en-07,wallet_balance,en,i want to know how much credit is left in my account,plain
+wallet_balance-en-08,wallet_balance,en,how much of my money is frozen right now,question;numeric
+wallet_balance-mix-01,wallet_balance,mix,escrow amount kitna hai mera {polite},code_switch;question
+wallet_balance-mix-02,wallet_balance,mix,kitna amount on hold hai abhi {polite},code_switch;question
+wallet_balance-mix-03,wallet_balance,mix,{opener} wallet ka current balance check karna hai,code_switch;plain
+wallet_balance-mix-04,wallet_balance,mix,pending payments ke baad kitna left hai,code_switch;question
+wallet_balance-mix-05,wallet_balance,mix,total credit kitna show ho raha hai app pe,code_switch;question
+wallet_balance-ru-01,wallet_balance,ru,balance kitna hai {polite},question;short
+wallet_balance-ru-02,wallet_balance,ru,apna balance dekhna hai {polite},plain
+wallet_balance-ru-03,wallet_balance,ru,{opener} zara bata do wallet mein kya bacha hai,imperative;politeness
+wallet_balance-ru-04,wallet_balance,ru,mere kitne paise rok kar rakhe hain,question;plain
+wallet_balance-ru-05,wallet_balance,ru,booking ke liye paise poore hain ya nahi,question;negation;boundary
+wallet_balance-ru-06,wallet_balance,ru,balance zero ho gaya kya mera,question;slang
+wallet_balance-ru-07,wallet_balance,ru,mere paise kahan gaye kuch bacha bhi hai,run_on;indirect
+wallet_balance-ru-08,wallet_balance,ru,{opener} account mein paise hain ya khali hai,question;negation
+wallet_balance-ru-09,wallet_balance,ru,pichli booking ke baad kitna bacha hai,question;plain
+greeting-en-10,greeting,en,{opener} thanks for the help,politeness;plain
+greeting-en-11,greeting,en,{opener} much appreciated,politeness;short
+greeting-en-12,greeting,en,{opener} anyone there,question;short
+greeting-en-13,greeting,en,{opener} thanks again,politeness;short
+greeting-en-14,greeting,en,{opener} that was quick thanks,politeness;plain
+greeting-en-15,greeting,en,{opener} you are a lifesaver,politeness;slang
+greeting-en-16,greeting,en,hii,short;sms_speak
+greeting-en-17,greeting,en,hey there,short;plain
+greeting-en-18,greeting,en,good afternoon,short;plain
+greeting-en-19,greeting,en,good evening,short;plain
+greeting-en-20,greeting,en,gm!,short;sms_speak
+greeting-en-21,greeting,en,gn!,short;sms_speak
+greeting-en-22,greeting,en,yo!,short;slang
+greeting-en-23,greeting,en,sup,short;slang
+greeting-en-24,greeting,en,how are you doing,question;plain
+greeting-en-25,greeting,en,ok thanks,short;politeness
+greeting-en-26,greeting,en,okay thank you,short;politeness
+greeting-en-27,greeting,en,got it thanks,short;politeness
+greeting-en-28,greeting,en,understood thanks,short;politeness
+greeting-en-29,greeting,en,alright thanks,short;politeness
+greeting-en-30,greeting,en,cool thanks,short;slang;politeness
+greeting-en-31,greeting,en,perfect thanks,short;politeness
+greeting-en-32,greeting,en,awesome thanks,short;slang;politeness
+greeting-en-33,greeting,en,thank you very much,politeness;plain
+greeting-en-34,greeting,en,tysm,short;sms_speak;politeness
+greeting-en-35,greeting,en,cheers mate,short;slang;politeness
+greeting-en-36,greeting,en,thanks bro,short;slang;politeness
+greeting-en-37,greeting,en,thats all thanks,politeness;ellipsis
+greeting-en-38,greeting,en,nothing else thanks,politeness;ellipsis
+greeting-en-39,greeting,en,bye,short;plain
+greeting-en-40,greeting,en,see you later,short;plain
+greeting-en-41,greeting,en,take care,short;plain
+greeting-mix-07,greeting,mix,{opener} bohat shukriya for the help,code_switch;politeness
+greeting-mix-08,greeting,mix,{opener} anyone online right now,code_switch;question
+greeting-mix-09,greeting,mix,"{opener} thanks, ye kaam ho gaya",code_switch;politeness
+greeting-mix-10,greeting,mix,"salam, how are you",code_switch;short
+greeting-mix-11,greeting,mix,"good evening, umeed hai theek hain",code_switch;politeness
+greeting-mix-12,greeting,mix,ok theek hai thanks,code_switch;short
+greeting-mix-13,greeting,mix,"thanks bhai, bohat mehrbani",code_switch;politeness
+greeting-mix-14,greeting,mix,"shukriya, that was helpful",code_switch;politeness
+greeting-mix-15,greeting,mix,"great, bohat acha",code_switch;short
+greeting-ru-12,greeting,ru,{opener} bohat mehrbani,politeness;short
+greeting-ru-13,greeting,ru,{opener} theek hai phir,short;plain
+greeting-ru-14,greeting,ru,{opener} kaise ho,question;short
+greeting-ru-15,greeting,ru,{opener} ok samajh gaya,short;plain
+greeting-ru-16,greeting,ru,{opener} khuda hafiz,short;plain
+greeting-ru-17,greeting,ru,assalam o alaikum,plain;politeness
+greeting-ru-18,greeting,ru,subah bakhair,short;plain
+greeting-ru-19,greeting,ru,shab bakhair,short;plain
+greeting-ru-20,greeting,ru,bohat shukriya ji,short;politeness
+greeting-ru-21,greeting,ru,"shukriya, kaam ban gaya",politeness;plain
+out_of_scope-en-13,out_of_scope,en,{opener} what is the capital of france,question;plain
+out_of_scope-en-14,out_of_scope,en,{opener} tell me a joke,imperative;plain
+out_of_scope-en-15,out_of_scope,en,{opener} book me a flight to karachi,imperative;boundary
+out_of_scope-en-16,out_of_scope,en,{opener} what is 2 plus 2,question;numeric
+out_of_scope-en-17,out_of_scope,en,{opener} how do i lose weight fast,question;plain
+out_of_scope-en-18,out_of_scope,en,{opener} write my english essay for me,imperative;plain
+out_of_scope-en-19,out_of_scope,en,{opener} where can i buy a new laptop,question;plain
+out_of_scope-en-20,out_of_scope,en,{opener} translate this into arabic for me,imperative;plain
+out_of_scope-en-21,out_of_scope,en,{opener} play some music for me,imperative;plain
+out_of_scope-en-22,out_of_scope,en,{opener} what time does the mall close,question;plain
+out_of_scope-en-23,out_of_scope,en,{opener} how is the traffic on the expressway,question;plain
+out_of_scope-en-24,out_of_scope,en,{opener} can you order groceries for me,question;boundary
+out_of_scope-mix-07,out_of_scope,mix,{opener} mujhe english grammar sikha do,code_switch;imperative
+out_of_scope-mix-08,out_of_scope,mix,{opener} mobile ka package activate karwa do,code_switch;imperative
+out_of_scope-mix-09,out_of_scope,mix,{opener} kal mausam kaisa rahega,code_switch;question
+out_of_scope-mix-10,out_of_scope,mix,{opener} online paisa kamane ka tarika batao,code_switch;imperative
+out_of_scope-ru-13,out_of_scope,ru,{opener} biryani ki recipe batao,imperative;plain
+out_of_scope-ru-14,out_of_scope,ru,{opener} mera net slow chal raha hai,plain;indirect
+out_of_scope-ru-15,out_of_scope,ru,{opener} eid ki chutiyan kab se hain,question;plain
+out_of_scope-ru-16,out_of_scope,ru,{opener} mujhe naukri chahiye koi bata do,imperative;plain
+out_of_scope-ru-17,out_of_scope,ru,{opener} exam ka date sheet aa gaya,question;plain
+out_of_scope-ru-18,out_of_scope,ru,koi acha novel bata do {polite},imperative;politeness
+out_of_scope-ru-19,out_of_scope,ru,{opener} petrol ka rate barh gaya kya,question;plain
+refund_policy-en-09,refund_policy,en,if i cancel my booking for {date} do i get a refund,question;numeric
+refund_policy-en-10,refund_policy,en,whats the refund rule for a {date} slot,question;plain
+refund_policy-en-11,refund_policy,en,i cancelled my {venue} booking when will the money come back,question;run_on
+refund_policy-en-12,refund_policy,en,do i get charged if i cancel {duration} before the game,question;numeric
+refund_policy-en-13,refund_policy,en,refund policy {polite},short;politeness
+refund_policy-en-14,refund_policy,en,{opener} how long does a refund take to show up,question;plain
+refund_policy-en-15,refund_policy,en,is the {venue} deposit refundable,question;plain
+refund_policy-mix-05,refund_policy,mix,{date} ki booking cancel karun to refund milega,code_switch;question
+refund_policy-mix-06,refund_policy,mix,refund policy kya hai {polite},code_switch;politeness
+refund_policy-mix-07,refund_policy,mix,{venue} ka advance wapas milta hai ya nahi,code_switch;question
+refund_policy-ru-09,refund_policy,ru,{date} wali booking cancel karne pe paise wapas milenge,question;plain
+refund_policy-ru-10,refund_policy,ru,{venue} ka refund kitne din me aata hai,question;plain
+refund_policy-ru-11,refund_policy,ru,barish ho gayi to paise wapas milenge {polite},question;politeness
+refund_policy-ru-12,refund_policy,ru,{opener} cancel karne ki fees kitni hai,question;plain
+refund_policy-ru-13,refund_policy,ru,slot se {duration} pehle cancel karun to charge lagega,question;numeric
+topup_help-en-09,topup_help,en,how do i add {budget} to my wallet,question;numeric
+topup_help-en-10,topup_help,en,{opener} how can i top up my balance,question;plain
+topup_help-en-11,topup_help,en,can i pay with easypaisa {polite},question;politeness
+topup_help-en-12,topup_help,en,is jazzcash supported for top up {polite},question;politeness
+topup_help-en-13,topup_help,en,i sent {budget} but my wallet is still empty,numeric;indirect
+topup_help-en-14,topup_help,en,whats the minimum top up amount,question;plain
+topup_help-en-15,topup_help,en,how long does a bank transfer take to reflect,question;plain
+topup_help-en-16,topup_help,en,can i top up with a debit card,question;plain
+topup_help-en-17,topup_help,en,{opener} where is the add money button,question;plain
+topup_help-en-18,topup_help,en,i want to load {budget} in my account,numeric;plain
+topup_help-mix-06,topup_help,mix,wallet me {budget} kaise add karun,code_switch;numeric
+topup_help-mix-07,topup_help,mix,{opener} top up ka tarika batao,code_switch;imperative
+topup_help-mix-08,topup_help,mix,easypaisa se paise dal sakta hun {polite},code_switch;question
+topup_help-ru-10,topup_help,ru,{budget} wallet me kaise dalun,question;numeric
+topup_help-ru-11,topup_help,ru,{opener} paise add karne ka tarika kya hai,question;plain
+topup_help-ru-12,topup_help,ru,jazzcash se top up hota hai {polite},question;politeness
+topup_help-ru-13,topup_help,ru,paise bheje the abhi tak wallet me nahi aaye {polite},indirect;negation
+topup_help-ru-14,topup_help,ru,bank transfer kitni der me show hota hai,question;code_switch
+topup_help-ru-15,topup_help,ru,minimum kitne paise dal sakte hain,question;plain
+wallet_balance-en-09,wallet_balance,en,whats my wallet balance {polite},question;politeness
+wallet_balance-en-10,wallet_balance,en,{opener} how much money do i have left,question;plain
+wallet_balance-en-11,wallet_balance,en,do i have enough balance to book {venue},question;plain
+wallet_balance-en-12,wallet_balance,en,show my current balance {polite},imperative;politeness
+wallet_balance-en-13,wallet_balance,en,{opener} check my wallet for me,imperative;plain
+wallet_balance-en-14,wallet_balance,en,how much credit is left in my account,question;plain
+wallet_balance-en-15,wallet_balance,en,is my balance enough for a {duration} slot,question;numeric
+wallet_balance-en-16,wallet_balance,en,whats left in my wallet after the last booking,question;plain
+wallet_balance-en-17,wallet_balance,en,do i have {budget} in my wallet,question;numeric
+wallet_balance-mix-06,wallet_balance,mix,wallet me kitne paise hain {polite},code_switch;question
+wallet_balance-mix-07,wallet_balance,mix,{opener} balance check kar do,code_switch;imperative
+wallet_balance-ru-10,wallet_balance,ru,{opener} mera balance kitna hai,question;plain
+wallet_balance-ru-11,wallet_balance,ru,wallet ka balance batao {polite},imperative;politeness
+wallet_balance-ru-12,wallet_balance,ru,{venue} book karne ke liye paise pure hain,question;plain
+wallet_balance-ru-13,wallet_balance,ru,kitne paise bache hain wallet me {polite},question;politeness
+create_team_help-en-09,create_team_help,en,how do i create a {sport} team,question;plain
+create_team_help-en-10,create_team_help,en,{opener} how do i add players to my team,question;plain
+create_team_help-en-11,create_team_help,en,can a team have {count} players,question;numeric
+create_team_help-en-12,create_team_help,en,how do i invite friends to {team},question;plain
+create_team_help-en-13,create_team_help,en,whats the minimum squad size for {sport},question;plain
+create_team_help-en-14,create_team_help,en,{opener} how do i make someone a captain,question;plain
+create_team_help-mix-06,create_team_help,mix,{sport} ki team kaise banayein,code_switch;question
+create_team_help-mix-07,create_team_help,mix,{opener} team me players add kaise karte hain,code_switch;question
+create_team_help-ru-10,create_team_help,ru,nayi team banani hai kaise banau {polite},question;politeness
+create_team_help-ru-11,create_team_help,ru,{count} banday ki team ban sakti hai,question;numeric
+create_team_help-ru-12,create_team_help,ru,{opener} team me dost kaise shamil karun,question;plain
+create_team_help-ru-13,create_team_help,ru,{team} me naya khiladi kaise add hoga,question;code_switch
+tournament_list-en-08,tournament_list,en,any {sport} tournaments coming up,question;ellipsis
+tournament_list-en-09,tournament_list,en,list the tournaments in {city},imperative;plain
+tournament_list-en-10,tournament_list,en,are there any tournaments on {date},question;plain
+tournament_list-en-11,tournament_list,en,{opener} show me the tournament list,imperative;plain
+tournament_list-en-12,tournament_list,en,how do i register my team for a tournament,question;plain
+tournament_list-en-13,tournament_list,en,whats the entry fee for the {sport} tournament,question;plain
+tournament_list-mix-05,tournament_list,mix,{city} me koi tournament chal raha hai,code_switch;question
+tournament_list-mix-06,tournament_list,mix,{sport} tournament ki list dikhao,code_switch;imperative
+tournament_list-mix-07,tournament_list,mix,{date} koi event hai kya,code_switch;question
+tournament_list-ru-08,tournament_list,ru,koi {sport} ka tournament hai in dino,question;plain
+tournament_list-ru-09,tournament_list,ru,{city} ke tournaments dikhao {polite},imperative;multi_slot
+tournament_list-ru-10,tournament_list,ru,tournament me team register kaise hoti hai,question;code_switch
+my_bookings-en-09,my_bookings,en,show my bookings for {date},imperative;plain
+my_bookings-en-10,my_bookings,en,{opener} what have i booked so far,question;plain
+my_bookings-ru-10,my_bookings,ru,{date} ki meri booking dikhao,imperative;plain
+team_stats-en-09,team_stats,en,hows {team} doing this season,question;slang
+team_stats-en-10,team_stats,en,{opener} show my rating,imperative;short

@@ -53,7 +53,7 @@ trained ML models — never replace them with external AI API calls.
 - generate_bookings.py must NOT touch the DB and must NOT import from app/routers/.
 
 ## Status
-S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D) and S.5 (A–C) are all code-complete. The ML tier is live end to
+S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D), S.5 (A–C) and S.6 (A) are all code-complete. The ML tier is live end to
 end: model #1 (dynamic pricing) is trained, gated, served, and on the owner's screen with
 real confidence + a 72h demand chart, plus a reproducibility/evidence pack. Model #2
 (sentiment) is trained, gated, served, and — as of S4-C — called by Node: every review with
@@ -111,13 +111,16 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
     ELO, or match change since) — expected untouched, not measured.
   - re-estimate elasticity from real bookings once data exists (pipeline is validated;
     ELASTICITY_PEAK 0.85 / OFFPEAK 2.20 are stated assumptions, not estimates).
-- NEXT: S.5 recommenders Wave A (venues, model #3) + Wave B (player/opponent scorer) + Wave C (offline
-  eval + model card) DONE, and the operator chain has been run once (seed → `build_reco.py` →
-  `POST /reco/refresh` → `--verify`: sport axis football/cricket, artifact `…-20260827-200702`, rails differ
-  4/5 overlap). Remaining HUMAN steps for the S.5 milestone: the in-app pass — two seeded accounts side by
-  side, a brand-new account showing "Popular nearby" with no %, ml-service-down fallback (TESTING.md §4.16
-  steps 157-158) → commit + `tag s5-done` → S.6 NLU assistant → S.7 tournaments/chat/admin
-  dispute-UI/demo pack + deploy ml-service as a 2nd Render service.
+- NEXT: S.6 Wave A (the assistant NLU corpus + the exam that will grade it) DONE — 1,680 rows over 15
+  intents, 40 corpus gates (39 PASS + 1 WARN) + 24/24 exam checks, sha256 stable on replay, nothing trained yet.
+  NEXT WAVE: S6-B — train the intent classifier on `data/assistant/intents.csv`, grade it on the
+  sha-locked 150-row exam (confusion matrix, per SRS), and serve `POST /nlu/parse`. Still open from
+  S.5: the operator chain has been run once (seed → `build_reco.py` → `POST /reco/refresh` →
+  `--verify`: sport axis football/cricket, artifact `…-20260827-200702`, rails differ 4/5 overlap), so
+  what remains is the HUMAN in-app pass — two seeded accounts side by side, a brand-new account
+  showing "Popular nearby" with no %, ml-service-down fallback (TESTING.md §4.16 steps 157-158) →
+  commit + `tag s5-done`. Then S.7 tournaments/chat/admin dispute-UI/demo pack + deploy ml-service as
+  a 2nd Render service.
 
 ## Wave log (one entry per completed wave: what shipped · the gotcha · verified)
 - S1-A — escrow ledger unified (20% deposit / 24h window / 30-min no-show); escrow.js +
@@ -381,6 +384,29 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
   /reco/refresh in the OpenAPI schema and returns ready/reco-content-v1-20260827-090526, node --check
   clean, flutter analyze 0 (no Flutter change this wave). seed_reco_demo.js is NOT run — it writes to
   the DB, so it is the user's to run, and the rails stay identical until build_reco + /reco/refresh.
+- S6-A — the Model #4 (assistant NLU) corpus, and the instrument that will grade it, both shipped
+  BEFORE any classifier exists. NEW `app/core/intent_spec.py` — the 4th frozen ◆ contract, and the
+  first to publish TWO fingerprints: labels `assistant-intents-v1` · 7bb78a3ac94cbdef over the 15
+  intents in `model.classes_` order, dataset `assistant-dataset-v1` · 0eb01bc58b4a040f over slot
+  vocabulary/quotas/thresholds. Two, because adding a slot value invalidates a corpus while renaming
+  an intent invalidates every model ever trained. NEW `training/gen_intents.py`: 464 hand-written
+  templates → ≤12 pooled candidates each (seeded, deliberately NOT index-sorted) → water-filled
+  allocation → split GROUPED by template_id → 40 named gates. 1,680 rows, **112 for each of the 15
+  intents** (en 675 · ru 585 · mix 420; train 1,332 / val 348; 236 authored rows kept verbatim),
+  sha256 c539b8fc…, byte-identical on replay. NEW `training/validate_intent_test.py`: 24 read-only
+  checks over the 150-row hand-written exam → sha-lock in `assistant_test_meta.json`, which
+  gen_intents then enforces as a HARD gate. GOTCHA: the gates found five real defects in the
+  hand-authored inputs before a model could hide them — 6 out_of_scope patterns used
+  {city}/{sport}/{date} (a slot spreads a "city ⇒ out_of_scope" association over dozens of rows;
+  each became one literal), a space before "??" in au-164, a 2-char exam row (`ty` → `ty!`, fixed in
+  the EXAM because it was not yet locked, rather than lowering MIN_TEXT_CHARS to fit one row), and a
+  429-row capacity gap over 24 (intent,lang) cells — closed by authoring 152 more templates, NOT by
+  relaxing TEMPLATE_CAPACITY_MARGIN=1.30 and NOT by giving up equal rows per intent. NEW
+  `.gitattributes`: core.autocrlf=true with no attributes means a fresh clone gets CRLF copies of
+  every sha-locked CSV and all three provenance gates fail on a machine where nothing is wrong.
+  VERIFIED: 40 corpus gates green (39 PASS + 1 WARN) + 24/24 exam checks PASS, sha256 stable on replay, 0 exam
+  rows leaked at the 0.80 near-dup threshold (max score seen 0.500), lang×intent Cramér's V = 0.000
+  by construction, source×intent 0.0318. NOT trained yet — that is Wave B.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;

@@ -1,0 +1,286 @@
+{
+  "generated_by": "validate_intent_test.py",
+  "generated_at": "2026-08-27T21:51:57+00:00",
+  "wave": "S.6 Wave A",
+  "model": "#4 assistant intent classifier",
+  "role": "held-out exam -- never trained on, never generated, never repaired",
+  "source_file": "assistant_test.csv",
+  "sha256": "f99691aa112957a5509f6d059f7db493e22c24b913b2de02b3a077ec6ab158b6",
+  "intent_spec_version": "assistant-intents-v1",
+  "intent_spec_fingerprint": "7bb78a3ac94cbdef",
+  "dataset_spec_version": "assistant-dataset-v1",
+  "dataset_spec_fingerprint": "0eb01bc58b4a040f",
+  "rows": 150,
+  "columns": [
+    "id",
+    "text",
+    "intent",
+    "lang",
+    "phenomena",
+    "notes"
+  ],
+  "design": {
+    "rows_per_intent": 10,
+    "lang_quota_per_intent": {
+      "ru": 4,
+      "mix": 3,
+      "en": 3
+    }
+  },
+  "intents": {
+    "book_venue": 10,
+    "cancel_booking": 10,
+    "check_availability": 10,
+    "create_team_help": 10,
+    "find_opponents": 10,
+    "find_venue": 10,
+    "greeting": 10,
+    "my_bookings": 10,
+    "out_of_scope": 10,
+    "refund_policy": 10,
+    "team_stats": 10,
+    "topup_help": 10,
+    "tournament_list": 10,
+    "venue_info": 10,
+    "wallet_balance": 10
+  },
+  "langs": {
+    "en": 45,
+    "mix": 45,
+    "ru": 60
+  },
+  "intent_x_lang": {
+    "book_venue|en": 3,
+    "book_venue|mix": 3,
+    "book_venue|ru": 4,
+    "cancel_booking|en": 3,
+    "cancel_booking|mix": 3,
+    "cancel_booking|ru": 4,
+    "check_availability|en": 3,
+    "check_availability|mix": 3,
+    "check_availability|ru": 4,
+    "create_team_help|en": 3,
+    "create_team_help|mix": 3,
+    "create_team_help|ru": 4,
+    "find_opponents|en": 3,
+    "find_opponents|mix": 3,
+    "find_opponents|ru": 4,
+    "find_venue|en": 3,
+    "find_venue|mix": 3,
+    "find_venue|ru": 4,
+    "greeting|en": 3,
+    "greeting|mix": 3,
+    "greeting|ru": 4,
+    "my_bookings|en": 3,
+    "my_bookings|mix": 3,
+    "my_bookings|ru": 4,
+    "out_of_scope|en": 3,
+    "out_of_scope|mix": 3,
+    "out_of_scope|ru": 4,
+    "refund_policy|en": 3,
+    "refund_policy|mix": 3,
+    "refund_policy|ru": 4,
+    "team_stats|en": 3,
+    "team_stats|mix": 3,
+    "team_stats|ru": 4,
+    "topup_help|en": 3,
+    "topup_help|mix": 3,
+    "topup_help|ru": 4,
+    "tournament_list|en": 3,
+    "tournament_list|mix": 3,
+    "tournament_list|ru": 4,
+    "venue_info|en": 3,
+    "venue_info|mix": 3,
+    "venue_info|ru": 4,
+    "wallet_balance|en": 3,
+    "wallet_balance|mix": 3,
+    "wallet_balance|ru": 4
+  },
+  "phenomena": {
+    "boundary": 69,
+    "question": 59,
+    "indirect": 46,
+    "run_on": 38,
+    "code_switch": 34,
+    "short": 28,
+    "ellipsis": 21,
+    "numeric": 21,
+    "multi_slot": 12,
+    "negation": 11,
+    "slang": 11,
+    "typo": 7,
+    "sms_speak": 5,
+    "imperative": 4,
+    "misspelled_venue": 2,
+    "politeness": 2,
+    "plain": 1
+  },
+  "boundary_per_intent": {
+    "book_venue": 5,
+    "cancel_booking": 4,
+    "check_availability": 5,
+    "create_team_help": 5,
+    "find_opponents": 4,
+    "find_venue": 4,
+    "greeting": 4,
+    "my_bookings": 5,
+    "out_of_scope": 7,
+    "refund_policy": 4,
+    "team_stats": 3,
+    "topup_help": 6,
+    "tournament_list": 6,
+    "venue_info": 1,
+    "wallet_balance": 6
+  },
+  "text_length": {
+    "min": 3,
+    "max": 84,
+    "mean": 51.81,
+    "bounds": [
+      3,
+      160
+    ]
+  },
+  "near_duplicate": {
+    "metric": "max(char-4-shingle, word-set) Jaccard over dedup_key text",
+    "max_score": 0.4667,
+    "max_pair": [
+      "at-125",
+      "at-126",
+      "word_set"
+    ],
+    "warn_threshold": 0.85,
+    "fatal_threshold": 0.97,
+    "warn_pairs": [],
+    "fatal_pairs": []
+  },
+  "authored_overlap": {
+    "file": "authored_intents.csv",
+    "rows_compared": 236,
+    "threshold": 0.8,
+    "overlaps": []
+  },
+  "checks": [
+    {
+      "name": "file_exists",
+      "ok": true,
+      "detail": "D:\\sportlynk\\ml-service\\data\\assistant\\assistant_test.csv"
+    },
+    {
+      "name": "csv_parses",
+      "ok": true,
+      "detail": "150 data rows"
+    },
+    {
+      "name": "columns",
+      "ok": true,
+      "detail": "id,text,intent,lang,phenomena,notes"
+    },
+    {
+      "name": "row_count",
+      "ok": true,
+      "detail": "150 (want 150)"
+    },
+    {
+      "name": "ids_well_formed",
+      "ok": true,
+      "detail": "all match at-NNN"
+    },
+    {
+      "name": "ids_unique",
+      "ok": true,
+      "detail": "at-001..at-150, all unique"
+    },
+    {
+      "name": "intents_in_contract",
+      "ok": true,
+      "detail": "subset of 15 contract intents"
+    },
+    {
+      "name": "all_intents_present",
+      "ok": true,
+      "detail": "15/15 intents graded"
+    },
+    {
+      "name": "intent_distribution",
+      "ok": true,
+      "detail": "10 rows for each of 15 intents"
+    },
+    {
+      "name": "langs_in_contract",
+      "ok": true,
+      "detail": "subset of ['en', 'mix', 'ru']"
+    },
+    {
+      "name": "lang_distribution",
+      "ok": true,
+      "detail": "{'en': 45, 'mix': 45, 'ru': 60}"
+    },
+    {
+      "name": "intent_lang_grid",
+      "ok": true,
+      "detail": "15x3 cells at ru 4, mix 3, en 3"
+    },
+    {
+      "name": "text_clean",
+      "ok": true,
+      "detail": "all 150 rows pass text_problems()"
+    },
+    {
+      "name": "length_bounds",
+      "ok": true,
+      "detail": "3..84 chars, mean 51.8 (bounds [3,160])"
+    },
+    {
+      "name": "phenomena_in_contract",
+      "ok": true,
+      "detail": "17 of 18 contract tags used"
+    },
+    {
+      "name": "every_row_tagged",
+      "ok": true,
+      "detail": "every row declares what it tests"
+    },
+    {
+      "name": "phenomena_coverage",
+      "ok": true,
+      "detail": "boundary=69, code_switch=34, indirect=46, short=28, numeric=21, negation=11"
+    },
+    {
+      "name": "phenomena_breadth",
+      "ok": true,
+      "detail": "17 distinct tags (want >= 15)"
+    },
+    {
+      "name": "boundary_per_intent",
+      "ok": true,
+      "detail": "every intent has >= 1 (min 1, max 7)"
+    },
+    {
+      "name": "no_exact_duplicates",
+      "ok": true,
+      "detail": "150 distinct utterances"
+    },
+    {
+      "name": "no_label_contradiction",
+      "ok": true,
+      "detail": "no utterance is graded against two intents"
+    },
+    {
+      "name": "no_near_duplicates",
+      "ok": true,
+      "detail": "max=0.467 at-125~at-126 (word_set), 0 soft warn(s) >= 0.85"
+    },
+    {
+      "name": "disjoint_from_authored",
+      "ok": true,
+      "detail": "236 authored training rows, none within 0.8 of an exam row"
+    },
+    {
+      "name": "every_row_documented",
+      "ok": true,
+      "detail": "every row records what it is testing"
+    }
+  ],
+  "all_passed": true
+}
