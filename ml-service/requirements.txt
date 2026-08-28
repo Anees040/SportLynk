@@ -41,6 +41,27 @@ pandas==3.0.5
 numpy==2.5.2
 joblib==1.5.3
 
+# ── Assistant NLU (S.6) ─────────────────────────────────────────────────
+dateparser==1.4.2
+# FALLBACK ONLY, and pinned for two separate reasons.
+#
+# core/entities.py resolves dates with its own regex + calendar rules first: every
+# form the corpus and the exam actually contain ("kal", "parso", "is weekend",
+# "30/08", "friday ko", "2 din baad") is handled in code, deterministically, in
+# Asia/Karachi. dateparser is consulted ONLY for a leftover date FRAGMENT the rules
+# did not claim, which is why entities.self_check() passes with it uninstalled —
+# the extractor degrades, it does not break.
+#
+# The pin matters because this package's behaviour IS its data: it ships language
+# files and settings whose parsing of an ambiguous "30/08" (DMY vs MDY) is a
+# version-dependent default, and a silent minor bump could change a resolved
+# booking date. Same argument as the sklearn pin above, one layer out.
+#
+# Its cost is paid at BOOT, not per request: the first parse loads language data
+# and was measured at 8,254 ms (1-7 ms after). routers/nlu.warm() calls
+# entities.warm() in main.py's lifespan for exactly that reason — see the 50 ms
+# per-parse budget in routers/nlu.py.
+
 # ── Config & reporting ──────────────────────────────────────────────────
 python-dotenv==1.2.3
 matplotlib==3.11.1

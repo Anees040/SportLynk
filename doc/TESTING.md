@@ -499,7 +499,8 @@ cd D:\sportlynk\backend    ; npm run dev          # terminal 2
 
 85. **The harness first — it is the cheapest 60 seconds in this section.**
     `node src/scripts/check_ml_service.js` (from `D:\sportlynk\backend`).
-    Expect **`60/60 checks passed`** with the service up, and **`31/31 passed, 4 skipped`**
+    Expect **`60/60 checks passed`** with the service up (**71/71** if you run this today — S4-C
+    added 11 sentiment checks; see step 115), and **`31/31 passed, 4 skipped`**
     with it down. Both are passes; the second is the more important one, because it is the
     state a real outage puts you in.
     The 501s from test 83 are now **200s** — the not-implemented branch is gone. Read the
@@ -740,7 +741,8 @@ cd D:\sportlynk\ml-service
      If you ever re-tune C, the threshold must be re-measured — that is the whole reason it
      travels inside the artifact. `MIN_NEG_THRESHOLD = 0.50` in the router floors what any
      artifact is allowed to ask for.
-113. **`/health` reports both models, and Node calls only one of them.** The health payload
+113. **`/health` reports both models, and Node calls only one of them.** (Two models at S.4 time; four
+     after S6-B — see step 171.) The health payload
      is a `models[]` array — `pricing` and `sentiment`, each with its own status and
      metrics, so one broken artifact degrades one entry instead of the whole report. Seven
      paths are served (`/predict/sentiment`, `/predict/sentiment/batch`, `/sentiment/spec`
@@ -1246,6 +1248,225 @@ are being scored, and that language carries no label signal by construction (lan
 
 Steps 159-164 are read-only, touch no database and need no emulator; **all six run green as written**.
 
+### 4.18 Model #4 — the intent classifier, the entity extractor and `/nlu/parse` (S.6 Wave B)
+
+**This is the wave with a model in it.** §4.17 proved the corpus and the exam; these steps prove the
+classifier trained on them, the rule-based extractor beside it, and the one endpoint Wave C's Node dialog
+manager will call. Read them in order — a drifted contract fingerprint makes every later number
+meaningless, so the self-checks come first, then the training run, then the unit suite, then the live
+service. All commands from `ml-service/`, PowerShell, with `.venv` activated or the full interpreter path
+as written.
+
+165. **The three frozen contracts self-check — 17 + 73 + 14 checks.**
+     `.venv\Scripts\python.exe -m app.core.nlu_text --self-check` → `PASS 17 checks`, `nlu-text-v1` ·
+     `eca8d0423d2084b3`.
+     `.venv\Scripts\python.exe -m app.core.entities --self-check` → `PASS 73 checks`, `nlu-entities-v1` ·
+     `34aee7e75192e6fe`, and a line reporting `31 area phrases` and whether `dateparser` is importable.
+     `.venv\Scripts\python.exe -m app.core.intent_spec --self-check` → `PASS 14 checks` with Wave A's two
+     fingerprints unchanged (`7bb78a3ac94cbdef`, `0eb01bc58b4a040f`).
+     Only **two** of these four fingerprints are gated when the artifact loads: the intent **labels** and
+     `nlu-text`. If either moves, the served model's classes or its features stop meaning what they meant
+     when it was fitted and the registry refuses the file — that is a **retrain**, not a metadata fix. The
+     dataset and entity fingerprints are provenance: they are stamped into the artifact and printed, but a
+     change to a rule table does not invalidate a trained classifier. `dateparser MISSING (fallback disabled)` is not
+     a failure either — the extractor resolves every date form the corpus and the exam contain in its own
+     rules, and this self-check passes with the library uninstalled.
+166. **Train it: ten gates, ~13 s, and the SERVED artifact is written only if all ten pass.**
+     `.venv\Scripts\python.exe training\train_intents.py`
+     Expect `RELEASED` and 10/10 PASS: contracts · corpus provenance (`c539b8fc4057…`) · exam provenance
+     (`f99691aa1129…`) · exam uncontaminated (0 exact matches, max near-duplicate 0.500 < 0.80) · no
+     leakage (val 0.8678 ≤ 0.995) · beats baseline (exam 0.6200 ≥ 0.0667 + 0.10) · exam floor (0.6200 ≥
+     0.55) · answers well (0.7368 ≥ 0.65 on the 114 exam rows it answers) · answers at all (val coverage
+     0.8764 ≥ 0.60) · calibrated (val ECE 0.1854 ≤ 0.25). Writes `models/intent_latest.joblib` (3,872,007
+     bytes) and a timestamped twin, `reports/intent_metrics.json`, `reports/model_card_intent.md`, two
+     confusion PNGs, `reports/intent_reliability.png`, and refreshes `reports/requirements.lock.txt`.
+     **The bare command is the reproducible one** — seed 20260824 is the default, so this run *is* what
+     produced the served artifact; `--seed` anything else and the numbers below are no longer the ones to
+     compare against. `--no-write` measures without releasing, `--sweep-c` re-runs the C sweep and exits,
+     `--boot N` changes the bootstrap resample count. A failed gate prints `NOT RELEASED` and leaves
+     `intent_latest.joblib` untouched, which is the behaviour to want: a bad retrain must not become a bad
+     deploy. The **timestamped twin is written either way** (only `--no-write` suppresses it), so a failed
+     run is still inspectable on disk — "the artifact is gated" means the *served* file, not every file.
+167. **Read the two confusion matrices, in this order.** `reports/intents_confusion_val.png` — 348 held-out
+     *phrasings*, accuracy 0.8678 / macro-F1 0.8662. Then `reports/intents_confusion.png` — the 150-row
+     hand-written exam, 0.6200 / 0.6129. **The gap between them is this wave's honest headline, not a
+     bug.** The validation rows come from templates the model never saw; the exam rows come from a
+     different writer, and 0.62 is what generalising across writers actually costs. On the exam matrix,
+     expect the diagonal to run from `create_team_help` 10/10 and `greeting` 9/10 (distinct vocabulary)
+     down to `cancel_booking` 4/10, `my_bookings` 4/10 and `wallet_balance` 2/10 — the account/booking
+     block is where the errors live, and `exam_top_confusions` in the metrics JSON names them pairwise, 2
+     rows each and every one **one-directional** (`wallet_balance → my_bookings`, `cancel_booking →
+     my_bookings`, `my_bookings → check_availability`, `check_availability → venue_info`,
+     `wallet_balance → topup_help`). Cross-check `exam_grouped` in the same file: collapsed to the 6 intent
+     groups the accuracy is **0.6733**, so **8 of the 57 exam errors** (5.3 points) are confusion *inside* a
+     group — an error Wave C's slot filling can often absorb, unlike a cross-group one. Be precise about
+     which: only **two of the ten named pairs are intra-group** (`cancel_booking → my_bookings` in
+     booking, `wallet_balance → topup_help` in account). `my_bookings → check_availability` reads like a
+     near-miss but crosses booking → discovery, so slot filling cannot absorb it. Two more views worth a look before drawing any
+     conclusion about the language: `exam_per_language` reads mix 0.7778 (45) · ru 0.5833 (60) · en 0.5111
+     (45), and `exam_per_phenomenon` reads `indirect` 0.4565 (46) and `negation` 0.3636 (11) against
+     `code_switch` 0.7941 (34). **Do not read that ordering as "English is hardest" — it is a
+     phenomenon-mix artefact.** English has the *largest* training slice, not the smallest
+     (`intent_spec.LANG_BUDGET` en 0.40 · ru 0.35 · mix 0.25, realised 675 · 585 · 420 rows), and the exam's
+     own tags explain the ranking: **76% of the `mix` rows are `code_switch`**, the model's best
+     phenomenon, while `indirect`, its worst, covers **42% of `ru`** and **33% of `en`** against **13% of
+     `mix`**. Cross-tab `lang` against `phenomena` in `data/assistant/assistant_test.csv` to see it. At
+     45–60 rows a slice, the per-language CIs are wider than the gaps between them anyway.
+168. **The abstain floor is measured, not asserted.** `reports/intent_reliability.png` is the calibration
+     curve for **validation only** — its title says so (`Reliability -- validation (ECE 0.185)`); the exam's
+     bins are in `reliability_exam` in the metrics JSON, not in any PNG. Read the two ECEs together (exam
+     0.0829 against validation 0.1854): the model is better calibrated on the harder set because it is
+     less confident there. Then in `reports/intent_metrics.json`: `floor_validation` must read
+     coverage 0.8764 / answered 305 / answeredAccuracy 0.9246 / confidentErrors 23, and `floor_exam`
+     coverage 0.76 / answered 114 / answeredAccuracy 0.7368 / confidentErrors 30. Read the pair together —
+     at 0.45 the model answers 88% of validation and is right 92% of the time when it does, and **half of
+     the wrong answers it would otherwise have given confidently become a fallback menu instead of a wrong
+     action**. The cost is in the same block: 20 validation rows it would have got right are abstained on.
+     Before proposing to move the number, read `threshold_sweep_validation` — 0.60 buys answeredAccuracy
+     0.9549 for coverage 0.7011, 0.70 buys 0.9891 for 0.5259 — and remember the floor is stamped **into
+     the artifact** as `confidenceThreshold`, so changing it is a retrain, not a serving-side edit.
+169. **The unit suite: 63 tests, ≈2 s warm, no pytest required.**
+     `.venv\Scripts\python.exe training\test_nlu.py` → `63 passed`. `-k date` filters by substring, `-q`
+     prints failures only, and `python -m pytest training\test_nlu.py -q` works if pytest is ever
+     installed (it is deliberately not in `requirements.txt`, so the suite is written to run both ways).
+     Nine sections: the frozen contracts, dates, times, sports, areas, budgets, combined utterances, the
+     classifier's behaviour, and the endpoint. Every date and time assertion is made against a **frozen
+     clock** (`entities.FIXED_NOW` = Friday 2026-08-28 15:00 Asia/Karachi) — that is what makes "kal is
+     tomorrow" a test instead of something that passes today and fails on Saturday. The classifier tests
+     assert *contract and behaviour* (probabilities over 15 labels summing to 1, `predict` == argmax, the
+     floor applied with `topIntent` preserved, three off-domain utterances landing on `out_of_scope`) and
+     never assert a specific accuracy: accuracy is the trainer's job, and a test that pins it would fail
+     on every legitimate retrain. **Run this before every commit** that touches `app/core/entities.py`,
+     `app/core/nlu_text.py`, `app/core/intent_spec.py` or `app/routers/nlu.py`. Warm it takes **2.4 s**; the
+     first run after a reboot took **20.2 s**, because the suite loads the released artifact through
+     `registry.get` and pays the sklearn import plus the unpickle off a cold file cache — slow, not hung.
+170. **Boot it and read the warm-up line — the cold cost is paid before the first user, on purpose.**
+     `.\run_dev.ps1`, then look for `nlu warmed (model intent-v1-20260828-0053, 9.71ms first parse);
+     entities 31 areas, dateparser=True in 108.4ms` in the startup log. That line is a *feature*: in a
+     process where the warm-up is skipped, the first parse measures **945 ms** and logs
+     `nlu parse over budget` — sklearn's imports and the unpickle of a 3.9 MB joblib land on whoever asks
+     first, and `main.py`'s lifespan makes that the boot, not a user. `nlu not warmed — intent model
+     not_loaded` instead means step 166 was never run (or its gates failed): the service still boots, and
+     `/nlu/parse` will return an honest **503** naming the reason rather than a guess.
+171. **`GET /health` now reports four models.** `curl http://127.0.0.1:8000/health` (one of **six** unkeyed
+     paths — `main.py`'s `PUBLIC_PATHS` also exempts `/`, `/docs`, `/docs/oauth2-redirect`, `/redoc` and
+     `/openapi.json`) → `{success, data}` with `data.models` carrying **pricing, sentiment, reco and
+     intent**, all `ready`. On the intent entry check `modelVersion` (`intent-v1-<date>-<hhmm>`),
+     `specVersion: "assistant-intents-v1"`, `artifact: "intent_latest.joblib"`, and that the metrics it
+     echoes are the ones from step 166 — `/health` reads the artifact's own stamped block, so a mismatch
+     between this and `intent_metrics.json` means uvicorn is serving an older file than the one you just
+     trained. **`/health` carries no `threshold` and no `labels` field**, and the version key is
+     `modelVersion`, not `version`: the entry is exactly `registry.describe()`. The floor and the label
+     count live on `GET /nlu/spec` (step 174) and in `POST /nlu/refresh`'s reply (step 176).
+     `apiKeyFingerprint` must be identical here and in Node's startup log; **never print the key itself.**
+172. **One parse, five slots, `< 50 ms`.**
+     `curl -s -X POST http://127.0.0.1:8000/nlu/parse -H "X-API-Key: <ML_API_KEY>" -H "Content-Type:
+     application/json" -d "{\"text\":\"kal shaam 6 baje f-11 me futsal ground chahiye 2500 tak\"}"`
+     Expect `intent: "find_venue"`, `confidence ≈ 0.78`, `intentGroup: "discovery"`, three
+     `alternatives` best-first (`find_venue` 0.78 · `book_venue` 0.15 · `find_opponents` 0.02), and all
+     five slots filled: `date.iso 2026-08-29` (`rule: relative:kal`), `time.start "18:00"`
+     (`clock:baje` — "6 baje" with "shaam" resolves to 18:00, not 06:00), `sport.value "futsal"`,
+     `area.area "F-11"` (`gazetteer:slot-vocab`), `budget {op:"max", amount:2500, currency:"PKR"}`. Every
+     slot carries its own `text`, and `date`/`time`/`area`/`budget` also carry a `span` — which is how Wave
+     C will highlight what it understood. Two asymmetries to code against: `sport` returns only
+     `{value, text, source}` (plus `variant`) with **no `span` and no `rule`**, and `budget` has a `span`
+     but no `rule`. A highlighter that assumes all five slots are uniform will throw on `sport`.
+     `elapsedMs` was **9.92** on this box (intent 9.69, entity 0.20); the endpoint's budget is 50 ms and it
+     logs a warning at every breach, so an empty log is itself the assertion. Measured over **300 corpus
+     utterances** through HTTP: server p50 **14.6 ms**, p95 18.9, p99 21.8, max 28.6, **0/300 over
+     budget** (round-trip including Windows loopback and JSON: p50 30.2 ms, max 49.1). Add
+     `"sessionId":"t172"` and confirm the log line reads `intent=… conf=… abstained=… chars=… session=t172`
+     — **the utterance itself is never logged**, here or anywhere (same rule as review text, §6).
+173. **The three refusal paths, which are the assistant's whole safety story.** Same command, three
+     bodies, and the important field is `abstainReason`:
+     * `"???"` → `abstained: true`, `abstainReason: "no_evidence"`, `confidence: 0.0`, `alternatives: []`.
+       Nothing but punctuation survived normalisation, so **the estimator is never called** (`intentMs`
+       0.02) — it would have answered, and that answer would be a reading of punctuation dressed as a
+       calibrated probability. Node re-asks the pending slot.
+     * `"asdkjh qweqwe zxcvb"` → `"no_known_terms"`, `confidence 0.0`. Real words, none of them in the
+       word vocabulary. This guard exists because the floor cannot do its job here: gibberish scored
+       `greeting` **0.5246** — comfortably *above* 0.45 — and the fix is evidence, not a higher threshold.
+       Measured before it was written: 0 firings on all 1,680 corpus and 150 exam rows, 85 of 87 gibberish
+       strings caught, 0.022 ms per call — but that sweep was a one-off during Wave B and **its 87-string
+       list is not committed**, so the only assertions you can reproduce from this repo are the two in
+       `test_nlu.py` (`test_gibberish_is_refused_even_though_the_floor_cannot_catch_it` and
+       `test_a_typo_is_not_treated_as_gibberish`).
+     * `"mera match kab hai"` → `"low_confidence"`, `intent: "out_of_scope"` but `topIntent:
+       "find_opponents"` at `topConfidence 0.4107`, with `alternatives` `find_opponents` 0.41 ·
+       `my_bookings` 0.29 · `out_of_scope` 0.19. **This is the did-you-mean menu**, and `topIntent` is why
+       an abstention is auditable: "it said out_of_scope" and "it thought find_opponents at 0.41" call for
+       different fixes.
+     Then confirm the rule that makes slot-filling work: **abstention never withholds entities.**
+     `"2 din baad shaam 7 se 9 g-8 cricket 4000 se 6000"` abstains at 0.439 and *still* returns date
+     2026-08-30, time 19:00→21:00, sport cricket, area G-8, budget 4000–6000. Node can keep the slots and
+     ask only for the verb.
+174. **`GET /nlu/spec` is the contract Wave C reads at startup.** `curl -H "X-API-Key: <ML_API_KEY>"
+     http://127.0.0.1:8000/nlu/spec` → the envelope's `data` carries `model` (status, version, trainedAt,
+     `threshold` **and `thresholdSource: "artifact"`** — "router default" means the served joblib predates
+     the stamped floor), `intents` (all 15 with `group`, `gloss` and `confusableWith`), `groups` (6),
+     `entities`, `text`, `corpus` (Wave A's row budgets, near-duplicate ceilings and exam quotas),
+     `abstainReasons` (the three ids from step 173, each with its one-line meaning) and `limits`
+     (`maxTextChars` 500, `alternatives` 3, `latencyBudgetMs` 50). Two properties to verify rather than
+     assume: it **does not 503 when the model is missing** (it answers "what contract does this service
+     implement", and reports the model's state as a field — which is what lets Node validate its label
+     mapping before anything is trained), and its `threshold` equals the `threshold` field on a live parse.
+     A label in Node's router that is absent from this list must be a loud mismatch, never a silent
+     `default:` branch.
+175. **The request contract, including the parts that must be refused.** Four calls to `/nlu/parse`:
+     `{"text":""}` → **422** `{"success":false, "message":"Invalid request: …", "code":"invalid_request"}`;
+     a 501-character text → **422** (`maxTextChars` 500 is a DoS bound, not a UX one); `{"text":"kal",
+     "sport":"futsal"}` → **422** (unknown fields are rejected, so a typo in Node's payload fails loudly
+     at integration time instead of being silently dropped); and no `X-API-Key` header → **401**. Then the
+     one field that exists for testing: `{"text":"kal","now":"2026-12-25T10:00:00+05:00"}` → `date.iso`
+     **2026-12-26**, not tomorrow. Every date rule resolves against `now` if it is supplied, which is what
+     makes the frozen-clock tests in step 169 possible and what will let Wave C replay a stored
+     conversation without the answers drifting by a day.
+176. **`POST /nlu/refresh` picks up a retrain without restarting uvicorn — and fails loudly by design.**
+     `curl -X POST -H "X-API-Key: <ML_API_KEY>" http://127.0.0.1:8000/nlu/refresh` → 200 with the new
+     `modelVersion`, `labels: 15` and `threshold`. Two things to understand before trusting it: it drops
+     the cached object **before** validating the replacement, so if `models/intent_latest.joblib` is
+     missing or its label/normaliser fingerprints no longer match this code, refresh returns **503 with
+     the registry's reason and `/nlu/parse` starts returning 503 too** — an outage that says why, chosen
+     over silently serving a model whose file on disk was swapped for an incompatible one. And it reloads
+     **artifacts, not code**: after editing `app/routers/nlu.py` or `app/core/entities.py` you must restart
+     the process, and a refresh that "did not pick up the change" is almost always this.
+177. **Nothing downstream moved.** From `D:\sportlynk\backend`: `node src/scripts/check_ml_service.js` →
+     **`71/71 checks passed`** with ml-service up. The §9 line already reads 71/71: the suite was 60 checks
+     until **S4-C** wired sentiment into the review write path and added 11 of its own. The forecast
+     checks were already inside the 60 (`check_ml_service.js:617-661`), so do not attribute the +11 to
+     Wave D. The fourth model must be invisible to it: the harness asserts `Array.isArray(h.models)`
+     rather than a count, which is exactly why adding a model to `/health` is not a breaking change for
+     Node. One expected diff to
+     ignore: step 166 rewrites `reports/requirements.lock.txt`, which `train_pricing.py` and
+     `train_sentiment.py` also write (S.5's `build_reco.py`/`eval_reco.py` do not). That
+     file records the environment, not the model — the rewrite is the point of it.
+
+**What this section cannot tell you.** Whether the assistant *works*. There is no dialog manager yet: no
+session state, no slot filling across turns, no action executed, no Flutter screen — the dialog manager
+and action executor are **Wave C**, the chat screen is **Wave D** — and none of these steps touch Postgres
+or a JWT. What they establish is narrower and worth stating
+precisely. The classifier scores **0.62 on 150 utterances written by one person who is not a user of this
+app**, and 0.87 on held-out phrasings of the templates it was trained on; the truth for real traffic is
+very likely between those two numbers and closer to the first, because the exam writer at least knew the
+domain. The 0.45 floor converts about half of the model's confident mistakes into a menu, which is the
+single most important number in the wave for a demo — a wrong booking is a support ticket, a menu is a
+click. The entity extractor is **pure rules and is meant to be**: every form in this section is a form
+someone wrote a rule for — but state the limits precisely, because two of them are narrower than they
+look. `4k tak` **does** parse to 4,000 (`_RE_AMOUNT_K`; `entities.py:1294` pins `3k tak ka ground
+chahiye` — 3,000 as a self-check case); what fails is the
+**spaced** `2 k tak`, because `nlu_text`'s synonym fold rewrites a standalone `k` to `ke` before the amount
+rule runs, and `4k budget` with no quantifier resolves `op: "qualitative"` off the word "budget" rather
+than the number. Sports outside the platform's five (padel, snooker) resolve to `null` by design. And an
+area outside the gazetteer is not always missed: a sector-shaped token like `g-13` or `i-10` is resolved by
+`_RE_SECTOR` with `rule: "sector"`, `area: "G-13"` and `zone: "UNKNOWN:G-13"` — canonical value, no city —
+so only non-sector place names outside the gazetteer come back `null`. Those are documented limitations, not
+regressions, and the rule tables are fingerprinted precisely so that "fixing" one is a visible, deliberate
+act. Nothing here measures how a human feels about the answer, and no amount of it substitutes for the
+first ten real users.
+
+Steps 165-177 are read-only with respect to the database and need no emulator; steps 165-169 need only the
+venv, 170-177 need uvicorn running. **All thirteen run green as written.**
+
 ---
 
 ## 5. Non-functional tests
@@ -1572,13 +1793,18 @@ Wave: ____            Date: ____
 [ ] npm test ..................... 10/10
 [ ] verify_schema.js ............. 113/113
 [ ] run_match_flow_check.js ...... 69/69
-[ ] check_ml_service.js .......... 60/60 up · 31/31+4 skipped down   (S.3+)
+[ ] check_ml_service.js .......... 71/71 up · 31/31+4 skipped down   (S.3+)
 [ ] check_price_sanity.js ........ 20/20 required, source='model'    (S.3+)
 [ ] train_sentiment.py ........... 7/7 gates, exam >= 0.80           (S.4+)
 [ ] smoke_sentiment_api.py ....... 49/49 vs released artifact        (S.4+)
 [ ] build_reco.py ................ 3/3 gates, RELEASED               (S.5+)
 [ ] eval_reco.py ................. gate PASS, lift over cold-start   (S.5-C+, run AFTER build_reco)
 [ ] ml /health.recoRankSpec ...... reco-rank-v1 · 1a6c5f39bf5a2c56  (S.5-B+, RESTART ml first)
+[ ] gen_intents.py ............... 1,680 rows, sha c539b8fc4057      (S.6-A+)
+[ ] train_intents.py ............. 10/10 gates, RELEASED, exam 0.62  (S.6-B+)
+[ ] test_nlu.py .................. 63/63, run before every commit    (S.6-B+)
+[ ] ml /health.models ............ 4 ready incl. intent, no threshold (S.6-B+, RESTART ml first)
+[ ] /nlu/parse ................... 5 slots, < 50 ms, 0 over-budget   (S.6-B+)
 [ ] server boots, 4 jobs registered
 [ ] this wave's feature steps (§3/§4)
 [ ] IDOR spot-check (§6.2)

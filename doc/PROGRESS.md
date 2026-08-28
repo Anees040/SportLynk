@@ -3031,11 +3031,189 @@ case is somebody "fixing" it by re-recording the hash and quietly retiring a wor
 
 ### Open / carried forward
 
-- [ ] **`ml-service/data/assistant/_wip/` is still on disk** (the one-off template-authoring script). It
-  is gitignored so it cannot reach the repo; deleting it was declined by the permission classifier, so
-  removal is the user's call.
+- [x] **`ml-service/data/assistant/_wip/` deleted** on 2026-08-28 (`Remove-Item -Recurse -Force`). It was
+  the one-off template-authoring scratch dir and was gitignored, so it never reached the repo.
 - [ ] One WARN, left as-is: template `greeting-en-41` contributed no rows — the allocator had enough
   capacity without it. A warn, not a gate, because unused capacity is slack working as intended.
 - [ ] `intents.csv` is **gitignored by design**; `intents_meta.json` (sha256 + census + 40 checks) is
   what travels, plus the generator and its seed (`--seed 20260824 --per-intent 112`).
-- [ ] Nothing in S.6 is committed yet, and no tag exists.
+- [x] **Wave A is committed** at `ebdc448` (its git subject says "Wave E" — the message used the old wave
+  letters): `intent_spec.py`, `gen_intents.py`, `validate_intent_test.py` and six of the seven
+  `data/assistant/` files. No tag exists.
+
+## Wave S6-B (Model #4 — the intent classifier, the rule extractor, and `POST /nlu/parse`)
+
+**Status: trained, served and gate-VERIFIED (2026-08-28). Model #4 exists.** The assistant's understanding
+layer is a scikit-learn pipeline this project fitted on Wave A's corpus, not a call to somebody's LLM: 15
+intents, a calibrated confidence, five rule-extracted slots, and a floor under which it refuses to guess.
+Wave A built the data and the exam; this wave is the model, its abstention policy, 63 unit tests and the
+one endpoint Wave C's dialog manager will call.
+
+```
+train_intents.py              RELEASED · 10/10 gates · 13.2 s · seed 20260824 (default)
+                              models/intent_latest.joblib 3,872,007 B · intent-v1-20260828-0053
+  validation (348 unseen phrasings)   acc 0.8678 · macroF1 0.8662 · ECE 0.1854 · grouped 0.8879
+  exam (150 hand-written, f99691aa)   acc 0.6200 · macroF1 0.6129 · ECE 0.0829 · grouped 0.6733
+                                      95% CI [0.54, 0.70] (2,000 bootstrap resamples)
+                                      by language  mix 0.7778 (45) · ru 0.5833 (60) · en 0.5111 (45)
+                                      by phenomenon  code_switch 0.7941 · indirect 0.4565 · negation 0.3636
+  baselines (uniform · train-majority · exam-majority)  all 0.0667 — the model is 9.3x its own prior
+  floor 0.45 (stamped in the artifact)  val  coverage 0.8764 · answered 305 · answeredAcc 0.9246 · confidentErrors 23
+                                        exam coverage 0.7600 · answered 114 · answeredAcc 0.7368 · confidentErrors 30
+  pipeline  word (1,2) 5,232 + char_wb (2,6) 9,988 = 15,220 features -> LinearSVC C=0.5 balanced
+            -> CalibratedClassifierCV(sigmoid, folds grouped by template_id)
+  libs  python 3.14.4 · sklearn 1.9.0 · numpy 2.5.2 · scipy 1.18.1 · joblib 1.5.3
+nlu_text.py   --self-check    PASS 17 checks · nlu-text-v1 · eca8d0423d2084b3      (GATED at load)
+entities.py   --self-check    PASS 73 checks · nlu-entities-v1 · 34aee7e75192e6fe  (provenance only)
+                              31 area phrases from slot vocab + reco artifact · dateparser = fallback only
+intent_spec.py --self-check   PASS 14 checks · labels 7bb78a3ac94cbdef · dataset 0eb01bc58b4a040f
+training/test_nlu.py          63 passed / 0 failed / 2.4 s warm · frozen clock 2026-08-28 15:00 PKT
+POST /nlu/parse               300 corpus utterances over HTTP: p50 14.6 · p95 18.9 · p99 21.8 · max 28.6 ms
+                              0/300 over the 50 ms budget · 0 over-budget warnings in the log
+GET /health                   4/4 ready: pricing · sentiment · reco · intent — no threshold/labels field
+check_ml_service.js           71/71 — the 4th model is invisible to Node, which asserts a list not a count
+```
+
+### The headline is a gap, and the gap is the honest number
+
+**0.8678 on held-out phrasings, 0.6200 on the exam.** Both are real and they measure different things: the
+validation rows come from templates the model never saw (the split is grouped by `template_id`), the exam
+rows were written by hand by a different person for the express purpose of being hard. 0.62 is what
+generalising across *writers* costs, and it is the number this wave reports, because the exam is the only
+set in the project nobody trained, tuned or repaired against. Two readings that make it less bleak without
+softening it: collapsed to the 6 intent groups the exam reads **0.6733**, so 8 of the 57 errors (5.3
+points) are confusion *inside* a group — `cancel_booking` → `my_bookings` and `wallet_balance` →
+`topup_help` are the only two intra-group pairs in `exam_top_confusions`, and `my_bookings` →
+`check_availability` reads like a near-miss but crosses booking → discovery — where Wave C's slot
+filling can still act sensibly; and at n = 150 the 95% CI is **[0.54, 0.70]**, so the
+exam cannot distinguish 0.62 from 0.65. It also cannot distinguish it from the train-only fit's 0.6467 —
+refitting on train+val moved the exam score *down* 2.7 points, which at this n is noise, and is recorded
+rather than re-rolled.
+
+### The floor is a product decision, and it was priced
+
+`confidenceThreshold = 0.45` is stamped **into the artifact**, so serving cannot quietly disagree with the
+model card. What it buys, measured on validation: coverage drops 1.0 → **0.8764**, accuracy on what it does
+answer rises 0.8678 → **0.9246**, and confident errors fall **46 → 23**. Half of the confident mistakes
+become a did-you-mean menu instead of a wrong action, which for this product is the whole trade: a wrong
+booking is a support ticket, a menu is a click. The cost is in the same table — 20 validation rows it would
+have got right are refused — and `threshold_sweep_validation` records the alternatives (0.60 → answeredAcc
+0.9549 at coverage 0.7011; 0.70 → 0.9891 at 0.5259) so the choice is auditable instead of asserted.
+
+### Three ways to say "I don't know", because one was not enough
+
+The floor catches uncertainty; it cannot catch nonsense. Measured: the gibberish string `asdkjh qweqwe
+zxcvb` scored `greeting` at **0.5246** — comfortably *above* 0.45, because a char-n-gram model always finds
+some texture. So `/nlu/parse` publishes three `abstainReason` ids, all on `/nlu/spec` for Node to branch on:
+
+* **`low_confidence`** — top probability under the floor. Node shows the menu; `topIntent`/`topConfidence`
+  survive in the response, so "it said out_of_scope" and "it thought `find_opponents` at 0.41" stay
+  distinguishable when someone has to fix it.
+* **`no_evidence`** — nothing but punctuation or emoji survived normalisation. The estimator is **not
+  called at all** (0.02 ms): it would answer, and that answer would be a reading of punctuation dressed as
+  a calibrated probability. Node re-asks the pending slot.
+* **`no_known_terms`** — real tokens, none of them in the fitted word vocabulary. Justified by measurement
+  before it was written: 0 firings across all 1,680 corpus and 150 exam rows, 85 of 87 gibberish strings
+  caught, 0.022 ms per call, 0 disagreements with a direct `nnz(word.transform(x)) == 0` check. That sweep
+  was a one-off and its 87-string list is **not committed**; the reproducible form of the claim is the pair
+  of cases in `test_nlu.py`.
+
+All three still return **all five entity slots** — an abstention withholds the verb, never the facts, which
+is what lets Wave C keep "kal 6 baje G-8" and ask only what the user wants done with it.
+
+### The word half of the pipeline earns its keep by not classifying
+
+Ablation, same trainer, one fixed configuration: `char_only` val 0.8534 / exam 0.6467 · `word+char` 0.8477
+/ 0.6467 · `word_only` 0.7356 / 0.6000. Character n-grams carry the accuracy — unsurprising for Roman Urdu
+with no standard spelling — and the word half adds nothing measurable to it. It stays anyway, because it is
+the only component that can be **empty**: a `char_wb` matrix is never a zero row, so `no_known_terms` is
+implementable only against a word vocabulary. The redundant half is the OOV detector.
+
+### Calibration was chosen by measurement, not by taste
+
+`CalibratedClassifierCV(method="sigmoid")` over folds **grouped by `template_id`**, compared against the two
+obvious alternatives in `proba_comparison`: a softmax over `decision_function` produces a maximum
+confidence of **0.4503** across all of validation — under a 0.45 floor it would abstain on **99.7%** of
+requests — and sigmoid on random (ungrouped) folds gives ECE 0.1736 with answeredAcc 0.9126 against the
+grouped variant's 0.9246. The C sweep is in the same file (C=0.5 chosen on validation accuracy).
+
+### The extractor is rules, and the docs say so out loud
+
+`app/core/entities.py` is **pure rules** — 73 self-checks, deterministic, `Asia/Karachi`, no model, no
+network. Roman Urdu is pre-mapped before anything else runs (`kal`, `parso`, `somwar`, `jumma`, `shaam`,
+`baje`, `2 din baad`, `agle hafte`), the sport lexicon is the platform's five plus variants, the area
+gazetteer is **seeded** from `intent_spec.SLOT_VOCAB["area"]` — what the classifier was actually trained
+on, 22 phrases — and then **extended** by the reco artifact's venue snapshot to 31 (13 entries stay
+seed-only, 18 take the artifact's city), and every rule reports its own `rule`, `source` and `text` so a
+wrong slot is traceable to the line that produced it. Four of the five slots also carry a `span`: `sport`
+carries neither a `span` nor a `rule`, and `budget` has a `span` but no `rule`.
+`dateparser` is a **fallback for leftover fragments only**, pinned because its language data *is* its
+behaviour; `entities.self_check()` passes with it uninstalled. This is standard NLU practice and it is
+stated plainly rather than dressed up as learning.
+
+### Serving: under 50 ms measured, and the cold cliff is paid at boot
+
+p50 **14.6 ms** over 300 utterances with 0 breaches of the 50 ms budget, and the endpoint logs a warning on
+every breach so an empty log is itself the assertion. In a process where the lifespan warm-up is skipped
+the *first* parse takes **945 ms** (sklearn's imports plus the unpickle of a 3.9 MB joblib, then
+dateparser's language data), so `main.py` pays it at boot: `nlu warmed (model intent-v1-20260828-0053,
+9.71ms first parse); entities 31 areas, dateparser=True in 108.4ms`. The utterance itself is **never
+logged** — intent, confidence, `abstained`, character count and `sessionId` only, the same rule review text
+follows.
+
+Re-verified after a clean service restart on 2026-08-28 at 10:14 UTC: `/health` reports the `intent` entry
+`ready` with `intent-v1-20260828-0053` and the same six metrics recorded above, and `book football ground
+for tomorrow 6pm` returns `book_venue` **0.8383** with date 2026-08-29 (`relative:tomorrow`), time 18:00
+(`clock:digits`) and sport football — a reminder that the exam's en 0.5111 is an adversarial-writing score,
+not the ceiling on plain English.
+
+### 63 tests, and what they deliberately do not assert
+
+`training/test_nlu.py` runs standalone (`-k`, `-q`) *and* under pytest, because pytest is deliberately not
+in `requirements.txt`. Nine sections: frozen contracts, dates, times, sports, areas, budgets, combined
+utterances, classifier behaviour, endpoint contract. Every date and time case is asserted against
+`entities.FIXED_NOW` (Friday 2026-08-28 15:00 PKT) — a clock, not today, or "kal is tomorrow" would pass
+today and fail on Saturday. The classifier tests assert **contract and behaviour** (a distribution over 15
+labels, `predict` == argmax, the floor applied with `topIntent` preserved, off-domain → `out_of_scope`,
+gibberish → `no_known_terms`) and never an accuracy figure: accuracy is the trainer's gate, and a test that
+pinned it would fail on every legitimate retrain. The suite also never reads the exam.
+Timing: **2.4 s** warm, **20.2 s** on the first run after a reboot — the suite loads the released artifact
+through `registry.get`, so it pays the sklearn import and the unpickle off a cold file cache. Slow, not hung.
+
+### Open / carried forward
+
+- [ ] **Two documented extractor gaps, deliberately not fixed in this wave — and narrower than the first
+  draft of this line claimed.** The budget gap is the **spaced** form only: `4k tak` and `1.5k tak` parse
+  correctly to 4,000 and 1,500 via `_RE_AMOUNT_K`, while `2 k tak` returns `null` because `nlu_text`'s
+  synonym fold rewrites a standalone `k` to `ke` before the amount rule ever sees it, and `4k budget` with
+  no quantifier resolves `op: "qualitative"` off the word "budget". Sports outside the platform's five
+  (padel, snooker) resolve to `null`. Both are rule-table edits that would move `nlu-entities-v1`'s
+  fingerprint away from the one stamped in a released artifact, so they belong to a wave that retrains, not
+  to a docs pass. (The area limitation that used to be listed here was wrong and has been removed: a
+  sector-shaped token outside the gazetteer, `g-13` or `i-10`, IS resolved by `_RE_SECTOR` with
+  `zone: "UNKNOWN:G-13"`.)
+- [ ] **The assistant *product* vision is not in this wave and needs a decision.** Learning from user
+  questions, an owner-side assistant, escalation to the owner when the assistant cannot answer, and a
+  product name are all Wave C-and-beyond scope; the classifier's `no_known_terms` / `low_confidence`
+  branches are the hooks an escalation flow would hang off. Nothing about them is built yet.
+- [x] **`ml-service/data/assistant/_wip/` deleted** on 2026-08-28 — `data/assistant/` now holds only the
+  seven corpus files (`intents.csv`, `templates.csv`, `authored_intents.csv`, the two metas, the exam,
+  README) — six of which are tracked; only `intents.csv` is gitignored.
+- [ ] `models/intent_latest.joblib` is **NOT gitignored — it has to be committed.** `.gitignore:88-89`
+  ignores `models/*.joblib` and then re-admits `*_latest.joblib` on purpose, so that a fresh clone serves a
+  real model without running a training pipeline first; `git ls-files ml-service/models/` shows pricing,
+  reco and sentiment already tracked that way. Wave B's commit therefore carries the 3.9 MB artifact plus
+  `reports/intent_metrics.json`, `reports/model_card_intent.md`, the three PNGs and the refreshed
+  `reports/requirements.lock.txt`. What stays out is narrower than the first draft of this line said: the
+  timestamped twins under `models/` and, under `data/assistant/`, **only `intents.csv`** — `.gitignore:152-157`
+  re-admits the other six, and `git ls-files ml-service/data/assistant/` shows all six already tracked from
+  Wave A. (The earlier draft also claimed the artifact was ignored; it is not.)
+- [x] The §9 checklist line for `check_ml_service.js` reads **71/71**. The suite grew from 60 to 71 in
+  **S4-C**, when sentiment was wired into the review write path and 11 checks came with it — not in Wave D,
+  whose forecast checks were already inside the 60 (`check_ml_service.js:617-661`). Earlier drafts of this
+  bullet and of TESTING step 177 mis-attributed the delta; both are fixed.
+- [ ] **S.6 Wave A IS committed** — `ebdc448` ("feat: implement NLP assistant intent models and
+  validation (Wave E)", the git message uses the old wave letters) carries `intent_spec.py`,
+  `gen_intents.py`, `validate_intent_test.py` and six `data/assistant/` files. **Wave B is not
+  committed**: the trainer, `nlu_text.py`, `entities.py`, the router, the test suite, the artifact and
+  the reports are all still working-tree only, and no tag exists for either wave.

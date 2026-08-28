@@ -19,7 +19,7 @@ trained ML models — never replace them with external AI API calls.
   (emulator: http://10.0.2.2:3000/api). A PHYSICAL phone ALWAYS needs the
   --dart-define set to the laptop's LAN IP; the 10.0.2.2 default is emulator-only.
 - ml-service: `cd ml-service && python -m uvicorn app.main:app` — binds 127.0.0.1:8000,
-  X-API-Key auth. Loads all three models/*_latest.joblib (pricing, sentiment, reco) ONCE at boot;
+  X-API-Key auth. Loads all four models/*_latest.joblib (pricing, sentiment, reco, intent) ONCE at boot;
   a retrain does NOT hot-swap (restart uvicorn, or registry.reload('<key>')). /health
   reports a models[] array so one bad artifact degrades one entry, not the whole report.
   The phone NEVER calls it — only Node does.
@@ -53,13 +53,15 @@ trained ML models — never replace them with external AI API calls.
 - generate_bookings.py must NOT touch the DB and must NOT import from app/routers/.
 
 ## Status
-S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D), S.5 (A–C) and S.6 (A) are all code-complete. The ML tier is live end to
+S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D), S.5 (A–C) and S.6 (A–B) are all code-complete. The ML tier is live end to
 end: model #1 (dynamic pricing) is trained, gated, served, and on the owner's screen with
 real confidence + a 72h demand chart, plus a reproducibility/evidence pack. Model #2
 (sentiment) is trained, gated, served, and — as of S4-C — called by Node: every review with
 text is scored by the classifier live at write time (backfill job for the rest). Model #3
 (venue recommender) is trained, gated, served, and on the player's Find Venues screen — every
-match% badge is a real cosine score and the fake client-side "AI Recommended" sort is gone.
+match% badge is a real cosine score and the fake client-side "AI Recommended" sort is gone. Model #4
+(assistant intent classifier + rule entity extractor) is trained, gated and served at `POST /nlu/parse`
+— but nothing calls it yet: the dialog manager and the action executor are Wave C, the chat screen Wave D.
 - Model: `pricing-v1-20260825-0041`, HistGradientBoostingClassifier, 374 KB, 12/12
   release gates. Binary classifier P(booked | features, price) — price is an INPUT
   (price_ratio), so one model serves BOTH the 72h forecast (ratio=1.0) and the price
@@ -93,6 +95,18 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
   0.461 vs cold-start-as-served 0.371 vs popularity 0.247 vs random 0.191 → **+24.2% over the baseline
   the app actually falls back to**. The 400-player synthetic population exists because the real corpus
   can only evaluate 2 users; both are published. reports/reco_eval.md + model_card_reco.md.
+- Model #4: `intent-v1-20260828-0053`, the assistant's INTENT CLASSIFIER — word (1,2) TF-IDF ∪ char_wb
+  (2,6) = 15,220 features → LinearSVC(C=0.5, balanced) → CalibratedClassifierCV(sigmoid, folds grouped by
+  template_id), 3.9 MB, 10/10 gates. 15 intents. Held-out phrasings 0.8678 / macro-F1 0.8662; the
+  sha-locked 150-row hand-written exam **0.6200** / 0.6129, 0.6733 collapsed to the 6 groups, 95% CI
+  [0.54, 0.70] vs a 0.0667 majority baseline — the gap is a WRITER gap, not a bug, and both numbers are
+  published. `confidenceThreshold = 0.45` is stamped IN the artifact: coverage 0.8764, accuracy on what
+  it answers 0.9246, confident errors 46 → 23. Three abstain reasons on the wire (`low_confidence`,
+  `no_evidence`, `no_known_terms`) and all five entity slots are returned even when it abstains.
+  Entities are PURE RULES (`app/core/entities.py`, `nlu-entities-v1`) — stated plainly, not dressed up as
+  learning. Reproduce: `cd ml-service && python training/train_intents.py` — no flags; seed 20260824 is
+  DEFAULT_SEED, so that exact command produced the served artifact in 13.2 s. `POST /nlu/parse` p50
+  14.6 ms, 0/300 over its 50 ms budget.
 - OPEN at end of S.4, in order:
   - **live two-device E2E + backend smoke + seed run** (TESTING.md §4.13) — S4-D is
     code-complete and `flutter analyze` is 0, but the emulator run (rate → sentiment chip →
@@ -111,16 +125,25 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
     ELO, or match change since) — expected untouched, not measured.
   - re-estimate elasticity from real bookings once data exists (pipeline is validated;
     ELASTICITY_PEAK 0.85 / OFFPEAK 2.20 are stated assumptions, not estimates).
-- NEXT: S.6 Wave A (the assistant NLU corpus + the exam that will grade it) DONE — 1,680 rows over 15
-  intents, 40 corpus gates (39 PASS + 1 WARN) + 24/24 exam checks, sha256 stable on replay, nothing trained yet.
-  NEXT WAVE: S6-B — train the intent classifier on `data/assistant/intents.csv`, grade it on the
-  sha-locked 150-row exam (confusion matrix, per SRS), and serve `POST /nlu/parse`. Still open from
-  S.5: the operator chain has been run once (seed → `build_reco.py` → `POST /reco/refresh` →
-  `--verify`: sport axis football/cricket, artifact `…-20260827-200702`, rails differ 4/5 overlap), so
-  what remains is the HUMAN in-app pass — two seeded accounts side by side, a brand-new account
-  showing "Popular nearby" with no %, ml-service-down fallback (TESTING.md §4.16 steps 157-158) →
-  commit + `tag s5-done`. Then S.7 tournaments/chat/admin dispute-UI/demo pack + deploy ml-service as
-  a 2nd Render service.
+- NEXT: S.6 Wave B (train the intent classifier + rule entity extraction + `POST /nlu/parse`) DONE —
+  model #4 released at 10/10 gates, exam 0.6200 with the 0.45 floor priced, 63/63 unit tests, `/health`
+  4/4 ready, parse p50 14.6 ms with 0/300 over budget, `check_ml_service.js` still 71/71.
+  NEXT WAVE: **S6-C — the Node dialog manager + action executor**: `POST /api/assistant/message
+  {text, session_id}` → call `/nlu/parse` → fill slots across turns → execute against the EXISTING
+  validated route logic with the caller's JWT (FR8.15: no business rule is duplicated), and branch on the
+  three abstain reasons (`low_confidence` → did-you-mean menu, `no_evidence` → re-ask the pending slot,
+  `no_known_terms` → "I did not understand"). Read `GET /nlu/spec` at boot and fail loudly on an unknown
+  label. Then the Flutter chat UI (Wave D) and the assistant's own evidence pass (Wave E). The product
+  questions the user raised — learning from real questions, an owner-side assistant, escalating an
+  unanswerable question to the owner and learning from the reply, and a product NAME — are scoped in
+  PROGRESS.md § Wave S6-B "Open / carried forward" and need a decision before Wave C's schema is fixed:
+  the escalation hook is `no_known_terms` / `low_confidence`, and any learning loop must be
+  owner-approved, per-venue isolated, and excluded from money and policy answers. Still open from S.5:
+  the operator chain has been run once (seed → `build_reco.py` → `POST /reco/refresh` → `--verify`:
+  sport axis football/cricket, artifact `…-20260827-200702`, rails differ 4/5 overlap), so what remains
+  is the HUMAN in-app pass — two seeded accounts side by side, a brand-new account showing "Popular
+  nearby" with no %, ml-service-down fallback (TESTING.md §4.16 steps 157-158) → commit + `tag s5-done`.
+  Then S.7 tournaments/chat/admin dispute-UI/demo pack + deploy ml-service as a 2nd Render service.
 
 ## Wave log (one entry per completed wave: what shipped · the gotcha · verified)
 - S1-A — escrow ledger unified (20% deposit / 24h window / 30-min no-show); escrow.js +
@@ -407,6 +430,46 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
   VERIFIED: 40 corpus gates green (39 PASS + 1 WARN) + 24/24 exam checks PASS, sha256 stable on replay, 0 exam
   rows leaked at the 0.80 near-dup threshold (max score seen 0.500), lang×intent Cramér's V = 0.000
   by construction, source×intent 0.0318. NOT trained yet — that is Wave B.
+
+- S6-B — **model #4 exists**: the assistant's intent classifier, trained by this project, not called
+  from an LLM API. NEW `training/train_intents.py` — word (1,2) TF-IDF ∪ char_wb (2,6) = 15,220
+  features → LinearSVC(C=0.5, balanced) → CalibratedClassifierCV(sigmoid, folds GROUPED by
+  template_id), 10 named release gates, the SERVED artifact written only if all ten pass (the
+  timestamped twin is written either way). Released
+  `intent-v1-20260828-0053` (3.9 MB): validation (348 unseen phrasings) 0.8678 / macro-F1 0.8662 /
+  ECE 0.1854, sha-locked 150-row exam **0.6200** / 0.6129 / ECE 0.0829, grouped to the 6 intent groups
+  0.6733, 95% CI [0.54, 0.70], vs a 0.0667 majority baseline. NEW `app/core/entities.py` — pure-rule
+  extractor (5th frozen ◆ contract, `nlu-entities-v1` · 34aee7e75192e6fe, provenance-only so moving the
+  "shaam" window cannot take the classifier offline): date/time/sport/area/budget in Asia/Karachi with
+  Roman Urdu pre-mapped (kal·parso·somwar·jumma·shaam·baje·2 din baad·agle hafte), a 31-phrase area
+  gazetteer seeded from `SLOT_VOCAB["area"]` (22 phrases, what the classifier was trained on) and extended
+  by the reco artifact's venue snapshot to 31, and every slot reporting its own rule/source/text/span —
+  except `sport`, which has neither span nor rule, and `budget`, which has a span but no rule. NEW `app/core/nlu_text.py` (`nlu-text-v1` · eca8d0423d2084b3 — GATED, because
+  the artifact pickles `prep` by reference). NEW `app/routers/nlu.py`: `POST /nlu/parse` →
+  `{intent, confidence, entities}` + abstention + provenance, `GET /nlu/spec` (the contract Node reads
+  at startup — 15 intents with glosses, the 3 abstain reasons, limits; deliberately does NOT 503 when
+  the model is missing), `POST /nlu/refresh`. NEW `training/test_nlu.py`: **63 tests, ≈2 s warm**, runs
+  standalone AND under pytest, every date case against a frozen clock (2026-08-28 15:00 PKT).
+  GOTCHA 1: the 0.45 floor cannot catch nonsense — gibberish scored `greeting` **0.5246**, ABOVE the
+  floor, because char n-grams always find texture. Fixed with a measured third abstain reason
+  `no_known_terms` (no token is a fitted word-vocabulary unigram): 0 firings on all 1,680 corpus + 150
+  exam rows, 85 of 87 gibberish strings caught, 0.022 ms/call. That is also why the word half of the
+  union stays despite the ablation (char_only val 0.8534 / exam 0.6467 ≈ word+char 0.8477 / 0.6467): a
+  char_wb row is never empty **for Latin-script input** (a non-Latin script zeroes both halves), so the
+  redundant half IS the OOV detector. GOTCHA 2: a pydantic field
+  named `entities` shadows the `entities` MODULE for the rest of the class body — `entities.ENTITY_SPEC_VERSION`
+  as a field default raised at import and the service would not boot; the three spec constants are now
+  bound above the model. GOTCHA 3: `/nlu/refresh` reloads ARTIFACTS, not code — after editing the
+  router you must restart uvicorn. VERIFIED: 10/10 gates RELEASED in 13.2 s at the default seed
+  20260824 · 63/63 tests · `/health` 4/4 models ready (it publishes `registry.describe()`: no threshold,
+  no labels — those are on `/nlu/spec`) · five slots extracted live
+  from "kal shaam 6 baje f-11 me futsal ground chahiye 2500 tak" (2026-08-29 · 18:00 · futsal · F-11 ·
+  max 2500 PKR) in 9.92 ms · 300 utterances over HTTP p50 14.6 / p95 18.9 / max 28.6 ms, **0/300 over
+  the 50 ms budget** · all three refusal paths + 422s for empty/501-char/unknown-field · check_ml_service.js
+  still **71/71**. The floor is priced, not asserted: coverage 0.8764, answeredAccuracy 0.9246,
+  confident errors 46 → 23. Utterances are NEVER logged (intent/confidence/chars/sessionId only). No
+  dialog manager, no session state, no Flutter screen — the manager and executor are Wave C, the screen
+  is Wave D.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;

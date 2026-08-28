@@ -1,4 +1,4 @@
-# Resolved environment for the sentiment training run.
+# Resolved environment for the intent training run.
 # requirements.txt is the install contract; THIS file is what actually ran.
 
 annotated-doc==0.0.5
@@ -8,6 +8,7 @@ click==8.4.2
 colorama==0.4.6
 contourpy==1.3.3
 cycler==0.12.1
+dateparser==1.4.2
 fastapi==0.141.1
 fonttools==4.63.0
 h11==0.16.0
@@ -25,6 +26,8 @@ pydantic_core==2.46.4
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.3
+pytz==2026.3.post1
+regex==2026.7.19
 scikit-learn==1.9.0
 scipy==1.18.1
 six==1.17.0
@@ -33,4 +36,5 @@ threadpoolctl==3.6.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 tzdata==2026.3
+tzlocal==5.4.4
 uvicorn==0.52.4

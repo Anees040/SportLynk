@@ -67,7 +67,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from . import config, features, text_norm, reco_features
+from . import config, features, intent_spec, nlu_text, reco_features, text_norm
 
 log = logging.getLogger("sportlynk.ml.registry")
 
@@ -79,7 +79,7 @@ LATEST_SUFFIX = "_latest.joblib"
 #: EXPECTED but absent. Discovery alone cannot distinguish "no pricing model yet"
 #: from "no pricing model was ever supposed to exist" — and in Wave A the correct
 #: answer is the first one, which is the whole point of the health endpoint.
-KNOWN_MODELS: tuple[str, ...] = ("pricing", "sentiment", "reco")
+KNOWN_MODELS: tuple[str, ...] = ("pricing", "sentiment", "reco", "intent")
 
 #: Status values, exhaustive. Exported as constants because the router branches on
 #: them and the Node client's tests assert on them — a typo'd string literal in
@@ -157,6 +157,49 @@ def _reco_verify(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _intent_verify(payload: dict[str, Any]) -> str | None:
+    """Model #4 answers to TWO frozen contracts, and only two.
+
+    GATED, because either one drifting makes the artifact predict confident
+    nonsense:
+      * the LABEL set (`intent_spec.intent_spec_fingerprint`) — the router reads
+        `classes_` positionally, so a renamed or reordered intent misassigns every
+        probability;
+      * the TEXT normaliser (`nlu_text.nlu_text_fingerprint`) — the artifact bakes
+        `nlu_text.prep` in as a FunctionTransformer, so the code that prepped the
+        training rows IS this process's code. Edit a fold table and the vocabulary
+        the vectoriser learned no longer describes what arrives at serving time.
+        Same failure mode as sentiment's normalizer fingerprint.
+
+    NOT gated, and deliberately so:
+      * `datasetSpecFingerprint` — the corpus GENERATION rules (row budgets, exam
+        quotas, near-duplicate ceilings). Provenance, not compatibility: those
+        rules describe how the training data was built, and changing them cannot
+        make an already-trained model disagree with this service. Gating it would
+        brick a working assistant the day someone edits a row budget.
+      * `entitySpecFingerprint` — the rule extractor is SERVED next to this model
+        (`POST /nlu/parse` returns both) but the classifier does not consume it.
+        Moving the "shaam" window must not take the classifier offline.
+    Both are still stamped in the artifact and published on /health, because
+    "which data, which rules" is a question the report has to answer.
+    """
+    checks = (
+        ("intentSpecFingerprint", intent_spec.intent_spec_fingerprint(),
+         "the intent LABEL contract in core/intent_spec.py changed"),
+        ("nluTextSpecFingerprint", nlu_text.nlu_text_fingerprint(),
+         "the frozen normaliser in core/nlu_text.py changed"),
+    )
+    for field, current, why in checks:
+        stamped = payload.get(field)
+        if stamped is not None and stamped != current:
+            return (
+                f"{field} mismatch under the same spec version — "
+                f"artifact={stamped!r} service={current!r}. {why}; "
+                "retrain: python training/train_intents.py"
+            )
+    return None
+
+
 #: The contract per known model. A key absent here (a stray *_latest.joblib from an
 #: experiment) is still loaded and reported, but without a spec check — we cannot
 #: verify a contract we do not know, and that fact is made explicit in its reason.
@@ -178,6 +221,12 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         service_spec=lambda: reco_features.RECO_SPEC_VERSION,
         trainer="python training/build_reco.py",
         verify=_reco_verify,
+    ),
+    "intent": ModelContract(
+        spec_field="intentSpecVersion",
+        service_spec=lambda: intent_spec.INTENT_SPEC_VERSION,
+        trainer="python training/train_intents.py",
+        verify=_intent_verify,
     ),
 }
 

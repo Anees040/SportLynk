@@ -83,7 +83,7 @@ from fastapi.responses import JSONResponse
 
 from .core import config, reco_features, reco_rank
 from .core.registry import registry
-from .routers import pricing, sentiment, reco
+from .routers import nlu, pricing, reco, sentiment
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Startup guards — these run at IMPORT time, before uvicorn binds a port
@@ -178,7 +178,13 @@ async def lifespan(app: FastAPI):
     # lazy-load contract above, under which a corrupt artifact 503s ONE endpoint rather
     # than blocking boot. A model that fails to warm here still serves its own honest
     # 503 on the endpoint; everything else stays up.
-    for name, warm in (("pricing", pricing.warm), ("sentiment", sentiment.warm), ("reco", reco.warm)):
+    # `nlu` is last and is the expensive one: it pays dateparser's language-data
+    # load, measured at 8.3 SECONDS on the first parse (see routers/nlu.warm). That
+    # cost is real either way — the only choice is whether boot pays it or the first
+    # user of the assistant does, and a 50ms endpoint that answers in 8s once looks
+    # exactly like a hung service to whoever is demoing it.
+    for name, warm in (("pricing", pricing.warm), ("sentiment", sentiment.warm),
+                       ("reco", reco.warm), ("nlu", nlu.warm)):
         try:
             log.info("warm-up: %s", warm())
         except Exception as exc:  # noqa: BLE001 — belt-and-braces; warm() already guards
@@ -389,6 +395,7 @@ def root() -> dict[str, Any]:
 app.include_router(pricing.router)
 app.include_router(sentiment.router)
 app.include_router(reco.router)
+app.include_router(nlu.router)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
