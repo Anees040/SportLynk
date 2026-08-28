@@ -3,161 +3,52 @@ const router = express.Router();
 const pool = require("../db/pool");
 const authMiddleware = require("../middleware/authMiddleware");
 const checkRole = require("../middleware/roleMiddleware");
-const crypto = require("crypto");
 const {
   POLICY,
-  asNum,
   round2,
-  depositFor,
   penaltySplit,
-  isLateCancellation,
   lockWallet,
   applyWallet,
   logTxn,
 } = require("../utils/escrow");
+// FR8.15 — one implementation of book/cancel, shared with the assistant.
+const {
+  createBookingTx,
+  cancelBookingTx,
+} = require("../services/bookingService");
 const { notify } = require("../utils/notify");
 const { recomputeTrust } = require("../utils/trustScore");
 
 // POST /api/bookings — create booking (player only)
 // Ledger: player balance -P, player frozen +P, status pending (P = slot price).
 // The 20% at-risk deposit is stored on the booking but nothing is forfeited yet.
+//
+// The rules moved to services/bookingService.js in S.6 Wave C so the assistant
+// creates bookings through THIS logic rather than a second copy of it (FR8.15).
+// What is left here is transport: read the request, call the service, shape the
+// response. The status codes, the messages and the ledger are unchanged.
 router.post(
   "/",
   authMiddleware,
   checkRole("player"),
   async (req, res, next) => {
     const { slotId, venueId, notes } = req.body;
-    if (!slotId || !venueId)
-      return res
-        .status(400)
-        .json({ success: false, message: "slotId and venueId required" });
-
-    const client = await pool.connect();
     try {
-      await client.query("BEGIN");
-
-      // 1. Lock the slot row atomically — the row lock is what actually settles
-      //    simultaneous bookings; the checkout hold below is only a courtesy so
-      //    two players don't both fill in the same form (SRS ER1.5).
-      const slotRes = await client.query(
-        `SELECT s.*, v.name as venue_name, v.price_per_hour, v.owner_id,
-              (s.locked_until IS NOT NULL AND s.locked_until > NOW()) AS is_held
-       FROM slots s JOIN venues v ON v.id = s.venue_id
-       WHERE s.id=$1 AND s.venue_id=$2
-       FOR UPDATE OF s`,
-        [slotId, venueId],
-      );
-
-      if (!slotRes.rows.length) {
-        await client.query("ROLLBACK");
-        return res
-          .status(404)
-          .json({ success: false, message: "Slot not found" });
-      }
-
-      const slot = slotRes.rows[0];
-
-      if (slot.status !== "available") {
-        await client.query("ROLLBACK");
-        return res
-          .status(409)
-          .json({
-            success: false,
-            message: "Slot no longer available. Another player just booked it.",
-          });
-      }
-
-      // Held by somebody else — they are mid-checkout, so this is a 409 even
-      // though the slot still reads 'available'.
-      if (slot.is_held && slot.locked_by !== req.user.id) {
-        await client.query("ROLLBACK");
-        return res
-          .status(409)
-          .json({
-            success: false,
-            message: "Another player is checking out this slot. Try again in a few minutes.",
-          });
-      }
-
-      // Escrow = FULL slot price. Deposit = 20% of it (server-side only).
-      const basePrice = round2(slot.price);
-      const escrowAmount = basePrice;
-      const depositAmount = depositFor(basePrice);
-
-      // 2. Lock + check player wallet
-      const playerWallet = await lockWallet(client, req.user.id);
-
-      if (!playerWallet || asNum(playerWallet.balance) < escrowAmount) {
-        await client.query("ROLLBACK");
-        return res
-          .status(400)
-          .json({ success: false, message: "Insufficient wallet balance" });
-      }
-
-      // 3. Generate QR
-      const qrData = crypto.randomUUID();
-
-      // 4. Create booking
-      const localSlotDateStr =
-        slot.slot_date instanceof Date
-          ? slot.slot_date.toLocaleDateString("en-CA")
-          : slot.slot_date;
-      const booking = await client.query(
-        `
-      INSERT INTO bookings (player_id, venue_id, slot_id, slot_date, start_time,
-        end_time, base_price, security_deposit, deposit_amount, total_amount,
-        status, qr_code, notes, owner_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12,$13)
-      RETURNING *`,
-        [
-          req.user.id,
-          venueId,
-          slotId,
-          localSlotDateStr,
-          slot.start_time,
-          slot.end_time,
-          basePrice,
-          escrowAmount,
-          depositAmount,
-          escrowAmount,
-          qrData,
-          notes || null,
-          slot.owner_id || null,
-        ],
-      );
-
-      // 5. Mark slot as booked and drop the checkout hold
-      await client.query(
-        `UPDATE slots SET status='booked', locked_by=null, locked_until=null WHERE id=$1`,
-        [slotId],
-      );
-
-      // 6. Move the full price out of available balance and into escrow
-      const updated = await applyWallet(client, playerWallet.id, {
-        balance: -escrowAmount,
-        frozen: escrowAmount,
-      });
-
-      // 7. Log player transaction
-      await logTxn(client, {
-        walletId: playerWallet.id,
+      const result = await createBookingTx({
         userId: req.user.id,
-        bookingId: booking.rows[0].id,
-        type: "booking_payment",
-        amount: -escrowAmount,
-        balanceAfter: updated.balance,
-        description: `Booking payment at ${slot.venue_name} (held in escrow)`,
-        counterparty: slot.venue_name,
+        slotId,
+        venueId,
+        notes,
       });
-
-      await client.query("COMMIT");
-      res.status(201).json({ success: true, data: booking.rows[0] });
+      if (!result.ok) {
+        return res
+          .status(result.status)
+          .json({ success: false, message: result.message });
+      }
+      res.status(201).json({ success: true, data: result.data });
     } catch (e) {
-      await client.query("ROLLBACK");
       console.error("Booking creation error:", e);
       next(e);
-    } finally {
-      client.release();
     }
   },
 );
@@ -214,126 +105,25 @@ router.get("/:id", authMiddleware, async (req, res, next) => {
 // PATCH /api/bookings/:id/cancel — player cancels
 // >= 24h before slot : player balance +P, frozen -P              (full refund)
 // <  24h before slot : player balance +0.8P, frozen -P, owner +0.2P
+//
+// Same extraction as POST above: the split, the lock order, the ledger rows and
+// the owner notification now live in services/bookingService.js, which Scout also
+// calls after showing the user a refund preview.
 router.patch("/:id/cancel", authMiddleware, async (req, res, next) => {
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-    const b = await client.query(
-      `SELECT b.*, v.owner_id, v.name AS venue_name, u.name AS player_name
-       FROM bookings b
-       JOIN venues v ON v.id = b.venue_id
-       JOIN users u ON u.id = b.player_id
-       WHERE b.id=$1 AND b.player_id=$2 FOR UPDATE OF b`,
-      [req.params.id, req.user.id],
-    );
-
-    if (!b.rows.length) {
-      await client.query("ROLLBACK");
-      return res
-        .status(404)
-        .json({ success: false, message: "Booking not found" });
-    }
-
-    const booking = b.rows[0];
-    if (!["pending", "confirmed"].includes(booking.status)) {
-      await client.query("ROLLBACK");
-      return res
-        .status(400)
-        .json({ success: false, message: "Cannot cancel this booking" });
-    }
-
-    // security_deposit holds what is ACTUALLY in escrow for this booking;
-    // deposit_amount is the 20% at-risk slice.
-    const escrow = round2(booking.security_deposit);
-    const deposit = round2(booking.deposit_amount);
-    const ownerId = booking.owner_id;
-    const playerId = booking.player_id;
-    const bookingId = booking.id;
-
-    const lateCancel = isLateCancellation(booking.slot_date, booking.start_time);
-    const { refund, penalty } = lateCancel
-      ? penaltySplit(escrow, deposit)
-      : { refund: escrow, penalty: 0 };
-
-    // Lock wallets in a fixed order (player then owner) to avoid deadlocks.
-    const playerWallet = await lockWallet(client, playerId);
-    const ownerWallet = penalty > 0 ? await lockWallet(client, ownerId) : null;
-
-    const playerAfter = await applyWallet(client, playerWallet.id, {
-      balance: refund,
-      frozen: -escrow,
+    const result = await cancelBookingTx({
+      userId: req.user.id,
+      bookingId: req.params.id,
     });
-
-    await logTxn(client, {
-      walletId: playerWallet.id,
-      userId: playerId,
-      bookingId,
-      type: "refund",
-      amount: refund,
-      balanceAfter: playerAfter.balance,
-      description: lateCancel
-        ? `Late cancellation — ${100 - POLICY.DEPOSIT_PERCENT}% refunded`
-        : "Booking cancellation — full refund",
-      counterparty: booking.venue_name,
-    });
-
-    if (penalty > 0 && ownerWallet) {
-      await logTxn(client, {
-        walletId: playerWallet.id,
-        userId: playerId,
-        bookingId,
-        type: "escrow_release",
-        amount: -penalty,
-        balanceAfter: playerAfter.balance,
-        description: `Late cancellation penalty (${POLICY.DEPOSIT_PERCENT}% deposit to venue)`,
-        counterparty: booking.venue_name,
-      });
-
-      const ownerAfter = await applyWallet(client, ownerWallet.id, {
-        balance: penalty,
-      });
-      await logTxn(client, {
-        walletId: ownerWallet.id,
-        userId: ownerId,
-        bookingId,
-        type: "escrow_received",
-        amount: penalty,
-        balanceAfter: ownerAfter.balance,
-        description: "Received late cancellation penalty",
-        counterparty: booking.player_name,
-      });
-
-      await notify(client, {
-        userId: ownerId,
-        bookingId,
-        type: "booking_cancelled_late",
-        title: "Late cancellation",
-        body: `${booking.player_name} cancelled within ${POLICY.CANCELLATION_WINDOW_HOURS}h — PKR ${penalty} credited to your wallet.`,
-      });
+    if (!result.ok) {
+      return res
+        .status(result.status)
+        .json({ success: false, message: result.message });
     }
-
-    // Cancel the booking and free the slot
-    await client.query(
-      `UPDATE bookings SET status='cancelled', cancelled_at=NOW(), cancellation_reason=$1 WHERE id=$2`,
-      [lateCancel ? "late_cancellation" : "user_cancelled", bookingId],
-    );
-
-    await client.query(
-      `UPDATE slots SET status='available', locked_by=null, locked_until=null WHERE id=$1`,
-      [booking.slot_id],
-    );
-
-    await client.query("COMMIT");
-    const msg = lateCancel
-      ? `Booking cancelled within ${POLICY.CANCELLATION_WINDOW_HOURS} hours — PKR ${refund} refunded, PKR ${penalty} deposit forfeited to the venue.`
-      : `Booking cancelled — PKR ${refund} refunded to your wallet.`;
-    res.json({ success: true, message: msg });
+    res.json({ success: true, message: result.message });
   } catch (e) {
-    await client.query("ROLLBACK");
     console.error("Booking cancellation error:", e);
     next(e);
-  } finally {
-    client.release();
   }
 });
 

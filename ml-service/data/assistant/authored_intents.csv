@@ -64,7 +64,7 @@ au-062,nai team k liye kya kya chahiay hota hai zra btao,create_team_help,ru,sms
 au-063,"need an opponent for sunday morning, futsal, we are 6",find_opponents,en,numeric;ellipsis;run_on,naturalised from find_opponents-en-01
 au-064,can u find us a team to play tmrw evening plz,find_opponents,en,sms_speak;politeness,naturalised from find_opponents-en-02
 au-065,any team looking for a friendly in rawalpindi this week?,find_opponents,en,question,naturalised from find_opponents-en-07
-au-066,"2 players short for tonights game, anyone available",find_opponents,en,numeric;typo,naturalised from find_opponents-en-03
+au-066,"2 players short for tonights game, anyone available",find_players,en,numeric;typo,naturalised from find_opponents-en-03
 au-067,"we want to challenge a higher rated team, possible?",find_opponents,en,question;ellipsis,fresh
 au-068,"koi team available hai saturday ko football ke liye, our rating 1240 hai",find_opponents,mix,code_switch;numeric;run_on,naturalised from find_opponents-mix-01
 au-069,"opponent dhoondna hai bhai, same level ki team ho to better",find_opponents,mix,code_switch;slang,naturalised from find_opponents-en-04
@@ -74,7 +74,7 @@ au-072,"match set karwa do kal ka, f-11 me koi b team",find_opponents,mix,code_s
 au-073,bhai koi team milay gi kal shaam 7 baje futsal khelne ke liye? hum 5 log hain,find_opponents,ru,typo;numeric;run_on,naturalised from find_opponents-ru-01
 au-074,"opponent chahiay is weekend, level koi b ho chalega",find_opponents,ru,typo;sms_speak,naturalised from find_opponents-ru-03
 au-075,hamari team ke liye match lagwa do plzz koi bhi team ho,find_opponents,ru,politeness;sms_speak;run_on,naturalised from find_opponents-ru-07
-au-076,"2 bande kam hain, kisi ko bhejo cricket ke liye",find_opponents,ru,numeric;imperative,naturalised from find_opponents-ru-02
+au-076,"2 bande kam hain, kisi ko bhejo cricket ke liye",find_players,ru,numeric;imperative,naturalised from find_opponents-ru-02
 au-077,kal koi khelne wala hai ya nahi?? bore ho rahe hain,find_opponents,ru,question;run_on;slang,fresh
 au-078,"aslam o alaikum, kisi team se match karwana tha g-11 me",find_opponents,ru,politeness;run_on,naturalised from find_opponents-ru-05
 au-079,show me cheap football grounds in f-11 markaz please,find_venue,en,imperative;multi_slot;politeness,naturalised from find_venue-en-01
@@ -203,7 +203,7 @@ au-201,sportlynk pe cricket tournament kab start ho ga? pichle sal bhi khela tha
 au-202,"apni team ko tournament me register krna hai, process kya he",tournament_list,ru,sms_speak;typo,naturalised from tournament_list-ru-03
 au-203,"salam, yahan koi football league chal rahi hai jisme entry mil jaye?",tournament_list,ru,politeness;question,naturalised from tournament_list-ru-04
 au-204,tournament ki entry fee kitni hai? aur registration ki last date?,tournament_list,ru,numeric;ellipsis,naturalised from tournament_list-ru-07
-au-205,"yaar app me tournaments ka tab kahan hai, mujhe list nahi mil rahi",tournament_list,ru,slang;negation;run_on,fresh
+au-205,"yaar app me tournaments ka tab kahan hai, mujhe list nahi mil rahi",app_help,ru,slang;negation;run_on,fresh
 au-206,quick q - does f-11 markaz football arena have floodlights? we play at 10pm,venue_info,en,sms_speak;question;run_on,naturalised from venue_info-en-01
 au-207,whats the hourly rate at bahria crickt arena and is the parking free,venue_info,en,typo;misspelled_venue;numeric,naturalised from venue_info-en-02
 au-208,"hey, i can see diamond cricket ground on the app but not the timings - when does it close??",venue_info,en,run_on;politeness;question,naturalised from venue_info-en-03
@@ -235,3 +235,149 @@ au-233,mere 2000 rupay kahan gaye?? kuch bacha bhi he ya nahi,wallet_balance,ru,
 au-234,escrow me mere kitne paise phanse hue hain yaar,wallet_balance,ru,question;slang,naturalised from wallet_balance-mix-01
 au-235,booking ke liye paise kaafi hain mere paas? 2500 ka ground he,wallet_balance,ru,question;boundary;numeric,naturalised from wallet_balance-ru-05
 au-236,"balance zeroo dikha raha he, ye galat he",wallet_balance,ru,typo;plain,naturalised from wallet_balance-ru-06
+au-237,yes please proceed,affirm,en,short;politeness,bare agreement with no booking verb
+au-238,thats correct go on,affirm,en,short,confirmation of a restated fact
+au-239,sounds perfect to me,affirm,en,short,evaluative agreement
+au-240,agreed lets move ahead,affirm,en,short,agreement with a generic continue
+au-241,haan ji theek hai,affirm,mix,short;politeness,shortest polite roman urdu yes
+au-242,bilkul sahi hai aage barhein,affirm,mix,politeness,formal agreement
+au-243,ok done bhai,affirm,mix,short;slang;code_switch,english ok with urdu address
+au-244,han wohi sahi hai,affirm,mix,short,refers to an option held only in dialog state
+au-245,chalo theek hai kar dein,affirm,mix,short,generic do verb not a booking verb
+au-246,jee bilkul,affirm,ru,short,two word affirmation
+au-247,haan theek hai aage chalein,affirm,ru,politeness,agreement plus continue
+au-248,manzoor hai yehi karein,affirm,ru,short,acceptance verb kept as the mirror of the deny row
+au-249,bilkul koi aitraz nahi,affirm,ru,negation;short;boundary,carries nahi but means yes so it must not fall to deny
+au-250,han sahi keh rahe hain aap,affirm,ru,politeness,agreeing with the assistant
+au-251,theek hai phir wesa hi,affirm,ru,short;ellipsis,elliptical agreement
+au-252,i am new here what can this app do for me,app_help,en,question,onboarding question
+au-253,how do i change my profile picture,app_help,en,question,concrete settings task
+au-254,what is the difference between escrow and wallet here,app_help,en,question;boundary,explains an app concept rather than reporting a balance
+au-255,is there a dark mode setting somewhere,app_help,en,question,feature existence question
+au-256,app me notification band kaise karun,app_help,mix,question,settings task in roman urdu
+au-257,bhai ye app kis kaam ati hai zara samjha do,app_help,mix,indirect;slang,broad capability question
+au-258,qr scan karne ka button kidhar hai,app_help,mix,question,ui location question
+au-259,app hang ho rahi hai kya karun,app_help,mix,question;boundary,app trouble routes to app_help since contact_owner is venue side
+au-260,settings me language change hoti hai kya,app_help,mix,question,feature existence
+au-261,is app ko istemaal karna kaise seekhun,app_help,ru,question,how to learn the app
+au-262,trust score ka kya matlab hota hai,app_help,ru,question,glossary question
+au-263,account delete karne ka tareeqa batao,app_help,ru,imperative,account task
+au-264,app me kaun kaun se features hain,app_help,ru,question,feature inventory
+au-265,mera password kaise badlun,app_help,ru,question,credential task
+au-266,paisa nahi bhejna sirf ye batao app kaam kaise karti hai,app_help,ru,negation;boundary,negates topup_help to select app_help
+au-267,put me through to whoever manages margalla cricket club,contact_owner,en,imperative,named venue escalation
+au-268,i have a question only the ground owner can answer,contact_owner,en,indirect,escalation without a request verb
+au-269,can someone from the venue call me back,contact_owner,en,question,callback request
+au-270,is there a real person i can chat with about this booking,contact_owner,en,question;boundary,human handoff not a booking lookup
+au-271,f-11 markaz football arena ke maalik se rabta karwao,contact_owner,mix,imperative,urdu verb on a named venue
+au-272,bhai owner ko message bhej do mera,contact_owner,mix,imperative;slang,relay a message
+au-273,ground ke incharge se baat karni hai zaroori,contact_owner,mix,plain,incharge synonym
+au-274,koi staff member available hai jo reply kare,contact_owner,mix,question,staff rather than owner
+au-275,bot nahi chahiye asli banda chahiye baat karne ke liye,contact_owner,mix,negation;boundary,rejects the assistant itself
+au-276,venue ke maalik ka rabta number chahiye,contact_owner,ru,plain,contact detail request
+au-277,mera message owner tak pohncha dein please,contact_owner,ru,imperative;politeness,formal relay
+au-278,jinnah sports complex wale se poochna hai kuch,contact_owner,ru,plain,indirect reference to venue staff
+au-279,kisi zimmedar shakhs se baat karwa dein,contact_owner,ru,imperative;politeness,responsible person phrasing
+au-280,owner online hai abhi,contact_owner,ru,question;short,availability of a human
+au-281,phone number nahi chahiye seedha owner se baat karwao,contact_owner,ru,negation;boundary,wants a live handoff not a lookup
+au-282,no leave it for now,deny,en,short,refusal plus defer
+au-283,thats not what i wanted,deny,en,short,rejection of the proposal
+au-284,i would rather not,deny,en,short;indirect,soft refusal
+au-285,nope not interested,deny,en,short;slang,blunt refusal
+au-286,nahi ji rehne dein,deny,mix,short;politeness,polite let it be
+au-287,abhi mat karo baad me,deny,mix,short,prohibitive plus defer
+au-288,no bhai wo nahi,deny,mix,short;code_switch,english no with urdu rejection
+au-289,ye sahi option nahi lag raha,deny,mix,plain,rejects the proposal on merit
+au-290,nahi shukriya zaroorat nahi,deny,mix,politeness;short,no thanks form
+au-291,jee nahi,deny,ru,short,shortest polite no
+au-292,bas rehne do,deny,ru,short,stop without the word no
+au-293,mujhe manzoor nahi,deny,ru,short,mirror of the affirm acceptance verb
+au-294,nahi aisa nahi karna,deny,ru,short,double negation for emphasis
+au-295,na na ye nahi chahiye,deny,ru,short,reduplicated refusal
+au-296,shukriya lekin nahi,deny,ru,politeness;short;boundary,opens like politeness but is a refusal
+au-297,explain the points formula behind these ratings,elo_help,en,imperative,formula question
+au-298,does beating a weak team give fewer points,elo_help,en,question;boundary,mechanism question not a rating lookup
+au-299,why did my score drop after a draw,elo_help,en,question,cause of a change is still a mechanism question
+au-300,how much elo do i lose if we forfeit,elo_help,en,question;numeric,forfeit case
+au-301,elo ka calculation kis tarah hota hai,elo_help,mix,question,calculation phrasing
+au-302,strong team ko haraya to zyada points milenge kya,elo_help,mix,question,upset case
+au-303,rating barhane ke liye kitne match jeetna zaroori hai,elo_help,mix,question;numeric,effort question
+au-304,bhai ye ranking system samajh nahi aata thora batao,elo_help,mix,indirect;slang,confusion framing
+au-305,meri team ka score nahi puchna bas system samjha do,elo_help,mix,negation;boundary,negates team_stats to select elo_help
+au-306,points ka hisaab kaise lagaya jata hai,elo_help,ru,question,plain roman urdu mechanism
+au-307,haarne pe rating gir jati hai ya wesi rehti hai,elo_help,ru,question,loss consequence
+au-308,elo kya cheez hai aur kis kaam ati hai,elo_help,ru,question,definition question
+au-309,agar match cancel ho jaye to rating pe asar hota hai,elo_help,ru,question;boundary,cancellation effect on rating not a cancel request
+au-310,rating tezi se barhane ka koi tareeqa hai,elo_help,ru,question,optimisation question
+au-311,20 points kaise mile mujhe pichle match me,elo_help,ru,question;numeric,numeric but about the rule
+au-312,looking for a striker for saturdays game,find_players,en,plain,role plus day
+au-313,we are short by one can you find someone quickly,find_players,en,question;indirect,shortfall stated not a count of wanted players
+au-314,any spare batsman available tomorrow morning,find_players,en,question,cricket role
+au-315,i need three more guys to complete eleven,find_players,en,numeric,two numbers one of them a squad size
+au-316,ek wicket keeper chahiye koi hai available,find_players,mix,question,specific position
+au-317,bhai do banday bhej do aaj ke match ke liye,find_players,mix,imperative;numeric,slang for players
+au-318,players ki list do jo tonight khel sakte hain,find_players,mix,imperative,availability filter
+au-319,squad me 4 jagah khali hain koi interested,find_players,mix,numeric;question;boundary,my team has the vacancy so this is find_players not find_teams
+au-320,koi free player mil jaye to bata dena yaar,find_players,mix,indirect;slang,conditional phrasing
+au-321,hamein aik aur khiladi ki zaroorat hai,find_players,ru,plain,formal roman urdu
+au-322,kuch bande chahiye football ke liye kal,find_players,ru,plain,sport plus day
+au-323,koi bowler available hai is shaam,find_players,ru,question,role plus time window
+au-324,team poori nahi ho rahi log dhoond do,find_players,ru,indirect,incomplete squad framing
+au-325,teen khiladi kam hain jaldi arrange karwao,find_players,ru,numeric;imperative,urdu numeral word
+au-326,nayi team nahi bana raha sirf ek banda chahiye,find_players,ru,negation;boundary,negates create_team_help to select find_players
+au-327,is any squad recruiting a fast bowler right now,find_teams,en,question,player seeks a team
+au-328,i want to play regularly so put me in a team,find_teams,en,imperative;indirect,motivation framing
+au-329,which clubs in rawalpindi have open slots,find_teams,en,question,area filter
+au-330,not hiring players i am the one looking for a side,find_teams,en,negation;boundary,reverses the find_players direction explicitly
+au-331,koi cricket team hai jo member le rahi ho,find_teams,mix,question,recruiting team
+au-332,mujhe kisi achi football team ke saath khelna hai,find_teams,mix,plain,sport plus quality preference
+au-333,bhai team join karne ka koi tareeqa hai,find_teams,mix,question;slang,process question that is still discovery
+au-334,g-11 ke around koi team practice kar rahi ho to batao,find_teams,mix,indirect,area plus practice
+au-335,meri rating ke hisaab se koi team suggest karo,find_teams,mix,imperative;boundary,asks for a team not an elo explanation
+au-336,kisi squad me jagah mil sakti hai mujhe,find_teams,ru,question,passive vacancy question
+au-337,main akela hun koi team dhoond do,find_teams,ru,indirect,solo player framing
+au-338,aisi teams batao jo naye log rakh rahi hain,find_teams,ru,imperative,recruiting filter
+au-339,football ki team chahiye jisme main khel sakun,find_teams,ru,plain,sport plus relative clause
+au-340,apni team nahi banani kisi purani team me shamil hona hai,find_teams,ru,negation;boundary,negates create_team_help to select find_teams
+au-341,shaam ko khelne wali koi team hai,find_teams,ru,question,time preference
+au-342,can you show me on the map where rawalpindi cricket nets is,navigate,en,question,map request with a real seeded venue
+au-343,i need directions to centaurus kickoff driving from i-8,navigate,en,imperative;multi_slot,venue plus origin area
+au-344,drop the pin for tomorrows ground so i can navigate,navigate,en,imperative;indirect,venue implied by an upcoming booking
+au-345,how many minutes from f-10 to jinnah sports complex,navigate,en,question;numeric,travel time phrasing
+au-346,bahria cricket arena ka location share karo na,navigate,mix,imperative;politeness,urdu verb on an english venue
+au-347,yaar rasta batao main pehli dafa ja raha hun wahan,navigate,mix,indirect;slang,no venue named at all
+au-348,maps kholo aur dha phase 2 arena set kar do,navigate,mix,imperative,explicit maps mention
+au-349,shalimar cricket academy g-13 se kitni door hai,navigate,mix,question;numeric,distance from an area
+au-350,navigation start kar do please late ho raha hun,navigate,mix,imperative;politeness;indirect,urgency with no venue
+au-351,mujhe pata nahi ye ground kahan hai rasta bata do,navigate,ru,indirect,anaphoric ground from dialog state
+au-352,margalla cricket club ka pin bhejo,navigate,ru,imperative;short,shortest navigate form
+au-353,wahan tak kaise jaun metro se ya taxi se,navigate,ru,question;boundary,transport mode question is still navigate
+au-354,diamond cricket ground ke liye directions chahiye,navigate,ru,plain,plain roman urdu request
+au-355,ghar se stadium tak ka safar kitna lamba hai,navigate,ru,question;indirect,generic stadium not a listed venue
+au-356,address nahi chahiye seedha map pe dikhao,navigate,ru,negation;boundary,negates venue_info to select navigate
+au-357,dont wait any longer just reserve the 7pm slot,book_venue,en,negation;boundary;imperative,booking verb present so a negation must not flip this to deny
+au-358,"aur options nahi chahiye, isi ground ko book kar do",book_venue,mix,negation;boundary;code_switch,refuses more options while committing
+au-359,"nahi socho zyada, wahi 6 baje wala slot lock kar do",book_venue,ru,negation;boundary;numeric,negation plus a concrete time and a lock verb
+au-360,"dair nahi karni, aaj hi ka slot pakka kar do",book_venue,ru,negation;boundary,urgency phrased as a negation
+au-361,we dont want it anymore please cancel that booking,cancel_booking,en,negation;boundary;politeness,cancel verb on an existing booking not a bare refusal
+au-362,"ab zaroorat nahi hai, meri booking cancel kar dein",cancel_booking,mix,negation;boundary;code_switch,negation plus an explicit booking object
+au-363,"wo slot nahi chahiye, usay khatam kar do",cancel_booking,ru,negation;boundary,acts on a booked slot so not deny
+au-364,noted thanks for the help,greeting,en,short;politeness,acknowledgement that closes a turn stays greeting not affirm
+au-365,acha samajh gaya bhai shukriya,greeting,mix,short;code_switch,acknowledgement plus thanks
+au-366,"koi baat nahi, phir baat karte hain",greeting,ru,negation;boundary,a sign-off carrying nahi must not fall to deny
+au-367,show my booking history in the app,my_bookings,en,imperative;boundary,own bookings asked with app wording
+au-368,mere account me kaun kaun si bookings hain,my_bookings,ru,question;boundary,account word must not pull app_help
+au-369,pakistan ki team ka agla match kab hai,out_of_scope,ru,boundary,national team fixtures are news so out_of_scope
+au-370,psl me kis team ne kal jeeta tha,out_of_scope,mix,boundary;code_switch,league result carrying the team word
+au-371,when does escrow release the money to the owner,refund_policy,en,question;boundary,escrow timing is a rule not an app concept
+au-372,escrow me paisa kab tak phansa rehta hai rules ke mutabiq,refund_policy,mix,question;boundary;code_switch,escrow concept plus money movement stays policy
+au-373,cancel karne pe kitna paisa wapis milta hai rule ke hisaab se,refund_policy,ru,question;boundary,refund share rule not a cancel request
+au-374,does adding funds in the app cost extra,topup_help,en,question;boundary,money procedure mentioning the app must not fall to app_help
+au-375,app me paisa dalne ka minimum kitna hai,topup_help,mix,question;numeric;boundary,top-up minimum inside the app
+au-376,wallet me paise bhejne pe koi fee lagti hai app me,topup_help,ru,question;boundary,fee question carrying the app word
+au-377,app ke tournament me register kaise karte hain,tournament_list,mix,question;boundary;code_switch,how to register is tournament_list per its gloss
+au-378,agle mukable ki tareekh kya hai aur naam kaise likhwana hai,tournament_list,ru,question;boundary,date plus sign-up in one turn
+au-379,is ground me aik waqt me kitne bande khel sakte hain,venue_info,ru,question;numeric;boundary,capacity fact about one venue
+au-380,is venue ki rating kitni hai aur price kya hai,venue_info,mix,question;boundary,venue rating is not an elo question
+au-381,app me mera available balance kitna dikha raha hai,wallet_balance,mix,question;boundary,balance number asked with app wording
+au-382,escrow me kitna paisa rooka hua hai is waqt,wallet_balance,ru,question;boundary,held amount rather than the escrow rule

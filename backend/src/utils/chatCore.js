@@ -44,7 +44,7 @@ async function insertMessage(client, {
   channelId, senderId = null, clientId = null, kind = 'text', body = null,
   mediaUrl = null, mediaMime = null, mediaBytes = null, mediaW = null,
   mediaH = null, durationMs = null, waveform = null, replyToId = null,
-  isSystem = false, systemMeta = null,
+  isSystem = false, systemMeta = null, assistantPayload = null,
 }) {
   if (clientId && senderId) {
     const existing = await client.query(
@@ -56,17 +56,29 @@ async function insertMessage(client, {
   }
 
   const { rows } = await client.query(
+    // created_at is clock_timestamp(), not the column default now(). now() is the
+    // TRANSACTION's timestamp, so two messages written inside one transaction get a
+    // byte-identical created_at -- and the assistant writes exactly that: the user's
+    // question and Scout's answer, in one turn, in one transaction. With now() the
+    // pair could only be ordered by the (kind = 'assistant') tiebreaker, which holds
+    // for one turn but collapses across two: every question in the thread sorted
+    // above every answer. clock_timestamp() advances per statement, so the rows are
+    // ordered by when they were actually written, and the tiebreaker goes back to
+    // covering only a genuine same-microsecond tie. Team chat writes one message per
+    // transaction, where the two functions are indistinguishable.
     `INSERT INTO chat_messages
        (channel_id, sender_id, client_id, kind, body, media_url, media_mime,
         media_bytes, media_w, media_h, duration_ms, waveform, reply_to_id,
-        is_system, system_meta)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        is_system, system_meta, assistant_payload, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, clock_timestamp())
      RETURNING *`,
     [channelId, senderId, clientId, kind, body, mediaUrl, mediaMime,
       mediaBytes, mediaW, mediaH, durationMs, waveform, replyToId,
-      isSystem, systemMeta],
+      isSystem, systemMeta, assistantPayload],
   );
   const message = rows[0];
+  // 'text', 'system' and 'assistant' all preview as their body — an assistant
+  // row is guaranteed a non-empty body by chk_chat_messages_payload (018).
   const preview = kind === 'image' ? 'Photo' : kind === 'audio' ? 'Voice message' : body;
   await client.query(
     `UPDATE chat_channels SET last_message_at = $2,

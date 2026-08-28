@@ -3217,3 +3217,459 @@ through `registry.get`, so it pays the sklearn import and the unpickle off a col
   `gen_intents.py`, `validate_intent_test.py` and six `data/assistant/` files. **Wave B is not
   committed**: the trainer, `nlu_text.py`, `entities.py`, the router, the test suite, the artifact and
   the reports are all still working-tree only, and no tag exists for either wave.
+
+---
+
+## Wave S6-C (Scout — the v2 label contract and model #4 retrained)
+
+**This section is written by two sessions and this is the first half.** Below is the **ml-service half**:
+the 23-label contract, the retrained classifier, a corpus repair and the unit suite — all released and
+verified. Scout's **Node half** — dialog manager, action executor, KB/escalation, `POST
+/api/assistant/message` and the three FR8.15 service extractions — landed in the parallel session and is
+written up under **Wave S6-C (Node half)** further down. The product decisions that Wave S6-B left open are
+now made, and they are not mine: the assistant is named **Scout**, and `answer.source` is the six-value enum
+`live | policy | model | kb | menu | escalated`.
+
+### The ml-service half — model #4, retrained to 23 intents
+
+**Status: RELEASED and verified (2026-08-28).** Wave B shipped a classifier that understood 15 intents.
+Scout needs to answer "find me players", "which teams are recruiting", "how do I get there", "let me talk
+to the owner", "how do I edit my profile", "how does ELO work" and plain **yes/no** — seven capabilities the
+v1 label set could not express at all, and one (`yes`/`no`) without which no confirmation gate can exist.
+So the contract moved, deliberately and visibly, and the model was refitted on it.
+
+```
+intent_spec.py --self-check   PASS 14 checks · labels assistant-intents-v2 · 68396192ab4a87a4
+                                              dataset assistant-dataset-v2 · 339ad58af5ddb072
+                              23 intents · 8 groups (dialog = exactly affirm + deny)
+gen_intents.py                data/assistant/intents.csv 2,576 rows · sha adbdd5d63a81
+                              112 rows/intent · en 1035 · ru 897 · mix 644
+                              616 templates (614 contributed, cap 12, max 8) + 382 authored rows
+validate_intent_test.py       data/assistant/assistant_test.csv 230 rows · sha 1f60b29cabad
+                              10/intent · ru 4 / mix 3 / en 3 per intent · v1's 150 rows byte-identical
+train_intents.py              RELEASED · 10/10 gates · 28.0 s · seed 20260824 (default)
+                              models/intent_latest.joblib 6,597,833 B · intent-v2-20260828-1329
+  validation (539 unseen phrasings)   acc 0.8033 · macroF1 0.7991 · ECE 0.1512 · grouped 0.8516
+  exam (230 hand-written, 1f60b29c)   acc 0.6652 · macroF1 0.6537 · ECE 0.0865 · grouped 0.7652
+                                      95% CI [0.6043, 0.7217] (2,000 bootstrap resamples)
+                                      by language  mix 0.8116 (69) · ru 0.6196 (92) · en 0.5797 (69)
+                                      by phenomenon  code_switch 0.8448 (58) · question 0.7439 (82)
+                                                     boundary 0.6000 (90) · negation 0.5143 (35)
+                                                     indirect 0.4909 (55)
+  baselines (uniform · train-majority `deny` · exam-majority `book_venue`)  all 0.0435 — 15.3x its prior
+  floor 0.45 (stamped in the artifact)  val   coverage 0.8683 · answered 468 · answeredAcc 0.8782 · cErr 57
+                                        exam  coverage 0.7870 · answered 181 · answeredAcc 0.7901 · cErr 38
+  pipeline  word (1,2) 6,838 + char_wb (2,6) 11,971 = 18,809 features -> LinearSVC C=0.5 balanced
+            -> CalibratedClassifierCV(sigmoid, folds grouped by template_id)
+training/test_nlu.py          68 passed / 0 skipped / 0 failed (63 -> 68, and 2 repaired)
+GET /health                   4/4 ready · intent-v2-20260828-1329 · assistant-intents-v2
+POST /nlu/parse               120 exam utterances over HTTP, quiet box: p50 20.9 · p95 32.9 · max 114.0 ms
+                              intentMs p50 20.9 · entityMs p50 0.2 · 2/120 over the 50 ms budget
+check_ml_service.js           71/71 — the 4th model changing shape is still invisible to Node
+```
+
+### 8 labels added, 0 dropped — and the subset property is a test, not a promise
+
+`find_players`, `find_teams`, `navigate`, `contact_owner`, `app_help`, `elo_help`, `affirm`, `deny`. Every
+one of v1's 15 survives, so no Node branch written against v1 can be orphaned by this release. That claim is
+**asserted mechanically**: `test_nlu.py` holds v1's 15 as a frozen set, derives `V2_ADDED` as
+`set(intent_spec.INTENTS) - V1_LABELS`, and a second test walks one utterance per added label through the
+released model requiring the right answer to beat its runner-up by **≥0.35** — with
+`assert {e for _, e in cases} == V2_ADDED`, so a 24th label cannot ship without a reachability case. The
+hand-typed alternative was tried first and rotted inside the same wave: an early audit script listed
+`help_menu` (never a label in either version) and omitted `check_availability` (a v1 label), which inflated
+a "steals" count from 21 to 29 until the sets were derived from `model.classes_` instead.
+
+`affirm`/`deny` are the reason the `dialog` group exists, and they are the one pair that is **unsafe to act
+on alone**: a bare "haan" carries no object, so honouring one without a pending proposal in session state
+would confirm a booking the user never saw. `intentGroup == "dialog"` is the flag for that, and the group's
+membership is pinned by `test_the_dialog_group_is_exactly_affirm_and_deny`.
+
+### The finding: a v1 corpus defect that every v1 gate had passed
+
+The canonical `find_players` utterance — "need 2 more players for tonights cricket match" — came back
+`find_opponents` at **0.77**. Ablation showed the word *match* flipped it. The cause was not the model:
+3 templates and 3 authored rows in the **v1** corpus taught "we are N players short ⇒ `find_opponents`",
+which was the least-wrong label available in a version that had no `find_players`. `git diff --stat`
+confirmed all six were v1's, untouched this wave. They were found from a fresh smoke-test utterance and then
+swept for as a class — not by reading the exam.
+
+The fix rewrote 3 templates so they ask for a **team** rather than for people (`{count}` leaves the pattern,
+so `numeric` leaves its phenomena) and relabelled 3 authored rows, each with a note recording *why* v1 had
+filed it elsewhere. Donor intents stayed above the `AUTHORED_MIN_PER_INTENT = 8` floor (`find_opponents`
+16 → 14, `tournament_list` 17 → 16) and post-rewrite template capacity still cleared the 1.30 margin in all
+three languages (en 73 vs 58.5 needed · mix 48 vs 36.4 · ru 55 vs 50.7). A regression guard now pins the
+squad-short frame in all three languages.
+
+### The question that dominated the middle of the wave, measured and then dissolved
+
+Adding 8 labels means the 26 utterances that sit on the new boundaries (`find_players` vs `find_opponents`,
+`app_help` vs `topup_help`) either go into the corpus or do not. Three candidates were trained and compared
+on identical instruments — the raw exam, v1's original 150 rows, the 80 new rows, and **served** behaviour at
+the 0.45 floor:
+
+| candidate | exam | v1's 150 | new 80 | answered | right | WRONG | loud | steals |
+|---|---|---|---|---|---|---|---|---|
+| labels+8, no boundary rows (1,258) | 0.6565 | 0.5533 | 0.8500 | 182 | 137 | 45 | 10 | 23 |
+| + 26 boundary rows (1,317) | 0.6435 | 0.5333 | 0.8500 | 178 | 138 | 40 | 10 | 21 |
+| **+ the 6 label corrections (1,329)** | **0.6652** | **0.5600** | **0.8625** | 181 | **143** | **38** | 10 | **19** |
+
+The middle row is the one worth understanding, because it looks like a **loss**: 1.3 points of raw exam
+accuracy for 5 fewer wrong assertions. It is not a loss, and the reason is a distinction this wave had to
+learn the hard way — **raw accuracy scores the argmax even below the floor, and the service abstains
+there**. All of that 1.3 points lived inside the abstain region (secretly-right abstentions 14 → 10) with
+**zero** right→wrong transitions among served answers. Users cannot see an accuracy change the service never
+surfaces; they can see 5 fewer confident lies. Then fixing the 6 mislabelled rows beat both candidates
+outright and the trade-off question stopped existing.
+
+### The honest cost of the new labels: 12 exam rows
+
+12 rows that v1 answered correctly are wrong under v2 (at-002, at-034, at-047, at-064, at-078, at-093,
+at-108, at-110, at-118, at-123, at-134, at-139). **7 of the 12 fall below 0.45**, so they abstain rather than
+lie — the floor is doing exactly the job it was priced for in Wave B. Of the 5 that are served, two are
+**stale gold under the v2 glosses** rather than errors (`navigate` now owns route questions, at-139;
+`elo_help` owns the ELO *rules* while `team_stats` owns the values, at-110). That leaves **3 genuine served
+regressions**: at-064 `greeting` → `deny` 0.78, at-093 `refund_policy` → `topup_help` 0.47, at-118
+`topup_help` → `app_help` 0.55. The v1 exam rows were **not edited** to make any of this look better; they
+are byte-identical, which is what keeps this comparison meaningful at all.
+
+The measured weak spots are recorded rather than chased, because the encroachment is symmetric — more
+`app_help` rows would take back at-095/at-113/at-118 and lose others:
+
+* **app_help vs topup_help vs refund_policy** on money-*procedure* questions ("paise andar kaise jate hain
+  is app me" → `app_help` 0.55). Scout should treat those three as **one clarify group below ~0.60**.
+* **"where is the &lt;domain noun&gt; tab"** lands on the domain label — "where is the tournaments tab" →
+  `tournament_list` 0.56 with `app_help` 0.39 as runner-up.
+* `check_availability` over-triggers on "free"/"khali" (at-003, at-080, at-149 at 0.72–0.75).
+* `create_team_help-en-08` / `create_team_help-ru-09` are a genuine **join-procedure vs `find_teams`**
+  ambiguity that neither gloss adjudicates. Flagged for the user to rule on, not silently re-taught.
+
+### The 50 ms parse budget is no longer robust, and that is this wave's operational gotcha
+
+Wave B measured p50 14.6 ms with 0/300 over budget. v2 costs more: **9.41 ms** median `predict_proba`
+against v1's **7.46 ms**, measured back to back in one interpreter on the same four utterances — +26% for
+8 more labels (23 × 5 = 115 calibrated sub-estimators, an artifact of 6.6 MB rather than 3.9, and 18,809
+features rather than 15,220). That is still comfortably inside 50 ms. What is **not** comfortable is the
+margin against real machine noise: the same 120 exam utterances over HTTP read **p50 20.9 ms, 2/120 over
+budget** on a quiet box and **p50 82.6 ms, 119/120 over budget** on a box shared with a second dev session,
+and `test_a_warm_parse_stays_inside_the_fifty_millisecond_budget` failed three times in a row at 63–95 ms
+median, then passed three times in a row at ≈2.5 s total once the box was quiet. `entityMs` stayed at
+**0.2 ms** throughout, so the variance is all estimator plus scheduler. Read a budget failure as a **load
+signal first** and re-measure before touching the model or the budget. Neither was touched here.
+
+### Three receipts were dishonest this wave, all fixed in the trainer
+
+`datasetSource` is published on `/health` and printed in the model card, so it is read as provenance — and
+it was a **hardcoded v1 string** that would have described the previous corpus after every regeneration. It
+is now derived from `intents_meta.json` (`generated corpus (614 of 616 templates contributed rows) + 382
+hand-authored rows`) and raises `SystemExit` naming the missing key rather than guessing. A docstring
+carrying a stale "(the 236 hand-authored ones)" count lost the number. A test named
+`..._over_fifteen_classes` had a body that already read the spec correctly — only the name lied — and is now
+`..._over_every_declared_class`.
+
+### 68 tests, and two of them were repaired rather than added
+
+63 → 68. The five new ones assert the v1-subset property, reachability of all 8 added labels, the `dialog`
+group's exact membership, that every intent has a group and a gloss, and the squad-short regression in three
+languages. Two existing tests were **repaired**:
+`test_the_abstain_floor_is_actually_applied` was silently **SKIPPING**, because the single vague utterance it
+pinned had risen above 0.45 as the corpus grew; it now scans four fragments and raises a named
+`AssertionError` if none of them abstains on low confidence, so "the floor is not applied" and "the model
+became overconfident on fragments" are both catchable. And an assertion written earlier in this same wave —
+`covered = {...} | V2_ADDED; assert covered == V2_ADDED` — was **vacuous**, unfailable by construction, and
+was replaced by the set equality above.
+
+### Open / carried forward
+
+- [ ] **`intent_latest.joblib` in the tree is v2; the copy in `aee2d91` is v1.** The parallel session
+  committed Wave B's artifact (3,872,007 B) at 16:55 local, before v2 was released at 18:29. The working
+  tree now holds `intent-v2-20260828-1329` (6,597,833 B) plus the regenerated corpus, exam, metrics, model
+  card and three PNGs, all **uncommitted**. `.gitignore:88-89` re-admits `*_latest.joblib` on purpose, so
+  the next commit MUST carry it or a fresh clone serves a model whose fingerprint no longer matches the
+  code.
+- [ ] **The 23 labels are FINAL for v2.** A 24th is a **v3 bump**, not a patch: the label fingerprint is
+  gated when the artifact loads, so adding one silently makes `/health` report `incompatible` and
+  `modelsReady 3/4` until a retrain.
+- [ ] **`create_team_help` vs `find_teams`** needs a product ruling (above). Two template rows are
+  genuinely ambiguous under the published glosses.
+- [ ] The ~28 throwaway audit scripts this wave used live in `%TEMP%` and are **not** part of the repo. The
+  reproducible forms of their claims are the trainer's gates and `test_nlu.py`; the scripts themselves
+  (exhaustive render-collision enumeration, exam-leak indexing, three-way candidate comparison, served
+  transition matrices) are not committed and their one-off numbers should not be cited as if they were.
+
+## Wave S6-C (Node half) — Scout's dialog manager, action executor and chat
+
+**Status: DONE and live-verified (2026-08-29).** This is the other half of the section above. A user can now
+open Scout, type `rawalpindi mein cricket ground chahiye`, get up to three venue cards (two, on the seeded
+demo database), tap **See times** on one,
+tap a numbered slot, read a confirmation that names the price and the 20% deposit, reply `haan`, and have a
+real booking written by the **same function the REST route calls** — then ask `meri bookings`, `wallet
+balance`, `refund policy`, `find me players`, `how do I get there`, cancel it with a refund preview, rename
+the chat, start another one, and come back to either. Every reply carries a machine-readable `answer.source`.
+
+### What ships
+
+| file | lines | what it owns |
+|---|---|---|
+| `routes/assistant.js` | 483 | 16 endpoints, mounted at `/api/assistant` in `server.js:81` |
+| `services/dialogManager.js` | 806 | `handleTurn` — session FSM, the three doors, turn logging |
+| `services/assistantActions.js` | 2138 | **27 actions** + the card builders; registry boot-asserted |
+| `services/assistantThreads.js` | 372 | chat drawer: list/create/rename/archive/delete/history |
+| `services/assistantKb.js` | 610 | escalation → owner answer → reusable KB, trigram matched |
+| `utils/assistantReply.js` | 219 | the two frozen enums (`SOURCES`, `CARDS`) + payload builders |
+| `utils/policyText.js` | 161 | the policy SENTENCE from `global_settings`, NUMBERS from `escrow.POLICY` |
+| `services/bookingService.js` | 467 | **the only place in the backend that inserts a booking** |
+| `services/rosterService.js` | 559 | player + opponent ranking, extracted from `routes/teams.js` |
+| `services/discoveryService.js` | 387 | venue search/detail/free-slots, tournaments, team discovery |
+| `migrations/018_assistant.sql` | 514 | 4 tables + 2 altered + 12 indexes |
+| `scripts/check_assistant.js` | 1526 | the live harness — 278 checks, one rolled-back transaction |
+
+The endpoints: `POST /message` · `GET/POST /threads` · `GET /threads/:id/messages` · `PATCH /threads/:id`
+(rename **or** archive) · `DELETE /threads/:id` · `POST /messages/:id/feedback` · `GET /capabilities` · and
+six owner-side ones (`GET /owner/questions`, `POST /owner/questions/:id/answer` · `/decline`, `GET/POST
+/owner/kb`, `PATCH/DELETE /owner/kb/:id`, `GET /owner/stats`) — the escalation inbox is a real screen's worth
+of API, not a TODO.
+
+Migration 018 adds `assistant_kb`, `assistant_escalations`, `assistant_turns`, `assistant_feedback`; alters
+`chat_channels` with `session_state jsonb NOT NULL DEFAULT '{}'`, `archived_at`, `assistant_persona` (+
+`chk_chat_channels_persona`) and `chat_messages` with `assistant_payload jsonb` (+ a kind constraint that
+admits `'assistant'` and a payload constraint that ties the two). The `pg_trgm` index on the KB is created
+**conditionally** — if the extension is absent the migration still applies and the KB falls back to `ILIKE`.
+
+### The three doors — and the money bug that writing the test found
+
+`dialogManager.decide()` resolves what the user meant through exactly three doors, in order:
+
+1. **a chip** — the button carries its own `{action, args}`, so no classification happens at all;
+2. **the frozen affirm/deny LEXICON** — 60 affirm and 34 deny tokens, and the match is strict: at most six
+   words, and *every* word must be an affirmation, a filler, or a repeat of the same decision. One unknown
+   word, or a mixed signal (`haan nahi`), returns null and the sentence goes to the classifier;
+3. **model #4** — `/nlu/parse`, honoured only above the artifact's own 0.45 floor.
+
+The bug: the confirm gate originally accepted **any** of the three. Model #4 parses `haan lekin 7 baje`
+("yes but make it 7") as `affirm` with confidence **0.6112** — above the floor, and correct as far as intent
+classification goes, because the sentence *does* start with a yes. The lexicon correctly declined it (`lekin`
+is not in the list), the model did not, and Scout fired the armed confirm and booked
+the **8 pm** slot the user was in the middle of correcting. That is a money loss caused by trusting a
+probability. Money is now gated by doors 1 and 2 only:
+
+```js
+const decisive = decided.via === 'chip' || decided.via === 'lexicon';
+```
+
+A model-affirm re-asks instead of executing. The lexicon path writes **NULL confidence and NULL
+model_version** into `assistant_turns`, so the log never credits the classifier for a decision it did not
+make — the abstention rate in the evidence pack stays honest. Four ways the gate could leak are now regression
+tests (§C/C2 of the harness), and the 0.6112 case is one of them: the assertion is that the booking count did
+**not** move.
+
+### `answer.source` — the decision the user delegated
+
+Every reply carries one of six values, and the column is constrained (`chk_assistant_turns_src`), so a
+handler cannot invent a seventh:
+
+| source | means | example |
+|---|---|---|
+| `live` | a database read, this second | availability, `my_bookings`, wallet, ELO |
+| `policy` | the sentence from `global_settings.assistant.policy_text`, **numbers substituted from `escrow.POLICY`** | refund/cancellation rules |
+| `model` | model #4 decided the intent and the answer is derived from it | ranked players, "did you mean…" |
+| `kb` | an owner-approved answer, reused | "is there parking?" answered once, served forever |
+| `menu` | Scout does not know and says so, with its capability list | `out_of_scope`, `no_known_terms` |
+| `escalated` | a human was asked; the reply promises a follow-up | a venue question no read can answer |
+
+This is the part a committee can audit: "the model answered" stops being a vibe when the row says `model`
+and the next row says `live`. Golden rule 3 is why `policy` is not simply canned text — the SENTENCE is
+editable content, the NUMBERS (20% deposit, 24h window, 80/20 split) are read from `escrow.POLICY` at render
+time, so no policy answer can ever drift from the money code.
+
+### FR8.15 in practice — three extractions, and a count that proves it
+
+"No business rule exists twice" is easy to claim and easy to violate the moment an assistant needs to book
+something. So the rule was made **countable**. Three services were extracted from the routes that owned
+them, and the routes now call the services:
+
+- **`bookingService.js`** — `createBookingTx` and `cancelBookingTx`. Slot lock, ownership, 20% deposit,
+  wallet debit, escrow hold, ledger rows, the 24h window, the 80/20 penalty split, trust penalty. `POST
+  /api/bookings` and `PATCH /api/bookings/:id/cancel` are now thin wrappers over these two.
+- **`rosterService.js`** — `suggestPlayers` / `suggestOpponents`, extracted from `routes/teams.js` so
+  Scout's ranked answers and the app's Suggestions screen are literally the same numbers, including the
+  `source` badge and the cold-start `fallbackNote`.
+- **`discoveryService.js`** — `searchVenues`, `venueDetail`, `freeSlots`, `listTournaments`,
+  `discoverTeams`, shared with `routes/venues.js` (which keeps model #3's `recommendVenues` + `recoCache`
+  on top of the same search).
+
+The harness counts this over the 50 files of `src/` (excluding `scripts/`, since verification code quotes
+the SQL it counts):
+
+```
+INSERT INTO bookings              1 file   → src/services/bookingService.js
+applyWallet( / logTxn( /
+penaltySplit( / lockWallet( /
+UPDATE slots SET status           0 occurrences in any assistant file
+routes/bookings.js                calls createBookingTx + cancelBookingTx
+```
+
+Scout owns **zero** money primitives. It cannot compute a refund; it asks `bookingService` for a preview and
+prints the sentence. That is the difference between an assistant that is a second implementation of your
+product and one that is a second *interface* to it.
+
+### Two ordering bugs, one root cause: `now()` is the transaction's clock
+
+`chat_messages.created_at` defaulted to `now()`, which in Postgres is the **transaction** timestamp, not the
+statement's. Team chat writes one message per transaction, so nothing ever showed. Scout writes **two** — the
+user's question and its own answer, in one turn, in one transaction — and both rows landed on a
+byte-identical stamp. History then ordered by whatever the tiebreaker happened to be, so the answer could
+render above the question. Two fixes, both in production code:
+
+1. `chatCore.insertMessage` now supplies `clock_timestamp()` explicitly (it advances per statement).
+2. `threads.history` sorts `created_at DESC, (kind = 'assistant') DESC, id DESC` and its cursor is a **row
+   tuple comparing the same three fields it sorts by**. A cursor that sorts on three columns and compares on
+   one silently drops or repeats rows exactly at a page seam — the harness now pages a known thread two
+   messages at a time and asserts the concatenation equals the unpaged read, every message exactly once.
+
+The measured gap between the two bubbles is ~1.5 s, because the `/nlu/parse` call sits between the inserts.
+The assertion is therefore `gap >= 0` — asserting a specific gap would be asserting the model's latency.
+
+### Session state, and why an unrelated turn disarms a confirmation
+
+Session state lives in `chat_channels.session_state jsonb` on the user's own assistant channel: the active
+intent, the slots filled so far, a `pending` slot request and an armed `confirm`. Every handler returns a
+**patch**, and the patch semantics are deliberately asymmetric:
+
+| key | absent from the patch means |
+|---|---|
+| `intent`, `slots` | **KEEP** — that is what makes slot-filling survive three turns |
+| `pending`, `confirm` | **CLEARED** — any unrelated turn disarms a pending confirmation |
+
+So "wallet balance" in the middle of a booking confirmation does not leave a live "yes" hanging: the confirm
+is gone, and a later `haan` re-asks instead of booking. A cleared slot is `undefined`, never `null` — `null`
+is a value, and a value fills a slot. (Both are asserted; the first version of the harness failed here
+because it expected `null`.)
+
+### The KB and escalation loop
+
+A venue question no read can answer (`is there parking?`) becomes an `assistant_escalations` row addressed to
+that venue's owner, and the user is told plainly that a human was asked (`source: escalated`). The owner
+answers from `POST /owner/questions/:id/answer`; the answer is delivered **into the player's own thread** as
+a Scout message and, if the owner allows reuse, is stored in `assistant_kb`. The next player asking the same
+thing gets it instantly with `source: kb`. Matching is `pg_trgm` similarity against a normalised question
+when the extension exists and `ILIKE` when it does not — `hasTrgm()` probes `pg_extension` once and caches,
+so the same code path works on a database where nobody could run `CREATE EXTENSION`. The learning loop is
+exactly what the security rules require: **owner-approved, per-venue isolated, and never used for money or
+policy answers** (those are `live` and `policy`, which the KB cannot shadow).
+
+### Discovery, maps, and two honest dead ends
+
+`find_players` and `find_teams` rank through `rosterService`, so the match% badges are model-backed when
+ranking is available and carry the cold-start note when it is not. A player who captains two teams is
+**asked which team** (`resolveTeam` returns `many` and Scout offers a chip per team) rather than guessed for
+— the first harness run failed on this and the harness was wrong, not the product. `navigate` answers with a
+`map` card carrying the venue's coordinates and a maps deep link, plus the address as text for when no maps
+app exists.
+
+Two limits are printed rather than papered over:
+
+- **There is no targeted-invite endpoint.** Scout can rank players and open the roster screen; sending the
+  invite is the user's tap. Inventing an endpoint here would have duplicated authority checks — the exact
+  thing FR8.15 exists to prevent.
+- **A challenge needs an existing booking**, so `find_opponents` ends at "book a slot first, then challenge"
+  — which is the real product rule, not a limitation of the assistant.
+- `tournaments` has **0 rows and no REST route yet**, so `tournament_list` answers honestly and empty
+  (S.7 owns tournaments).
+
+### The verification harness — 278 checks, 38 real turns, one rolled-back transaction
+
+`node src/scripts/check_assistant.js` drives Scout the way Flutter will: real users from the seeded demo
+database, real JWT-equivalent user ids, the **live** classifier (`intent-v2-20260828-1329`, floor 0.45), real
+money. It runs inside a single `BEGIN … ROLLBACK`, which is only possible because `handleTurn` accepts a
+caller-owned `client` and degrades its own `TXN` to `SAVEPOINT scout_turn` / `RELEASE` / `ROLLBACK TO
+SAVEPOINT` when it has one. Nested `BEGIN` would have flattened the harness's rollback and left 38 turns of
+junk in the demo database.
+
+```
+0  preflight — registry, model #4, migration 018                       3
+A  find a ground → see times → pick → confirm → booked                42
+B  cancel it → refund preview → confirmed → wallet and ledger agree   33
+C  a yes that is really a correction must NOT spend money             11
+C2 stale confirms, model denials, and the button that must still work 11
+D  reads: wallet · bookings · policy · tournaments · help · out of scope 31
+E  escalation → the owner answers → the next ask is free              28
+F  discovery: ground info · directions · players · opponents · teams   26
+G  threads: new · switch · rename · archive · delete · ownership       53
+H  FR8.15 — one implementation of every rule, shared by route and Scout 40
+                                                          PASS 278/278
+```
+
+**Zero skips** (a skip is counted and printed separately, so a run that quietly avoided the money path could
+not read as green), exit 0, ~3m15s, and a 38-turn transcript is dumped at the end so the conversation itself
+can be read in the report. Measured after the run: assistant threads 0, turns 0, escalations 0, bookings back
+to 40 — the seeded database is byte-identical. `npm test` is **78/78** with the database down (the pure unit
+tests never touch it).
+
+What each block actually proves, since "278 checks" on its own means nothing:
+
+- **A/B — money.** The booking's ledger legs, the wallet debit, the escrow hold; then the cancellation's
+  refund and penalty legs, and **money conserved across both wallets** (the player's refund plus the owner's
+  penalty share equals what left, to the paisa).
+- **C/C2 — the gate.** Four ways it could leak: the 0.6112 model-affirm books nothing · a confirm armed three
+  turns ago and orphaned by an unrelated read cannot fire · a model-deny does not execute · and a chip
+  positive control **does** book, so the gate is proven closed rather than merely broken.
+- **D — every read intent and every `answer_source`** except `model` and `kb`, which E and F own.
+- **E — the full loop**, including the owner's answer landing in the player's thread and the next player
+  getting it as `kb`.
+- **G — the drawer**: `MAX_THREADS = 50` refuses chat 51 with `too_many_threads`, another user's thread id
+  is `thread_not_found` for both read and write, the first message names the chat, the chat just used sorts
+  to the top, and paging returns every message exactly once.
+- **H — FR8.15 counted** (above) plus the S.5 read regression through the extracted `discoveryService` and
+  the privacy census: `assistant_turns` has 17 columns and **not one free-text column** that could hold what
+  the user typed (`text_chars int` — length only). Deleting a chat cascades its messages; the turn's
+  `channel_id` is `ON DELETE SET NULL`, so the evidence that model #4 answered *n* turns survives while the
+  conversation does not.
+
+### Incidents and repairs from this half of the wave
+
+- **`assistantActions.js` lost ~736 lines mid-wave.** The cause was never established (no git operation
+  explains it; the file simply came back truncated on a subsequent read). Every handler was rebuilt from the
+  contracts that were already verified — `discoveryService`, `rosterService`, `bookingService`,
+  `assistantReply`, `teamAccess` — and the registry is now **asserted at require-time** against the action
+  list, so a missing handler crashes the boot instead of surfacing as "Scout didn't understand" during a demo.
+  `server.js:77` carries the comment that explains why requiring the route requires the registry.
+- **`upsertKb` — two fixes.** It was returning before the ownership re-read on one path, and its
+  normalisation and its match used different normalisers, so an answer could be stored under a question it
+  would never match again.
+- **`resolveTeam` selected no display columns**, so the disambiguation chips would have been labelled
+  `undefined`. It now selects through `TEAM_COLUMNS`.
+- **The first `refundPolicy` draft used escrow constants that do not exist** (`POLICY.DEPOSIT_PCT`,
+  `POLICY.CANCEL_WINDOW`). Every placeholder is now resolved from the real `POLICY` object and
+  `test/assistant.test.js` asserts that every placeholder in every template resolves — a typo in a policy
+  sentence is a failing test, not a `PKR undefined` in a user's chat.
+- **A stale `topic` slot** survived across intents and made the second question in a session answer the
+  first one's subject.
+- **Two context fields the dialog manager never passed** (`userName`, `lastIntent`) — handlers read them,
+  got `undefined`, and degraded silently.
+- **Deep-link chip args were being dropped by `cleanSlots`** because `screen` was not in `SLOT_KEYS`, so
+  "open my wallet" opened nothing.
+- **The fixture picker queried an impossible team role.** `team_members.role` is `captain | vice_captain |
+  member` (`chk_team_members_role`); there is no `'admin'` row to find. That was a harness bug, but it is the
+  kind that produces a green run over an empty fixture, so it is recorded.
+- **`test.after(() => pool.end())`** — the unit suite was taking 13 s waiting on an idle pool; now 1.8 s.
+- **The ACTIONS count reconciles:** 27 = the 23 model labels + 4 button-only actions — `confirm`,
+  `cancel_confirm`, `pick_slot`, `capability_menu` — that no utterance can reach, because only a card's
+  button issues them. Deep links are NOT a fifth: "open my wallet" is `app_help` carrying
+  `args.screen`, which is why `screen` had to join `SLOT_KEYS`.
+
+### Open / carried forward
+
+- [ ] **Wave D — the Flutter chat screen.** The payload contract is frozen (12 card types, chips carry
+  `{action, args}`, `answer.source` is renderable) and documented in CLAUDE.md's NEXT block. Two rules for
+  that wave: never build a confirm card's `args` client-side, and never auto-retry a turn that timed out.
+- [ ] **Nothing is committed.** A commit that includes Scout must also include
+  `ml-service/models/intent_latest.joblib` (v2, 6,597,833 B), or a fresh clone boots 3/4.
+- [ ] **`tournament_list` is honest but empty** — S.7 gives tournaments rows and a route.
+- [ ] **No live authenticated HTTP pass over the 16 assistant endpoints.** The harness calls
+  `dialogManager.handleTurn` and the thread service directly with a rolled-back client, which is what makes
+  278 checks affordable, but it does **not** exercise Express, the JWT middleware, or the rate limiter on
+  these routes. That is TESTING.md §4.19's manual curl block and it is not yet run.
+- [ ] **The 50 ms parse budget is load-sensitive** (see the ml-service half). Scout's own turn latency is
+  therefore not a fixed number; the transcript prints `totalMs` per turn so it can be measured on the demo
+  box rather than asserted here.

@@ -149,3 +149,83 @@ at-147,"6000 ka ground he, mere pas utne hain?",wallet_balance,ru,numeric;short;
 at-148,"match cancel hua tha, jo paise wapas aye the wo ab kitne hain",wallet_balance,ru,run_on;boundary,"asks the current amount sitting in the wallet after a refund, not the refund rule, so wallet_balance not refund_policy"
 at-149,yaar meri app wali jeb khali he ya kuch he us me,wallet_balance,ru,indirect;slang,"a playful way of asking the in-app wallet amount, so wallet_balance"
 at-150,nikalne se pehle ye batao andar kitna he,wallet_balance,ru,boundary;indirect,"withdrawal is only the context; the question asked is the balance figure, so wallet_balance not topup_help"
+at-151,how do i get to centaurus kickoff from blue area,navigate,en,question;multi_slot,"asks for a route between two points, which is navigate rather than facts about the venue"
+at-152,send me the location pin for diamond cricket ground,navigate,en,imperative,"a pin is a map object; the request is to locate, not to describe"
+at-153,is bahria town futsal far from g-11 or should i leave early,navigate,en,boundary;run_on;question,distance and travel time are navigate; venue_info would be amenities or price at the same ground
+at-154,margalla cricket club tak ka raasta bata dein zara,navigate,mix,code_switch;imperative;politeness,english route inside an urdu frame; the object is the way there
+at-155,yaar shalimar cricket academy jane ka sabse asaan zariya konsa hai,navigate,mix,code_switch;question,"best way to reach is a routing question, not a comparison of grounds"
+at-156,google maps pe f-11 markaz football arena kaise dhundu,navigate,mix,code_switch;question,"explicitly about finding the venue on a map, so navigate"
+at-157,jinnah sports complex kis taraf parta hai,navigate,ru,question;plain,bare how-do-i-reach with a named venue
+at-158,"mujhe wahan ka rasta samajh nahi aa raha, pin bhej do",navigate,ru,indirect;run_on;negation,states confusion about the route and then asks for a pin; the ask is directions
+at-159,ghar se dha phase 2 arena tak kitni dair ka safar hai,navigate,ru,boundary;question,distance from home is navigate; the same ground timings would be venue_info
+at-160,nakshe pe dikha do ye ground kidhar hai,navigate,ru,imperative;indirect,"show it on the map is a request for location, not for ground facts"
+at-161,need 2 players for tonights football match,find_players,en,numeric;ellipsis,"a count of people, not an opposing side"
+at-162,"anyone free to join us at 9pm, we are one short",find_players,en,indirect;run_on;numeric,asks for individuals to fill a gap in the user own side
+at-163,"we dont need a whole team, just one keeper",find_players,en,negation;boundary,explicitly rules out find_opponents and asks for a single person
+at-164,bhai kal cricket khelne ke liye 3 log short hain,find_players,mix,code_switch;numeric,banday is people; the count and the sport make it a squad-filling request
+at-165,koi goalkeeper available hai is weekend,find_players,mix,code_switch;question,"one named position, so a person rather than a team"
+at-166,"hamari team adhoori hai, 2 log bhijwa do",find_players,mix,code_switch;run_on;numeric,"kar do here acts on people, not on a booking, so find_players not book_venue"
+at-167,shaam wale match me kuch khiladi kam pad rahe hain,find_players,ru,plain,khiladi is players; asks the platform to supply them
+at-168,"hamari side me ek bandah kam hai, koi mil sakta hai",find_players,ru,indirect;boundary;run_on,"one person short on the user own side, which is find_players and not find_opponents"
+at-169,do players ka intezaam karwa do yaar,find_players,ru,slang;imperative,arrange two players; the object is people
+at-170,"opponent nahi chahiye, sirf apni team ke liye player chahiye",find_players,ru,negation;boundary,names and rejects the confusable label in the same breath
+at-171,any team looking for a midfielder,find_teams,en,question;ellipsis,"the user offers themselves to a squad, so joining rather than opposing"
+at-172,is there a cricket club in islamabad taking new members,find_teams,en,plain,"explicit join, with a sport and a city"
+at-173,"not making my own squad, i want to be part of one",find_teams,en,negation;boundary,rules out create_team_help and asks to be recruited
+at-174,koi team hai jo naye players le rahi ho,find_teams,mix,code_switch;question,"asks which teams are recruiting, so find_teams not find_players"
+at-175,bhai mujhe kisi bani hui squad ka hissa banna hai,find_teams,mix,code_switch,english squad inside an urdu frame; shamil hona is joining
+at-176,recruiting teams ki list dikha do,find_teams,mix,code_switch;imperative,an english participle in an urdu clause; asks for a list of teams with openings
+at-177,main kisi team ka member banna chahta hun,find_teams,ru,plain,the bare joining request
+at-178,"mujhe team banani nahi hai, kisi ki team me khelna hai",find_teams,ru,negation;boundary;run_on,contrasts creating a team with joining one and picks joining
+at-179,pindi me koi football team players dhoond rahi hai,find_teams,ru,question;boundary,"the subject is a team searching, so the user is asking to be found; find_players would make the user the searcher"
+at-180,aisi team batao jisme jagah khali ho,find_teams,ru,indirect,"teams with a vacancy, which is a recruiting list"
+at-181,how does the elo rating actually go up,elo_help,en,question,"asks the mechanism, which is a rule and not the user own number"
+at-182,what do i gain if we beat a stronger team,elo_help,en,indirect;question,"asks what a win is worth, which is the rating rule"
+at-183,"not asking my rating, asking how the system calculates it",elo_help,en,negation;boundary,explicitly separates elo_help from team_stats
+at-184,elo barhane ka tareeqa kya hai bhai,elo_help,mix,code_switch;question,"tareeqa is the method, so the rules"
+at-185,haarne pe kitne points kat jate hain,elo_help,mix,code_switch;question,"the cost of a loss is a rule, not a current standing"
+at-186,rating system kaise kaam karta hai samjha do,elo_help,mix,code_switch;imperative,asks for an explanation of the system
+at-187,rating oopar niche kis wajah se hoti hai,elo_help,ru,question;plain,the bare how-does-rating-rise question
+at-188,"meri rating kyun kam ho gayi, kya wajah hoti hai",elo_help,ru,indirect;run_on;boundary,"opens with the user own rating but the question asked is why ratings fall, which is the rule"
+at-189,jeetne pe 20 points milte hain ya kam,elo_help,ru,numeric;question,checks a specific rule value
+at-190,"apni rating nahi puch raha, ye batao hisaab kaise lagta hai",elo_help,ru,negation;boundary,declines team_stats and asks for the calculation
+at-191,"how do i use this app, i just signed up",app_help,en,run_on;plain,"a new user asking for orientation, which no specific procedure label covers"
+at-192,what does trust score even mean here,app_help,en,question;slang,asks the meaning of a platform concept
+at-193,which tab has my wallet on it,app_help,en,short;boundary,"asks where a screen is, which is app_help; the amount in it would be wallet_balance"
+at-194,qr code wala option app ke kis hissay me hai,app_help,mix,code_switch;question,locates a feature inside the app
+at-195,escrow ka concept zara samjha dein,app_help,mix,code_switch;imperative,"asks what a concept means, not the refund rule that uses it"
+at-196,apni profile ki tasweer badalne ka tareeqa kya hai,app_help,mix,code_switch;question,"where is a setting, so app_help"
+at-197,is app ka istemaal shuru kaise karun,app_help,ru,question;plain,the bare how-does-this-work question
+at-198,"paise dalne ka tareeqa nahi puch raha, sirf ye batao app me kya kya hota hai",app_help,ru,negation;boundary,explicitly declines topup_help and asks what the app does
+at-199,"login nahi ho raha, is app me account kaise banta hai",app_help,ru,run_on;indirect;negation,"a sign-in problem plus an account question, both app_help"
+at-200,notification ki setting kidhar hai,app_help,ru,question,locates a setting
+at-201,i need to speak with whoever runs diamond cricket ground,contact_owner,en,plain,asks to reach the human behind a named venue
+at-202,please pass my question on to the ground manager,contact_owner,en,politeness;imperative,"asks scout to forward, which is the escalation door"
+at-203,"i dont want the listed details, i want to actually speak to someone",contact_owner,en,negation;boundary,declines venue_info and asks for a person
+at-204,bahria cricket arena ke maalik ko mera sawal bhejo,contact_owner,mix,code_switch;imperative,connect me to the owner of a named venue
+at-205,"yaar kisi asli insan se rabta karwao, machine se nahi",contact_owner,mix,code_switch;negation,asks for a person rather than the assistant
+at-206,ground manager ka number mil sakta hai,contact_owner,mix,code_switch;question,asks for a contact route to a human
+at-207,mujhe maalik se seedhi baat karni hai,contact_owner,ru,plain,the bare reach-the-owner request
+at-208,mera sawal maalik tak pohncha do please,contact_owner,ru,politeness;imperative,asks that the question be forwarded to the owner
+at-209,kisi zinda insan se baat ho sakti hai yahan,contact_owner,ru,indirect;question,asks whether a human is available to answer
+at-210,"venue ki tafseel nahi chahiye, sirf owner se rabta karwao",contact_owner,ru,negation;boundary,rejects venue_info and asks for contact with the owner
+at-211,yes thats fine go ahead,affirm,en,plain;sms_speak,"bare agreement with no booking word in it, so affirm rather than book_venue"
+at-212,"sure, sounds good to me",affirm,en,politeness,"agreement with a proposal, carrying no task of its own"
+at-213,"yeah do that one, not the other",affirm,en,boundary;negation,contains a negation and is still agreement; the negation only picks between offered options
+at-214,haan bilkul theek hai,affirm,mix,code_switch;short,"emphatic agreement, no act named"
+at-215,ji han chalo aage barho,affirm,mix,code_switch,"agreement plus proceed, still no booking verb"
+at-216,ok bhai wohi kar do,affirm,mix,code_switch;boundary,"kar do with no slot or venue attached refers to whatever scout proposed, so affirm not book_venue"
+at-217,haan yehi sahi hai,affirm,ru,short;plain,the minimal affirmation
+at-218,haan theek hai mujhe aitraz nahi,affirm,ru,negation;boundary,agreement with an address term
+at-219,"bilkul, mujhe manzoor hai",affirm,ru,plain,explicit acceptance
+at-220,"haan wohi, koi masla nahi",affirm,ru,boundary;negation;ellipsis,"a fragment selecting the proposed option; the negation is reassurance, not refusal"
+at-221,lets not go ahead with it,deny,en,negation;plain,refuses the proposal without acting on any booking
+at-222,"dont do that, hold on",deny,en,negation;imperative,stops scout mid-flow
+at-223,"not that one, i changed my mind",deny,en,negation;boundary,rejects the offered option; no existing booking is being cancelled
+at-224,nahi bhai ek minute rukein,deny,mix,code_switch;short;negation,refusal plus wait
+at-225,"abhi nahi karna, baad me dekhenge",deny,mix,code_switch;negation,"defers the proposal, which is a refusal of it now"
+at-226,"nope, wo option rehne do",deny,mix,code_switch;negation;slang,declines the offered option
+at-227,bilkul nahi,deny,ru,short;negation,the minimal refusal
+at-228,chhod do isay abhi,deny,ru,short;slang,"leave it, a refusal of what was proposed"
+at-229,"nahi, mujhe ye wala nahi chahiye",deny,ru,boundary;negation;ellipsis,"refuses the option scout just offered and names no booking, so deny; a cancel verb here would have made it cancel_booking"
+at-230,ye bilkul wo nahi jo main chahta tha,deny,ru,negation;plain,emphatic refusal of what scout offered

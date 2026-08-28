@@ -464,7 +464,7 @@ def calibration_folds(
     memorised, and the resulting probabilities are over-confident in precisely the
     region the 0.45 floor has to police.
 
-    Rows whose template_id is blank (the 236 hand-authored ones) each get their own
+    Rows whose template_id is blank (the hand-authored ones) each get their own
     group -- they have no siblings to leak, so grouping them together would only
     make the folds coarser for nothing.
     """
@@ -973,7 +973,7 @@ def write_model_card(path: Path, record: dict) -> None:
     def A(s: str = "") -> None:
         lines.append(s)
 
-    exam = record["exam_150"]
+    exam = record["exam_scores"]
     val = record["validation"]
     prob = (record.get("classifier") or {}).get("probability", {})
     prob_phrase = {
@@ -1380,7 +1380,16 @@ def main(argv: list[str] | None = None) -> int:
     started = datetime.now(tz=timezone.utc)
     t_start = time.perf_counter()
     stamp = started.strftime("%Y%m%d-%H%M")
-    model_version = f"{MODEL_KEY}-v1-{stamp}"
+    # The major tracks the LABEL CONTRACT, not this script: a 23-label model must
+    # not ship calling itself v1. intent_spec.INTENT_SPEC_VERSION is the source.
+    _, _sep, spec_major = intent_spec.INTENT_SPEC_VERSION.rpartition("-")
+    if not (_sep and spec_major.startswith("v") and spec_major[1:].isdigit()):
+        raise SystemExit(
+            f"INTENT_SPEC_VERSION {intent_spec.INTENT_SPEC_VERSION!r} does not end "
+            f"in -vN, so the model version major cannot be derived from the label "
+            f"contract; fix the spec version or this line, do not guess a major"
+        )
+    model_version = f"{MODEL_KEY}-{spec_major}-{stamp}"
 
     models_dir: Path = args.models_dir
     reports_dir: Path = args.reports_dir
@@ -1811,7 +1820,7 @@ def main(argv: list[str] | None = None) -> int:
         "reliability_validation": val_reliability,
         "threshold_sweep_validation": val_sweep,
         "floor_validation": val_floor,
-        "exam_150": exam_metrics,
+        "exam_scores": exam_metrics,
         "exam_grouped": exam_grouped,
         "reliability_exam": exam_reliability,
         "threshold_sweep_exam": exam_sweep,
@@ -1880,6 +1889,24 @@ def main(argv: list[str] | None = None) -> int:
     for g in gates:
         shout(g.line())
 
+    # The dataset receipt is published on /health and in the model card, so it is
+    # read as provenance. It must be DERIVED from the corpus meta, never typed in:
+    # a hardcoded count silently describes a previous corpus after every regen.
+    try:
+        _tpl_rows = corpus_meta["inputs"]["templates"]["rows"]
+        _tpl_used = corpus_meta["census"]["per_template"]["used"]
+        _auth_rows = corpus_meta["inputs"]["authored"]["rows"]
+    except (KeyError, TypeError) as exc:
+        raise SystemExit(
+            f"intents_meta.json is missing {exc}, so the dataset provenance string "
+            f"cannot be derived; regenerate with training/gen_intents.py rather than "
+            f"letting this receipt guess"
+        ) from exc
+    dataset_source = (
+        f"generated corpus ({_tpl_used} of {_tpl_rows} templates contributed rows) "
+        f"+ {_auth_rows} hand-authored rows"
+    )
+
     payload = {
         "model": model_full,
         # ── what the registry gates at load time ──
@@ -1917,7 +1944,7 @@ def main(argv: list[str] | None = None) -> int:
         "libraries": record["libraries"],
         "dataset": {
             "rows": len(corpus_rows),
-            "source": "generated corpus (464 templates) + 236 hand-authored rows",
+            "source": dataset_source,
             "seed": args.seed,
             "sha256": corpus_sha,
             "exam": {"rows": len(exam_rows), "sha256": exam_sha},

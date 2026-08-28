@@ -75,17 +75,17 @@ create_team_help-ru-08,create_team_help,ru,{opener} team banane ka tarika,short;
 create_team_help-ru-09,create_team_help,ru,kisi ki team me shamil hone ke liye kya karna hoga,question
 find_opponents-en-01,find_opponents,en,find {team} an opponent for {date} {polite},imperative;multi_slot;politeness
 find_opponents-en-02,find_opponents,en,is there any {sport} team free {date} {time},question;multi_slot
-find_opponents-en-03,find_opponents,en,we need {count} more players for a {sport} match {date},multi_slot;numeric
+find_opponents-en-03,find_opponents,en,we need a team to play a {sport} match {date},multi_slot
 find_opponents-en-04,find_opponents,en,looking for a friendly against a team around our rating,plain
 find_opponents-en-05,find_opponents,en,match us with a team in {area} {polite},imperative;politeness
 find_opponents-en-06,find_opponents,en,any {sport} match {date},short;ellipsis;multi_slot
 find_opponents-en-07,find_opponents,en,who can we play against {date} in {city},question;multi_slot
 find_opponents-mix-01,find_opponents,mix,{date} ke liye koi opponent team available hai,code_switch;question
-find_opponents-mix-02,find_opponents,mix,hamare {count} players short hain {sport} ke liye,code_switch;numeric;multi_slot
+find_opponents-mix-02,find_opponents,mix,koi team hai jo hamare saath {sport} khele {date},code_switch;question;multi_slot
 find_opponents-mix-03,find_opponents,mix,{team} ke liye friendly match arrange karwa do {polite},code_switch;imperative;politeness
 find_opponents-mix-04,find_opponents,mix,{area} ki koi decent team hai jo {sport} khelti ho,code_switch;multi_slot;question
 find_opponents-ru-01,find_opponents,ru,koi team milegi {date} khelne ke liye,question
-find_opponents-ru-02,find_opponents,ru,{count} bande chahiye {sport} ke match ke liye,numeric;multi_slot
+find_opponents-ru-02,find_opponents,ru,{sport} ke match ke liye koi team chahiye {date},multi_slot
 find_opponents-ru-03,find_opponents,ru,hamare liye koi opponent dhoondo {polite},imperative;politeness
 find_opponents-ru-04,find_opponents,ru,{date} {time} match khelna hai kisi ke saath,multi_slot
 find_opponents-ru-05,find_opponents,ru,{area} me koi {sport} ki team hai jo match khelay,question;multi_slot
@@ -463,3 +463,155 @@ my_bookings-en-10,my_bookings,en,{opener} what have i booked so far,question;pla
 my_bookings-ru-10,my_bookings,ru,{date} ki meri booking dikhao,imperative;plain
 team_stats-en-09,team_stats,en,hows {team} doing this season,question;slang
 team_stats-en-10,team_stats,en,{opener} show my rating,imperative;short
+affirm-en-01,affirm,en,{opener} yes go ahead {polite},short;plain
+affirm-en-02,affirm,en,{opener} sounds good {polite},short;politeness
+affirm-en-03,affirm,en,{opener} thats fine {polite},short;sms_speak
+affirm-en-04,affirm,en,{opener} sure do that {polite},short;plain
+affirm-en-05,affirm,en,{opener} yeah correct {polite},short;slang
+affirm-en-06,affirm,en,{opener} ok agreed {polite},short;boundary
+affirm-en-07,affirm,en,{opener} yes exactly {polite},short;plain
+affirm-mix-01,affirm,mix,{opener} ok theek hai chalo {polite},code_switch;short
+affirm-mix-02,affirm,mix,{opener} haan bilkul {polite},code_switch;short
+affirm-mix-03,affirm,mix,{opener} yes wohi kar do {polite},code_switch;short;boundary
+affirm-mix-04,affirm,mix,{opener} ji ok {polite},code_switch;short
+affirm-mix-05,affirm,mix,{opener} sure theek {polite},code_switch;short;ellipsis
+affirm-ru-01,affirm,ru,{opener} haan {polite},short;plain
+affirm-ru-02,affirm,ru,{opener} theek hai {polite},short;plain
+affirm-ru-03,affirm,ru,{opener} bilkul {polite},short;slang
+affirm-ru-04,affirm,ru,{opener} ji han {polite},short;politeness
+affirm-ru-05,affirm,ru,{opener} haan wohi {polite},short;ellipsis;boundary
+affirm-ru-06,affirm,ru,{opener} chalo kar do {polite},short;boundary
+affirm-ru-07,affirm,ru,{opener} manzoor hai {polite},short;plain
+app_help-en-01,app_help,en,{opener} how do i use this app {polite},question;plain
+app_help-en-02,app_help,en,{opener} what does trust score mean {polite},question
+app_help-en-03,app_help,en,{opener} where is the wallet screen {polite},question;boundary
+app_help-en-04,app_help,en,{opener} what is escrow here {polite},question;boundary
+app_help-en-05,app_help,en,{opener} how do i edit my profile {polite},question
+app_help-en-06,app_help,en,{opener} where do i find my qr code {polite},question
+app_help-en-07,app_help,en,{opener} how do i sign in {polite},question;short
+app_help-mix-01,app_help,mix,{opener} app me qr code kahan hai {polite},code_switch;question
+app_help-mix-02,app_help,mix,{opener} escrow ka matlab kya hota hai {polite},code_switch;question
+app_help-mix-03,app_help,mix,{opener} profile edit ka option kidhar hai {polite},code_switch;question
+app_help-mix-04,app_help,mix,{opener} notification settings kahan hain {polite},code_switch;question
+app_help-mix-05,app_help,mix,{opener} is app ko use kaise karte hain {polite},code_switch;question
+app_help-ru-01,app_help,ru,{opener} ye app kaise chalti hai {polite},question;short
+app_help-ru-02,app_help,ru,{opener} trust score ka matlab kya hai {polite},question
+app_help-ru-03,app_help,ru,{opener} wallet ka screen kidhar hai {polite},question;boundary
+app_help-ru-04,app_help,ru,{opener} profile kaise edit karun {polite},question
+app_help-ru-05,app_help,ru,{opener} qr code kahan milta hai {polite},question
+app_help-ru-06,app_help,ru,{opener} account kaise banta hai {polite},question
+app_help-ru-07,app_help,ru,{opener} app me kya kya hota hai {polite},question;indirect
+contact_owner-en-01,contact_owner,en,{opener} can i talk to the owner of {venue} {polite},question
+contact_owner-en-02,contact_owner,en,{opener} i need to speak to the ground manager {polite},plain
+contact_owner-en-03,contact_owner,en,{opener} pass my question to the owner {polite},imperative
+contact_owner-en-04,contact_owner,en,how do i contact {venue},question;short
+contact_owner-en-05,contact_owner,en,{opener} is there a human i can ask {polite},question;indirect
+contact_owner-en-06,contact_owner,en,{opener} connect me with the {venue} owner {polite},imperative
+contact_owner-en-07,contact_owner,en,{opener} i want to talk to support {polite},plain;boundary
+contact_owner-mix-01,contact_owner,mix,{opener} {venue} ke owner se baat karwa do {polite},code_switch;imperative
+contact_owner-mix-02,contact_owner,mix,{opener} human se baat karni hai bot se nahi {polite},code_switch;negation
+contact_owner-mix-03,contact_owner,mix,{opener} ground manager ka contact do {polite},code_switch;imperative
+contact_owner-mix-04,contact_owner,mix,{opener} mera message owner ko forward kar do {polite},code_switch;imperative
+contact_owner-mix-05,contact_owner,mix,{opener} support se baat ho sakti hai {polite},code_switch;question
+contact_owner-ru-01,contact_owner,ru,{opener} owner se baat karani hai {polite},plain;short
+contact_owner-ru-02,contact_owner,ru,{opener} {venue} ke maalik se baat karwao {polite},imperative
+contact_owner-ru-03,contact_owner,ru,{opener} mera sawal owner tak pohncha do {polite},imperative;indirect
+contact_owner-ru-04,contact_owner,ru,{opener} koi banda hai jo jawab de {polite},question;indirect
+contact_owner-ru-05,contact_owner,ru,{opener} ground manager ka number chahiye {polite},plain
+contact_owner-ru-06,contact_owner,ru,{opener} {venue} walon se rabta karwa do {polite},imperative;boundary
+contact_owner-ru-07,contact_owner,ru,{opener} kisi insaan se baat karni hai {polite},indirect
+deny-en-01,deny,en,{opener} no thanks {polite},short;negation
+deny-en-02,deny,en,{opener} dont do that {polite},short;negation
+deny-en-03,deny,en,{opener} not that one {polite},short;negation;boundary
+deny-en-04,deny,en,{opener} leave it {polite},short;ellipsis
+deny-en-05,deny,en,{opener} hold on {polite},short;imperative
+deny-en-06,deny,en,{opener} no i changed my mind {polite},negation;indirect
+deny-en-07,deny,en,{opener} thats wrong {polite},short;sms_speak
+deny-mix-01,deny,mix,{opener} no rehne do {polite},code_switch;short;negation
+deny-mix-02,deny,mix,{opener} nahi abhi nahi karna {polite},code_switch;negation
+deny-mix-03,deny,mix,{opener} wo option nahi {polite},code_switch;short;negation
+deny-mix-04,deny,mix,{opener} nope galat hai {polite},code_switch;short;slang
+deny-mix-05,deny,mix,{opener} nahi baad me dekhenge {polite},code_switch;negation;indirect
+deny-ru-01,deny,ru,{opener} nahi {polite},short;negation
+deny-ru-02,deny,ru,{opener} rehne do {polite},short;slang
+deny-ru-03,deny,ru,{opener} ruko zara {polite},short;imperative
+deny-ru-04,deny,ru,{opener} nahi chahiye {polite},short;negation
+deny-ru-05,deny,ru,{opener} abhi nahi {polite},short;negation;boundary
+deny-ru-06,deny,ru,{opener} ye galat hai {polite},short;plain
+deny-ru-07,deny,ru,{opener} nahi ye wala nahi {polite},negation;ellipsis
+elo_help-en-01,elo_help,en,{opener} how does elo work {polite},question;short
+elo_help-en-02,elo_help,en,{opener} how do i increase my rating {polite},question
+elo_help-en-03,elo_help,en,{opener} what does a win add to my elo {polite},question;indirect
+elo_help-en-04,elo_help,en,{opener} why did my rating drop {polite},question;boundary
+elo_help-en-05,elo_help,en,{opener} how is the rating calculated {polite},question
+elo_help-en-06,elo_help,en,{opener} how many points for beating a stronger team {polite},question;indirect
+elo_help-en-07,elo_help,en,{opener} explain the elo system {polite},imperative
+elo_help-mix-01,elo_help,mix,{opener} elo kaise kaam karta hai {polite},code_switch;question
+elo_help-mix-02,elo_help,mix,{opener} rating barhane ke liye kya karna hoga {polite},code_switch;question
+elo_help-mix-03,elo_help,mix,{opener} win pe kitni rating milti hai {polite},code_switch;question
+elo_help-mix-04,elo_help,mix,{opener} strong team ko harane pe zyada points {polite},code_switch;ellipsis
+elo_help-mix-05,elo_help,mix,{opener} rating calculate kaise hoti hai {polite},code_switch;question
+elo_help-ru-01,elo_help,ru,{opener} rating kaise barhti hai {polite},question;short
+elo_help-ru-02,elo_help,ru,{opener} elo barhane ka tareeqa batao {polite},imperative
+elo_help-ru-03,elo_help,ru,{opener} jeetne pe kitne points milte hain {polite},question
+elo_help-ru-04,elo_help,ru,{opener} haarne pe rating kam hoti hai {polite},question;boundary
+elo_help-ru-05,elo_help,ru,{opener} rating ka hisaab kaise lagta hai {polite},question
+elo_help-ru-06,elo_help,ru,{opener} {team} ki rating kaise barhe {polite},question;boundary
+elo_help-ru-07,elo_help,ru,{opener} elo system samjha do {polite},imperative
+find_players-en-01,find_players,en,{opener} need {count} players for {sport} {polite},numeric;multi_slot
+find_players-en-02,find_players,en,{opener} looking for {count} more players {date} {polite},numeric;multi_slot
+find_players-en-03,find_players,en,anyone free to play {sport} {date} we are short,indirect;run_on
+find_players-en-04,find_players,en,{opener} can you find me {count} players {polite},numeric;question
+find_players-en-05,find_players,en,we need one more for {sport} at {time},ellipsis;multi_slot
+find_players-en-06,find_players,en,{opener} short of {count} people for {date} {polite},numeric;ellipsis
+find_players-en-07,find_players,en,find players near {area} for {sport},imperative;multi_slot;boundary
+find_players-mix-01,find_players,mix,{opener} {count} players chahiye {sport} ke liye {polite},code_switch;numeric;multi_slot
+find_players-mix-02,find_players,mix,{opener} koi banda available hai {time} {polite},code_switch;question
+find_players-mix-03,find_players,mix,team incomplete hai {count} log arrange kar do,code_switch;numeric;run_on
+find_players-mix-04,find_players,mix,{opener} {sport} ke liye players dhoond do {polite},code_switch;imperative
+find_players-mix-05,find_players,mix,{date} ke match ke liye {count} khiladi chahiye,code_switch;numeric;multi_slot
+find_players-ru-01,find_players,ru,{opener} {count} players chahiye {polite},numeric;short
+find_players-ru-02,find_players,ru,{opener} {sport} ke liye {count} banday chahiye {polite},numeric;multi_slot
+find_players-ru-03,find_players,ru,{date} {time} ke liye khiladi chahiye,multi_slot;ellipsis
+find_players-ru-04,find_players,ru,{opener} koi player mil sakta hai {date} {polite},question;indirect
+find_players-ru-05,find_players,ru,hamari team me {count} log kam hain,numeric;indirect;boundary
+find_players-ru-06,find_players,ru,{opener} {area} me koi khiladi hai {polite},question
+find_players-ru-07,find_players,ru,{count} khiladi ka intezaam karwa do {date} ko,numeric;imperative
+find_teams-en-01,find_teams,en,{opener} any team looking for players {polite},question;indirect
+find_teams-en-02,find_teams,en,{opener} i want to join a {sport} team {polite},plain
+find_teams-en-03,find_teams,en,which teams are recruiting in {city},question
+find_teams-en-04,find_teams,en,{opener} can i join a squad {polite},question;short
+find_teams-en-05,find_teams,en,show me teams with open spots in {area},imperative
+find_teams-en-06,find_teams,en,{opener} looking to join a {sport} side {polite},ellipsis;boundary
+find_teams-en-07,find_teams,en,{opener} any {sport} team near {area} {polite},question;multi_slot
+find_teams-mix-01,find_teams,mix,{opener} koi team recruiting kar rahi hai {polite},code_switch;question
+find_teams-mix-02,find_teams,mix,{opener} mujhe kisi squad me shamil hona hai {polite},code_switch;plain
+find_teams-mix-03,find_teams,mix,{city} ki teams ki list dikha do,code_switch;imperative
+find_teams-mix-04,find_teams,mix,{opener} {sport} team join karni hai {polite},code_switch;plain
+find_teams-mix-05,find_teams,mix,open spots wali teams batao {area} me,code_switch;imperative
+find_teams-ru-01,find_teams,ru,{opener} kisi team me join karna hai {polite},plain
+find_teams-ru-02,find_teams,ru,{opener} koi team players le rahi hai {polite},question;indirect
+find_teams-ru-03,find_teams,ru,{city} me koi {sport} team hai jo naye log le,question;multi_slot
+find_teams-ru-04,find_teams,ru,{opener} mujhe kisi team me khelna hai {polite},indirect;boundary
+find_teams-ru-05,find_teams,ru,{area} me koi team khaali jagah bhar rahi hai,imperative;indirect
+find_teams-ru-06,find_teams,ru,{opener} {area} me koi team bana rahi hai {polite},question
+find_teams-ru-07,find_teams,ru,{sport} ki team me shamil hona hai {city} me,multi_slot;plain
+navigate-en-01,navigate,en,{opener} how do i get to {venue} {polite},question;plain
+navigate-en-02,navigate,en,{opener} directions to {venue} {polite},imperative;ellipsis
+navigate-en-03,navigate,en,whats the fastest route to {venue} from {area},question;multi_slot
+navigate-en-04,navigate,en,{opener} send me the location of {venue} {polite},imperative
+navigate-en-05,navigate,en,how far is {venue} from {area},question;multi_slot;boundary
+navigate-en-06,navigate,en,{opener} is {venue} easy to find {polite},question;indirect
+navigate-en-07,navigate,en,{opener} share the map pin for {venue} {polite},imperative
+navigate-mix-01,navigate,mix,{opener} {venue} ka route batao {polite},code_switch;imperative
+navigate-mix-02,navigate,mix,{opener} google maps pe {venue} kahan hai {polite},code_switch;question
+navigate-mix-03,navigate,mix,{venue} tak pohnchne ka best way kya hai,code_switch;question
+navigate-mix-04,navigate,mix,{opener} {venue} ki location share kar do {polite},code_switch;imperative
+navigate-mix-05,navigate,mix,{area} se {venue} ka distance kitna hai,code_switch;multi_slot
+navigate-ru-01,navigate,ru,{opener} {venue} kaise pohnchun {polite},question;plain
+navigate-ru-02,navigate,ru,{opener} {venue} ka rasta batao {polite},imperative
+navigate-ru-03,navigate,ru,{venue} {area} se kitna door hai,question;multi_slot;boundary
+navigate-ru-04,navigate,ru,{opener} location bhej do {venue} ki {polite},imperative
+navigate-ru-05,navigate,ru,{opener} {venue} tak jane ka rasta {polite},ellipsis
+navigate-ru-06,navigate,ru,{area} se {venue} kitni der lagti hai,question;multi_slot
+navigate-ru-07,navigate,ru,{opener} nakshe pe {venue} dikha do {polite},imperative;indirect

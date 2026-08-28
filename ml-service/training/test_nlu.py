@@ -552,8 +552,8 @@ def test_a_500_character_utterance_is_still_parsed():
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def test_probabilities_are_a_distribution_over_fifteen_classes():
-    """15 columns, non-negative, summing to 1. `predict_proba` is the whole basis
+def test_probabilities_are_a_distribution_over_every_declared_class():
+    """One column per declared intent, non-negative, summing to 1. `predict_proba` is the whole basis
     of the abstain floor: a "confidence" that is not a probability makes 0.45 an
     arbitrary number instead of a rate."""
     entry = model_entry()
@@ -611,10 +611,22 @@ def test_the_abstain_floor_is_actually_applied():
     Both halves matter: the first is the refusal, the second is what makes the
     refusal auditable and what feeds Node's did-you-mean menu.
     """
-    got = parse("grnd chahiye")
-    assert got.threshold == 0.45
-    if not got.abstained:
-        skip(f"'grnd chahiye' now scores {got.confidence} (>= floor); no abstention to check")
+    # A single pinned utterance made this test skip itself as soon as the model
+    # got confident about it (v2 scores 'grnd chahiye' 0.55). Scan instead, and
+    # FAIL rather than skip if nothing abstains: a classifier that answers every
+    # vague fragment above the floor has lost the refusal, and silence about that
+    # is the one outcome a test must not produce.
+    vague = ("yaar wo cheez", "ground ka scene", "grnd chahiye", "batao na kuch")
+    for text in vague:
+        got = parse(text)
+        assert got.threshold == 0.45
+        if got.abstained and got.abstain_reason == "low_confidence":
+            break
+    else:
+        raise AssertionError(
+            f"none of {vague} abstained on low confidence -- the floor is not being "
+            f"applied, or the model has become overconfident on fragments"
+        )
     assert got.intent == "out_of_scope"
     assert got.abstain_reason == "low_confidence"
     assert got.top_confidence < got.threshold
@@ -744,6 +756,110 @@ def test_a_warm_parse_stays_inside_the_fifty_millisecond_budget():
 # ─────────────────────────────────────────────────────────────────────────────
 # Standalone runner
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── the v2 label contract: 8 intents were added, and a label the model never
+#    emits is dead code wearing a contract's clothes ──────────────────────────
+
+#: Derived, not typed: whatever `intent_spec` declares minus what the last v1
+#: artifact could emit. A typed list rots the moment the contract moves -- and it
+#: already did once during this wave, when a hand-written "new labels" list
+#: carried `help_menu` (never a label) and omitted `check_availability` (a v1 one).
+V1_LABELS = frozenset({
+    "book_venue", "cancel_booking", "my_bookings", "check_availability", "find_venue",
+    "venue_info", "wallet_balance", "topup_help", "refund_policy", "tournament_list",
+    "team_stats", "create_team_help", "find_opponents", "greeting", "out_of_scope",
+})
+V2_ADDED = frozenset(intent_spec.INTENTS) - V1_LABELS
+
+
+def test_the_v1_label_set_is_a_subset_of_v2():
+    """v2 ADDED labels; it must not have dropped any. If a v1 label disappeared,
+    every Node branch and every stored `assistant_turns.intent` row referring to
+    it became unreadable, and that is a migration, not a retrain."""
+    missing = V1_LABELS - set(intent_spec.INTENTS)
+    assert not missing, f"v2 dropped v1 label(s): {sorted(missing)}"
+    assert len(V2_ADDED) == 8, f"expected 8 added labels, found {sorted(V2_ADDED)}"
+
+
+def test_every_label_the_v2_contract_added_is_reachable():
+    """One high-margin utterance per added label.
+
+    This is NOT an accuracy claim -- eight rows cannot make one. It answers a
+    different question: is the label OPERATIONAL? A classifier can carry a class
+    it has learned to never predict, and the contract, the spec endpoint and
+    Node's switch would all still list it while it silently never fires. Each
+    utterance below beats its runner-up by >= 0.35, so a failure here means the
+    label has gone dead or the corpus moved under it -- not that the model is
+    imperfect.
+    """
+    cases = (
+        ("we are 3 players short for the game", "find_players"),
+        ("kisi team me jagah hai to bata do main join karunga", "find_teams"),
+        ("how do i get to centaurus from blue area", "navigate"),
+        ("i want to talk to the owner of this ground", "contact_owner"),
+        ("app me profile kaise edit karun", "app_help"),
+        ("elo kaise barhta hai", "elo_help"),
+        ("haan bilkul kar do", "affirm"),
+        ("nahi rehne do abhi", "deny"),
+    )
+    # A label added later must land here too, or it ships untested behind a green
+    # suite. This assertion is the thing that notices.
+    assert {e for _, e in cases} == V2_ADDED, (
+        f"untested added label(s): {sorted(V2_ADDED - {e for _, e in cases})}"
+    )
+    for text, expected in cases:
+        got = parse(text)
+        assert got.intent == expected, f"{text!r} -> {got.intent} ({got.confidence})"
+
+
+def test_the_dialog_group_is_exactly_affirm_and_deny():
+    """Node needs one stable way to know an intent is meaningless without context.
+    `affirm`/`deny` answer a proposal Scout made a turn ago; served with no pending
+    proposal they mean nothing, and acting on them would confirm a booking the user
+    never saw. The `dialog` group IS that flag, so its membership is a contract.
+    """
+    dialog = {i for i in intent_spec.INTENTS if intent_spec.intent_group(i) == "dialog"}
+    assert dialog == {"affirm", "deny"}, dialog
+    for i in ("book_venue", "cancel_booking", "greeting", "out_of_scope"):
+        assert intent_spec.intent_group(i) != "dialog"
+
+
+def test_every_intent_has_a_group_and_a_gloss():
+    """The gloss is not documentation -- it is what decided six v1 rows were
+    mislabelled this wave. An intent without one cannot be argued about, so its
+    boundary is whatever the model happened to learn."""
+    assert len(intent_spec.INTENT_CATALOG) == len(intent_spec.INTENTS)
+    for intent, group, gloss, _confusable in intent_spec.INTENT_CATALOG:
+        assert intent in intent_spec.INTENTS, intent
+        assert group in intent_spec.INTENT_GROUPS, (intent, group)
+        assert len(gloss.split()) >= 5, f"{intent}: gloss too thin to adjudicate: {gloss!r}"
+
+
+def test_a_squad_short_of_players_is_find_players_not_find_opponents():
+    """Regression guard for the corpus defect this wave fixed.
+
+    v1 had no `find_players`, so "we need 2 more players for a match" was filed
+    under `find_opponents` -- the least-wrong label then, a label error under the
+    v2 gloss ("ask for one or more PEOPLE to fill a squad"). Three templates and
+    two authored rows taught it, so the model answered the single most likely
+    find_players utterance with find_opponents at 0.77. Recruiting PEOPLE into my
+    side and seeking a TEAM to play against are different actions with different
+    Node handlers, so this stays pinned in all three languages.
+    """
+    for text in (
+        "need 2 more players for tonights cricket match",
+        "hamare 2 players short hain cricket ke liye",
+        "2 khiladi kam hain kal ke match ke liye",
+    ):
+        got = parse(text)
+        assert got.intent == "find_players", f"{text!r} -> {got.intent} ({got.confidence})"
+    for text in (
+        "we need a team to play against this sunday",
+        "koi team hai jo hamare saath khele",
+    ):
+        got = parse(text)
+        assert got.intent == "find_opponents", f"{text!r} -> {got.intent} ({got.confidence})"
 
 
 def collect(pattern: str | None = None) -> list[tuple[str, object]]:

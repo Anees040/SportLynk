@@ -1,33 +1,33 @@
 {
   "generated_by": "training/gen_intents.py",
-  "generated_at": "2026-08-27T22:10:53+00:00",
+  "generated_at": "2026-08-28T13:29:08+00:00",
   "wave": "S.6 Wave A",
   "model": "#4 SportLynk assistant -- intent classifier corpus",
   "seed": 20260824,
   "per_intent_target": 112,
-  "intent_spec_version": "assistant-intents-v1",
-  "intent_spec_fingerprint": "7bb78a3ac94cbdef",
-  "dataset_spec_version": "assistant-dataset-v1",
-  "dataset_spec_fingerprint": "0eb01bc58b4a040f",
+  "intent_spec_version": "assistant-intents-v2",
+  "intent_spec_fingerprint": "68396192ab4a87a4",
+  "dataset_spec_version": "assistant-dataset-v2",
+  "dataset_spec_fingerprint": "339ad58af5ddb072",
   "inputs": {
     "templates": {
       "file": "templates.csv",
-      "rows": 464,
-      "sha256": "793ac7a55b97304d6dc43386a461e92e5e8f84cd0e8e2f04a9465a0ae5f86c28"
+      "rows": 616,
+      "sha256": "0722056117b4b7efa8f79f995de1256c0fc98c1e5a7b1d662ca79047aca187cf"
     },
     "authored": {
       "file": "authored_intents.csv",
-      "rows": 236,
-      "sha256": "878d465ea8163a0c06fba08d1d574b584e980b2f549c3be0ced45c4adb0768f3"
+      "rows": 382,
+      "sha256": "d2aef007bfdd5ec00c9eceb2fd0e2fdc180413a8bdfbf84b5a76cb748bbc8ef2"
     },
     "exam": {
       "file": "assistant_test.csv",
-      "rows": 150,
-      "sha256": "f99691aa112957a5509f6d059f7db493e22c24b913b2de02b3a077ec6ab158b6",
+      "rows": 230,
+      "sha256": "1f60b29cabad57d40ae8f538ef9c063a749a4b3c81ff18ed305a6df9e235f9b4",
       "used_for": "exclusion only -- never mixed into the corpus"
     }
   },
-  "rows": 1680,
+  "rows": 2576,
   "columns": [
     "id",
     "text",
@@ -40,14 +40,22 @@
   ],
   "census": {
     "per_intent": {
+      "affirm": 112,
+      "app_help": 112,
       "book_venue": 112,
       "cancel_booking": 112,
       "check_availability": 112,
+      "contact_owner": 112,
       "create_team_help": 112,
+      "deny": 112,
+      "elo_help": 112,
       "find_opponents": 112,
+      "find_players": 112,
+      "find_teams": 112,
       "find_venue": 112,
       "greeting": 112,
       "my_bookings": 112,
+      "navigate": 112,
       "out_of_scope": 112,
       "refund_policy": 112,
       "team_stats": 112,
@@ -57,19 +65,25 @@
       "wallet_balance": 112
     },
     "langs": {
-      "en": 675,
-      "mix": 420,
-      "ru": 585
+      "en": 1035,
+      "mix": 644,
+      "ru": 897
     },
     "sources": {
-      "authored": 236,
-      "template": 1444
+      "authored": 382,
+      "template": 2194
     },
     "splits": {
-      "train": 1332,
-      "val": 348
+      "train": 2037,
+      "val": 539
     },
     "intent_x_lang": {
+      "affirm|en": 45,
+      "affirm|mix": 28,
+      "affirm|ru": 39,
+      "app_help|en": 45,
+      "app_help|mix": 28,
+      "app_help|ru": 39,
       "book_venue|en": 45,
       "book_venue|mix": 28,
       "book_venue|ru": 39,
@@ -79,12 +93,27 @@
       "check_availability|en": 45,
       "check_availability|mix": 28,
       "check_availability|ru": 39,
+      "contact_owner|en": 45,
+      "contact_owner|mix": 28,
+      "contact_owner|ru": 39,
       "create_team_help|en": 45,
       "create_team_help|mix": 28,
       "create_team_help|ru": 39,
+      "deny|en": 45,
+      "deny|mix": 28,
+      "deny|ru": 39,
+      "elo_help|en": 45,
+      "elo_help|mix": 28,
+      "elo_help|ru": 39,
       "find_opponents|en": 45,
       "find_opponents|mix": 28,
       "find_opponents|ru": 39,
+      "find_players|en": 45,
+      "find_players|mix": 28,
+      "find_players|ru": 39,
+      "find_teams|en": 45,
+      "find_teams|mix": 28,
+      "find_teams|ru": 39,
       "find_venue|en": 45,
       "find_venue|mix": 28,
       "find_venue|ru": 39,
@@ -94,6 +123,9 @@
       "my_bookings|en": 45,
       "my_bookings|mix": 28,
       "my_bookings|ru": 39,
+      "navigate|en": 45,
+      "navigate|mix": 28,
+      "navigate|ru": 39,
       "out_of_scope|en": 45,
       "out_of_scope|mix": 28,
       "out_of_scope|ru": 39,
@@ -117,57 +149,106 @@
       "wallet_balance|ru": 39
     },
     "phenomena": {
-      "question": 828,
-      "code_switch": 421,
-      "plain": 374,
-      "imperative": 313,
-      "multi_slot": 308,
-      "short": 253,
-      "politeness": 219,
-      "numeric": 204,
-      "run_on": 177,
-      "ellipsis": 109,
-      "boundary": 107,
-      "negation": 91,
+      "question": 1192,
+      "code_switch": 604,
+      "short": 496,
+      "plain": 473,
+      "imperative": 467,
+      "multi_slot": 390,
+      "boundary": 252,
+      "numeric": 252,
+      "politeness": 244,
+      "run_on": 183,
+      "negation": 172,
+      "ellipsis": 165,
+      "indirect": 135,
+      "slang": 75,
       "typo": 50,
-      "slang": 48,
-      "sms_speak": 36,
-      "indirect": 29,
+      "sms_speak": 47,
       "emoji": 14,
       "misspelled_venue": 4
     },
     "per_template": {
-      "templates": 464,
-      "used": 463,
-      "unused": 1,
+      "templates": 616,
+      "used": 614,
+      "unused": 2,
       "max": 8,
       "min": 1,
-      "mean": 3.12,
+      "mean": 3.57,
       "cap": 12,
       "unused_ids": [
+        "greeting-en-40",
         "greeting-en-41"
       ]
     },
     "text_length": {
       "chars_min": 3,
       "chars_max": 96,
-      "chars_mean": 42.3,
+      "chars_mean": 39.8,
       "words_min": 1,
       "words_max": 19,
-      "words_mean": 8.17
+      "words_mean": 7.77
     }
   },
   "allocation": {
-    "book_venue": {
+    "affirm": {
       "authored": {
-        "en": 5,
+        "en": 4,
         "mix": 5,
         "ru": 6
       },
       "template_rows": {
-        "en": 40,
+        "en": 41,
         "mix": 23,
         "ru": 33
+      },
+      "effective_capacity": {
+        "en": 84,
+        "mix": 60,
+        "ru": 84
+      },
+      "spec_capacity": {
+        "en": 84,
+        "mix": 60,
+        "ru": 84
+      },
+      "floor_moves": [],
+      "unplaced": 0
+    },
+    "app_help": {
+      "authored": {
+        "en": 4,
+        "mix": 5,
+        "ru": 7
+      },
+      "template_rows": {
+        "en": 41,
+        "mix": 23,
+        "ru": 32
+      },
+      "effective_capacity": {
+        "en": 84,
+        "mix": 60,
+        "ru": 84
+      },
+      "spec_capacity": {
+        "en": 84,
+        "mix": 60,
+        "ru": 84
+      },
+      "floor_moves": [],
+      "unplaced": 0
+    },
+    "book_venue": {
+      "authored": {
+        "en": 6,
+        "mix": 6,
+        "ru": 8
+      },
+      "template_rows": {
+        "en": 39,
+        "mix": 22,
+        "ru": 31
       },
       "effective_capacity": {
         "en": 76,
@@ -184,14 +265,14 @@
     },
     "cancel_booking": {
       "authored": {
-        "en": 4,
-        "mix": 5,
-        "ru": 6
+        "en": 5,
+        "mix": 6,
+        "ru": 7
       },
       "template_rows": {
-        "en": 41,
-        "mix": 23,
-        "ru": 33
+        "en": 40,
+        "mix": 22,
+        "ru": 32
       },
       "effective_capacity": {
         "en": 64,
@@ -230,6 +311,30 @@
       "floor_moves": [],
       "unplaced": 0
     },
+    "contact_owner": {
+      "authored": {
+        "en": 4,
+        "mix": 5,
+        "ru": 6
+      },
+      "template_rows": {
+        "en": 41,
+        "mix": 23,
+        "ru": 33
+      },
+      "effective_capacity": {
+        "en": 82,
+        "mix": 60,
+        "ru": 84
+      },
+      "spec_capacity": {
+        "en": 82,
+        "mix": 60,
+        "ru": 84
+      },
+      "floor_moves": [],
+      "unplaced": 0
+    },
     "create_team_help": {
       "authored": {
         "en": 4,
@@ -254,16 +359,64 @@
       "floor_moves": [],
       "unplaced": 0
     },
-    "find_opponents": {
+    "deny": {
       "authored": {
-        "en": 5,
+        "en": 4,
         "mix": 5,
         "ru": 6
       },
       "template_rows": {
-        "en": 40,
+        "en": 41,
         "mix": 23,
         "ru": 33
+      },
+      "effective_capacity": {
+        "en": 84,
+        "mix": 60,
+        "ru": 84
+      },
+      "spec_capacity": {
+        "en": 84,
+        "mix": 60,
+        "ru": 84
+      },
+      "floor_moves": [],
+      "unplaced": 0
+    },
+    "elo_help": {
+      "authored": {
+        "en": 4,
+        "mix": 5,
+        "ru": 6
+      },
+      "template_rows": {
+        "en": 41,
+        "mix": 23,
+        "ru": 33
+      },
+      "effective_capacity": {
+        "en": 84,
+        "mix": 60,
+        "ru": 84
+      },
+      "spec_capacity": {
+        "en": 84,
+        "mix": 60,
+        "ru": 84
+      },
+      "floor_moves": [],
+      "unplaced": 0
+    },
+    "find_opponents": {
+      "authored": {
+        "en": 4,
+        "mix": 5,
+        "ru": 5
+      },
+      "template_rows": {
+        "en": 41,
+        "mix": 23,
+        "ru": 34
       },
       "effective_capacity": {
         "en": 73,
@@ -274,6 +427,54 @@
         "en": 73,
         "mix": 48,
         "ru": 55
+      },
+      "floor_moves": [],
+      "unplaced": 0
+    },
+    "find_players": {
+      "authored": {
+        "en": 5,
+        "mix": 5,
+        "ru": 7
+      },
+      "template_rows": {
+        "en": 40,
+        "mix": 23,
+        "ru": 32
+      },
+      "effective_capacity": {
+        "en": 84,
+        "mix": 54,
+        "ru": 78
+      },
+      "spec_capacity": {
+        "en": 84,
+        "mix": 54,
+        "ru": 78
+      },
+      "floor_moves": [],
+      "unplaced": 0
+    },
+    "find_teams": {
+      "authored": {
+        "en": 4,
+        "mix": 5,
+        "ru": 6
+      },
+      "template_rows": {
+        "en": 41,
+        "mix": 23,
+        "ru": 33
+      },
+      "effective_capacity": {
+        "en": 77,
+        "mix": 52,
+        "ru": 81
+      },
+      "spec_capacity": {
+        "en": 77,
+        "mix": 55,
+        "ru": 84
       },
       "floor_moves": [],
       "unplaced": 0
@@ -304,14 +505,14 @@
     },
     "greeting": {
       "authored": {
-        "en": 5,
-        "mix": 5,
-        "ru": 6
+        "en": 6,
+        "mix": 6,
+        "ru": 7
       },
       "template_rows": {
-        "en": 40,
-        "mix": 23,
-        "ru": 33
+        "en": 39,
+        "mix": 22,
+        "ru": 32
       },
       "effective_capacity": {
         "en": 59,
@@ -328,14 +529,14 @@
     },
     "my_bookings": {
       "authored": {
-        "en": 4,
+        "en": 5,
         "mix": 5,
-        "ru": 6
+        "ru": 7
       },
       "template_rows": {
-        "en": 41,
+        "en": 40,
         "mix": 23,
-        "ru": 33
+        "ru": 32
       },
       "effective_capacity": {
         "en": 60,
@@ -350,16 +551,40 @@
       "floor_moves": [],
       "unplaced": 0
     },
+    "navigate": {
+      "authored": {
+        "en": 4,
+        "mix": 5,
+        "ru": 6
+      },
+      "template_rows": {
+        "en": 41,
+        "mix": 23,
+        "ru": 33
+      },
+      "effective_capacity": {
+        "en": 84,
+        "mix": 58,
+        "ru": 82
+      },
+      "spec_capacity": {
+        "en": 84,
+        "mix": 58,
+        "ru": 84
+      },
+      "floor_moves": [],
+      "unplaced": 0
+    },
     "out_of_scope": {
       "authored": {
         "en": 6,
-        "mix": 6,
-        "ru": 8
+        "mix": 7,
+        "ru": 9
       },
       "template_rows": {
         "en": 39,
-        "mix": 22,
-        "ru": 31
+        "mix": 21,
+        "ru": 30
       },
       "effective_capacity": {
         "en": 60,
@@ -376,14 +601,14 @@
     },
     "refund_policy": {
       "authored": {
-        "en": 4,
-        "mix": 5,
-        "ru": 6
+        "en": 5,
+        "mix": 6,
+        "ru": 7
       },
       "template_rows": {
-        "en": 41,
-        "mix": 23,
-        "ru": 33
+        "en": 40,
+        "mix": 22,
+        "ru": 32
       },
       "effective_capacity": {
         "en": 69,
@@ -424,14 +649,14 @@
     },
     "topup_help": {
       "authored": {
-        "en": 4,
-        "mix": 5,
-        "ru": 6
+        "en": 5,
+        "mix": 6,
+        "ru": 7
       },
       "template_rows": {
-        "en": 41,
-        "mix": 23,
-        "ru": 33
+        "en": 40,
+        "mix": 22,
+        "ru": 32
       },
       "effective_capacity": {
         "en": 60,
@@ -449,12 +674,12 @@
     "tournament_list": {
       "authored": {
         "en": 4,
-        "mix": 5,
+        "mix": 6,
         "ru": 6
       },
       "template_rows": {
         "en": 41,
-        "mix": 23,
+        "mix": 22,
         "ru": 33
       },
       "effective_capacity": {
@@ -473,13 +698,13 @@
     "venue_info": {
       "authored": {
         "en": 5,
-        "mix": 5,
-        "ru": 6
+        "mix": 6,
+        "ru": 7
       },
       "template_rows": {
         "en": 40,
-        "mix": 23,
-        "ru": 33
+        "mix": 22,
+        "ru": 32
       },
       "effective_capacity": {
         "en": 88,
@@ -497,13 +722,13 @@
     "wallet_balance": {
       "authored": {
         "en": 4,
-        "mix": 5,
-        "ru": 6
+        "mix": 6,
+        "ru": 7
       },
       "template_rows": {
         "en": 41,
-        "mix": 23,
-        "ru": 33
+        "mix": 22,
+        "ru": 32
       },
       "effective_capacity": {
         "en": 60,
@@ -529,11 +754,11 @@
     "metric": "max(char 4-shingle Jaccard, word-set Jaccard)",
     "dropped": 0,
     "by_metric": {},
-    "max_score_seen": 0.5,
+    "max_score_seen": 0.7143,
     "examples": [],
     "exam_file": "assistant_test.csv",
-    "exam_sha256": "f99691aa112957a5509f6d059f7db493e22c24b913b2de02b3a077ec6ab158b6",
-    "exam_rows": 150,
+    "exam_sha256": "1f60b29cabad57d40ae8f538ef9c063a749a4b3c81ff18ed305a6df9e235f9b4",
+    "exam_rows": 230,
     "exact_skipped_during_draw": 0,
     "authored_exact_dropped": 0,
     "limitation": "the exam is compared against every corpus row, generated and authored alike, and only corpus rows are ever dropped"
@@ -542,19 +767,35 @@
     "grouped_by": "template_id",
     "fraction_target": 0.2,
     "per_intent": {
+      "affirm": {
+        "rows": 112,
+        "val": 25,
+        "val_fraction": 0.2232,
+        "val_authored": 3,
+        "val_template_groups": 4,
+        "train_template_groups": 15
+      },
+      "app_help": {
+        "rows": 112,
+        "val": 23,
+        "val_fraction": 0.2054,
+        "val_authored": 3,
+        "val_template_groups": 4,
+        "train_template_groups": 15
+      },
       "book_venue": {
         "rows": 112,
-        "val": 24,
-        "val_fraction": 0.2143,
-        "val_authored": 3,
+        "val": 25,
+        "val_fraction": 0.2232,
+        "val_authored": 4,
         "val_template_groups": 4,
         "train_template_groups": 14
       },
       "cancel_booking": {
         "rows": 112,
-        "val": 26,
-        "val_fraction": 0.2321,
-        "val_authored": 3,
+        "val": 27,
+        "val_fraction": 0.2411,
+        "val_authored": 4,
         "val_template_groups": 4,
         "train_template_groups": 12
       },
@@ -566,6 +807,14 @@
         "val_template_groups": 4,
         "train_template_groups": 14
       },
+      "contact_owner": {
+        "rows": 112,
+        "val": 24,
+        "val_fraction": 0.2143,
+        "val_authored": 3,
+        "val_template_groups": 4,
+        "train_template_groups": 15
+      },
       "create_team_help": {
         "rows": 112,
         "val": 23,
@@ -574,6 +823,22 @@
         "val_template_groups": 6,
         "train_template_groups": 28
       },
+      "deny": {
+        "rows": 112,
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 3,
+        "val_template_groups": 4,
+        "train_template_groups": 15
+      },
+      "elo_help": {
+        "rows": 112,
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 3,
+        "val_template_groups": 4,
+        "train_template_groups": 15
+      },
       "find_opponents": {
         "rows": 112,
         "val": 22,
@@ -581,6 +846,22 @@
         "val_authored": 3,
         "val_template_groups": 3,
         "train_template_groups": 15
+      },
+      "find_players": {
+        "rows": 112,
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 3,
+        "val_template_groups": 4,
+        "train_template_groups": 15
+      },
+      "find_teams": {
+        "rows": 112,
+        "val": 26,
+        "val_fraction": 0.2321,
+        "val_authored": 3,
+        "val_template_groups": 5,
+        "train_template_groups": 14
       },
       "find_venue": {
         "rows": 112,
@@ -594,31 +875,39 @@
         "rows": 112,
         "val": 22,
         "val_fraction": 0.1964,
-        "val_authored": 3,
-        "val_template_groups": 16,
-        "train_template_groups": 60
+        "val_authored": 4,
+        "val_template_groups": 14,
+        "train_template_groups": 61
       },
       "my_bookings": {
         "rows": 112,
-        "val": 22,
-        "val_fraction": 0.1964,
+        "val": 23,
+        "val_fraction": 0.2054,
         "val_authored": 3,
         "val_template_groups": 5,
         "train_template_groups": 20
       },
+      "navigate": {
+        "rows": 112,
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 3,
+        "val_template_groups": 4,
+        "train_template_groups": 15
+      },
       "out_of_scope": {
         "rows": 112,
-        "val": 23,
-        "val_fraction": 0.2054,
+        "val": 22,
+        "val_fraction": 0.1964,
         "val_authored": 4,
         "val_template_groups": 10,
         "train_template_groups": 43
       },
       "refund_policy": {
         "rows": 112,
-        "val": 24,
-        "val_fraction": 0.2143,
-        "val_authored": 3,
+        "val": 25,
+        "val_fraction": 0.2232,
+        "val_authored": 4,
         "val_template_groups": 6,
         "train_template_groups": 29
       },
@@ -632,11 +921,11 @@
       },
       "topup_help": {
         "rows": 112,
-        "val": 23,
-        "val_fraction": 0.2054,
-        "val_authored": 3,
-        "val_template_groups": 9,
-        "train_template_groups": 32
+        "val": 24,
+        "val_fraction": 0.2143,
+        "val_authored": 4,
+        "val_template_groups": 8,
+        "train_template_groups": 33
       },
       "tournament_list": {
         "rows": 112,
@@ -648,9 +937,9 @@
       },
       "venue_info": {
         "rows": 112,
-        "val": 23,
-        "val_fraction": 0.2054,
-        "val_authored": 3,
+        "val": 24,
+        "val_fraction": 0.2143,
+        "val_authored": 4,
         "val_template_groups": 4,
         "train_template_groups": 16
       },
@@ -659,8 +948,8 @@
         "val": 22,
         "val_fraction": 0.1964,
         "val_authored": 3,
-        "val_template_groups": 6,
-        "train_template_groups": 31
+        "val_template_groups": 7,
+        "train_template_groups": 30
       }
     }
   },
@@ -668,27 +957,27 @@
     "lang_x_intent": {
       "cramers_v": 0.0,
       "chi2": 0.0,
-      "dof": 28,
-      "n": 1680
+      "dof": 44,
+      "n": 2576
     },
     "source_x_intent": {
-      "cramers_v": 0.0318,
-      "chi2": 1.7,
-      "dof": 14,
-      "n": 1680
+      "cramers_v": 0.0479,
+      "chi2": 5.9,
+      "dof": 22,
+      "n": 2576
     },
     "split_x_intent": {
-      "cramers_v": 0.023,
-      "chi2": 0.89,
-      "dof": 14,
-      "n": 1680
+      "cramers_v": 0.0309,
+      "chi2": 2.46,
+      "dof": 22,
+      "n": 2576
     },
     "vocabulary": {
-      "train_types": 990,
-      "val_types": 509,
-      "val_types_unseen": 96,
-      "val_rows_with_unseen_token": 127,
-      "val_rows": 348
+      "train_types": 1190,
+      "val_types": 619,
+      "val_types_unseen": 124,
+      "val_rows_with_unseen_token": 174,
+      "val_rows": 539
     }
   },
   "checks": [
@@ -708,7 +997,7 @@
       "name": "templates_ids_unique",
       "ok": true,
       "severity": "gate",
-      "detail": "464 distinct ids"
+      "detail": "616 distinct ids"
     },
     {
       "name": "templates_ids_agree",
@@ -720,13 +1009,13 @@
       "name": "templates_contract",
       "ok": true,
       "severity": "gate",
-      "detail": "15 intents, 3 langs, 18 phenomena all recognised"
+      "detail": "23 intents, 3 langs, 18 phenomena all recognised"
     },
     {
       "name": "templates_valid",
       "ok": true,
       "severity": "gate",
-      "detail": "all 464 patterns pass validate_pattern()"
+      "detail": "all 616 patterns pass validate_pattern()"
     },
     {
       "name": "templates_distinct",
@@ -744,7 +1033,7 @@
       "name": "authored_ids",
       "ok": true,
       "severity": "gate",
-      "detail": "236 rows, ids unique and well formed"
+      "detail": "382 rows, ids unique and well formed"
     },
     {
       "name": "authored_contract",
@@ -756,7 +1045,7 @@
       "name": "authored_text_clean",
       "ok": true,
       "severity": "gate",
-      "detail": "all 236 rows pass text_problems()"
+      "detail": "all 382 rows pass text_problems()"
     },
     {
       "name": "authored_distinct",
@@ -774,7 +1063,7 @@
       "name": "exam_ids",
       "ok": true,
       "severity": "gate",
-      "detail": "150 rows, ids unique and well formed"
+      "detail": "230 rows, ids unique and well formed"
     },
     {
       "name": "exam_contract",
@@ -786,7 +1075,7 @@
       "name": "exam_text_clean",
       "ok": true,
       "severity": "gate",
-      "detail": "all 150 rows pass text_problems()"
+      "detail": "all 230 rows pass text_problems()"
     },
     {
       "name": "exam_distinct",
@@ -798,25 +1087,25 @@
       "name": "exam_lock",
       "ok": true,
       "severity": "gate",
-      "detail": "matches assistant_test_meta.json (f99691aa1129..)"
+      "detail": "matches assistant_test_meta.json (1f60b29cabad..)"
     },
     {
       "name": "intent_coverage",
       "ok": true,
       "severity": "gate",
-      "detail": "templates cover 15/15, authored 15/15"
+      "detail": "templates cover 23/23, authored 23/23"
     },
     {
       "name": "authored_floor",
       "ok": true,
       "severity": "gate",
-      "detail": "236 hand-written rows, >= 8 for every intent"
+      "detail": "382 hand-written rows, >= 8 for every intent"
     },
     {
       "name": "rendered_clean",
       "ok": true,
       "severity": "gate",
-      "detail": "2579 candidate rows across 464 templates, all clean and deduplicated"
+      "detail": "4367 candidate rows across 616 templates, all clean and deduplicated"
     },
     {
       "name": "templates_per_lang",
@@ -834,25 +1123,25 @@
       "name": "quota_feasible",
       "ok": true,
       "severity": "gate",
-      "detail": "112 rows reachable for all 15 intents"
+      "detail": "112 rows reachable for all 23 intents"
     },
     {
       "name": "exam_near_dup",
       "ok": true,
       "severity": "warn",
-      "detail": "0 corpus row(s) dropped at >= 0.80 ({}), max score seen 0.500"
+      "detail": "0 corpus row(s) dropped at >= 0.80 ({}), max score seen 0.714"
     },
     {
       "name": "no_label_contradiction",
       "ok": true,
       "severity": "gate",
-      "detail": "all 1680 distinct utterances carry exactly one label"
+      "detail": "all 2576 distinct utterances carry exactly one label"
     },
     {
       "name": "split_fraction",
       "ok": true,
       "severity": "gate",
-      "detail": "every intent's val share in [0.196,0.232]"
+      "detail": "every intent's val share in [0.196,0.241]"
     },
     {
       "name": "split_grouped",
@@ -870,13 +1159,13 @@
       "name": "rows_per_intent",
       "ok": true,
       "severity": "gate",
-      "detail": "all 15 intents in [112,112]"
+      "detail": "all 23 intents in [112,112]"
     },
     {
       "name": "rows_total",
       "ok": true,
       "severity": "gate",
-      "detail": "1680 rows (want [1500,1950])"
+      "detail": "2576 rows (want [2300,2990])"
     },
     {
       "name": "lang_floor",
@@ -888,25 +1177,25 @@
       "name": "rows_per_template",
       "ok": true,
       "severity": "gate",
-      "detail": "max 8 rows from one template (cap 12), mean 3.1"
+      "detail": "max 8 rows from one template (cap 12), mean 3.6"
     },
     {
       "name": "templates_used",
       "ok": false,
       "severity": "warn",
-      "detail": "1 template(s) contributed no rows: ['greeting-en-41']"
+      "detail": "2 template(s) contributed no rows: ['greeting-en-40', 'greeting-en-41']"
     },
     {
       "name": "corpus_distinct",
       "ok": true,
       "severity": "gate",
-      "detail": "1680 rows, 1680 distinct utterances"
+      "detail": "2576 rows, 2576 distinct utterances"
     },
     {
       "name": "ids_unique",
       "ok": true,
       "severity": "gate",
-      "detail": "it-0001..it-1680"
+      "detail": "it-0001..it-2576"
     },
     {
       "name": "out_of_scope_topic_words",
@@ -918,13 +1207,13 @@
       "name": "shortcut_association",
       "ok": true,
       "severity": "warn",
-      "detail": "strongest is source_x_intent V=0.0318 (warn at 0.50); split_x_intent V=0.023 (stratification, want ~0)"
+      "detail": "strongest is source_x_intent V=0.0479 (warn at 0.50); split_x_intent V=0.0309 (stratification, want ~0)"
     },
     {
       "name": "val_generalisation",
       "ok": true,
       "severity": "warn",
-      "detail": "127/348 val rows contain a token unseen in train (96 of 509 val types)"
+      "detail": "174/539 val rows contain a token unseen in train (124 of 619 val types)"
     },
     {
       "name": "determinism",
@@ -934,7 +1223,7 @@
     }
   ],
   "all_passed": true,
-  "sha256": "c539b8fc4057cfe67736bd4a8f903542c0410b3756e12317649d118d077cbb92",
+  "sha256": "adbdd5d63a81b8e1dac2b3c4c86d642c8e5ffb372fcd2807eee91ed41894d565",
   "output": "data/assistant/intents.csv",
   "reproduce": "python training/gen_intents.py --seed 20260824 --per-intent 112"
 }

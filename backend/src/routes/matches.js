@@ -55,8 +55,8 @@ const access = require('../utils/teamAccess');
 const mc = require('../utils/matchCore');
 const elo = require('../utils/elo');
 const settings = require('../utils/globalSettings');
-const teamStats = require('../utils/teamStats');
 const ml = require('../services/mlClient');
+const roster = require('../services/rosterService');
 const bus = require('../realtime/bus');
 const { PREVIEW_LABEL } = require('../utils/matchPreview');
 const { notify } = require('../utils/notify');
@@ -390,244 +390,25 @@ router.get('/owner/pending', async (req, res, next) => {
 });
 
 /**
- * GET /api/matches/opponents?teamId=&q=
+ * GET /api/matches/opponents — FR5.3 – FR5.5, the Find Opponents list.
  *
- * The Find Opponents list (FR5.3 – FR5.5): public teams in the same sport that
- * the caller does not already belong to, CLOSEST RATING FIRST, each carrying its
- * competitiveness score against the caller's team and its roster trust badge.
- *
- * WHY NOT /teams/discover
- * That endpoint is rating-ordered and team-agnostic — it cannot know which team
- * you would be challenging, so it cannot order by rating PROXIMITY, cannot
- * compute competitiveness, and does not carry trust. All three are what this
- * screen is specified to show, and all three depend on the pairing rather than on
- * either team alone.
- *
- * FR5.3 — S.5 Wave B MOVED THE RANKING TO THE MODEL SEAM, and the SQL's
- * `abs(t.elo - my elo)` ordering is now the FALLBACK rather than the answer. The
- * ml-service scores 0.6 x rating proximity + 0.2 x opponent trust + 0.2 x recent
- * activity and returns a component breakdown per row; when it cannot be reached
- * the rows ship in this query's order with S.2's competitiveness formula, which is
- * why the ORDER BY still has to be right. `withinBand` is reported per row on both
- * paths so the UI can mark where the good-match band ends.
+ * TRANSPORT ONLY, for the same reason as suggested-players: the candidate pool,
+ * the rating band, the competitiveness score, the trust badge and the ranking
+ * fallback now live in services/rosterService.js so Scout's `find_opponents`
+ * answers with the SAME opinion this screen shows (FR8.15). The teamId guard
+ * moved with them — the assistant resolves a team by name and has to be refused
+ * in the same words a bad query string is.
  */
 router.get('/opponents', async (req, res, next) => {
-  const teamId = uuid(req.query.teamId || req.query.team_id);
-  if (!access.isUuid(teamId)) return fail(res, 400, 'Pick one of your teams first.');
-  const q = access.squash(req.query.q || '');
-
   const client = await pool.connect();
   try {
-    const role = await mc.roleInTeam(client, teamId, req.user.id);
-    if (!role) return fail(res, 403, 'You are not a member of that team.');
-
-    const features = await mc.teamFeatures(client, [teamId]);
-    const me = features.get(teamId);
-    if (!me) return fail(res, 404, 'Team not found.');
-
-    const { base } = await settings.elo({ client });
-    const myElo = me.elo || base;
-
-    const params = [req.user.id, teamId, me.sport, myElo];
-    let extra = '';
-    if (q) {
-      params.push(`%${q}%`);
-      extra = ` AND t.name ILIKE $${params.length}`;
-    }
-
-    const { rows } = await client.query(
-      `SELECT t.id, t.name, t.logo_url, t.city, t.sport::text AS sport,
-              t.elo, t.wins, t.losses, t.draws, t.elo_frozen,
-              COALESCE(tr.trust, 100) AS trust_score,
-              COALESCE(tr.members, 0) AS member_count,
-              abs(COALESCE(t.elo, $4) - $4) AS gap
-         FROM teams t
-         LEFT JOIN LATERAL (
-           SELECT round(avg(pp.trust_score))::int AS trust, count(*)::int AS members
-             FROM team_members m
-             LEFT JOIN player_profiles pp ON pp.user_id = m.user_id
-            WHERE m.team_id = t.id
-         ) tr ON TRUE
-        WHERE t.visibility = 'public'
-          AND t.sport = $3
-          AND t.id <> $2
-          AND NOT EXISTS (
-                SELECT 1 FROM team_members m
-                 WHERE m.team_id = t.id AND m.user_id = $1
-              )${extra}
-        ORDER BY abs(COALESCE(t.elo, $4) - $4), lower(t.name)
-        LIMIT 60`,
-      params,
-    );
-
-    // ── Recent activity for the whole pool, in one query ────────────────────
-    // The recommender's third component. Counted over the SAME 30-day window and
-    // the SAME statuses utils/teamStats.js already counts a team's own activity
-    // over (a disputed fixture was still played), so the number behind a "Playing
-    // regularly" reason is the number that team's own profile card shows.
-    //
-    // LEFT JOIN LATERAL over unnest, so a team with no matches comes back as ZERO
-    // rather than missing: zero is a measurement — genuinely inactive — and
-    // reco_rank scores it 0.0, while an absent value would take the neutral prior
-    // and quietly reward a dormant team.
-    const ids = rows.map((r) => r.id);
-    const activity = new Map();
-    if (ids.length) {
-      const { rows: act } = await client.query(
-        `SELECT x.id, COALESCE(c.n, 0)::int AS activity_30d
-           FROM unnest($1::uuid[]) AS x(id)
-           LEFT JOIN LATERAL (
-             SELECT count(*) AS n
-               FROM matches m
-              WHERE (m.challenger_team = x.id OR m.opponent_team = x.id)
-                AND m.status = ANY($2::text[])
-                AND COALESCE(m.verified_at, m.updated_at, m.created_at) >= now() - $3::interval
-           ) c ON TRUE`,
-        [ids, teamStats.SERIES_STATUSES, `${teamStats.ACTIVITY_WINDOW_DAYS} days`],
-      );
-      for (const a of act) activity.set(a.id, mc.int0(a.activity_30d));
-    }
-
-    const opponents = rows.map((r) => {
-      const stats = {
-        wins: mc.int0(r.wins), losses: mc.int0(r.losses), draws: mc.int0(r.draws),
-      };
-      const rating = mc.int0(r.elo) || base;
-      const ranked = elo.isRanked(stats);
-      return {
-        id: r.id,
-        name: r.name,
-        logoUrl: r.logo_url || null,
-        city: r.city || null,
-        sport: r.sport,
-        elo: rating,
-        ranked,
-        displayElo: ranked ? rating : null,
-        played: stats.wins + stats.losses + stats.draws,
-        ...stats,
-        memberCount: mc.int0(r.member_count),
-        eloFrozen: r.elo_frozen === true,
-        ...mc.trustBadge(r.trust_score),
-        eloGap: mc.int0(r.gap),
-        withinBand: mc.int0(r.gap) <= elo.PREFERRED_ELO_BAND,
-        // FR5.4 — null whenever either side is unranked, so the bar renders
-        // "Unranked" instead of a percentage derived from a placeholder 1000.
-        //
-        // THIS IS NOW THE FALLBACK VALUE. When the ranking service answers, it is
-        // overwritten below by the three-component score; when it does not, this v1
-        // number ships unchanged and the screen keeps working. Both paths obey the
-        // same unranked rule, which is why the swap is invisible to the UI.
-        competitiveness: elo.competitivenessFor(me, { elo: rating, ...stats }),
-        matchesLast30d: activity.get(r.id) ?? 0,
-        // Populated only on the ranked path — see below. Null here rather than
-        // absent so Dart's model reads one shape from both paths.
-        matchPct: null,
-        rankScore: null,
-        components: null,
-        reasons: [],
-      };
+    const out = await roster.suggestOpponents(client, {
+      teamId: req.query.teamId || req.query.team_id,
+      userId: req.user.id,
+      q: req.query.q || '',
     });
-
-    // ── FR5.3 — model ranking, v1 kept as the fallback ──────────────────────
-    // The ml-service scores each pairing on 0.6 x rating proximity + 0.2 x trust +
-    // 0.2 x recent activity and returns a per-row component breakdown, which the app
-    // renders as the expandable "Why this match?" line. Rating proximity is the same
-    // curve utils/elo.js uses, so the primary and fallback paths agree about what a
-    // close match is and only disagree about what else counts.
-    //
-    // If it is unreachable the rows keep the SQL's rating-proximity order and v1's
-    // competitiveness, and `ranking.source` says `heuristic` — the feature degrades
-    // to exactly what S.2 shipped rather than going blank (ER2.6).
-    const ranked = await ml.recommendOpponents({
-      teamId,
-      team: {
-        team_id: teamId,
-        elo: myElo,
-        ranked: elo.isRanked(me),
-        trust_score: me.trustScore,
-        sport: me.sport,
-        city: me.city,
-      },
-      candidates: opponents.map((o) => ({
-        team_id: o.id,
-        elo: o.elo,
-        ranked: o.ranked,
-        trust_score: o.trustScore,
-        matches_30d: o.matchesLast30d,
-      })),
-      limit: Math.max(1, opponents.length),
-    });
-
-    let list = opponents;
-    if (ranked.available && ranked.items.length) {
-      const enriched = new Map(
-        opponents.map((o) => [String(o.id), o]),
-      );
-      for (const it of ranked.items) {
-        const row = enriched.get(String(it.team_id));
-        if (!row) continue;
-        // `?? null` and not `|| null`: a legitimate 0 must survive, and
-        // competitiveness is deliberately null for an unranked pairing.
-        row.competitiveness = it.competitiveness ?? null;
-        row.matchPct = it.match_pct ?? null;
-        row.rankScore = it.score ?? null;
-        row.components = it.components || null;
-        row.reasons = Array.isArray(it.reasons) ? it.reasons : [];
-      }
-      // Reorder to the scorer's ranking. Anything it did not score (it cannot
-      // happen today, but a future filter there would make it possible) keeps its
-      // v1 position at the tail rather than vanishing from the screen.
-      const seen = new Set();
-      const ordered = [];
-      for (const it of ranked.items) {
-        const row = enriched.get(String(it.team_id));
-        if (row && !seen.has(String(it.team_id))) {
-          ordered.push(row);
-          seen.add(String(it.team_id));
-        }
-      }
-      for (const o of opponents) if (!seen.has(String(o.id))) ordered.push(o);
-      list = ordered;
-    }
-
-    return ok(res, {
-      myTeam: {
-        id: me.id,
-        name: me.name,
-        logoUrl: me.logoUrl,
-        sport: me.sport,
-        elo: myElo,
-        ranked: elo.isRanked(me),
-        displayElo: elo.displayElo(me, base),
-        played: me.wins + me.losses + me.draws,
-        wins: me.wins,
-        losses: me.losses,
-        draws: me.draws,
-        ...mc.trustBadge(me.trustScore),
-        eloFrozen: me.eloFrozen,
-      },
-      // Shipped so the Challenge button can be disabled for a non-captain rather
-      // than offered and then refused by the API with a 403.
-      myRole: role,
-      canChallenge: role === 'captain',
-      preferredBand: elo.PREFERRED_ELO_BAND,
-      // Which path produced the order and the percentages, in the same spirit as
-      // the pricing card's `source` badge: a screen that shows a ranking is
-      // entitled to say what ranked it, and the FYP committee is entitled to ask.
-      ranking: {
-        source: ranked.source,
-        available: ranked.available,
-        specVersion: ranked.rankSpecVersion,
-        specFingerprint: ranked.rankSpecFingerprint,
-        weights: ranked.weights,
-        componentOrder: ranked.componentOrder,
-        activityWindowDays: teamStats.ACTIVITY_WINDOW_DAYS,
-        fallbackNote: ranked.available
-          ? null
-          : 'Ordered by rating proximity — the ranking service is unavailable',
-      },
-      opponents: list,
-    });
+    if (!out.ok) return fail(res, out.status, out.message);
+    return ok(res, out.data);
   } catch (e) {
     const f = friendlyDbError(e);
     return f ? fail(res, f.status, f.message) : next(e);

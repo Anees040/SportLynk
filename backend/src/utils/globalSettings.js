@@ -42,6 +42,12 @@ const DEFAULTS = Object.freeze({
   commission_pct: 0,
   deposit_pct: 20,
   sports_enabled: Object.freeze({ football: true, cricket: true }),
+  assistant: Object.freeze({
+    name: 'Scout',
+    confidence_floor: 0.45,
+    escalation_enabled: true,
+    policy_text: Object.freeze({}),
+  }),
   match: Object.freeze({
     challenge_ttl_hours: 48,   // FR5.12
     dispute_window_hours: 24,  // FR5.17
@@ -178,4 +184,47 @@ async function match({ client = null, fresh = false } = {}) {
   };
 }
 
-module.exports = { DEFAULTS, get, elo, match, invalidate, clampNum };
+
+/**
+ * Scout's settings (S.6), validated and camelCased.
+ *
+ *   name              what the assistant calls itself in its own replies
+ *   confidenceFloor   below this the dialog manager shows the capability menu
+ *                     instead of guessing. A MIRROR of the artifact's threshold,
+ *                     not the authority on it: the model applies its own floor
+ *                     and reports it on every parse, so this value exists for the
+ *                     UI copy and for an owner who wants Scout to be more
+ *                     cautious than the artifact is — never to loosen it.
+ *   escalationEnabled whether an unknown venue question may be forwarded to that
+ *                     venue's owner. One switch, so a demo can turn the learning
+ *                     loop off without a deploy.
+ *   policyText        editable SENTENCES with {placeholders}; the numbers are
+ *                     substituted from escrow.js POLICY by utils/policyText.js.
+ *
+ * The clamp on confidenceFloor is [0.05, 0.95] for the same reason the ELO bands
+ * are finite: 0 would route every stray utterance into a real action, and 1 would
+ * make Scout answer nothing at all. Both are typo shapes.
+ */
+async function assistant({ client = null, fresh = false } = {}) {
+  const raw = await get('assistant', { client, fresh });
+  const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const d = DEFAULTS.assistant;
+
+  const name = typeof obj.name === 'string' && obj.name.trim()
+    ? obj.name.trim().slice(0, 40)
+    : d.name;
+  const policy = obj.policy_text ?? obj.policyText;
+
+  return {
+    name,
+    confidenceFloor: clampNum(
+      obj.confidence_floor ?? obj.confidenceFloor, d.confidence_floor, 0.05, 0.95,
+    ),
+    // Anything other than an explicit false leaves the loop on, so a partially
+    // written settings row cannot silently disable a feature the docs claim.
+    escalationEnabled: (obj.escalation_enabled ?? obj.escalationEnabled) !== false,
+    policyText: policy && typeof policy === 'object' && !Array.isArray(policy) ? policy : {},
+  };
+}
+
+module.exports = { DEFAULTS, get, elo, match, assistant, invalidate, clampNum };

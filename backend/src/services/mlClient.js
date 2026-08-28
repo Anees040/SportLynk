@@ -1133,6 +1133,274 @@ async function rankSpec() {
   return { reachable: true, error: null, status: res.status, data: res.body };
 }
 
+// ─── Assistant NLU (model #4) ─────────────────────────────────
+/**
+ * The one Node-side door to the trained intent classifier + rule entity extractor.
+ *
+ * WHY THE LABEL LIST IS NOT HARD-CODED HERE
+ * -----------------------------------------
+ * Every other model in this file has a stable output shape; the assistant's does
+ * not. `intent_spec.py` is a living artifact — it went from 15 labels
+ * (assistant-intents-v1) to 23 (v2) inside one wave — and the RELEASED joblib can
+ * lag the module that describes it, so at any moment `/nlu/spec` may advertise
+ * labels `/nlu/parse` cannot yet emit. A copy of the label list in Node would be
+ * wrong for one of those two states.
+ *
+ * So the routing table lives in services/assistantActions.js keyed by label, it is
+ * built for the SUPERSET, and `assertNluLabels()` compares it to the live spec at
+ * boot. An unknown label is then a printed mismatch instead of a silent no-op
+ * branch — the failure mode that a hard-coded list produces and hides.
+ *
+ * WHY THERE IS NO KEYWORD FALLBACK
+ * --------------------------------
+ * When ml-service is down, `suggestPrice()` falls back to a business rule because
+ * a price is still a price. An INTENT is not: a hand-written keyword matcher would
+ * be a second, untrained, unmeasured classifier answering under the same UI, and
+ * "the model understood you" would become a lie in exactly the case the committee
+ * will test. The honest degradation is to abstain and let the dialog manager show
+ * the capability menu, whose chips carry explicit actions and therefore need no
+ * classification at all. Scout stays fully usable by button while the model is
+ * unreachable, and never pretends to have understood free text.
+ */
+
+/** The five entity slots the extractor always returns. Contract, not a guess. */
+const NLU_ENTITY_KEYS = ['date', 'time', 'sport', 'area', 'budget'];
+
+/** The label the Python side falls back to. Node branches on it, so it is named. */
+const NLU_FALLBACK_INTENT = 'out_of_scope';
+
+/** ParseRequest.text has max_length=500; exceeding it is a 422, not a parse. */
+const NLU_MAX_TEXT_CHARS = 500;
+
+/** The three silences the model itself can report (GET /nlu/spec.abstainReasons). */
+const NLU_ABSTAIN_LOW_CONFIDENCE = 'low_confidence';
+const NLU_ABSTAIN_NO_EVIDENCE = 'no_evidence';
+const NLU_ABSTAIN_NO_KNOWN_TERMS = 'no_known_terms';
+const NLU_MODEL_ABSTAIN_REASONS = [
+  NLU_ABSTAIN_LOW_CONFIDENCE, NLU_ABSTAIN_NO_EVIDENCE, NLU_ABSTAIN_NO_KNOWN_TERMS,
+];
+
+/** Two more that only Node can detect, added before the call is ever made. */
+const NLU_ABSTAIN_UNAVAILABLE = 'nlu_unavailable';
+const NLU_ABSTAIN_TOO_LONG = 'text_too_long';
+
+/** All five slots, always present — so no caller writes `entities.date && ...`. */
+function emptyEntities() {
+  const out = {};
+  for (const key of NLU_ENTITY_KEYS) out[key] = null;
+  return out;
+}
+
+/**
+ * A parse-shaped answer for the cases where no parse happened. Same field set as
+ * the real thing, `available: false`, and a reason the dialog manager can render.
+ */
+function nluUnavailable(reason, abstainReason, { status = 0 } = {}) {
+  return {
+    available: false,
+    source: SOURCE_UNAVAILABLE,
+    intent: NLU_FALLBACK_INTENT,
+    confidence: 0,
+    entities: emptyEntities(),
+    abstained: true,
+    abstainReason,
+    topIntent: NLU_FALLBACK_INTENT,
+    topConfidence: 0,
+    intentGroup: null,
+    alternatives: [],
+    threshold: null,
+    modelVersion: null,
+    intentSpecVersion: null,
+    entitySpecVersion: null,
+    nluTextSpecVersion: null,
+    elapsedMs: null,
+    status,
+    error: reason,
+  };
+}
+
+/**
+ * Classify one utterance and extract its slots.
+ *
+ * `text` is sent RAW. The frozen normaliser is baked into the pipeline as a
+ * FunctionTransformer, so pre-cleaning here would apply a second, different
+ * normalisation and reintroduce the train/serve skew the artifact was shaped to
+ * make impossible. Trim only — that is what pydantic does anyway.
+ *
+ * Never throws. Never returns a partial object: on every path the caller gets all
+ * of the fields below, so the dialog manager has no optional-shape branches.
+ *
+ * @param {string} text            the user's message, exactly as typed
+ * @param {object} [opts]
+ * @param {string} [opts.sessionId] opaque conversation id, for correlation only
+ * @param {string} [opts.now]       ISO instant, ONLY for tests pinning "kal"
+ */
+async function parseNlu(text, { sessionId = null, now = null } = {}) {
+  const raw = typeof text === 'string' ? text.trim() : '';
+  if (!raw) {
+    return nluUnavailable('empty text', NLU_ABSTAIN_NO_EVIDENCE, { status: 400 });
+  }
+  if (raw.length > NLU_MAX_TEXT_CHARS) {
+    // Truncating would silently change what the user said, and a 422 from
+    // pydantic would surface as an opaque failure. Refuse locally and say why.
+    return nluUnavailable(
+      `text is ${raw.length} chars; the parser accepts ${NLU_MAX_TEXT_CHARS}`,
+      NLU_ABSTAIN_TOO_LONG, { status: 400 },
+    );
+  }
+
+  const payload = { text: raw };
+  if (sessionId) payload.sessionId = String(sessionId).slice(0, 64);
+  if (now) payload.now = now;
+
+  const res = await call('/nlu/parse', { method: 'POST', payload });
+  if (!res.ok || !res.body || typeof res.body.intent !== 'string') {
+    return nluUnavailable(
+      res.error || 'ml-service returned no intent',
+      NLU_ABSTAIN_UNAVAILABLE, { status: res.status || 0 },
+    );
+  }
+
+  const b = res.body;
+  const entities = emptyEntities();
+  if (b.entities && typeof b.entities === 'object') {
+    for (const key of NLU_ENTITY_KEYS) {
+      const slot = b.entities[key];
+      entities[key] = slot && typeof slot === 'object' ? slot : null;
+    }
+  }
+
+  const confidence = Number.isFinite(Number(b.confidence)) ? Number(b.confidence) : 0;
+  return {
+    available: true,
+    source: SOURCE_MODEL,
+    intent: b.intent,
+    confidence,
+    entities,
+    abstained: b.abstained === true,
+    abstainReason: b.abstainReason || null,
+    topIntent: b.topIntent || b.intent,
+    topConfidence: Number.isFinite(Number(b.topConfidence)) ? Number(b.topConfidence) : confidence,
+    intentGroup: b.intentGroup || null,
+    alternatives: Array.isArray(b.alternatives)
+      ? b.alternatives
+        .filter((a) => a && typeof a.intent === 'string')
+        .map((a) => ({
+          intent: a.intent,
+          confidence: Number(a.confidence) || 0,
+          group: a.group || null,
+        }))
+      : [],
+    threshold: Number.isFinite(Number(b.threshold)) ? Number(b.threshold) : null,
+    modelVersion: b.modelVersion || null,
+    intentSpecVersion: b.intentSpecVersion || null,
+    entitySpecVersion: b.entitySpecVersion || null,
+    nluTextSpecVersion: b.nluTextSpecVersion || null,
+    // The server's own wall clock, plus ours including the network.
+    elapsedMs: Number.isFinite(Number(b.elapsedMs)) ? Number(b.elapsedMs) : null,
+    roundTripMs: res.elapsed ?? null,
+    status: res.status,
+    error: null,
+  };
+}
+
+/**
+ * The NLU contract as the PYTHON side defines it — the sibling of sentimentSpec().
+ *
+ * Deliberately does not 503 when no artifact is loaded, so this is also the way to
+ * ask "is the label list I route on still the label list that exists?" against a
+ * service whose model has not been retrained yet.
+ */
+async function nluSpec() {
+  const res = await call('/nlu/spec', { method: 'GET' });
+  if (!res.ok) return { reachable: false, error: res.error, status: res.status, data: null };
+  return { reachable: true, error: null, status: res.status, data: res.body };
+}
+
+/** intent_spec.spec() publishes its version as `intentSpecVersion`. */
+function corpusVersion(data) {
+  const c = (data && data.corpus) || {};
+  return c.intentSpecVersion || c.specVersion || null;
+}
+
+/**
+ * Boot-time contract check: does the routing table cover the labels the service
+ * can actually produce?
+ *
+ * Two directions, and they are NOT equally serious:
+ *
+ *   unroutable  a label in the spec that Node has no branch for. A user utterance
+ *               classified into it would fall through to the capability menu with
+ *               no explanation. This is the real defect and it prints as one.
+ *   stale       a label Node routes that the spec no longer lists. Harmless at
+ *               runtime (nothing will ever emit it) but it means dead code, and
+ *               after a rename it means the LIVE label is in `unroutable` too.
+ *
+ * Non-fatal by design: a backend that refuses to boot because a Python service on
+ * port 8000 is not running would fail the same graceful-degradation requirement
+ * this whole file exists to satisfy. It is loud, and check_assistant.js turns the
+ * same comparison into a hard failure where a hard failure belongs.
+ *
+ * @param {string[]} routed the labels services/assistantActions.js can handle
+ */
+async function assertNluLabels(routed = []) {
+  const spec = await nluSpec();
+  if (!spec.reachable) {
+    warnOnce('nlu-spec-unreachable',
+      `assistant NLU spec unreachable (${spec.error}) — label routing unverified. `
+      + 'Scout will serve its capability menu until ml-service answers.');
+    return {
+      ok: false, reachable: false, error: spec.error,
+      unroutable: [], stale: [], specVersion: null, modelStatus: null, labels: [],
+    };
+  }
+
+  const data = spec.data || {};
+  const labels = Array.isArray(data.intents)
+    ? data.intents.map((i) => (typeof i === 'string' ? i : i && i.intent)).filter(Boolean)
+    : [];
+  const routedSet = new Set(routed);
+  const specSet = new Set(labels);
+  const unroutable = labels.filter((l) => !routedSet.has(l));
+  const stale = routed.filter((l) => !specSet.has(l));
+  const model = data.model || {};
+
+  if (unroutable.length) {
+    console.error(
+      `✗ assistant NLU: ${unroutable.length} intent(s) the model can emit have no `
+      + `route in services/assistantActions.js: ${unroutable.join(', ')}. `
+      + 'Users hitting them get the capability menu. Add a branch or map them.',
+    );
+  }
+  if (stale.length) {
+    console.warn(
+      `~ assistant NLU: Node routes ${stale.length} label(s) absent from `
+      + `${data.corpus && data.corpus.specVersion ? data.corpus.specVersion : 'the spec'}: `
+      + `${stale.join(', ')}. Dead branches, or a rename to follow.`,
+    );
+  }
+  if (!unroutable.length && !stale.length) {
+    console.log(
+      `✓ assistant NLU: ${labels.length} intents routed `
+      + `(${model.modelVersion || 'no artifact'}, threshold ${model.threshold ?? '?'})`,
+    );
+  }
+
+  return {
+    ok: unroutable.length === 0,
+    reachable: true,
+    error: null,
+    labels,
+    unroutable,
+    stale,
+    specVersion: corpusVersion(data),
+    modelStatus: model.status || null,
+    modelVersion: model.modelVersion || null,
+    threshold: Number.isFinite(Number(model.threshold)) ? Number(model.threshold) : null,
+    fallbackIntent: model.fallbackIntent || NLU_FALLBACK_INTENT,
+  };
+}
+
 module.exports = {
   // public API
   suggestPrice,
@@ -1146,6 +1414,9 @@ module.exports = {
   recommendPlayers,
   recommendOpponents,
   rankSpec,
+  parseNlu,
+  nluSpec,
+  assertNluLabels,
 
   // constants — exported so routes, scripts and tests reference the value rather
   // than re-typing a string or a number that could drift
@@ -1154,6 +1425,15 @@ module.exports = {
   SOURCE_UNAVAILABLE,
   SOURCE_RANKED,
   SENTIMENT_LABELS,
+  NLU_ENTITY_KEYS,
+  NLU_FALLBACK_INTENT,
+  NLU_MAX_TEXT_CHARS,
+  NLU_MODEL_ABSTAIN_REASONS,
+  NLU_ABSTAIN_LOW_CONFIDENCE,
+  NLU_ABSTAIN_NO_EVIDENCE,
+  NLU_ABSTAIN_NO_KNOWN_TERMS,
+  NLU_ABSTAIN_UNAVAILABLE,
+  NLU_ABSTAIN_TOO_LONG,
   DEMAND_HIGH,
   DEMAND_MEDIUM,
   DEMAND_LOW,
@@ -1182,4 +1462,6 @@ module.exports = {
   normaliseFactors,
   resetBreaker,
   breakerState,
+  emptyEntities,
+  nluUnavailable,
 };

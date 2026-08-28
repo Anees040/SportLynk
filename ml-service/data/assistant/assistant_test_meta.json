@@ -1,16 +1,16 @@
 {
   "generated_by": "validate_intent_test.py",
-  "generated_at": "2026-08-27T21:51:57+00:00",
+  "generated_at": "2026-08-28T13:06:46+00:00",
   "wave": "S.6 Wave A",
   "model": "#4 assistant intent classifier",
   "role": "held-out exam -- never trained on, never generated, never repaired",
   "source_file": "assistant_test.csv",
-  "sha256": "f99691aa112957a5509f6d059f7db493e22c24b913b2de02b3a077ec6ab158b6",
-  "intent_spec_version": "assistant-intents-v1",
-  "intent_spec_fingerprint": "7bb78a3ac94cbdef",
-  "dataset_spec_version": "assistant-dataset-v1",
-  "dataset_spec_fingerprint": "0eb01bc58b4a040f",
-  "rows": 150,
+  "sha256": "1f60b29cabad57d40ae8f538ef9c063a749a4b3c81ff18ed305a6df9e235f9b4",
+  "intent_spec_version": "assistant-intents-v2",
+  "intent_spec_fingerprint": "68396192ab4a87a4",
+  "dataset_spec_version": "assistant-dataset-v2",
+  "dataset_spec_fingerprint": "339ad58af5ddb072",
+  "rows": 230,
   "columns": [
     "id",
     "text",
@@ -28,14 +28,22 @@
     }
   },
   "intents": {
+    "affirm": 10,
+    "app_help": 10,
     "book_venue": 10,
     "cancel_booking": 10,
     "check_availability": 10,
+    "contact_owner": 10,
     "create_team_help": 10,
+    "deny": 10,
+    "elo_help": 10,
     "find_opponents": 10,
+    "find_players": 10,
+    "find_teams": 10,
     "find_venue": 10,
     "greeting": 10,
     "my_bookings": 10,
+    "navigate": 10,
     "out_of_scope": 10,
     "refund_policy": 10,
     "team_stats": 10,
@@ -45,11 +53,17 @@
     "wallet_balance": 10
   },
   "langs": {
-    "en": 45,
-    "mix": 45,
-    "ru": 60
+    "en": 69,
+    "mix": 69,
+    "ru": 92
   },
   "intent_x_lang": {
+    "affirm|en": 3,
+    "affirm|mix": 3,
+    "affirm|ru": 4,
+    "app_help|en": 3,
+    "app_help|mix": 3,
+    "app_help|ru": 4,
     "book_venue|en": 3,
     "book_venue|mix": 3,
     "book_venue|ru": 4,
@@ -59,12 +73,27 @@
     "check_availability|en": 3,
     "check_availability|mix": 3,
     "check_availability|ru": 4,
+    "contact_owner|en": 3,
+    "contact_owner|mix": 3,
+    "contact_owner|ru": 4,
     "create_team_help|en": 3,
     "create_team_help|mix": 3,
     "create_team_help|ru": 4,
+    "deny|en": 3,
+    "deny|mix": 3,
+    "deny|ru": 4,
+    "elo_help|en": 3,
+    "elo_help|mix": 3,
+    "elo_help|ru": 4,
     "find_opponents|en": 3,
     "find_opponents|mix": 3,
     "find_opponents|ru": 4,
+    "find_players|en": 3,
+    "find_players|mix": 3,
+    "find_players|ru": 4,
+    "find_teams|en": 3,
+    "find_teams|mix": 3,
+    "find_teams|ru": 4,
     "find_venue|en": 3,
     "find_venue|mix": 3,
     "find_venue|ru": 4,
@@ -74,6 +103,9 @@
     "my_bookings|en": 3,
     "my_bookings|mix": 3,
     "my_bookings|ru": 4,
+    "navigate|en": 3,
+    "navigate|mix": 3,
+    "navigate|ru": 4,
     "out_of_scope|en": 3,
     "out_of_scope|mix": 3,
     "out_of_scope|ru": 4,
@@ -97,33 +129,41 @@
     "wallet_balance|ru": 4
   },
   "phenomena": {
-    "boundary": 69,
-    "question": 59,
-    "indirect": 46,
-    "run_on": 38,
-    "code_switch": 34,
-    "short": 28,
-    "ellipsis": 21,
-    "numeric": 21,
-    "multi_slot": 12,
-    "negation": 11,
-    "slang": 11,
+    "boundary": 90,
+    "question": 82,
+    "code_switch": 58,
+    "indirect": 55,
+    "run_on": 47,
+    "negation": 35,
+    "short": 34,
+    "numeric": 26,
+    "ellipsis": 25,
+    "imperative": 15,
+    "plain": 15,
+    "slang": 15,
+    "multi_slot": 13,
     "typo": 7,
-    "sms_speak": 5,
-    "imperative": 4,
-    "misspelled_venue": 2,
-    "politeness": 2,
-    "plain": 1
+    "politeness": 6,
+    "sms_speak": 6,
+    "misspelled_venue": 2
   },
   "boundary_per_intent": {
+    "affirm": 4,
+    "app_help": 2,
     "book_venue": 5,
     "cancel_booking": 4,
     "check_availability": 5,
+    "contact_owner": 2,
     "create_team_help": 5,
+    "deny": 2,
+    "elo_help": 3,
     "find_opponents": 4,
+    "find_players": 3,
+    "find_teams": 3,
     "find_venue": 4,
     "greeting": 4,
     "my_bookings": 5,
+    "navigate": 2,
     "out_of_scope": 7,
     "refund_policy": 4,
     "team_stats": 3,
@@ -135,7 +175,7 @@
   "text_length": {
     "min": 3,
     "max": 84,
-    "mean": 51.81,
+    "mean": 47.96,
     "bounds": [
       3,
       160
@@ -156,7 +196,7 @@
   },
   "authored_overlap": {
     "file": "authored_intents.csv",
-    "rows_compared": 236,
+    "rows_compared": 382,
     "threshold": 0.8,
     "overlaps": []
   },
@@ -169,7 +209,7 @@
     {
       "name": "csv_parses",
       "ok": true,
-      "detail": "150 data rows"
+      "detail": "230 data rows"
     },
     {
       "name": "columns",
@@ -179,7 +219,7 @@
     {
       "name": "row_count",
       "ok": true,
-      "detail": "150 (want 150)"
+      "detail": "230 (want 230)"
     },
     {
       "name": "ids_well_formed",
@@ -189,22 +229,22 @@
     {
       "name": "ids_unique",
       "ok": true,
-      "detail": "at-001..at-150, all unique"
+      "detail": "at-001..at-230, all unique"
     },
     {
       "name": "intents_in_contract",
       "ok": true,
-      "detail": "subset of 15 contract intents"
+      "detail": "subset of 23 contract intents"
     },
     {
       "name": "all_intents_present",
       "ok": true,
-      "detail": "15/15 intents graded"
+      "detail": "23/23 intents graded"
     },
     {
       "name": "intent_distribution",
       "ok": true,
-      "detail": "10 rows for each of 15 intents"
+      "detail": "10 rows for each of 23 intents"
     },
     {
       "name": "langs_in_contract",
@@ -214,22 +254,22 @@
     {
       "name": "lang_distribution",
       "ok": true,
-      "detail": "{'en': 45, 'mix': 45, 'ru': 60}"
+      "detail": "{'en': 69, 'mix': 69, 'ru': 92}"
     },
     {
       "name": "intent_lang_grid",
       "ok": true,
-      "detail": "15x3 cells at ru 4, mix 3, en 3"
+      "detail": "23x3 cells at ru 4, mix 3, en 3"
     },
     {
       "name": "text_clean",
       "ok": true,
-      "detail": "all 150 rows pass text_problems()"
+      "detail": "all 230 rows pass text_problems()"
     },
     {
       "name": "length_bounds",
       "ok": true,
-      "detail": "3..84 chars, mean 51.8 (bounds [3,160])"
+      "detail": "3..84 chars, mean 48.0 (bounds [3,160])"
     },
     {
       "name": "phenomena_in_contract",
@@ -244,7 +284,7 @@
     {
       "name": "phenomena_coverage",
       "ok": true,
-      "detail": "boundary=69, code_switch=34, indirect=46, short=28, numeric=21, negation=11"
+      "detail": "boundary=90, code_switch=58, indirect=55, short=34, numeric=26, negation=35"
     },
     {
       "name": "phenomena_breadth",
@@ -259,7 +299,7 @@
     {
       "name": "no_exact_duplicates",
       "ok": true,
-      "detail": "150 distinct utterances"
+      "detail": "230 distinct utterances"
     },
     {
       "name": "no_label_contradiction",
@@ -274,7 +314,7 @@
     {
       "name": "disjoint_from_authored",
       "ok": true,
-      "detail": "236 authored training rows, none within 0.8 of an exam row"
+      "detail": "382 authored training rows, none within 0.8 of an exam row"
     },
     {
       "name": "every_row_documented",

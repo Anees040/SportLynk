@@ -53,6 +53,7 @@ const chatRoutes = require("./routes/chat");
 const matchRoutes = require("./routes/matches");
 const reviewRoutes = require("./routes/reviews");
 const internalRoutes = require("./routes/internal");
+const assistantRoutes = require("./routes/assistant");
 const { startNoShowJob } = require("./jobs/noShowJob");
 const { startAutoApproveJob } = require("./jobs/autoApproveJob");
 const { startWithdrawalJob } = require("./jobs/withdrawalJob");
@@ -73,6 +74,11 @@ app.use("/api/teams", teamRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/matches", matchRoutes);
 app.use("/api/internal", internalRoutes);
+// Scout (S.6). Requiring routes/assistant also requires services/assistantActions,
+// whose assertRoutable() THROWS at load time if any trained intent label has no
+// handler -- so a mismatch between model #4's labels and the action registry fails
+// the BOOT rather than one unlucky user's message.
+app.use("/api/assistant", assistantRoutes);
 // Reviews own four paths across three resources — /api/reviews, /api/reviews/:id/flag,
 // /api/venues/:id/reviews, /api/users/:id/reviews — so this router mounts at the bare
 // /api root and each handler declares `auth` itself (it does NOT use router.use(auth),

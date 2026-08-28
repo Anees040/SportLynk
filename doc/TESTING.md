@@ -1469,6 +1469,296 @@ venv, 170-177 need uvicorn running. **All thirteen run green as written.**
 
 ---
 
+### 4.19 Scout — the v2 label contract and model #4 retrained (S.6 Wave C, ml-service half)
+
+**Read §4.18 first; these steps replace its numbers, they do not add to them.** Wave C moved the label
+contract from 15 intents to **23** and refitted model #4 on it, so every figure in §4.18 now describes a
+**superseded** artifact (`intent-v1-20260828-0053`). Nothing in §4.18's *method* changed — the same gates,
+the same self-checks, the same abstain policy — so what follows is the delta plus the two things that only
+break on a version bump: the load-time fingerprint check and the label-reachability sweep. The Node half of
+this wave (Scout's dialog manager, `POST /api/assistant/message`, the KB and escalation) is documented from
+**step 190** onward. All commands from `ml-service/`, PowerShell, `.venv` activated or the full interpreter
+path as written.
+
+178. **The contract self-check must now print v2 — and BOTH fingerprints must have moved.**
+     `.venv\Scripts\python.exe -m app.core.intent_spec --self-check` → `PASS 14 checks`,
+     `assistant-intents-v2 / 68396192ab4a87a4` **+** `assistant-dataset-v2 / 339ad58af5ddb072`, and a line
+     confirming the two are **distinct**. If either still reads v1 you are looking at an unmodified checkout
+     and every number below will disagree with you. `nlu_text` (`PASS 17`, `eca8d0423d2084b3`) and
+     `entities` (`PASS 73`, `34aee7e75192e6fe`) must be **unchanged** — the feature normaliser and the rule
+     tables were deliberately not touched in a wave that retrains, so that the only moving part is the
+     label set. Expect 23 intents in **8** groups; the 8th is `dialog`, and it contains exactly `affirm`
+     and `deny`.
+179. **Validate the exam BEFORE regenerating the corpus — this order is not cosmetic.**
+     `.venv\Scripts\python.exe training\validate_intent_test.py` → 24 read-only checks over
+     `data/assistant/assistant_test.csv`, now **230 rows** (10 per intent, ru 4 / mix 3 / en 3 per intent),
+     re-locking `assistant_test_meta.json` at sha **1f60b29cabad**. `gen_intents.py` then enforces that
+     lock as a HARD gate and uses the exam for **exclusion only**, so validating second means generating
+     against a stale hash and failing for a reason that has nothing to do with what you changed. v1's
+     original 150 rows are **byte-identical** inside the 230 — that is what keeps the v1-vs-v2 comparison
+     in PROGRESS honest, and a diff that touches them invalidates it.
+180. **Regenerate the corpus and check the receipt, not just the exit code.**
+     `.venv\Scripts\python.exe training\gen_intents.py` → `data/assistant/intents.csv` **2,576 rows**, sha
+     **adbdd5d63a81**, `all_passed true` in `intents_meta.json`. Expect **112 rows per intent** (equal by
+     construction, not by luck), en 1035 · ru 897 · mix 644, and `census.per_template` reading
+     `616 templates · 614 used · 2 unused` — the two unused ids are `greeting-en-40` and `greeting-en-41`,
+     and they are named in the meta rather than silently absent. Re-run it: the sha must be **identical**,
+     because the corpus is a seeded draw and a drifting sha means the provenance gate in step 181 is about
+     to fail for a reason nobody can reproduce.
+181. **Train it: 10/10 gates, ~28 s, and v1 stays released if any gate fails.**
+     `.venv\Scripts\python.exe training\train_intents.py` → `RELEASED`,
+     `models/intent_latest.joblib` **6,597,833 bytes**, `intent-v2-20260828-1329`. All ten gates, with the
+     numbers to expect: contracts · corpus provenance (2,576 rows, `adbdd5d63a81`) · exam provenance
+     (230 rows, `1f60b29cabad`, "locked and unedited") · exam uncontaminated (**0 exact**, max near-dup
+     **0.7143** word_set < 0.80) · no leakage (val 0.8033 ≤ 0.995) · beats baseline (exam 0.6652 ≥ 0.0435 +
+     0.10) · exam floor (0.6652 ≥ 0.55) · answers well (**0.7901** on the 181 rows it answers ≥ 0.65) ·
+     answers at all (val coverage 0.8683 ≥ 0.60) · calibrated (val ECE **0.1512** ≤ 0.25). The artifact is
+     **1.70× larger** than v1's for 1.53× the labels, and the fit takes 28.0 s rather than 13.2 — 23 classes
+     × 5 grouped calibration folds = 115 sub-estimators. **The rule this wave was held to: a gate v1 passed
+     that v2 fails means v2 does not ship and v1 stays released, and no threshold is lowered to make a model
+     pass.** All ten passed unmodified; `confidenceThreshold` is still 0.45 and still stamped in the
+     artifact.
+182. **The exam is 230 rows now, so re-read both matrices against the new denominators.**
+     `reports/intents_confusion_val.png` — 539 held-out phrasings, 0.8033 / macro-F1 0.7991 (v1 read 0.8678
+     over 348: the drop is 8 more classes to be wrong in, on 23 rather than 15 columns). Then
+     `reports/intents_confusion.png` — the 230-row exam, **0.6652** / 0.6537, up from v1's 0.6200 on its
+     150. Collapsed to the 8 groups the exam reads **0.7652** (`exam_grouped`), so a tenth of the errors are
+     intra-group. The rows to look at first are the ones the new labels pressure: `contact_owner` 10/10 and
+     `elo_help` 10/10 (distinct vocabulary, nothing else claims it), `navigate` 9/10, `find_players` 8/10 —
+     against `wallet_balance` 2/10, `my_bookings` 3/10 and `venue_info` 3/10, which is the same
+     account/booking block §4.18 flagged and which the new labels did **not** make worse. `exam_per_language`
+     now reads mix 0.8116 (69) · ru 0.6196 (92) · en 0.5797 (69), and the §4.18 warning still applies: that
+     ordering is a **phenomenon-mix artefact**, not evidence about English.
+183. **The floor's price changed with the label count — read it before quoting the old numbers.** In
+     `reports/intent_metrics.json`: `floor_validation` must read coverage **0.8683** / answered 468 /
+     answeredAccuracy **0.8782** / confidentErrors **57**, and `floor_exam` coverage 0.7870 / answered
+     **181** / answeredAccuracy **0.7901** / confidentErrors 38. Both answered-accuracies are lower than
+     v1's (0.9246 val) and that is expected: 8 more labels means 8 more ways to be confidently wrong. What
+     matters for the product is unchanged — at 0.45 the model answers 87% of validation, is right 88% of
+     the time when it does, and **confident errors fall 106 → 57**. On the exam, 22 validation rows and 10
+     exam rows it would have got right are refused instead; that is the cost, it is in the same block, and
+     `threshold_sweep_validation` is still there for anyone who wants to argue the number.
+184. **The unit suite is 68 now, and one of its tests is a load sensor.**
+     `.venv\Scripts\python.exe training\test_nlu.py` → **68 passed, 0 skipped**. `0 skipped` is part of the
+     assertion: `test_the_abstain_floor_is_actually_applied` used to **skip silently** because the single
+     vague utterance it pinned had risen above 0.45 as the corpus grew, and a skipped floor test is
+     indistinguishable from a floor that is not applied. Five tests are new — the v1-subset property, the
+     reachability of all 8 added labels, `dialog` == {`affirm`, `deny`}, every intent having a group and a
+     gloss, and the squad-short regression in three languages. **The one test that fails for reasons that
+     are not the code** is `test_a_warm_parse_stays_inside_the_fifty_millisecond_budget`: it failed three
+     times in a row at 63–95 ms median while a second dev session was running Node and Postgres on this box,
+     and passed three times in a row immediately afterwards. If it fails, check the load before you check
+     the model — and confirm with step 188, which measures the same thing through HTTP with an
+     intent-vs-entity split.
+185. **The version bump breaks a running service on purpose — this is the trap to walk into deliberately
+     once.** With uvicorn already up on the v1 artifact, `curl http://127.0.0.1:8000/health` after step 181
+     reports the intent entry **`incompatible`** ("artifact was trained on 'assistant-intents-v1' but this
+     service builds 'assistant-intents-v2'") and `modelsReady` **3/4** — the label fingerprint is checked at
+     load, so a retrain that changes the label set is a *deploy* event, not a file swap.
+     `curl -X POST -H "X-API-Key: <ML_API_KEY>" http://127.0.0.1:8000/nlu/refresh` → 200 with
+     `modelVersion: "intent-v2-20260828-1329"`, `labels: 23`, `threshold: 0.45`; then `/health` reads
+     **4/4 ready** with `specVersion: "assistant-intents-v2"`. A restart does the same thing. Not doing
+     either leaves `/nlu/parse` returning 503 with the registry's reason, which is the correct behaviour and
+     is not a bug to work around.
+186. **`GET /nlu/spec` is the contract Scout reads at boot, and every count in it moved.**
+     `curl -H "X-API-Key: <ML_API_KEY>" http://127.0.0.1:8000/nlu/spec` → inside `data`: `intents` **23**
+     each with `group`, `gloss` and `confusableWith`; `groups` **8**; `model.threshold` 0.45 with
+     `thresholdSource: "artifact"`; `corpus.intentSpecVersion` **assistant-intents-v2**; `abstainReasons`
+     exactly `low_confidence` · `no_evidence` · `no_known_terms`; fallback intent **`out_of_scope`**. Three
+     integration facts to verify here rather than discover in Node: **`/nlu/spec` and `/nlu/refresh` are
+     enveloped as `{success, data}` but `/nlu/parse` is NOT** — it returns the flat object, so a uniform
+     `.data` unwrap in `mlClient` breaks on parse; **`modelVersion`'s major tracks the label contract**, so
+     `intent-v1-*` → `intent-v2-*` and nothing may parse it except for display (read
+     `corpus.intentSpecVersion` instead); and the endpoint still **does not 503** when no model is loaded,
+     which is what lets Node validate its label mapping before anything is trained.
+187. **Prove all 8 new labels are reachable over HTTP — a label that never wins is dead code in a
+     contract.** `POST /nlu/parse` with each of: "we are 3 players short for the game" → `find_players` ·
+     "kisi team me jagah hai to bata do main join karunga" → `find_teams` · "how do i get to centaurus from
+     blue area" → `navigate` · "i want to talk to the owner of this ground" → `contact_owner` · "app me
+     profile kaise edit karun" → `app_help` · "elo kaise barhta hai" → `elo_help` · "haan bilkul kar do" →
+     `affirm` · "nahi rehne do abhi" → `deny`. Each must win by **≥0.35 over its runner-up** (measured:
+     +0.80 to +0.93). These same eight are pinned in `test_nlu.py`, so this step is the live confirmation,
+     not the only guard. Then check the two things Scout must build around: `affirm`/`deny` come back with
+     `intentGroup: "dialog"` and **no object** — acting on a bare "haan" with no pending proposal in session
+     state confirms a booking the user never saw — and the entity block is still only
+     `{date, time, sport, area, budget}`, so "need 2 players" yields **no 2** and `navigate` /
+     `contact_owner` yield **no venue name**. Those must be resolved from `area` plus the database or from
+     thread context; the extractor was deliberately not changed in this wave.
+188. **Re-measure the 50 ms budget, and read a breach as a load signal first.** Sweep the 230 exam rows (or
+     a 120-row sample) through `/nlu/parse` and read the server's own `elapsedMs` / `intentMs` / `entityMs`.
+     On a quiet box: p50 **20.9 ms**, p95 32.9, max 114.0, **2/120 over budget** — against v1's p50 14.6 and
+     0/300. The model genuinely got slower (**9.41 ms** median `predict_proba` vs v1's **7.46 ms**, measured
+     back to back in one interpreter on the same utterances: +26% for 8 labels), but it did not get slow.
+     On a box shared with a second dev session the same 120 rows read **p50 82.6 ms with 119/120 over
+     budget**, while `entityMs` never moved off **0.2 ms**. So: `entityMs` flat + `intentMs` inflated =
+     contention, not regression. The budget is still 50 ms and the endpoint still logs a warning on every
+     breach; what changed is that the margin is now thin enough that a busy laptop trips it, and that is
+     recorded rather than papered over by raising the budget.
+189. **Nothing downstream moved.** From `D:\sportlynk\backend`: `node src/scripts/check_ml_service.js` →
+     **`71/71 checks passed`** with ml-service up, unchanged across a label-contract bump — the harness
+     asserts `Array.isArray(h.models)` and a list of keys, never a count or a version string, which is
+     exactly why this was not a breaking change for Node. Re-run it *after* step 185, not before: against an
+     `incompatible` intent model the health assertions still pass (they check the four keys are present),
+     which is a good reminder that `71/71` is not a statement about model #4's health — `modelsReady 4` is.
+
+**What this half of the wave cannot tell you.** Whether Scout works. There is still no dialog manager in
+these steps, no session state, no confirmation gate, no action executed and no Flutter screen: this is a
+classifier that now understands 23 intents instead of 15, verified over HTTP, and nothing more. Two limits
+worth stating precisely because they will shape the Node half. **The exam is 230 rows written by one person
+who is not a user of this app**, so 0.6652 is a writer-generalisation score, and the 95% CI [0.60, 0.72]
+cannot distinguish it from v1's 0.6200 on 150 — the case for v2 is not that it scores higher, it is that it
+can express eight things v1 could not say at all, with 0 of v1's 15 labels dropped and 5 fewer confident
+errors at the floor. And **the abstain region is invisible to users**: raw accuracy scores the argmax even
+below 0.45 while the service abstains there, so any accuracy comparison that ignores coverage is measuring
+something the product never shows. The numbers that matter for Scout are answered-count, accuracy-on-answered
+and confidently-wrong count — all three are in `floor_exam` and `floor_validation`.
+
+Steps 178-184 need only the venv; 185-189 need uvicorn running, and 189 needs Node. **All twelve run green
+as written**, with the one caveat named in steps 184 and 188: the latency assertion is load-sensitive and
+must be measured on an otherwise-idle box.
+
+### 4.20 Scout — dialog manager, actions, chat history and the money gate (S.6 Wave C, Node half)
+
+**This is the half a viva panel will actually click on.** §4.19 proved the classifier; these steps prove the
+thing that uses it: slot-filling across turns, a booking written through the *same* service the REST route
+uses, a refund preview, chat history, the KB/escalation loop, and the two doors that are allowed to move
+money. One script does almost all of it. Read step 192 before running anything else, because that script is
+the gate the whole wave is judged by. `ml-service` must be up (`/health` 4/4) or every intent abstains, and
+all Node commands run from `D:\sportlynk\backend`.
+
+190. **Migration 018 — four tables, two altered, twelve indexes.**
+     `node run_migration_018.js` → idempotent (`IF NOT EXISTS` throughout), safe to re-run. Then confirm in
+     the Supabase SQL editor:
+     ```sql
+     SELECT table_name FROM information_schema.tables
+      WHERE table_name LIKE 'assistant%' ORDER BY 1;
+     -- assistant_escalations · assistant_feedback · assistant_kb · assistant_turns
+     SELECT column_name FROM information_schema.columns
+      WHERE table_name='chat_channels' AND column_name IN ('session_state','archived_at','assistant_persona');
+     SELECT conname FROM pg_constraint WHERE conname='chk_assistant_turns_src';
+     ```
+     `pg_trgm` is created **conditionally** — if the extension is unavailable the migration still applies and
+     the KB matches with `ILIKE` instead (`assistantKb.hasTrgm()` probes `pg_extension` once and caches). To
+     see which path this database is on: `SELECT 1 FROM pg_extension WHERE extname='pg_trgm';`
+191. **The unit suite, with the database DOWN.** `npm test` → **78/78**. Turning the database off is the
+     point: these tests cover `escrow`, `elo`, `policyText` placeholder resolution and the reply/card enums,
+     none of which may need a connection. `test/assistant.test.js` asserts that **every placeholder in every
+     policy template resolves** against the real `escrow.POLICY` — that is what stops `PKR undefined` from
+     ever reaching a user's chat.
+192. **THE GATE: `node src/scripts/check_assistant.js` → `PASS 278/278`, exit 0, zero skips, ~3m15s.**
+     It drives Scout through 38 real turns as seeded demo users, against the **live** classifier, with real
+     money, inside one `BEGIN … ROLLBACK`. Expect exactly this shape:
+     ```
+     0  preflight — registry, model #4, migration 018                        3
+     A  find a ground → see times → pick → confirm → booked                 42
+     B  cancel it → refund preview → confirmed → wallet and ledger agree     33
+     C  a yes that is really a correction must NOT spend money              11
+     C2 stale confirms, model denials, and the button that must still work   11
+     D  reads: wallet · bookings · policy · tournaments · help · out of scope 31
+     E  escalation → the owner answers → the next ask is free                28
+     F  discovery: ground info · directions · players · opponents · teams     26
+     G  threads: new · switch · rename · archive · delete · ownership         53
+     H  FR8.15 — one implementation of every rule, shared by route and Scout  40
+                                                               PASS 278/278
+     the transaction was rolled back — the database is exactly as it was.
+     ```
+     Reading a failure: a `SKIP` line is **not** green — it is printed and counted separately precisely so a
+     run that quietly avoided the money path cannot look like a pass. `no free slot at <venue>` means the
+     fixture venue has no bookable hour left today (run `node src/scripts/add_future_slots.js` and re-run).
+     A preflight failure naming a fingerprint means ml-service is serving an artifact this code does not
+     expect — that is §4.19 step 185, not a Scout bug. Redirect the output to a file if you want to read it
+     twice; piping it through a pager loses the tail.
+193. **Read the transcript it prints, not just the count.** The last block of the run dumps all 38 turns with
+     the user text, Scout's reply, the card types and `totalMs`. That transcript is the demo script: if a
+     sentence in it reads like a robot, fix the copy before the viva. It is also the only place the per-turn
+     latency is recorded — Scout's response time is not asserted anywhere, because the parse budget is
+     load-sensitive (§4.19 step 188).
+194. **Prove it really rolled back.** After the run:
+     ```sql
+     SELECT count(*) FROM chat_channels WHERE type='assistant';   -- unchanged (0 on a fresh demo DB)
+     SELECT count(*) FROM assistant_turns;                        -- unchanged
+     SELECT count(*) FROM assistant_escalations;                  -- unchanged
+     SELECT count(*) FROM bookings;                               -- unchanged (40 on the seeded demo DB)
+     ```
+     If any of these grew, the harness lost its transaction — stop and read `handleTurn`'s `client` seam
+     before trusting a later run.
+195. **The money extraction, on its own, against the escrow table: `node src/scripts/check_booking_service.js`
+     → `PASS 60/60`.** Also always rolled back. Where step 192 proves *Scout* books correctly, this proves the
+     **extraction** did not change what booking means — it books and cancels for real and asserts the ledger
+     line by line against the table at the top of `utils/escrow.js`: full refund ≥24h out, `+0.8P / +0.2P`
+     inside the window (`the ledger sums to -440`), double-book refused (`slot_taken`), double-cancel refused
+     (`not_cancellable`), a broke player refused (`insufficient_funds`) **with the wallet and the slot left
+     exactly as they were**, plus `missing_args` and `slot_not_found`. Every refusal carries a machine code
+     next to the human sentence, deliberately, so the dialog manager never string-matches English. Run this
+     one whenever anything in `escrow.js`, `bookingService.js` or `routes/bookings.js` is touched — it is
+     faster than 192 and it is the one that catches a refactor that loses PKR 200 a cancellation.
+196. **The endpoints over real HTTP — the part the scripts do NOT cover.** Steps 192 and 195 call the services
+     directly with a rolled-back client, which is what makes them affordable; they never touch Express, the
+     JWT middleware or the rate limiter. **These writes are real** — do them as the demo player and delete the
+     thread at the end. `npm start` in one terminal, then:
+     ```bash
+     BASE=http://localhost:3000/api   # PORT defaults to 3000 (server.js:131)
+     TOKEN=<login as the demo player>                         # POST $BASE/auth/login
+     curl -s -X POST $BASE/assistant/message -H "Authorization: Bearer $TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"text":"rawalpindi mein cricket ground chahiye"}'
+     # → data.reply.cards[] of type "venue", data.reply.source "live"|"model",
+     #   data.threadId (save it), data.nlu.intent "find_venue", data.nlu.confidence
+     curl -s $BASE/assistant/threads -H "Authorization: Bearer $TOKEN"
+     curl -s "$BASE/assistant/threads/<threadId>/messages?limit=10" -H "Authorization: Bearer $TOKEN"
+     curl -s -X PATCH $BASE/assistant/threads/<threadId> -H "Authorization: Bearer $TOKEN" \
+          -H "Content-Type: application/json" -d '{"title":"Pindi plans"}'
+     curl -s $BASE/assistant/capabilities -H "Authorization: Bearer $TOKEN"
+     curl -s -X DELETE $BASE/assistant/threads/<threadId> -H "Authorization: Bearer $TOKEN"
+     ```
+     Four things to check while you are in here: the body field may be `session_id`, `sessionId`, `threadId`
+     or `thread_id` (all four are accepted on purpose — Wave D should not 400 over a naming preference);
+     omitting it entirely is legal and means "newest chat, or a new one"; a chip is posted as
+     `{"action":"pick_slot","args":{...}}` with **no text**; and the `messages` cursor must be passed back
+     **verbatim** — it is an opaque row tuple, not a page number.
+197. **The security cases, all four with a token in hand.** No `Authorization` header → **401** (the router
+     is behind `router.use(auth)`, so every one of the 16 endpoints is covered by one line). Another user's
+     thread id on `GET /threads/:id/messages` and on `POST /message` → **404 `thread_not_found`**, never a
+     403 and never a leaked title. A non-uuid thread id → 404, not a 500. A 501-character `text` → Scout
+     answers with the capability menu (`abstainReason: text_too_long`, refused in `mlClient` **before** the
+     HTTP call, because the parser's own limit is 500 and a 422 is not something a chat screen can render).
+     Then the 51st thread → **`too_many_threads`** (`MAX_THREADS = 50`).
+198. **FR8.15 by hand, in one grep.** From `backend/`:
+     ```bash
+     grep -rn "INSERT INTO bookings" src/ --include=*.js | grep -v /scripts/
+     # → exactly ONE hit: src/services/bookingService.js
+     grep -rln "applyWallet(\|logTxn(\|penaltySplit(\|lockWallet(\|UPDATE slots SET status" \
+          src/services/assistant* src/services/dialogManager.js src/routes/assistant.js
+     # → NOTHING. Scout owns no money primitive.
+     ```
+     Step 192's section H does this over all 50 files of `src/` and fails the run if either answer changes.
+199. **Privacy, as a column census rather than a promise.**
+     ```sql
+     SELECT column_name, data_type FROM information_schema.columns
+      WHERE table_name='assistant_turns' ORDER BY ordinal_position;
+     ```
+     17 columns, and the only length-ish one is `text_chars int`. There is **no column that can hold what the
+     user typed** — the utterance lives only in the user's own chat thread, which they can delete. Deleting a
+     chat cascades its messages while `assistant_turns.channel_id` is `ON DELETE SET NULL`, so the evidence
+     that model #4 answered *n* turns at *m*% abstention survives a deletion that removes the conversation.
+     Confirm the enum is enforced, not merely documented:
+     ```sql
+     INSERT INTO assistant_turns (answer_source) VALUES ('gpt');   -- user_id is nullable
+     -- → violates check constraint "chk_assistant_turns_src"   (expected; roll it back)
+     ```
+200. **Owner side.** As a venue owner: `GET /api/assistant/owner/questions` lists escalations for **their**
+     venues only, `POST .../:id/answer` delivers the answer into the asking player's own thread as a Scout
+     message and optionally stores it in `assistant_kb`, `POST .../:id/decline` closes it without one, and
+     `GET /api/assistant/owner/stats` reports what Scout has been telling players about their ground. The
+     next player asking the same question must get `source: "kb"` — that round trip is step 192's section E,
+     and it is worth doing once by hand because it is the wave's most demo-able feature.
+
+Steps 190-195 and 198-199 run green as written. **196, 197 and 200 have not been executed** — they need a
+running `npm start` and a live login, and they are the one gap between "278 checks pass" and "the HTTP
+surface is proven". Do them before the viva; nothing in them should surprise you if 192 is green.
+
+---
+
 ## 5. Non-functional tests
 
 - **Responsiveness:** run on a small phone (~5") and a tablet. Nothing clipped, no
@@ -1790,7 +2080,7 @@ asked "what happens if a user does X maliciously" — §6 is your prepared answe
 Wave: ____            Date: ____
 
 [ ] flutter analyze .............. 0 issues
-[ ] npm test ..................... 10/10
+[ ] npm test ..................... 78/78 (DB may be down)
 [ ] verify_schema.js ............. 113/113
 [ ] run_match_flow_check.js ...... 69/69
 [ ] check_ml_service.js .......... 71/71 up · 31/31+4 skipped down   (S.3+)
@@ -1800,11 +2090,14 @@ Wave: ____            Date: ____
 [ ] build_reco.py ................ 3/3 gates, RELEASED               (S.5+)
 [ ] eval_reco.py ................. gate PASS, lift over cold-start   (S.5-C+, run AFTER build_reco)
 [ ] ml /health.recoRankSpec ...... reco-rank-v1 · 1a6c5f39bf5a2c56  (S.5-B+, RESTART ml first)
-[ ] gen_intents.py ............... 1,680 rows, sha c539b8fc4057      (S.6-A+)
-[ ] train_intents.py ............. 10/10 gates, RELEASED, exam 0.62  (S.6-B+)
-[ ] test_nlu.py .................. 63/63, run before every commit    (S.6-B+)
-[ ] ml /health.models ............ 4 ready incl. intent, no threshold (S.6-B+, RESTART ml first)
-[ ] /nlu/parse ................... 5 slots, < 50 ms, 0 over-budget   (S.6-B+)
+[ ] gen_intents.py ............... 2,576 rows, sha adbdd5d63a81      (S.6-C+, validate exam FIRST)
+[ ] train_intents.py ............. 10/10 gates, RELEASED, exam 0.6652 (S.6-C+, 23 labels)
+[ ] test_nlu.py .................. 68/68 + 0 skipped, before commit  (S.6-C+)
+[ ] ml /health.models ............ 4 ready, intent spec = ...-v2     (S.6-C+, /nlu/refresh first)
+[ ] /nlu/parse ................... 5 slots, p50 ~21 ms on IDLE box   (S.6-C+, load-sensitive)
+[ ] /nlu/spec .................... 23 intents / 8 groups / 3 reasons  (S.6-C+)
+[ ] check_assistant.js ........... PASS 278/278, 0 skips, rolled back (S.6-C+, ml-service UP)
+[ ] check_booking_service.js ..... PASS 60/60, ledger matches escrow  (S.6-C+, any money change)
 [ ] server boots, 4 jobs registered
 [ ] this wave's feature steps (§3/§4)
 [ ] IDOR spot-check (§6.2)

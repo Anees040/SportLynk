@@ -880,7 +880,7 @@ def audit(rows: list[dict[str, str]], templates: list[Template],
     led.gate("rows_per_intent", not out_of_band,
              f"outside [{isp.ROWS_PER_INTENT_MIN},{isp.ROWS_PER_INTENT_MAX}]: "
              f"{out_of_band}" if out_of_band else
-             f"all 15 intents in [{min(per_intent.values())},"
+             f"all {len(per_intent)} intents in [{min(per_intent.values())},"
              f"{max(per_intent.values())}]")
     led.gate("rows_total", isp.TOTAL_ROWS_MIN <= len(rows) <= isp.TOTAL_ROWS_MAX,
              f"{len(rows)} rows (want [{isp.TOTAL_ROWS_MIN},{isp.TOTAL_ROWS_MAX}])")

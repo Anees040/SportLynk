@@ -108,34 +108,83 @@ from typing import Iterable, Sequence
 
 #: Bump when the label contract in section 2 changes. Stamped into
 #: ``intents_meta.json``, into the exam lock, and (Wave C) into the model.
-INTENT_SPEC_VERSION: str = "assistant-intents-v1"
+INTENT_SPEC_VERSION: str = "assistant-intents-v2"
 
 #: Bump when the generation tables in sections 3-5 change. Recorded in
 #: ``intents_meta.json`` so a regenerated corpus can be told apart from the
 #: shipped one even when both happen to have 15 intents and 1,680 rows.
-DATASET_SPEC_VERSION: str = "assistant-dataset-v1"
+DATASET_SPEC_VERSION: str = "assistant-dataset-v2"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. The label contract
 # ─────────────────────────────────────────────────────────────────────────────
 
-#: The 15 intents, ALPHABETICAL. Alphabetical because scikit-learn sorts string
+#: The 23 intents, ALPHABETICAL. Alphabetical because scikit-learn sorts string
 #: classes, so ``model.classes_`` lines up with this tuple with no remapping --
 #: the same reason ``text_norm.LABELS`` is alphabetical. Every confusion-matrix
 #: axis, every ``labels=`` argument and every ``predict_proba`` column uses this
 #: order.
 #:
-#: A 16th intent is a new INTENT_SPEC_VERSION and a retrain, not an edit.
+#: A 24th intent is a new INTENT_SPEC_VERSION and a retrain, not an edit. This
+#: tuple has been through that door once: v1 shipped 15 labels, v2 adds the
+#: eight below, and the rule that made it a version bump rather than an edit is
+#: the reason v1's released model is still loadable and still comparable.
+#:
+#: ── why these eight, and not the other things Scout can do ────────────────
+#:
+#: The test for "deserves a trained label" is: does it arrive as UNPROMPTED FREE
+#: TEXT, in many phrasings, meaning something no existing label means? Eight
+#: things passed it.
+#:
+#: * ``find_players`` -- "koi player chahiye", "need 2 guys tonight". A PERSON,
+#:   which ``find_opponents`` (a whole opposing team) does not cover, and the
+#:   confusion between the two is the interesting one.
+#: * ``find_teams`` -- "kisi team me join karna hai". JOINING a squad, the mirror
+#:   of ``find_opponents`` playing against one.
+#: * ``navigate`` -- "kaise pohnchu", "location bhejo". ``venues.latitude`` and
+#:   ``longitude`` are already populated, so this answers with a real map card
+#:   and real directions rather than a paragraph.
+#: * ``elo_help`` -- "rating kaise barhay". Answered from the seeded ``elo``
+#:   block in ``global_settings``, so the numbers in the reply are the numbers
+#:   the ranking system actually uses.
+#: * ``app_help`` -- "app kaise use karu", "ye wallet kya hota hai". The
+#:   where-is-it / what-is-it bucket. Deliberately NARROW: a specific procedure
+#:   already has a label (``topup_help``, ``create_team_help``,
+#:   ``refund_policy``) and must keep it, because this class is a semantic sponge
+#:   and every phrasing it absorbs is one the specific label loses.
+#: * ``contact_owner`` -- "owner se baat karani hai". The front door of the
+#:   escalation loop: Scout does not know, a human is asked, the answer is
+#:   remembered for the next person who asks.
+#: * ``affirm`` / ``deny`` -- "haan bhai kar do" / "nahi ruko". A pending
+#:   confirmation is resolved by a DETERMINISTIC lexicon before the classifier
+#:   is consulted, because two classes of one-word replies is a job a rule does
+#:   at ~100% and a 23-way classifier can only do worse. They are trained labels
+#:   anyway, for the case the rule never sees: a bare "haan" arriving with
+#:   nothing pending, which must land somewhere sane instead of firing the
+#:   out-of-scope menu at a user who was agreeing with Scout.
+#:
+#: What is deliberately NOT here: new chat, switch chat, rename thread. Nobody
+#: types "switch chat" at an assistant -- they tap the thread. Those are REST
+#: endpoints and UI affordances, and putting them in the classifier would cost
+#: real accuracy on all 23 labels to serve a gesture nobody makes.
 INTENTS: tuple[str, ...] = (
+    "affirm",
+    "app_help",
     "book_venue",
     "cancel_booking",
     "check_availability",
+    "contact_owner",
     "create_team_help",
+    "deny",
+    "elo_help",
     "find_opponents",
+    "find_players",
+    "find_teams",
     "find_venue",
     "greeting",
     "my_bookings",
+    "navigate",
     "out_of_scope",
     "refund_policy",
     "team_stats",
@@ -184,8 +233,15 @@ INTENT_CATALOG: tuple[tuple[str, str, str, str], ...] = (
      "named venue or on a given date",
      "find_venue"),
     ("book_venue", "booking",
-     "commit to a booking, including the bare in-dialog confirmation whose slots "
-     "the dialog manager is already holding",
+     "commit to a booking. v2 narrows this, and the line is drawn where a "
+     "classifier can actually see it: book_venue if the utterance carries a "
+     "booking VERB (book, reserve, lock, karwa do) OR re-specifies a concrete "
+     "option (a time, a date, a venue -- 'yes the 8pm one'). ``affirm`` is what "
+     "is left: agreement carrying neither, where the thing agreed to exists only "
+     "in the dialog state ('haan theek hai', 'ok wohi kar do'). v1 folded both "
+     "readings in here; once ``affirm`` exists that leaves two labels claiming "
+     "one utterance, and a rule about DIALOG CONTEXT would be one the model "
+     "cannot apply because it never sees the context",
      "check_availability"),
     ("my_bookings", "booking",
      "list the user's own bookings, upcoming or past",
@@ -226,11 +282,53 @@ INTENT_CATALOG: tuple[tuple[str, str, str, str], ...] = (
      "anything SportLynk cannot act on, INCLUDING sports news, live scores and "
      "PSL fixtures",
      "tournament_list"),
+
+    # ── v2 ─────────────────────────────────────────────────────────────────
+    # Appended rather than interleaved: INTENT_GROUPS is derived from
+    # first-appearance order here, so appending puts the two new groups at the
+    # end of that tuple and leaves the six v1 groups on the axis positions the
+    # v1 confusion matrices already used. INTENTS is what is alphabetical; this
+    # tuple is what is ordered by reading sense, and self_check() asserts the two
+    # hold the same names.
+    ("navigate", "discovery",
+     "how to GET to a venue: directions, distance, location, a map or a pin; the "
+     "object is a route, not a ground to choose",
+     "venue_info"),
+    ("find_players", "team",
+     "ask the platform for one or more PEOPLE to fill a squad or a side, usually "
+     "with a count, a sport or a time",
+     "find_opponents"),
+    ("find_teams", "team",
+     "ask to JOIN an existing team, or to be shown teams that are recruiting; the "
+     "user wants to be on the squad, not to play against it",
+     "find_opponents"),
+    ("elo_help", "info",
+     "the RULES of rating: how ELO moves, what a win or a loss is worth, how to "
+     "climb, why a rating dropped",
+     "team_stats"),
+    ("app_help", "info",
+     "how to USE SportLynk, or what one of its concepts means: where a screen is, "
+     "what a wallet or escrow or trust score is, how to sign in. NOT a specific "
+     "money, team or refund procedure -- those keep their own labels",
+     "out_of_scope"),
+    ("contact_owner", "support",
+     "reach a HUMAN: the venue owner, the ground manager, support; includes asking "
+     "Scout to pass a question on",
+     "venue_info"),
+    ("affirm", "dialog",
+     "bare agreement with what Scout just proposed: yes, haan, ji, theek hai, kar "
+     "do. Carries no task of its own -- it is an answer, not a request",
+     "deny"),
+    ("deny", "dialog",
+     "bare refusal of what Scout just proposed: no, nahi, ruko, cancel that, "
+     "rehne do. NOT cancel_booking, which acts on an existing booking",
+     "affirm"),
 )
 
 #: Coarse groups, in first-appearance order in :data:`INTENT_CATALOG`.
 INTENT_GROUPS: tuple[str, ...] = (
     "discovery", "booking", "account", "team", "info", "social",
+    "support", "dialog",
 )
 
 #: The closed tag vocabulary for the ``phenomena`` column, alphabetical.
@@ -439,8 +537,8 @@ ROWS_PER_INTENT_MAX: int = 130
 #: contradicting each other: fifteen intents each sitting legally on 100 rows
 #: total 1500, which a hand-written floor of 1600 would then reject with no way
 #: for the author to satisfy both. The spec's "~1,800 rows" sits inside this range.
-TOTAL_ROWS_MIN: int = 15 * ROWS_PER_INTENT_MIN
-TOTAL_ROWS_MAX: int = 15 * ROWS_PER_INTENT_MAX
+TOTAL_ROWS_MIN: int = len(INTENTS) * ROWS_PER_INTENT_MIN
+TOTAL_ROWS_MAX: int = len(INTENTS) * ROWS_PER_INTENT_MAX
 
 #: Target share of each intent's TEMPLATE rows by language. English leads
 #: because it is the shortest path to a working demo; Roman Urdu is close behind
@@ -1163,7 +1261,11 @@ _TEXT_CASES: tuple[tuple[str, str | None], ...] = (
 #: :func:`stable_seed` pinned against a literal. Recomputing sha256 inside the
 #: test would prove nothing; a literal is what actually detects the day somebody
 #: "simplifies" this to ``hash()`` and reproducibility quietly dies.
-_PINNED_SEED: int = 3041649028626642170  # stable_seed(INTENT_SPEC_VERSION, "find_venue-en-01")
+_PINNED_SEED: int = 3481851257299005900  # stable_seed(INTENT_SPEC_VERSION, "find_venue-en-01")
+#: The v1 value was 3041649028626642170. It changed because INTENT_SPEC_VERSION is
+#: an input to the seed, which is the whole point of this pin: every generated row
+#: is reseeded by a label-contract change, so a v2 corpus cannot silently inherit
+#: v1's draws and pass itself off as the same dataset.
 
 #: ``(left, right, same?)`` for :func:`dedup_key`. The two ``False`` rows are the
 #: load-bearing ones: they pin that this key does NOT fold Roman Urdu spelling
@@ -1192,9 +1294,9 @@ def self_check() -> list[tuple[str, str]]:
     receipts: list[tuple[str, str]] = []
 
     # ---- 1. the label contract ------------------------------------------------
-    assert len(INTENTS) == 15, (
-        f"INTENTS has {len(INTENTS)} entries; the S.6 spec fixes the label set at "
-        f"15. Adding a sixteenth is a model-invalidating change: bump "
+    assert len(INTENTS) == 23, (
+        f"INTENTS has {len(INTENTS)} entries; the S.6 contract fixes the v2 label "
+        f"set at 23. Adding a twenty-fourth is a model-invalidating change: bump "
         f"INTENT_SPEC_VERSION and retrain, do not just append"
     )
     assert len(set(INTENTS)) == len(INTENTS), "INTENTS contains a duplicate"
@@ -1222,7 +1324,7 @@ def self_check() -> list[tuple[str, str]]:
     )
     assert tuple(sorted(catalog_names)) == INTENTS, (
         f"INTENT_CATALOG covers {catalog_names} but INTENTS is {INTENTS}. The two "
-        f"tuples hold the same 15 names in two different ORDERS on purpose -- "
+        f"tuples hold the same {len(INTENTS)} names in two different ORDERS on purpose -- "
         f"INTENTS is alphabetical because that is model.classes_ order and so the "
         f"order every confusion-matrix axis must use, while the catalog keeps the "
         f"S.6 spec's presentation order (discovery, booking, account, team, info) "
@@ -1246,7 +1348,7 @@ def self_check() -> list[tuple[str, str]]:
     )
     receipts.append((
         "catalog",
-        f"15 glosses in spec order, {len(INTENT_GROUPS)} groups all used, "
+        f"{len(INTENT_CATALOG)} glosses in spec order, {len(INTENT_GROUPS)} groups all used, "
         f"confusable != self",
     ))
 
@@ -1564,8 +1666,10 @@ def self_check() -> list[tuple[str, str]]:
         f"EXAM_LANG_QUOTA sums to {sum(EXAM_LANG_QUOTA.values())} but the exam takes "
         f"{EXAM_ROWS_PER_INTENT} rows per intent"
     )
-    assert len(INTENTS) * EXAM_ROWS_PER_INTENT == EXAM_ROWS_TOTAL == 150, (
-        f"the exam must be exactly 150 rows, 10 per intent (S.6 Wave A spec): "
+    assert len(INTENTS) * EXAM_ROWS_PER_INTENT == EXAM_ROWS_TOTAL == 230, (
+        f"the exam must be exactly 230 rows, 10 per intent -- the 150 v1 rows "
+        f"byte-identical plus 80 for the eight v2 labels, which is what makes a "
+        f"v1-vs-v2 score on the shared 150 an honest comparison: "
         f"{len(INTENTS)} x {EXAM_ROWS_PER_INTENT} != {EXAM_ROWS_TOTAL}"
     )
     assert EXAM_LANG_QUOTA["ru"] >= EXAM_LANG_QUOTA["en"], (
