@@ -53,10 +53,14 @@ trained ML models — never replace them with external AI API calls.
 - generate_bookings.py must NOT touch the DB and must NOT import from app/routers/.
 
 ## Status
-S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D), S.5 (A–C) and S.6 (A–C) are all code-complete — **Wave C landed on
+S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D), S.5 (A–C) and S.6 (A–E) are all code-complete — **Wave C landed on
 BOTH halves**: the v2 label contract + model #4 retrained to 23 intents (ml-service), and Scout's dialog
 manager, action executor, chat persistence and the three FR8.15 service extractions (Node), verified live
-at `PASS 278/278`. Wave D is the Flutter chat screen. The ML tier is live end to
+at `PASS 326/326`. Wave D is the Flutter chat screen — built and `flutter analyze`-clean in a parallel
+session, so that receipt is that session's and was not re-run here. Wave E is the honesty pass: no LLM in
+the reply path (decided, not omitted), two dishonest badges corrected, the live HTTP surface proved at
+`PASS 173/173`, a generated evidence pack, and the S.6 milestone checklist audited line by line in
+TESTING.md §4.21. The ML tier is live end to
 end: model #1 (dynamic pricing) is trained, gated, served, and on the owner's screen with
 real confidence + a 72h demand chart, plus a reproducibility/evidence pack. Model #2
 (sentiment) is trained, gated, served, and — as of S4-C — called by Node: every review with
@@ -67,7 +71,8 @@ match% badge is a real cosine score and the fake client-side "AI Recommended" so
 and as of S6-C it understands **23 intents, not 15** — the assistant is named **Scout**, and its dialog
 manager + action executor now SHIP: 27 actions, session state in `chat_channels type='assistant'`, a
 six-value `answer.source` on every reply, and money executed through the same `bookingService` the REST
-route uses. The chat screen is Wave D.
+route uses. The chat screen shipped in Wave D, and S6-E audited the whole milestone against its own
+acceptance list (TESTING.md §4.21) instead of declaring it done.
 - Model: `pricing-v1-20260825-0041`, HistGradientBoostingClassifier, 374 KB, 12/12
   release gates. Binary classifier P(booked | features, price) — price is an INPUT
   (price_ratio), so one model serves BOTH the 72h forecast (ratio=1.0) and the price
@@ -101,20 +106,23 @@ route uses. The chat screen is Wave D.
   0.461 vs cold-start-as-served 0.371 vs popularity 0.247 vs random 0.191 → **+24.2% over the baseline
   the app actually falls back to**. The 400-player synthetic population exists because the real corpus
   can only evaluate 2 users; both are published. reports/reco_eval.md + model_card_reco.md.
-- Model #4: `intent-v2-20260828-1329`, the assistant's INTENT CLASSIFIER — word (1,2) TF-IDF ∪ char_wb
-  (2,6) = 18,809 features → LinearSVC(C=0.5, balanced) → CalibratedClassifierCV(sigmoid, folds grouped by
+- Model #4: `intent-v2-20260828-2315`, the assistant's INTENT CLASSIFIER — word (1,2) TF-IDF ∪ char_wb
+  (2,6) = 18,849 features → LinearSVC(C=0.5, balanced) → CalibratedClassifierCV(sigmoid, folds grouped by
   template_id), 6.6 MB, 10/10 gates. **23 intents in 8 groups** (`assistant-intents-v2` ·
   68396192ab4a87a4) — S6-C added `find_players`, `find_teams`, `navigate`, `contact_owner`, `app_help`,
-  `elo_help`, `affirm`, `deny` and dropped NONE of v1's 15. Held-out phrasings 0.8033 / macro-F1 0.7991
-  (0.8516 grouped); the sha-locked, re-locked **230-row** hand-written exam **0.6652** / 0.6537, 0.7652
-  collapsed to the 8 groups, 95% CI [0.60, 0.72] vs a 0.0435 majority baseline — the gap is a WRITER gap,
-  not a bug, and both numbers are published. `confidenceThreshold = 0.45` is stamped IN the artifact: val
-  coverage 0.8683, accuracy on what it answers 0.8782, confident errors 106 → 57, ECE 0.1854 → 0.1512.
+  `elo_help`, `affirm`, `deny` and dropped NONE of v1's 15. Held-out phrasings 0.8086 / macro-F1 0.8042
+  (0.8569 grouped); the sha-locked, re-locked **230-row** hand-written exam **0.6696** / 0.6608, 0.7652
+  collapsed to the 8 groups, 95% CI [0.6087, 0.7261] (2000 resamples) vs a 0.0435 majority baseline — the
+  gap is a WRITER gap, not a bug, and both numbers are published. `confidenceThreshold = 0.45` is stamped
+  IN the artifact: val coverage 0.8662, accuracy on what it answers 0.8863, confident errors 103 → 53,
+  ECE 0.1854 → 0.1788. Every one of those figures is in `reports/intent_metrics.json` — read them there,
+  because a superseded same-spec candidate (`intent-v2-20260828-1329`) is still in `models/` and its
+  numbers are close enough to look right when quoted from memory.
   Three abstain reasons on the wire (`low_confidence`, `no_evidence`, `no_known_terms`) and all five entity
   slots are returned even when it abstains — there is NO count, team or venue-name slot, so "need 2
   players" yields no 2. Entities are PURE RULES (`app/core/entities.py`, `nlu-entities-v1`) — stated
   plainly, not dressed up as learning. Reproduce: `cd ml-service && python training/train_intents.py` — no
-  flags; seed 20260824 is DEFAULT_SEED, so that exact command produced the served artifact in 28.0 s.
+  flags; seed 20260824 is DEFAULT_SEED, so that exact command produced the served artifact in 30.6 s.
   `POST /nlu/parse` p50 **20.9 ms** on a quiet box (v1 was 14.6 — 8 more labels cost +26% at the
   estimator: 9.41 ms vs 7.46 ms predict_proba, measured back to back in one interpreter), and the 50 ms
   budget is now close enough to real scheduler jitter that a CONTENDED laptop breaches it — see the S6-C
@@ -137,10 +145,10 @@ route uses. The chat screen is Wave D.
     ELO, or match change since) — expected untouched, not measured.
   - re-estimate elasticity from real bookings once data exists (pipeline is validated;
     ELASTICITY_PEAK 0.85 / OFFPEAK 2.20 are stated assumptions, not estimates).
-- NEXT: **S6-C is DONE on both halves.** Model #4 serves 23 intents at `intent-v2-20260828-1329`, and Scout's
+- NEXT: **S.6 is DONE, A through E.** Model #4 serves 23 intents at `intent-v2-20260828-2315`, and Scout's
   Node half is built and live-verified: `POST /api/assistant/message`, 27 actions, slot-filling across turns,
-  the chat drawer, the KB/escalation loop, and `PASS 278/278` from `check_assistant.js` inside a rolled-back
-  transaction. **Wave D is the Flutter chat screen** — and the contract it must render is fixed, so build to it:
+  the chat drawer, the KB/escalation loop, and `PASS 326/326` from `check_assistant.js` inside a rolled-back
+  transaction. **Wave D built the Flutter chat screen** against this fixed contract — it is the one to build to:
   `{text, chips[{label, action, args}], cards[{type, data}], answer:{source, ...}}` where `type` is one of
   venue · booking · slot_picker · confirm · player · team · tournament · map · wallet · stats · policy ·
   capabilities, EVERY action card carries buttons (there is no free-text-only dead end by design), and a chip tap
@@ -494,9 +502,11 @@ route uses. The chat screen is Wave D.
   `navigate`, `contact_owner`, `app_help`, `elo_help`, `affirm`, `deny`; **none of v1's 15 was dropped**,
   and that is asserted, not asserted-by-hand — `test_nlu.py` derives the added set from the spec and fails
   if a label ships untested. Corpus regenerated to **2,576 rows** (112/intent, en 1035 · ru 897 · mix 644,
-  616 templates of which 614 contributed, 382 authored, sha `adbdd5d63a81`); the exam grew to **230 rows**
+  624 templates of which 622 contributed, 382 authored, sha `64395ec8026c`); the exam grew to **230 rows**
   (10/intent, re-locked at sha `1f60b29cabad`) with v1's 150 rows kept **byte-identical** so the grids and
-  the old numbers stay comparable. RELEASED `intent-v2-20260828-1329` at 10/10 gates in 28.0 s.
+  the old numbers stay comparable. RELEASED `intent-v2-20260828-2315` at 10/10 gates in 30.6 s — the
+  pre-fix candidate `intent-v2-20260828-1329` is still in `models/` and every figure below was recomputed
+  off the RELEASED artifact in S6-E, because the wave was first written up from the candidate's numbers.
   THE FINDING — a **pre-existing v1 corpus defect**, not a model failure: "need 2 more players for
   tonights cricket match" returned `find_opponents` 0.77, and ablation showed the word "match" flipped it.
   3 templates + 3 authored rows had taught "we are N players short ⇒ find_opponents" — the least-wrong
@@ -513,19 +523,25 @@ route uses. The chat screen is Wave D.
   budget failure as a load signal first; the number to re-measure is `intentMs`, since `entityMs` stayed
   0.2 ms throughout. GOTCHA 3: `datasetSource` is published on `/health` and in the model card, and it was
   a **hardcoded v1 string** — the third dishonest receipt of this wave. It is now DERIVED from
-  `intents_meta.json` and raises `SystemExit` rather than guess. VERIFIED: 10/10 gates · val 0.8033 /
-  macro-F1 0.7991 / ECE **0.1512** (from 0.1854) · exam **0.6652** / 0.6537 / 0.7652 grouped / CI
-  [0.60, 0.72] · floor 0.45 → coverage 0.8683, answeredAccuracy 0.8782, confident errors 106 → 57 ·
+  `intents_meta.json` and raises `SystemExit` rather than guess. VERIFIED: 10/10 gates · val 0.8086 /
+  macro-F1 0.8042 / ECE **0.1788** (from 0.1854) · exam **0.6696** / 0.6608 / 0.7652 grouped / CI
+  [0.6087, 0.7261] · floor 0.45 → coverage 0.8662, answeredAccuracy 0.8863, confident errors 103 → 53 ·
   0 exact exam collisions, max near-dup 0.7143 · **68/68 tests** (63 → 68, and two were repaired: one was
   silently SKIPPING because its pinned utterance had risen above the floor, one had a name that still said
-  "fifteen classes") · `/health` 4/4 ready on `intent-v2-20260828-1329` · `/nlu/spec` 23 intents / 8 groups
+  "fifteen classes") · `/health` 4/4 ready on `intent-v2-20260828-2315` · `/nlu/spec` 23 intents / 8 groups
   / threshold 0.45 / fallback `out_of_scope` / the three abstainReasons · all **8 new labels reachable over
   HTTP**, each beating its runner-up by ≥0.35 · `check_ml_service.js` still **71/71**. THE HONEST COST of
-  8 more labels is **12 exam rows** v1 got right and v2 gets wrong — 7 of them fall below the floor and so
-  abstain rather than lie, 2 are stale gold under the v2 glosses (`navigate` now owns routes, `elo_help`
-  owns the rules), leaving **3 genuine served regressions**: at-064 greeting → deny 0.78, at-093
-  refund_policy → topup_help 0.47, at-118 topup_help → app_help 0.55. No threshold was moved to make any
-  of this pass.
+  8 more labels, recomputed in S6-E off the RELEASED artifact by `training/diff_intent_exam.py` (both models
+  scored on the 150 exam rows whose gold predates v2, argmax of one `predict_proba` call): v1 got **93/150**,
+  v2 gets **84/150** — **13 rows lost, 4 regained, net -9**. 6 of the 13 fall below the floor and abstain
+  rather than lie; 1 is stale gold under a v2 gloss (at-139 `venue_info` → `navigate` 0.7801 — routes ARE
+  `navigate` in v2), leaving **6 served regressions a user can actually see**: at-056 find_venue →
+  find_players 0.5217, at-064 greeting → deny 0.7693, at-093 refund_policy → topup_help 0.4886, at-110
+  team_stats → app_help 0.4748, at-118 topup_help → app_help 0.5112, at-123 tournament_list → find_teams
+  0.4781. All 4 regained rows sit BELOW the floor, so they are argmax wins the user never sees. This entry
+  first published **12 lost / 7 abstaining / 3 served** — that is the PRE-FIX candidate's diff, and the same
+  script reproduces it with `--candidate intent_20260828-1329.joblib`, which is how the two were told apart.
+  No threshold was moved to make any of this pass.
 - S6-C (Node half) — **Scout exists.** `POST /api/assistant/message {text, threadId?}` → `dialogManager.handleTurn`
   → `/nlu/parse` → an action executor that answers with `{text, chips[], cards[], answer:{source, ...}}`, plus the
   whole chat drawer (`GET/POST /api/assistant/threads`, rename, archive, delete, `GET .../messages` paged) so Scout
@@ -570,10 +586,12 @@ route uses. The chat screen is Wave D.
   ends at "book a slot first". `tournaments` has rows: 0 and no REST route yet — `tournament_list` answers
   honestly and empty. Verification needs a seam: `handleTurn` accepts a caller-owned `client`, and with one, `TXN`
   degrades to `SAVEPOINT scout_turn` / `RELEASE` / `ROLLBACK TO SAVEPOINT`, so a check script's outer
-  `BEGIN … ROLLBACK` survives 38 real turns.
-  VERIFIED: `node src/scripts/check_assistant.js` → **PASS 278/278**, exit 0, **zero skips**, ~3m15s, inside one
+  `BEGIN … ROLLBACK` survives 45 real turns.
+  VERIFIED: `node src/scripts/check_assistant.js` → **PASS 326/326**, exit 0, **zero skips**, ~2m40s, inside one
   transaction that is ROLLED BACK (assistant threads/turns/escalations back to 0, bookings back to 40 — measured
-  after the run). It drives the LIVE classifier (`intent-v2-20260828-1329`, floor 0.45) through: a booking end to
+  after the run). (The wave closed at 278 checks; S6-E's badge fix took it to 280 and its new sections to 326 —
+  the script is one growing receipt, not one per wave.) It drives the LIVE classifier
+  (`intent-v2-20260828-2315`, floor 0.45) through: a booking end to
   end with its ledger legs; a cancellation with refund + penalty and **money conserved across both wallets**; the
   four ways a confirm gate could leak money (model-affirm books nothing · stale confirm · model-deny · a chip
   positive control that DOES book); every read intent and every `answer_source`; escalation → owner answer → KB
@@ -586,8 +604,72 @@ route uses. The chat screen is Wave D.
   `check_booking_service.js` **PASS 60/60** — it books and cancels for real and asserts the ledger against the
   table at the top of `escrow.js` (full refund ≥24h, 0.8/0.2 inside the window, `slot_taken`,
   `not_cancellable`, `insufficient_funds` leaving wallet and slot untouched), so the extraction is proved
-  money-safe independently of Scout. `npm test` **78/78** with the DB down. NOT yet run: the live HTTP pass
-  over the 16 endpoints (Express, JWT middleware, rate limiter) — TESTING.md §4.20 steps 196/197/200.
+  money-safe independently of Scout. `npm test` **85/85** with the DB down. The one thing this wave did NOT
+  run was the live HTTP pass over the 16 endpoints (Express, JWT middleware, rate limiter) — TESTING.md §4.20
+  steps 196/197/200 — and S6-E closed it: `check_assistant_http.js` → **PASS 173/173**, 0 skips.
+- S6-E (the honesty pass) — **DECIDED: no LLM anywhere in Scout's reply path.** An `ASSISTANT_LLM=off|phrasing`
+  layer (deterministic reply → external API → reworded reply) was designed and deliberately not built:
+  rephrasing means transmitting wallet balances, booking times and opponent names to a third party, which
+  reverses the `assistant_turns`-stores-no-free-text property proved in S6-C; golden rule 3's carve-outs leave
+  only the greeting and the capability menu, which are the two lines that need it least; and it muddies the one
+  claim worth defending — that routing is done by a classifier this project trained. Every sentence Scout speaks
+  is composed in Node from a template or read from the database. Cost accepted and written down: the replies
+  read like a well-built form. Recorded in PROGRESS.md (Wave S6-E) and in `model_card_intent.md`.
+  Two badges corrected. (1) `"kal shaam football islamabad"` — the checklist's own utterance — parsed 0.364 and
+  ABSTAINED, because the corpus taught `find_venue` in sentence form and almost never as bare keywords. Fixed at
+  the CORPUS, not with a pre-classifier `if sport && city` rule that would have answered the checklist while
+  leaving the model as weak as it was: keyword shapes added to `gen_intents.py`, retrained →
+  **`intent-v2-20260828-2315`** (corpus 2,576, the sha-locked 230-row exam untouched), and that utterance now
+  reads `find_venue` **0.8108** while `"kal shaam"` alone still abstains at 0.3172. KNOWN LIMITATION, kept
+  rather than papered over: `"kal shaam cricket lahore"` → `find_players` 0.4764 — Lahore is in neither
+  `CITY_ALIASES` nor `SLOT_VOCAB["city"]` because all ten seeded venues are in the twin cities, and teaching the
+  classifier a city the booking half cannot serve would be the worse bug. (2) `find_players` /
+  `find_opponents` no longer answer `source: 'model'`: `reco_rank.py` is a deterministic weighted scorer, so one
+  flag became two — `scored` picks the sentence ("ranked by fit" vs "most recently active"), `modelBadge` picks
+  the badge, and the three-state truth moved to `meta.ranking` (`ranked | heuristic | unavailable`).
+  `find_venue` keeps `model` because model #3 is genuinely trained. `check_assistant.js` → **PASS 280/280**
+  at that point, and **326/326** once this wave's own sections landed.
+  NEW receipt, closing S6-C's dangling "NOT yet run": `src/scripts/check_assistant_http.js` (1,258 lines) →
+  **PASS 173/173**, 0 skips — it attaches to a listening server or spawns `src/server.js` and kills only what it
+  spawned, mints real JWTs, drives all 16 endpoints through Express, cleans up in a `finally`. TESTING.md §4.20
+  steps 196/197/200 are green.
+  NEW ARTIFACT — **`doc/scout_evidence.md` is generated, not written.** Both check scripts take `--evidence`
+  and each owns one HTML-comment-delimited block in it (`service`, `http`), rewriting only its own, so either
+  can be re-run alone; **a block that is absent was not run.** Each block carries what is needed to reproduce
+  it — commit + uncommitted-path count, node, model version + threshold + threshold SOURCE, the label/dataset
+  and entity/text fingerprints from the Python side, parse limits, registry census, database — then every
+  assertion in order and the transcript of the real turns (45 service, 19 HTTP) with intent, confidence,
+  `answer.source` and the `via` door. Shared writer: `src/scripts/lib/evidence.js`, a no-op unless the flag is
+  passed, which is why the calls live permanently in `section`/`check`/`skip`/`note` and inside `api()` (one
+  helper, not forty call sites). Deliberately NOT recorded: any credential, and not even `/health`'s
+  `apiKeyFingerprint` — it is safe by construction but the file is committed and the key is awaiting rotation.
+  GOTCHA — a pipe in a generated table cell must be `&#124;`, not `\|`: a backslash in a JS string written
+  through a shell heredoc is one escaping round from being eaten, and in the first pack it was, giving
+  five-column rows. Same family as the recorded `\n`-in-a-heredoc and `python - <<'PY'` cp1252 quirks.
+  GOTCHA — **SEC-6 shuts the door before the doorman does.** Eight assertions failed `429` where `401` was
+  expected: the anonymous quota is 20/min/IP and `identifyUser` counts a token that FAILS to verify as
+  anonymous, so 4 logins + 16 probes had spent the bucket. Section A is now 4 bad headers + 16 endpoints =
+  exactly 20, runs before any login, and mints its own token for the positive check; new section A2 spends
+  request 21 on purpose, asserts the exact 429 sentence + `RateLimit-Policy: 20;w=60` + `Retry-After`, then
+  sleeps the window out. Two of my own assertions were wrong and the code won both: a chip turn DOES carry an
+  `nlu` block (`intent` is what the client renders) — what must be null is `confidence` and `modelVersion`, so a
+  tap never enters measured accuracy; and the abstain reason is `nlu.reason` over the wire, not `abstainReason`.
+  VERIFIED over HTTP, not argued from source: `"haan lekin 7 baje"` = affirm **0.5898 via model**, above the
+  0.45 floor, and the census reads **bookings 27 → 27, balance 8300.00 unchanged** with the armed confirm gone
+  and `slots.time` = `19:00`; the bare `haan` after it is `via: 'lexicon'` and still buys nothing; the 51st chat
+  → `409`; a stranger reading another user's thread → `403`, not a 404 that would confirm it exists;
+  `state.confirm` never appears in a response body; and — provable only after the delete — **19 telemetry rows
+  survived their thread being deleted, `channel_id` nulled 19/19** (migration 018's `ON DELETE SET NULL`).
+  AUDIT, not a victory lap: the S.6 milestone acceptance list is now walked line by line in TESTING.md
+  §4.21 — six acceptance lines, five pitfalls, one limitation — and two of its lines could NOT be ticked as
+  written, so they are recorded instead of quietly satisfied. `my_elo` cannot exist as an intent (SportLynk
+  rates TEAMS, so it is `team_stats`; a per-player ELO answer could only invent a number), and pitfall 5
+  ("keep the 15 labels") was not followed — v2 ships 23, with step 187's ≥0.35-margin reachability check as
+  the compensating control. The audit also caught this file, PROGRESS.md and TESTING.md quoting the PRE-FIX
+  candidate run: corpus sha `adbdd5d63a81` (real: `64395ec8026c`), 616/614 templates (real: 624/622), val
+  0.8033 / exam 0.6652 (real: 0.8086 / 0.6696), 18,809 features (real: 18,849), and a "12 exam rows" cost
+  that is 13 on the released artifact. All propagated, and the last one now has a script instead of a
+  memory: `training/diff_intent_exam.py`.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;

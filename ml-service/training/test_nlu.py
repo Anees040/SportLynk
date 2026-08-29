@@ -655,8 +655,12 @@ def test_gibberish_is_refused_even_though_the_floor_cannot_catch_it():
 
 def test_a_typo_is_not_treated_as_gibberish():
     """The guard must not fire on a real utterance with a misspelling in it: prep
-    canonicalises "futbal" to "football" before the vocabulary is consulted."""
-    got = parse("futbal ka grnd chahiye kal")
+    canonicalises "futbal" to "football" before the vocabulary is consulted.
+
+    `now=NOW` is not optional: this asserts a DATE, and a date asserted against the
+    real clock passes on the day it was written and fails the next morning.
+    """
+    got = parse("futbal ka grnd chahiye kal", now=NOW)
     assert got.abstain_reason != "no_known_terms"
     assert got.entities["date"]["iso"] == "2026-08-29"
 
@@ -684,8 +688,11 @@ def test_an_abstention_still_returns_its_slots():
     """The slot-filling turn. The dialog manager asks "kis waqt?" and the user
     answers "kal 6 baje" -- an utterance with no intent to speak of. Returning
     empty entities alongside the abstention would break the conversation at exactly
-    the point where the user was being most cooperative."""
-    got = parse("kal 6 baje")
+    the point where the user was being most cooperative.
+
+    Frozen clock, same reason as above -- "kal" is only 2026-08-29 from 2026-08-28.
+    """
+    got = parse("kal 6 baje", now=NOW)
     assert got.entities["date"]["iso"] == "2026-08-29"
     assert got.entities["time"]["start"] == "18:00"
     if got.abstained:

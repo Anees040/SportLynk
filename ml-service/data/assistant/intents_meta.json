@@ -1,6 +1,6 @@
 {
   "generated_by": "training/gen_intents.py",
-  "generated_at": "2026-08-28T13:29:08+00:00",
+  "generated_at": "2026-08-28T23:14:39+00:00",
   "wave": "S.6 Wave A",
   "model": "#4 SportLynk assistant -- intent classifier corpus",
   "seed": 20260824,
@@ -12,8 +12,8 @@
   "inputs": {
     "templates": {
       "file": "templates.csv",
-      "rows": 616,
-      "sha256": "0722056117b4b7efa8f79f995de1256c0fc98c1e5a7b1d662ca79047aca187cf"
+      "rows": 624,
+      "sha256": "4ea0cdfa88d4df5c5ea039c6945e26353812a860c731475094b7292b0e971ce8"
     },
     "authored": {
       "file": "authored_intents.csv",
@@ -74,8 +74,8 @@
       "template": 2194
     },
     "splits": {
-      "train": 2037,
-      "val": 539
+      "train": 2038,
+      "val": 538
     },
     "intent_x_lang": {
       "affirm|en": 45,
@@ -149,18 +149,18 @@
       "wallet_balance|ru": 39
     },
     "phenomena": {
-      "question": 1192,
+      "question": 1182,
       "code_switch": 604,
-      "short": 496,
-      "plain": 473,
-      "imperative": 467,
-      "multi_slot": 390,
-      "boundary": 252,
-      "numeric": 252,
-      "politeness": 244,
-      "run_on": 183,
-      "negation": 172,
-      "ellipsis": 165,
+      "short": 505,
+      "plain": 471,
+      "imperative": 460,
+      "multi_slot": 399,
+      "boundary": 260,
+      "numeric": 255,
+      "politeness": 247,
+      "ellipsis": 187,
+      "run_on": 176,
+      "negation": 171,
       "indirect": 135,
       "slang": 75,
       "typo": 50,
@@ -169,12 +169,12 @@
       "misspelled_venue": 4
     },
     "per_template": {
-      "templates": 616,
-      "used": 614,
+      "templates": 624,
+      "used": 622,
       "unused": 2,
       "max": 8,
       "min": 1,
-      "mean": 3.57,
+      "mean": 3.53,
       "cap": 12,
       "unused_ids": [
         "greeting-en-40",
@@ -184,10 +184,10 @@
     "text_length": {
       "chars_min": 3,
       "chars_max": 96,
-      "chars_mean": 39.8,
+      "chars_mean": 39.7,
       "words_min": 1,
       "words_max": 19,
-      "words_mean": 7.77
+      "words_mean": 7.72
     }
   },
   "allocation": {
@@ -491,14 +491,14 @@
         "ru": 33
       },
       "effective_capacity": {
-        "en": 84,
-        "mix": 48,
-        "ru": 83
+        "en": 120,
+        "mix": 72,
+        "ru": 119
       },
       "spec_capacity": {
-        "en": 84,
-        "mix": 48,
-        "ru": 84
+        "en": 120,
+        "mix": 72,
+        "ru": 120
       },
       "floor_moves": [],
       "unplaced": 0
@@ -865,11 +865,11 @@
       },
       "find_venue": {
         "rows": 112,
-        "val": 24,
-        "val_fraction": 0.2143,
+        "val": 23,
+        "val_fraction": 0.2054,
         "val_authored": 3,
-        "val_template_groups": 4,
-        "train_template_groups": 14
+        "val_template_groups": 5,
+        "train_template_groups": 21
       },
       "greeting": {
         "rows": 112,
@@ -974,10 +974,10 @@
     },
     "vocabulary": {
       "train_types": 1190,
-      "val_types": 619,
+      "val_types": 618,
       "val_types_unseen": 124,
       "val_rows_with_unseen_token": 174,
-      "val_rows": 539
+      "val_rows": 538
     }
   },
   "checks": [
@@ -997,7 +997,7 @@
       "name": "templates_ids_unique",
       "ok": true,
       "severity": "gate",
-      "detail": "616 distinct ids"
+      "detail": "624 distinct ids"
     },
     {
       "name": "templates_ids_agree",
@@ -1015,7 +1015,7 @@
       "name": "templates_valid",
       "ok": true,
       "severity": "gate",
-      "detail": "all 616 patterns pass validate_pattern()"
+      "detail": "all 624 patterns pass validate_pattern()"
     },
     {
       "name": "templates_distinct",
@@ -1105,7 +1105,7 @@
       "name": "rendered_clean",
       "ok": true,
       "severity": "gate",
-      "detail": "4367 candidate rows across 616 templates, all clean and deduplicated"
+      "detail": "4463 candidate rows across 624 templates, all clean and deduplicated"
     },
     {
       "name": "templates_per_lang",
@@ -1177,7 +1177,7 @@
       "name": "rows_per_template",
       "ok": true,
       "severity": "gate",
-      "detail": "max 8 rows from one template (cap 12), mean 3.6"
+      "detail": "max 8 rows from one template (cap 12), mean 3.5"
     },
     {
       "name": "templates_used",
@@ -1213,7 +1213,7 @@
       "name": "val_generalisation",
       "ok": true,
       "severity": "warn",
-      "detail": "174/539 val rows contain a token unseen in train (124 of 619 val types)"
+      "detail": "174/538 val rows contain a token unseen in train (124 of 618 val types)"
     },
     {
       "name": "determinism",
@@ -1223,7 +1223,7 @@
     }
   ],
   "all_passed": true,
-  "sha256": "adbdd5d63a81b8e1dac2b3c4c86d642c8e5ffb372fcd2807eee91ed41894d565",
+  "sha256": "64395ec8026c89c74f97ff88eac1f595fba47dee3bc88b8047422465063be6e0",
   "output": "data/assistant/intents.csv",
   "reproduce": "python training/gen_intents.py --seed 20260824 --per-intent 112"
 }

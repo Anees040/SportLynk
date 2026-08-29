@@ -49,6 +49,14 @@ class BookingsScreenState extends State<BookingsScreen>
   /// Called by parent (PlayerHomeScreen) when Bookings tab becomes active
   void refreshIfNeeded() => _refreshIfStale();
 
+  /// Reload unconditionally, ignoring the 5-second staleness guard.
+  ///
+  /// Used when something outside this screen is KNOWN to have changed the rows —
+  /// a booking made or cancelled through the assistant. `refreshIfNeeded` would be
+  /// free to skip that, and a booking the user just paid for missing from the list
+  /// is not a cache miss, it is the app calling them a liar.
+  Future<void> reloadNow() => _load();
+
   void _refreshIfStale() {
     final now = DateTime.now();
     if (_lastLoadTime == null || now.difference(_lastLoadTime!).inSeconds > 5) {

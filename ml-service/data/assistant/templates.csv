@@ -98,10 +98,15 @@ find_venue-en-04,find_venue,en,any {sport} {venue_word} close to {area},ellipsis
 find_venue-en-05,find_venue,en,i need {sport} {venue_word} with {amenity} in {area},plain;multi_slot
 find_venue-en-06,find_venue,en,we want to play {sport} {date} which {venue_word} do you suggest,run_on;multi_slot;boundary
 find_venue-en-07,find_venue,en,what are my options for {sport} in {area} {polite},question
+find_venue-en-08,find_venue,en,{sport} {city} {date},short;ellipsis;multi_slot
+find_venue-en-09,find_venue,en,{sport} {area} {time},short;ellipsis;multi_slot
+find_venue-en-10,find_venue,en,{date} {time} {sport} {city},ellipsis;multi_slot;boundary
 find_venue-mix-01,find_venue,mix,{opener} koi decent {sport} {venue_word} suggest karo {area} me,code_switch;imperative
 find_venue-mix-02,find_venue,mix,any {sport} {venue_word} {area} ke around jo {budget} ho,code_switch;multi_slot;run_on
 find_venue-mix-03,find_venue,mix,{city} me best {sport} {venue_word} kaunsa hai {polite},code_switch;question
 find_venue-mix-04,find_venue,mix,{date} {sport} khelna hai koi good {venue_word} in {area},code_switch;multi_slot
+find_venue-mix-05,find_venue,mix,{date} {sport} {area} {time},code_switch;multi_slot;boundary
+find_venue-mix-06,find_venue,mix,{sport} {city} {budget} {polite},code_switch;ellipsis;politeness
 find_venue-ru-01,find_venue,ru,{date} {area} me koi {sport} {venue_word} hai {polite},question;multi_slot
 find_venue-ru-02,find_venue,ru,{area} ke {sport} {venue_word} dikhao {polite},imperative
 find_venue-ru-03,find_venue,ru,{city} me {sport} kahan khel sakte hain {polite},question
@@ -109,6 +114,9 @@ find_venue-ru-04,find_venue,ru,koi {sport} {venue_word} chahiye {area} me jo {bu
 find_venue-ru-05,find_venue,ru,{time} ke liye koi {sport} {venue_word} bata do {polite},imperative;multi_slot;boundary
 find_venue-ru-06,find_venue,ru,{amenity} wala {sport} {venue_word} chahiye {city} me,multi_slot
 find_venue-ru-07,find_venue,ru,{opener} {area} ke aas paas koi acha {sport} {venue_word} nai hai kya,negation;question
+find_venue-ru-08,find_venue,ru,{date} {time} {sport} {city},ellipsis;multi_slot;boundary
+find_venue-ru-09,find_venue,ru,{sport} {area} {date},short;ellipsis;multi_slot
+find_venue-ru-10,find_venue,ru,{city} {sport} {budget},ellipsis;multi_slot;numeric
 greeting-en-01,greeting,en,good morning,plain;short
 greeting-en-02,greeting,en,hello how are you,question
 greeting-en-03,greeting,en,whats up,slang;question;short

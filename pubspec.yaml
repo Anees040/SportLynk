@@ -48,6 +48,11 @@ dependencies:
   socket_io_client: ^2.0.3
   # S2 Wave D — the team profile's ELO history line chart (FR5.14).
   fl_chart: ^0.69.0
+  # S6 Wave D — Scout's `map` card opens a route in Google Maps. This was ALREADY
+  # a transitive dependency (supabase_flutter pulls it) and is already pinned at
+  # 6.3.2 in pubspec.lock, so declaring it directly adds no download and moves no
+  # version — it only stops `depend_on_referenced_packages` firing on the import.
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

@@ -26,6 +26,7 @@ const policyText = require('../src/utils/policyText');
 const threads = require('../src/services/assistantThreads');
 const discovery = require('../src/services/discoveryService');
 const escrow = require('../src/utils/escrow');
+const ml = require('../src/services/mlClient');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. THE REGISTRY — every trained label has somewhere to go
@@ -741,6 +742,101 @@ test('SCREENS: the deep-link map is a contract with Flutter, and `screen` surviv
   }
   // cleanSlots would drop the chip arg that names the screen if SLOT_KEYS forgot it.
   assert.equal(dialog.cleanSlots({ screen: 'wallet' }).screen, 'wallet');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 13. ABSTENTION RECOVERY — the parse survives, so offer it as a BUTTON
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// The entity extractor runs beside the classifier, not inside it, so a turn can
+// abstain on the INTENT while holding a flawless "football, Islamabad, tomorrow 6pm".
+// Wave E's measured case: "kal shaam football islamabad" parsed all four entities and
+// still scored find_venue 0.364 against a 0.45 floor. The corpus fix (eight verbless
+// keyword templates, retrained to intent-v2-20260828-2315) took that to 0.81, and this
+// is the belt to its braces for the abstentions that remain.
+//
+// The invariant these tests defend is WHERE the recovery happens: a chip carries its
+// own {action, args}, so tapping one re-enters decide() through the CHIP door. Nothing
+// here promotes a low score to an action -- the user does, with a tap.
+
+const ABSTAIN = {
+  low: ml.NLU_ABSTAIN_LOW_CONFIDENCE,
+  none: ml.NLU_ABSTAIN_NO_EVIDENCE,
+  terms: ml.NLU_ABSTAIN_NO_KNOWN_TERMS,
+  down: ml.NLU_ABSTAIN_UNAVAILABLE,
+  long: ml.NLU_ABSTAIN_TOO_LONG,
+};
+
+test('slotSearchChip: a parsed sport and city become one routable button', () => {
+  const out = dialog.slotSearchChip({
+    sport: 'football', area: 'Islamabad', date: '2026-08-30', time: '18:00',
+  });
+  assert.equal(out.action, 'find_venue');
+  assert.equal(actions.isAction(out.action), true, 'a chip nothing executes is worse than no chip');
+  assert.match(out.label, /Football in Islamabad/);
+  // Every arg must survive the whitelist, or the tap searches without them.
+  assert.deepEqual(dialog.cleanSlots(out.args), {
+    sport: 'football', area: 'Islamabad', date: '2026-08-30', time: '18:00',
+  });
+});
+
+test('slotSearchChip: date and time ALONE offer nothing — the abstention stands', () => {
+  // "kal shaam" is the utterance the model is RIGHT to abstain on: it names no sport
+  // and no place. A venue-search button here would be inventing the intent that the
+  // abstention just declined to invent.
+  assert.equal(dialog.slotSearchChip({ date: '2026-08-30', time: '18:00' }), null);
+  assert.equal(dialog.slotSearchChip({}), null);
+  assert.equal(dialog.slotSearchChip(null), null);
+});
+
+test('slotSearchChip: a place with no sport still searches, and a bare sport still searches', () => {
+  assert.match(dialog.slotSearchChip({ area: 'Islamabad' }).label, /^Grounds in Islamabad$/);
+  assert.match(dialog.slotSearchChip({ sport: 'cricket' }).label, /^Cricket grounds$/);
+  // A neighbourhood is a `locality`, not a city -- slotsFromEntities' own distinction.
+  const near = dialog.slotSearchChip({ sport: 'futsal', locality: 'F-11 Markaz' });
+  assert.equal(near.args.locality, 'F-11 Markaz');
+  assert.equal(near.args.area, undefined);
+});
+
+test('slotSearchChip: the label fits the chip cap, and the args keep what it drops', () => {
+  const out = dialog.slotSearchChip({
+    sport: 'badminton', locality: 'Bahria Town Phase 7', date: '2026-08-30', time: '18:00',
+  });
+  assert.ok(out.label.length <= 40, `40 is chip()'s own cap, got ${out.label.length}`);
+  assert.equal(out.label.endsWith('Ag'), false, 'a label chopped mid-word reads like a bug');
+  // The label had no room for the time; the SEARCH must still use it.
+  assert.equal(out.args.time, '18:00');
+  assert.equal(out.args.date, '2026-08-30');
+});
+
+test('abstainReply: the slot chip leads on all five reasons, including "we are down"', () => {
+  const slotChip = dialog.slotSearchChip({ sport: 'football', area: 'Islamabad' });
+  for (const [why, reason] of Object.entries(ABSTAIN)) {
+    const out = dialog.abstainReply({ reason, slotChip, name: 'Scout' });
+    assert.equal(out.chips[0].action, 'find_venue', `${why} dropped the slot chip`);
+    assert.equal(out.chips[0].label, slotChip.label);
+    assert.ok(out.chips.length <= 6, `${why} exceeded the chip cap`);
+    // Never at the cost of the capability menu: ER2.6 wants the help card on ALL five.
+    assert.ok(out.cards.some((c) => c.type === 'capabilities'), `${why} lost the menu`);
+  }
+});
+
+test('abstainReply: the slot chip outranks the "did you mean" guesses', () => {
+  // Order is the whole point: the concrete search the user just described beats a
+  // label-only guess at what they meant.
+  const out = dialog.abstainReply({
+    reason: ABSTAIN.low,
+    alternatives: [{ intent: 'find_players', confidence: 0.31 }, { intent: 'book_venue', confidence: 0.2 }],
+    slotChip: dialog.slotSearchChip({ sport: 'football', area: 'Islamabad' }),
+  });
+  assert.equal(out.chips[0].action, 'find_venue');
+  assert.deepEqual(out.chips.slice(1, 3).map((c) => c.action), ['find_players', 'book_venue']);
+});
+
+test('abstainReply: no parse, no chip — the reply is exactly what it was before', () => {
+  const bare = dialog.abstainReply({ reason: ABSTAIN.terms, name: 'Scout' });
+  assert.equal(bare.chips.some((c) => c.action === 'find_venue' && c.args), false);
+  assert.ok(bare.cards.some((c) => c.type === 'capabilities'));
 });
 
 // The pool opens on require (services/dialogManager -> db/pool). Without this the

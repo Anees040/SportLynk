@@ -127,4 +127,19 @@ class ApiConstants {
   /// takes `{action: 'hide'|'restore'|'dismiss'}`.
   static const String adminFlaggedReviews = '/admin/reviews/flagged';
   static String adminModerateReview(String reviewId) => '/admin/reviews/$reviewId';
+
+  // ── Scout, the assistant (S.6 Wave D) ───────────────────────
+  /// Every player-facing turn goes through the ONE `POST /message`: typed text
+  /// and a tapped chip are the same request, distinguished only by whether the
+  /// body carries `action`. That is deliberate — a chip must not need a second
+  /// endpoint, because the whole point of a chip is to reach a capability the
+  /// classifier may not have a label for.
+  static const String assistantMessage = '/assistant/message';
+  static const String assistantThreads = '/assistant/threads';
+  static const String assistantCapabilities = '/assistant/capabilities';
+  static String assistantThread(String threadId) => '/assistant/threads/$threadId';
+  static String assistantThreadMessages(String threadId) =>
+      '/assistant/threads/$threadId/messages';
+  static String assistantFeedback(String messageId) =>
+      '/assistant/messages/$messageId/feedback';
 }

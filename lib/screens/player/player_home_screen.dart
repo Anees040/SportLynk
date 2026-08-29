@@ -10,6 +10,8 @@ import 'player_profile_screen.dart';
 import 'bookings_screen.dart';
 import 'wallet_screen.dart';
 import 'teams_screen.dart';
+import '../../widgets/assistant/scout_fab.dart';
+import 'assistant_screen.dart';
 
 class PlayerHomeScreen extends StatefulWidget {
   const PlayerHomeScreen({super.key});
@@ -21,6 +23,11 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   int _tab = 0;
   int _prevTab = 0;
   Map<String, dynamic>? _homeData;
+
+  /// Reaches into the live Bookings tab so a booking made in the chat can be pulled
+  /// in immediately. The tab is inside an [IndexedStack] with `wantKeepAlive`, so its
+  /// State outlives every tab switch — the key is the only handle to it.
+  final GlobalKey<BookingsScreenState> _bookingsKey = GlobalKey<BookingsScreenState>();
 
   @override
   void initState() {
@@ -52,7 +59,37 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     _prevTab = _tab;
     setState(() => _tab = index);
     if (index == 0 && _prevTab != 0) _load();
+    if (index == 1 && _prevTab != 1) _bookingsKey.currentState?.refreshIfNeeded();
   }
+
+  /// Open Scout, then act on what it hands back.
+  ///
+  /// Two things can have happened in there. A booking may have been made or cancelled
+  /// — the same rows the Bookings tab is showing — so that tab is reloaded outright
+  /// rather than left to its staleness guard. And Scout may have answered "that lives
+  /// on the Wallet screen", in which case the trip continues here instead of dead-ending
+  /// in the chat.
+  Future<void> _openScout() async {
+    final exit = await Navigator.of(context).pushNamed('/assistant');
+    if (!mounted) return;
+    if (exit is! ScoutExit) return;
+    if (exit.bookingsChanged) {
+      _bookingsKey.currentState?.reloadNow();
+      // The home tab prints an upcoming-bookings strip from its own payload.
+      if (_tab == 0) _load();
+    }
+    final target = exit.screen == null ? null : _tabOf(exit.screen!);
+    if (target != null && target != _tab) _onTabChanged(target);
+  }
+
+  static int? _tabOf(String screen) => switch (screen) {
+        'home' => 0,
+        'bookings' => 1,
+        'teams' => 2,
+        'wallet' => 3,
+        'profile' => 4,
+        _ => null,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -63,12 +100,17 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
         index: _tab,
         children: [
           _buildHome(auth),
-          const BookingsScreen(),
+          BookingsScreen(key: _bookingsKey),
           const TeamsScreen(),
           const WalletScreen(),
           const PlayerProfileScreen(),
         ],
       ),
+      // Scout rides the shell, not the individual tabs, so it survives tab switches
+      // and keeps one instance. It is hidden on Teams — that tab has its own FAB and
+      // two stacked circles is a design bug, not a feature — and on Profile, which is
+      // settings, where a chat button is only noise.
+      floatingActionButton: (_tab == 2 || _tab == 4) ? null : ScoutFab(onTap: _openScout),
       bottomNavigationBar: _buildNav(),
     );
   }
@@ -305,6 +347,17 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
                   ),
                 ),
               ),
+            ),
+          ),
+
+          // ── ASK SCOUT ─────────────────────────────────────────
+          // Above Quick Actions, because it is the shortest path to every one of
+          // them: "koi ground milega kal shaam" beats four taps through the grid.
+          // The FAB handles discovery on the other tabs; this is the pitch.
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+              child: ScoutAskBanner(onTap: _openScout),
             ),
           ),
 

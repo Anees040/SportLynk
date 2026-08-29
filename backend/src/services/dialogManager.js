@@ -324,6 +324,49 @@ function guessChips(alternatives = []) {
 }
 
 /**
+ * THE SLOTS WE ALREADY HAVE, as a button.
+ *
+ * The entity extractor is deterministic and runs beside the classifier, not inside
+ * it, so an abstained turn can still be holding a perfectly parsed "football,
+ * Islamabad, tomorrow 6pm". Printing a help menu and dropping that on the floor
+ * wastes work the user already did -- so offer it back as a chip.
+ *
+ * This is deliberately NOT an override. A chip carries its own `{action, args}`, so
+ * tapping it re-enters `decide()` through the CHIP door and the classifier's
+ * abstention stands: the model was unsure, we said so, and the USER decided. A rule
+ * that quietly promoted a 0.36 guess to an action would be the other thing, and
+ * money-adjacent flows are exactly why this codebase does not do that.
+ *
+ * Requires a sport or a place. Date and time ALONE must not produce this chip --
+ * "kal shaam" is the utterance the model is RIGHT to abstain on, and offering a
+ * venue search for a bare "tomorrow evening" would be inventing the intent that the
+ * abstention just declined to invent.
+ */
+function slotSearchChip(slots) {
+  const s = cleanSlots(slots || {});
+  const where = s.locality || s.area || null;
+  if (!s.sport && !where) return null;
+
+  const args = {};
+  for (const key of ['sport', 'area', 'locality', 'date', 'time', 'budget', 'sort']) {
+    if (s[key] !== undefined) args[key] = s[key];
+  }
+
+  let label;
+  if (s.sport && where) label = `${titleCase(s.sport)} in ${where}`;
+  else if (s.sport) label = `${titleCase(s.sport)} grounds`;
+  else label = `Grounds in ${where}`;
+  // Append only what still fits: chip() truncates at 40, and a label chopped
+  // mid-word ("...Sat 30 Ag") reads like a bug. Whatever the label omits is still
+  // in `args`, so the search itself keeps the full date and time either way.
+  for (const extra of [s.date ? actions.day(s.date) : null,
+    s.time ? actions.clock(s.time) : null]) {
+    if (extra && `${label}, ${extra}`.length <= 40) label = `${label}, ${extra}`;
+  }
+  return chip(label, 'find_venue', args);
+}
+
+/**
  * The apology, chosen by WHY the model did not answer. Five reasons, three of them
  * the model's own and two of them ours, and they do not deserve the same sentence:
  *
@@ -339,36 +382,45 @@ function guessChips(alternatives = []) {
  * Every branch returns the capability menu, so ER2.6's "friendly help menu on low
  * confidence" holds for all five and no reply is ever text alone.
  */
-function abstainReply({ reason, alternatives = [], name = 'Scout' }) {
+function abstainReply({ reason, alternatives = [], name = 'Scout', slotChip = null }) {
+  // Mutating the built payload rather than assembling a second one: menu() is the
+  // only place the capability card is built, and it must stay that way. One helper
+  // so no branch can forget the lead chips -- the slot chip goes first on ALL five
+  // reasons, because when the parser got something concrete, the most useful button
+  // is the one that uses it, and that is as true when WE are down as when the model
+  // merely hesitated.
+  const withChips = (out, extras = []) => {
+    const lead = [slotChip, ...extras].filter(Boolean);
+    if (lead.length) out.chips = [...lead, ...out.chips].slice(0, 6);
+    return out;
+  };
   if (reason === ml.NLU_ABSTAIN_UNAVAILABLE) {
-    return menu(
+    return withChips(menu(
       `I could not read that just now — my language model is not answering. `
       + `Every button below still works, so tap what you need and I will do it.`,
       { name },
-    );
+    ));
   }
   if (reason === ml.NLU_ABSTAIN_TOO_LONG) {
-    return menu(
+    return withChips(menu(
       'That is a lot for one message. Say the main thing in a sentence and I will take it from there.',
       { name },
-    );
+    ));
   }
   if (reason === ml.NLU_ABSTAIN_LOW_CONFIDENCE) {
-    const out = menu('I am not sure I got that. Did you mean one of these?', { name });
-    const guesses = guessChips(alternatives);
-    // Mutating the built payload rather than assembling a second one: menu() is the
-    // only place the capability card is built, and it must stay that way.
-    if (guesses.length) out.chips = [...guesses, ...out.chips].slice(0, 6);
-    return out;
+    return withChips(
+      menu('I am not sure I got that. Did you mean one of these?', { name }),
+      guessChips(alternatives),
+    );
   }
   if (reason === ml.NLU_ABSTAIN_NO_KNOWN_TERMS) {
-    return menu(
+    return withChips(menu(
       `I did not recognise any of those words. I am ${name} — I only know SportLynk. `
       + 'Here is what I can do:',
       { name },
-    );
+    ));
   }
-  return menu(null, { name });
+  return withChips(menu(null, { name }));
 }
 
 /**
@@ -665,6 +717,11 @@ async function handleTurn({
           reason: decided.abstainReason,
           alternatives: decided.nlu ? decided.nlu.alternatives : [],
           name: settings.name,
+          // THIS turn's parse, not the merged slots: the chip must echo what the
+          // user just typed. Merged slots would resurrect a search from six turns
+          // ago on an unrelated unreadable message, which reads as Scout ignoring
+          // the question it just admitted it could not read.
+          slotChip: slotSearchChip(incoming),
         });
     } else {
       const fn = actions.ACTIONS[actionKey];
@@ -800,6 +857,7 @@ module.exports = {
   slotsFromEntities,
   fsmStateOf,
   guessChips,
+  slotSearchChip,
   abstainReply,
   labelFor,
   continuationOf,

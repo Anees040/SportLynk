@@ -3242,27 +3242,27 @@ So the contract moved, deliberately and visibly, and the model was refitted on i
 intent_spec.py --self-check   PASS 14 checks · labels assistant-intents-v2 · 68396192ab4a87a4
                                               dataset assistant-dataset-v2 · 339ad58af5ddb072
                               23 intents · 8 groups (dialog = exactly affirm + deny)
-gen_intents.py                data/assistant/intents.csv 2,576 rows · sha adbdd5d63a81
+gen_intents.py                data/assistant/intents.csv 2,576 rows · sha 64395ec8026c
                               112 rows/intent · en 1035 · ru 897 · mix 644
-                              616 templates (614 contributed, cap 12, max 8) + 382 authored rows
+                              624 templates (622 contributed, cap 12, max 8) + 382 authored rows
 validate_intent_test.py       data/assistant/assistant_test.csv 230 rows · sha 1f60b29cabad
                               10/intent · ru 4 / mix 3 / en 3 per intent · v1's 150 rows byte-identical
-train_intents.py              RELEASED · 10/10 gates · 28.0 s · seed 20260824 (default)
-                              models/intent_latest.joblib 6,597,833 B · intent-v2-20260828-1329
-  validation (539 unseen phrasings)   acc 0.8033 · macroF1 0.7991 · ECE 0.1512 · grouped 0.8516
-  exam (230 hand-written, 1f60b29c)   acc 0.6652 · macroF1 0.6537 · ECE 0.0865 · grouped 0.7652
-                                      95% CI [0.6043, 0.7217] (2,000 bootstrap resamples)
-                                      by language  mix 0.8116 (69) · ru 0.6196 (92) · en 0.5797 (69)
-                                      by phenomenon  code_switch 0.8448 (58) · question 0.7439 (82)
-                                                     boundary 0.6000 (90) · negation 0.5143 (35)
+train_intents.py              RELEASED · 10/10 gates · 30.6 s · seed 20260824 (default)
+                              models/intent_latest.joblib 6,610,141 B · intent-v2-20260828-2315
+  validation (538 unseen phrasings)   acc 0.8086 · macroF1 0.8042 · ECE 0.1788 · grouped 0.8569
+  exam (230 hand-written, 1f60b29c)   acc 0.6696 · macroF1 0.6608 · ECE 0.1077 · grouped 0.7652
+                                      95% CI [0.6087, 0.7261] (2,000 bootstrap resamples)
+                                      by language  mix 0.8261 (69) · ru 0.6087 (92) · en 0.5942 (69)
+                                      by phenomenon  code_switch 0.8621 (58) · question 0.7439 (82)
+                                                     boundary 0.6222 (90) · negation 0.5143 (35)
                                                      indirect 0.4909 (55)
-  baselines (uniform · train-majority `deny` · exam-majority `book_venue`)  all 0.0435 — 15.3x its prior
-  floor 0.45 (stamped in the artifact)  val   coverage 0.8683 · answered 468 · answeredAcc 0.8782 · cErr 57
-                                        exam  coverage 0.7870 · answered 181 · answeredAcc 0.7901 · cErr 38
-  pipeline  word (1,2) 6,838 + char_wb (2,6) 11,971 = 18,809 features -> LinearSVC C=0.5 balanced
+  baselines (uniform · train-majority `deny` · exam-majority `book_venue`)  all 0.0435 — 15.4x its prior
+  floor 0.45 (stamped in the artifact)  val   coverage 0.8662 · answered 466 · answeredAcc 0.8863 · cErr 53
+                                        exam  coverage 0.7870 · answered 181 · answeredAcc 0.7735 · cErr 41
+  pipeline  word (1,2) 6,878 + char_wb (2,6) 11,971 = 18,849 features -> LinearSVC C=0.5 balanced
             -> CalibratedClassifierCV(sigmoid, folds grouped by template_id)
 training/test_nlu.py          68 passed / 0 skipped / 0 failed (63 -> 68, and 2 repaired)
-GET /health                   4/4 ready · intent-v2-20260828-1329 · assistant-intents-v2
+GET /health                   4/4 ready · intent-v2-20260828-2315 · assistant-intents-v2
 POST /nlu/parse               120 exam utterances over HTTP, quiet box: p50 20.9 · p95 32.9 · max 114.0 ms
                               intentMs p50 20.9 · entityMs p50 0.2 · 2/120 over the 50 ms budget
 check_ml_service.js           71/71 — the 4th model changing shape is still invisible to Node
@@ -3322,25 +3322,59 @@ there**. All of that 1.3 points lived inside the abstain region (secretly-right 
 surfaces; they can see 5 fewer confident lies. Then fixing the 6 mislabelled rows beat both candidates
 outright and the trade-off question stopped existing.
 
-### The honest cost of the new labels: 12 exam rows
+That third row is the artifact S6-C released. The keyword retrain in S6-E, measured on the same instruments,
+reads `exam 0.6696 · v1's 150 0.5600 · new 80 0.8750 · answered 181 · right 140 · WRONG 41` — better on raw
+exam accuracy and on the 80 new rows, identical on v1's 150, and **3 more wrong answers actually served**,
+because rows that used to sit below the floor crossed it (at-056 and at-123 among them). Both directions are
+recorded because the released artifact is the one users meet; the trade bought a milestone utterance that
+abstained, and it was not free.
 
-12 rows that v1 answered correctly are wrong under v2 (at-002, at-034, at-047, at-064, at-078, at-093,
-at-108, at-110, at-118, at-123, at-134, at-139). **7 of the 12 fall below 0.45**, so they abstain rather than
-lie — the floor is doing exactly the job it was priced for in Wave B. Of the 5 that are served, two are
-**stale gold under the v2 glosses** rather than errors (`navigate` now owns route questions, at-139;
-`elo_help` owns the ELO *rules* while `team_stats` owns the values, at-110). That leaves **3 genuine served
-regressions**: at-064 `greeting` → `deny` 0.78, at-093 `refund_policy` → `topup_help` 0.47, at-118
-`topup_help` → `app_help` 0.55. The v1 exam rows were **not edited** to make any of this look better; they
-are byte-identical, which is what keeps this comparison meaningful at all.
+### The honest cost of the new labels: 13 exam rows
+
+13 rows that v1 answered correctly are wrong under the released v2 (at-002, at-034, at-040, at-047, at-056,
+at-064, at-078, at-093, at-108, at-110, at-118, at-123, at-139) and 4 go the other way (at-023, at-057,
+at-113, at-136), a net of **-9** on the 150 comparable rows: **93/150 under v1, 84/150 under v2**. **6 of the
+13 fall below 0.45**, so they abstain rather than lie — the floor is doing exactly the job it was priced for
+in Wave B — and all 4 regained rows sit below the floor too, so the service does not surface those either.
+Of the 7 that are served, one is **stale gold under the v2 glosses** rather than an error: `navigate` now owns
+route questions, so at-139 ("us maidan tak pohanchne ka rasta kya hai") is right and its gold is behind. That
+leaves **6 served regressions a user can actually see**:
+
+| row | gold | served as | conf | note |
+|---|---|---|---|---|
+| at-056 | `find_venue` | `find_players` | 0.5217 | "hum 10 log hain saturday ko, koi bara ground chahiye" |
+| at-064 | `greeting` | `deny` | 0.7693 | "koi masla nahi, thanks anyway" — loud and wrong |
+| at-093 | `refund_policy` | `topup_help` | 0.4886 | wallet-vs-card refund routing |
+| at-110 | `team_stats` | `app_help` | 0.4748 | three-way gloss overlap, see below |
+| at-118 | `topup_help` | `app_help` | 0.5112 | money *procedure* question |
+| at-123 | `tournament_list` | `find_teams` | 0.4781 | "any 5 a side events ... that we could join?" |
+
+Reproduce with `python training/diff_intent_exam.py` (defaults compare the v1 release to `intent_latest`): it
+derives the 150 comparable rows from the label spec, scores both artifacts through the router's own
+`argmax(predict_proba)` path, and prints the lost/gained/abstained split. The v1 exam rows were **not edited**
+to make any of this look better; they are byte-identical, which is what keeps this comparison meaningful.
+
+This section first published **12 lost / 7 abstaining / 3 served**, which is the S6-C release
+`intent-v2-20260828-1329`; the same script reproduces those figures exactly with
+`--candidate intent_20260828-1329.joblib`, which is how the two runs were told apart instead of argued about.
+Three rows account for the difference, and all three are honest losses rather than restatements: **at-056**
+was right under 1329 (`find_venue` 0.4596, below the floor) and the keyword retrain flipped it to
+`find_players` **above** the floor — the same corpus shapes that fixed bare `kal shaam football islamabad`
+cost this row; **at-123** was already wrong under 1329 but abstained at 0.3825 and is now served at 0.4781;
+and **at-110** was never the row the old entry described. That entry excused it as `elo_help` owning the ELO
+*rules* — but both artifacts predict `app_help` (0.4770 / 0.4748), a label that excuse does not cover. "elo
+ka hisaab kitab kahan dikhta hai app me" is a genuine three-way overlap (`app_help` for where-in-the-UI,
+`elo_help` for the rules, `team_stats` for the values), so it is counted wrong here rather than explained away.
 
 The measured weak spots are recorded rather than chased, because the encroachment is symmetric — more
 `app_help` rows would take back at-095/at-113/at-118 and lose others:
 
 * **app_help vs topup_help vs refund_policy** on money-*procedure* questions ("paise andar kaise jate hain
-  is app me" → `app_help` 0.55). Scout should treat those three as **one clarify group below ~0.60**.
+  is app me" → `app_help` 0.51). Scout should treat those three as **one clarify group below ~0.60**.
 * **"where is the &lt;domain noun&gt; tab"** lands on the domain label — "where is the tournaments tab" →
-  `tournament_list` 0.56 with `app_help` 0.39 as runner-up.
-* `check_availability` over-triggers on "free"/"khali" (at-003, at-080, at-149 at 0.72–0.75).
+  `tournament_list` 0.72 with `app_help` 0.21 as runner-up — the keyword shapes sharpened this, they did not
+  fix it.
+* `check_availability` over-triggers on "free"/"khali" (at-003, at-080, at-149 at 0.74–0.77).
 * `create_team_help-en-08` / `create_team_help-ru-09` are a genuine **join-procedure vs `find_teams`**
   ambiguity that neither gloss adjudicates. Flagged for the user to rule on, not silently re-taught.
 
@@ -3348,20 +3382,23 @@ The measured weak spots are recorded rather than chased, because the encroachmen
 
 Wave B measured p50 14.6 ms with 0/300 over budget. v2 costs more: **9.41 ms** median `predict_proba`
 against v1's **7.46 ms**, measured back to back in one interpreter on the same four utterances — +26% for
-8 more labels (23 × 5 = 115 calibrated sub-estimators, an artifact of 6.6 MB rather than 3.9, and 18,809
+8 more labels (23 × 5 = 115 calibrated sub-estimators, an artifact of 6.6 MB rather than 3.9, and 18,849
 features rather than 15,220). That is still comfortably inside 50 ms. What is **not** comfortable is the
 margin against real machine noise: the same 120 exam utterances over HTTP read **p50 20.9 ms, 2/120 over
 budget** on a quiet box and **p50 82.6 ms, 119/120 over budget** on a box shared with a second dev session,
 and `test_a_warm_parse_stays_inside_the_fifty_millisecond_budget` failed three times in a row at 63–95 ms
 median, then passed three times in a row at ≈2.5 s total once the box was quiet. `entityMs` stayed at
 **0.2 ms** throughout, so the variance is all estimator plus scheduler. Read a budget failure as a **load
-signal first** and re-measure before touching the model or the budget. Neither was touched here.
+signal first** and re-measure before touching the model or the budget. Neither was touched here. (Both
+latency figures were first taken on the `1329` candidate. Re-measured in S6-E on the RELEASED artifact by the
+same method — 4 utterances × 200 reps, one interpreter, back to back — v1 reads p50 **7.63 ms** and v2 p50
+**9.57 ms**, **+25.4%**, so the retrain's 40 extra features did not move the cost claim.)
 
 ### Three receipts were dishonest this wave, all fixed in the trainer
 
 `datasetSource` is published on `/health` and printed in the model card, so it is read as provenance — and
 it was a **hardcoded v1 string** that would have described the previous corpus after every regeneration. It
-is now derived from `intents_meta.json` (`generated corpus (614 of 616 templates contributed rows) + 382
+is now derived from `intents_meta.json` (`generated corpus (622 of 624 templates contributed rows) + 382
 hand-authored rows`) and raises `SystemExit` naming the missing key rather than guessing. A docstring
 carrying a stale "(the 236 hand-authored ones)" count lost the number. A test named
 `..._over_fifteen_classes` had a body that already read the spec correctly — only the name lied — and is now
@@ -3381,10 +3418,13 @@ was replaced by the set equality above.
 
 ### Open / carried forward
 
-- [ ] **`intent_latest.joblib` in the tree is v2; the copy in `aee2d91` is v1.** The parallel session
-  committed Wave B's artifact (3,872,007 B) at 16:55 local, before v2 was released at 18:29. The working
-  tree now holds `intent-v2-20260828-1329` (6,597,833 B) plus the regenerated corpus, exam, metrics, model
-  card and three PNGs, all **uncommitted**. `.gitignore:88-89` re-admits `*_latest.joblib` on purpose, so
+- [ ] **`intent_latest.joblib` in the tree is newer than the committed copy — twice over now.** The
+  parallel session first committed Wave B's v1 artifact (3,872,007 B) at 16:55 local, before v2 was released
+  at 18:29; a later peer commit (`c751102`) carried a v2 artifact, but it is the **pre-fix `1329` candidate**
+  (6,597,833 B — verified with `git cat-file -s HEAD:ml-service/models/intent_latest.joblib`). The working
+  tree holds the RELEASED `intent-v2-20260828-2315` (6,610,141 B) plus the regenerated corpus, exam, metrics,
+  model card and three PNGs, still **uncommitted**, so a fresh clone today serves `1329` while every figure
+  in this file describes `2315`. `.gitignore:88-89` re-admits `*_latest.joblib` on purpose, so
   the next commit MUST carry it or a fresh clone serves a model whose fingerprint no longer matches the
   code.
 - [ ] **The 23 labels are FINAL for v2.** A 24th is a **v3 bump**, not a patch: the label fingerprint is
@@ -3422,7 +3462,7 @@ the chat, start another one, and come back to either. Every reply carries a mach
 | `services/rosterService.js` | 559 | player + opponent ranking, extracted from `routes/teams.js` |
 | `services/discoveryService.js` | 387 | venue search/detail/free-slots, tournaments, team discovery |
 | `migrations/018_assistant.sql` | 514 | 4 tables + 2 altered + 12 indexes |
-| `scripts/check_assistant.js` | 1526 | the live harness — 278 checks, one rolled-back transaction |
+| `scripts/check_assistant.js` | 1778 | the live harness — 326 checks, one rolled-back transaction |
 
 The endpoints: `POST /message` · `GET/POST /threads` · `GET /threads/:id/messages` · `PATCH /threads/:id`
 (rename **or** archive) · `DELETE /threads/:id` · `POST /messages/:id/feedback` · `GET /capabilities` · and
@@ -3577,36 +3617,37 @@ Two limits are printed rather than papered over:
 - `tournaments` has **0 rows and no REST route yet**, so `tournament_list` answers honestly and empty
   (S.7 owns tournaments).
 
-### The verification harness — 278 checks, 38 real turns, one rolled-back transaction
+### The verification harness — 326 checks, 45 real turns, one rolled-back transaction
 
 `node src/scripts/check_assistant.js` drives Scout the way Flutter will: real users from the seeded demo
-database, real JWT-equivalent user ids, the **live** classifier (`intent-v2-20260828-1329`, floor 0.45), real
+database, real JWT-equivalent user ids, the **live** classifier (`intent-v2-20260828-2315`, floor 0.45), real
 money. It runs inside a single `BEGIN … ROLLBACK`, which is only possible because `handleTurn` accepts a
 caller-owned `client` and degrades its own `TXN` to `SAVEPOINT scout_turn` / `RELEASE` / `ROLLBACK TO
-SAVEPOINT` when it has one. Nested `BEGIN` would have flattened the harness's rollback and left 38 turns of
+SAVEPOINT` when it has one. Nested `BEGIN` would have flattened the harness's rollback and left 45 turns of
 junk in the demo database.
 
 ```
-0  preflight — registry, model #4, migration 018                       3
-A  find a ground → see times → pick → confirm → booked                42
-B  cancel it → refund preview → confirmed → wallet and ledger agree   33
-C  a yes that is really a correction must NOT spend money             11
-C2 stale confirms, model denials, and the button that must still work 11
-D  reads: wallet · bookings · policy · tournaments · help · out of scope 31
-E  escalation → the owner answers → the next ask is free              28
-F  discovery: ground info · directions · players · opponents · teams   26
-G  threads: new · switch · rename · archive · delete · ownership       53
+0  preflight — registry, model #4, migration 018                         3
+A  find a ground → see times → pick → confirm → booked                  42
+B  cancel it → refund preview → confirmed → wallet and ledger agree     33
+C  a yes that is really a correction must NOT spend money               11
+C2 stale confirms, model denials, and the button that must still work   11
+D  reads: wallet · bookings · policy · tournaments · team rating · help 47
+E  escalation → the owner answers → the next ask is free                28
+F  discovery: ground info · directions · players · opponents · teams    28
+G  threads: new · switch · rename · archive · delete · ownership        53
 H  FR8.15 — one implementation of every rule, shared by route and Scout 40
-                                                          PASS 278/278
+I  the milestone utterance — "kal shaam football islamabad", end to end 30
+                                                              PASS 326/326
 ```
 
 **Zero skips** (a skip is counted and printed separately, so a run that quietly avoided the money path could
-not read as green), exit 0, ~3m15s, and a 38-turn transcript is dumped at the end so the conversation itself
+not read as green), exit 0, ~2m40s, and a 45-turn transcript is dumped at the end so the conversation itself
 can be read in the report. Measured after the run: assistant threads 0, turns 0, escalations 0, bookings back
-to 40 — the seeded database is byte-identical. `npm test` is **78/78** with the database down (the pure unit
+to 40 — the seeded database is byte-identical. `npm test` is **85/85** with the database down (the pure unit
 tests never touch it).
 
-What each block actually proves, since "278 checks" on its own means nothing:
+What each block actually proves, since "326 checks" on its own means nothing:
 
 - **A/B — money.** The booking's ledger legs, the wallet debit, the escrow hold; then the cancellation's
   refund and penalty legs, and **money conserved across both wallets** (the player's refund plus the owner's
@@ -3663,13 +3704,237 @@ What each block actually proves, since "278 checks" on its own means nothing:
 - [ ] **Wave D — the Flutter chat screen.** The payload contract is frozen (12 card types, chips carry
   `{action, args}`, `answer.source` is renderable) and documented in CLAUDE.md's NEXT block. Two rules for
   that wave: never build a confirm card's `args` client-side, and never auto-retry a turn that timed out.
-- [ ] **Nothing is committed.** A commit that includes Scout must also include
-  `ml-service/models/intent_latest.joblib` (v2, 6,597,833 B), or a fresh clone boots 3/4.
+- [x] **Scout is committed — but its model is one run behind.** `c751102` carries the Node half; the commit
+  that closes S.6 must re-carry `ml-service/models/intent_latest.joblib` (**6,610,141 B**, `2315`), or a
+  fresh clone keeps serving the pre-fix candidate. The timestamped twin stays untracked by `.gitignore:88-89`
+  on purpose — do not force-add it.
 - [ ] **`tournament_list` is honest but empty** — S.7 gives tournaments rows and a route.
-- [ ] **No live authenticated HTTP pass over the 16 assistant endpoints.** The harness calls
-  `dialogManager.handleTurn` and the thread service directly with a rolled-back client, which is what makes
-  278 checks affordable, but it does **not** exercise Express, the JWT middleware, or the rate limiter on
-  these routes. That is TESTING.md §4.19's manual curl block and it is not yet run.
+- [x] **No live authenticated HTTP pass over the 16 assistant endpoints** — **CLOSED in S6-E.** The harness
+  calls `dialogManager.handleTurn` and the thread service directly with a rolled-back client, which is what
+  makes 326 checks affordable, but it does **not** exercise Express, the JWT middleware, or the rate limiter
+  on these routes. `src/scripts/check_assistant_http.js` now does, over real JWTs: **PASS 173/173**, 0 skips
+  (TESTING.md §4.20 steps 196/197/200).
 - [ ] **The 50 ms parse budget is load-sensitive** (see the ml-service half). Scout's own turn latency is
   therefore not a fixed number; the transcript prints `totalMs` per turn so it can be measured on the demo
   box rather than asserted here.
+
+---
+
+## Wave S6-E (The honesty pass — one decision refused, two badges corrected, the live HTTP receipt)
+
+Wave E has no new feature in it. That is the point: S.6 shipped a trained classifier, a dialog manager and a
+Flutter screen in three waves, and this one goes back over the claims those waves make and checks each one
+against something. Three of the four items are corrections to claims that were slightly too generous; the
+fourth is the receipt that was missing.
+
+### 1. DECISION — no LLM anywhere in Scout's reply path (the wave's headline, and it is a "no")
+
+The wave was scoped to add an optional Gemini rephrasing layer behind `ASSISTANT_LLM=off|phrasing`: the
+deterministic template writes the answer, the LLM only makes it read better. **It is not being built.** The
+user was given the choice explicitly and chose to skip it and record why. The four reasons, in the order they
+decide the matter:
+
+1. **To rephrase a reply you must first transmit it.** The answer text is not a neutral string — it is the
+   user's own data already rendered: `wallet_balance` contains their spendable balance and their escrow,
+   `my_bookings` contains where they will be on Saturday, `find_opponents` contains other people's names and
+   ELOs. Sending that to Google to be made prettier reverses the privacy property S6-C spent a migration
+   establishing, that `assistant_turns` has **no free-text column** — 17 columns, `text_chars int` for the
+   length and nothing that can hold what was said. A phrasing layer would make the whole reply leave the
+   country, which is a strictly larger leak than the one the schema was designed to prevent.
+2. **Golden rule 3 forbids paraphrasing the only sentences worth paraphrasing.** Policy text, money figures
+   and confirmation prompts must be verbatim — a rephrased "20% deposit, refundable up to 24 hours before"
+   is a support ticket at best and a false promise at worst. Carve out policy, money, numeric and confirm
+   replies and what is left for the LLM to improve is the greeting and the capability menu: two strings that
+   a template already writes well and that a human wrote once.
+3. **It undercuts the claim the sprint exists to make.** Model #4 is a genuinely trained classifier
+   (`intent-v2-20260828-2315`, 23 labels, threshold 0.45, its own held-out exam and model card). A viva
+   question of the form "so which part is the AI?" has a clean answer today: the intent, the slots, and the
+   ranking, each with a version string and a metrics file. Adding a generative layer on the output makes the
+   honest answer longer and the demo's weakest sentence — "the wording comes from Gemini" — the first thing
+   a reader sees.
+4. **Sequencing.** A second external credential is the wrong thing to add while the first one is still owed
+   a rotation: `ML_API_KEY` was pasted in cleartext in an early session and CLAUDE.md carries an open action
+   to rotate it in both `.env` files before S.7 puts ml-service on a public URL. One key to rotate is a
+   task; two is a habit.
+
+**What this costs, stated plainly:** Scout's replies are template-written, so they are consistent and
+slightly stiff, and a user who phrases something in a way no template anticipated gets the capability menu
+rather than a conversational deflection. That is the trade, and it is the direction a rubric rewards.
+
+### 2. CORRECTION — the keyword query was fixed in the corpus, not with a rule
+
+`"kal shaam football islamabad"` — the exact utterance in the S.6 milestone checklist — parsed at **0.364
+and abstained**, while the same words with a head noun (`… ground`) parsed 0.8516. The corpus taught
+`find_venue` almost entirely in sentence form ("… ground chahiye", "… mein ground dhundo") and barely at all
+in the shape people actually type into a search box: three or four bare keywords, no verb, no noun.
+
+The tempting fix is a pre-classifier rule — *if the text contains a sport and a city, it is `find_venue`* —
+and it is the wrong one twice over. It would answer the checklist while leaving the model exactly as weak as
+it was, and it would put a hand-written `if` in front of a classifier whose whole claim is that it was
+trained. So the corpus was fixed instead: keyword-shaped `find_venue` patterns were added to
+`training/gen_intents.py` in both languages, the sport+city+time orderings people really use, and model #4
+was retrained → **`intent-v2-20260828-2315`**, corpus 2,576 rows (sha `64395ec8…3be6e0`), the sha-locked
+230-row exam untouched.
+
+| utterance | before | after |
+|---|---|---|
+| `kal shaam football islamabad` | 0.364 → **abstain** | `find_venue` **0.8108** |
+| `football islamabad` | 0.583 | `find_venue` 0.8504 |
+| `islamabad futsal 3000 tak` | 0.653 | `find_venue` 0.7987 |
+| `cricket f-11 8pm` | — | `find_venue` 0.5224 |
+| `kal shaam` (deliberately vague) | abstain | **abstain 0.3172** — still refuses to guess |
+
+**KNOWN LIMITATION, recorded rather than fixed:** `"kal shaam cricket lahore"` reads as `find_players`
+**0.4764**. Lahore is not in the coverage area — `SLOT_VOCAB["city"]` is Islamabad / Rawalpindi / Pindi /
+isb / rwp and `CITY_ALIASES` in `entities.py` is the same two cities — because the product has ten seeded
+venues and all ten are in the twin cities. To the model the sentence is "tomorrow evening cricket
+`<unknown token>`", which genuinely does look more like *find me people to play with* than *find me a
+ground*. Adding Lahore to the vocabulary would train the classifier to promise a city the booking half
+cannot serve, so the vocabulary stays frozen and this stays a documented out-of-coverage case. It is the one
+red row in the 12-utterance probe (11/12).
+
+### 3. CORRECTION — a weighted mean is not a model, so it no longer wears the badge
+
+`find_players` and `find_opponents` were answering with `source: 'model'` whenever the ranker had run. But
+the ranker is `reco_rank.py`, a **deterministic weighted scorer** whose weights S.5 Wave B states literally
+in its own report — there is no trained artifact behind those two replies, and `answer.source` is the field a
+committee reads to ask "which part is the AI?".
+
+One flag was doing two jobs. It is now two: `scored = rank.available === true` decides the SENTENCE ("ranked
+by fit" vs "most recently active"), and `modelBadge = rank.source === 'model'` decides the BADGE. For players
+and opponents the badge is therefore `live`, and the distinction is not lost — it moved to
+`meta.ranking`, which carries mlClient's own three-state value (`ranked` · `heuristic` · `unavailable`).
+`find_venue` still earns `model`, because model #3 (`reco-rank-v1`) really is a trained recommender.
+`check_assistant.js` grew two assertions for it and read **PASS 280/280** at that point; with this wave's own
+block I it reads **326/326**. One script, one growing receipt — not one per wave.
+
+### 4. THE RECEIPT — `check_assistant_http.js`, the first live authenticated pass over the wire
+
+Every Scout claim so far was proved by `check_assistant.js`, which calls the service layer directly. That
+leaves a real gap: the route file, the auth middleware, the rate limiter, the JSON projections and the status
+codes were all argued from source rather than exercised. `src/scripts/check_assistant_http.js` (1,258 lines)
+closes it — it attaches to a server already listening on `PORT`, or spawns `src/server.js` itself and kills
+only what it spawned, mints real JWTs with the real secret, drives all sixteen assistant endpoints through
+Express, and deletes its own residue in a `finally`. One command, no fixtures to arrange by hand:
+
+```
+cd backend && node src/scripts/check_assistant_http.js      # PASS 173/173, 0 skipped, exit 0
+```
+
+**What it caught on the first run — SEC-6 shuts the door before the doorman does.** Eight assertions failed
+with `429` where `401` was expected. Not a bug: the anonymous quota is 20 requests per minute per IP, and
+`identifyUser` counts a token that FAILS to verify as anonymous, so four logins plus sixteen endpoint probes
+had already spent the bucket before the bad-header cases ran. Section A is now ordered so that 4 bad headers
++ 16 endpoints = exactly 20, runs before any login, and mints its own token for the positive check so that
+one lands in the per-user bucket. Then **section A2 spends request 21 on purpose** and asserts what a client
+actually receives: the exact 429 sentence, `RateLimit-Policy: 20;w=60`, and a `Retry-After` inside the
+window — after which it sleeps the window out so the logins below it are real. A failure became two
+requirements that had never been covered over the wire.
+
+Two assertions of mine were also simply wrong about the code, and the code won both times. A chip turn DOES
+carry an `nlu` block — it must, because `intent` is what the client renders and what telemetry files the turn
+under; what must be absent is `confidence` and `modelVersion`, so a tap can never enter measured accuracy,
+and that is what is now asserted. And the abstention reason is `nlu.reason` over HTTP, not `abstainReason` —
+the route renames it in its projection.
+
+**The money gate, over the wire, with a census on both sides.** `awaiting_confirm` reached honestly
+(`check_availability` → slot picker → `pick_slot` → confirm card), then `"haan lekin 7 baje"`: **affirm
+0.5898 via `model`**, confidence above the 0.45 threshold, and it still does not buy. The armed block is
+gone, `slots.time` is `19:00`, the FSM has dropped to `awaiting_choice`, and the census reads **bookings 27
+before / 27 after, balance 8300.00 unchanged**. The bare `haan` sent afterwards is decided `via: 'lexicon'`
+and buys nothing either, because there is no longer anything armed for it to confirm. Money remains gated by
+chip-or-lexicon only, and no model confidence can open it.
+
+Also newly proved over HTTP rather than argued: the 51st chat is refused `409 "You have 50 open chats.
+Archive one to start another."`; a stranger reading another user's thread gets `403`, not a 404 that would
+confirm the thread exists; `state.confirm` never appears in a response body (the client sees `fsm` only);
+`"order me a pizza"` is `out_of_scope` 0.879 answered from the `menu`, not from a model guess; and — the one
+claim that can only be made after the delete — **19 telemetry rows survived their thread being deleted with
+`channel_id` nulled 19/19**, which is migration 018's `ON DELETE SET NULL` doing exactly what it was written
+to do. Two consecutive runs leave the fixture player at the same 2 pre-existing open threads, so the script
+does not leak state into the next run.
+
+### 5. THE PACK — `doc/scout_evidence.md`, written by the scripts that proved it
+
+Both receipts print several hundred lines to a terminal and exit, which is the right output for the person
+running them and the wrong one for everybody else: a supervisor reading this months from now has no terminal,
+and "it said PASS 326/326 on my machine" is a claim, not evidence. So both scripts now take `--evidence` and
+write what they just proved into **`doc/scout_evidence.md`** — ≈750 lines, generated, never hand-edited:
+
+```
+cd backend
+node src/scripts/check_assistant.js      --evidence   # block 1, the service layer, rolled back
+node src/scripts/check_assistant_http.js --evidence   # block 2, the same assistant over real Express
+```
+
+Each script owns one HTML-comment-delimited block and rewrites only its own, so the two can be run in either
+order or separately, and **a block that is absent was not run — it is not a pass.** Every block carries the
+provenance needed to reproduce it: the git commit and how many paths were uncommitted, the node version, the
+model version with its threshold and the source of that threshold, the label-contract and dataset
+fingerprints, the entity- and text-normaliser fingerprints from the Python side, the parse limits, the action
+registry census, and the database it ran against. Then every assertion in the order it was made, and the
+transcript of the real turns — 45 through the service layer, 19 over HTTP — with each turn's intent,
+confidence, `answer.source` and the `via` door that decided it. What it deliberately does NOT record: any
+credential, and not even `/health`'s `apiKeyFingerprint` — the fingerprint is safe by construction, but the
+file is committed and the key behind it is still awaiting rotation, so there is no reason to put a hash of it
+in git.
+
+The shared writer is `src/scripts/lib/evidence.js` (208 lines). It is a no-op unless `--evidence` is passed,
+which is why the recorder calls can sit permanently in `section()` / `check()` / `skip()` / `note()` and in
+`api()` — the HTTP transcript is captured inside the one request helper rather than at forty call sites,
+because a transcript missing the turns somebody forgot to annotate is worse than no transcript. One quirk
+worth recording: a pipe inside a table cell becomes `&#124;` and not a backslash escape, because a backslash
+in a JS string written through a shell heredoc is one round of escaping from being eaten — and in the first
+generated pack it silently was, giving five-column rows.
+
+### 6. THE AUDIT — the S.6 acceptance checklist, walked line by line instead of declared done
+
+A wave that ends "everything passes" has graded its own paper. So the last act of S6-E was to take the S.6
+milestone's own acceptance list — six acceptance lines, five pitfalls, one stated limitation — and walk it
+against the built system in **TESTING.md §4.21**, with the rule that every line gets either a step number and
+a count or the word **gap**. There is no third category and in particular no "looks fine".
+
+Two lines came back as something other than a tick, and both are written up rather than quietly satisfied:
+
+* **`my_elo` cannot exist as an intent.** SportLynk rates **teams**, not players, so there is no per-player
+  number to answer with — a `my_elo` intent could only invent one. The capability is real but it is
+  `team_stats`, and the Flutter "My ELO" entry point wires to exactly that. The checklist line is a **screen**,
+  not a label, and saying so is cheaper than shipping a label that lies.
+* **Pitfall 5, "keep the 15 labels", was not followed.** v2 ships **23**. The pitfall exists to stop label
+  inflation from outrunning the corpus, so the compensating control is named instead of hand-waved: step 187
+  asserts every one of the 23 is reachable with a ≥ **0.35** margin over its runner-up, which is the property
+  the pitfall was protecting.
+
+The audit's other yield was less comfortable. Walking the checklist meant re-deriving every figure it quotes,
+and that is how it surfaced that **CLAUDE.md, PROGRESS.md and TESTING.md were all describing the pre-fix
+`1329` candidate** while the service was serving `2315`: corpus sha `adbdd5d63a81` (real `64395ec8026c`),
+616/614 templates (real 624/622), val 0.8033 / exam 0.6652 (real 0.8086 / 0.6696), 18,809 features (real
+18,849), both ECEs quoted better than they are (exam 0.0865 → **0.1077**, val 0.1512 → **0.1788**), and a
+"12 exam rows" cost that is **13** on the released artifact. Every one is propagated now, and the last one
+stopped being a memory: `training/diff_intent_exam.py` recomputes it from the two artifacts on demand, and
+reproduces the old figure from the old artifact, which is how the two runs were told apart rather than
+argued about. The ECEs moved the *wrong* way, and that is measured rather than assumed: scoring both
+artifacts on the exam through the trainer's own `expected_calibration_error` gives **0.0865** for `1329` and
+**0.1077** for the released `2315`, so the keyword retrain bought its milestone utterance with calibration as
+well as with the three extra served errors. Recorded at the real values. The same sweep caught a stale receipt
+inside the trainer itself — that function's docstring described validation as 348 rows when the split is
+**538**.
+
+### Wave S6-E — what remains open
+
+- **`ML_API_KEY` rotation is still outstanding.** The dev value was pasted in cleartext in an early session.
+  It is inert today (ml-service binds 127.0.0.1 and gates nothing user-facing) but it MUST be rotated in both
+  `.env` files before S.7 puts ml-service on a public URL. Compare by `/health` `apiKeyFingerprint`
+  (sha256[:8]) — never print the key itself.
+- **The commit is the user's step, and one file in it matters more than the rest.** A peer session has since
+  committed the S.3–S.6 work at `c751102`, so the earlier "nothing is committed" note in this file is spent —
+  but the `intent_latest.joblib` inside that commit is the **pre-fix `1329` candidate** (6,597,833 B), so the
+  closing commit MUST carry the released **6,610,141 B** copy. `models/intent_20260828-2315.joblib` must NOT
+  be committed: `.gitignore:88-89` excludes timestamped artifacts and re-admits `*_latest.joblib` by design,
+  and force-adding the twin is how a repo ends up with two release pointers.
+- Carried forward from earlier waves: the §4.13 two-device E2E, §4.16 steps 157-158 (S.5 in-app pass), a
+  blind second-annotator κ on `domain_test_200.csv`, and a human read of `reports/demand_patterns.png`.
+- `kal shaam cricket lahore` stays out of coverage by decision (see §2 above).
+- **No milestone tags exist.** `git tag` lists only `S1-Wave-2`, `S1-Wave-3`, `S1-Wave-4`, so `s3-done`,
+  `s5-done` and `s6-done` are still unmade — worth making at the closing commit, because every "as of"
+  claim in this file is otherwise anchored to a commit subject a reader has to go looking for.

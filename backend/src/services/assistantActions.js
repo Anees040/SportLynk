@@ -1270,19 +1270,33 @@ async function findPlayers(ctx) {
     }), state: { intent: null, slots } };
   }
 
-  // The `source` badge is the honest half of this reply. When model #2 answered, the
-  // cards carry a match percentage and this says `model`; when it did not, the rows
-  // are in recent-activity order, carry NO percentage, and this says `live`. A
-  // fabricated number would be worse than no number, and the fallbackNote says so
-  // in the sentence rather than only in the payload.
-  const modelRanked = rank.available === true;
+  // The `source` badge is the honest half of this reply, and it answers a NARROWER
+  // question than "is this list well ordered". reco_rank.py is a DETERMINISTIC
+  // WEIGHTED SCORER, not a trained model: S.5 Wave B states the weights literally,
+  // so mlClient gives it its own third value, `'ranked'`, and says why at length.
+  // This file used to stamp `model` over it anyway, which put an "AI" badge on a
+  // weighted mean on a screen a real captain reads. Two separate questions:
+  //
+  //   scored     — the formula ran, so the percentages are real and "best fit
+  //                first" is a true sentence
+  //   modelBadge — a TRAINED model shaped this answer. Only model #3, the venue
+  //                recommender, ever earns it on a Scout reply, and it earns it by
+  //                ml-service saying `source: 'model'` itself rather than by us
+  //                inferring it from "the call did not fail".
+  //
+  // `meta.ranking` still carries 'ranked' vs 'heuristic', so the distinction a
+  // reviewer needs survives in the place that can hold a name. A fabricated number
+  // would be worse than no number, and the fallbackNote says so in the sentence
+  // rather than only in the payload.
+  const scored = rank.available === true;
+  const modelBadge = rank.source === 'model';
   const head = `${list.length} player${list.length === 1 ? '' : 's'} for ${one.name}`;
-  const tail = modelRanked
+  const tail = scored
     ? ', best fit first.'
     : `. ${rank.fallbackNote || 'Ranking is unavailable, so these are in recent-activity order.'}`;
   return {
     reply: reply(head + tail, {
-      source: modelRanked ? SOURCES.MODEL : SOURCES.LIVE,
+      source: modelBadge ? SOURCES.MODEL : SOURCES.LIVE,
       action: 'find_players', actionOk: true,
       cards: list.slice(0, TOP_PEOPLE).map((p) => playerCard({
         id: p.userId, name: p.name, avatar_url: p.avatarUrl,
@@ -1354,18 +1368,21 @@ async function findOpponents(ctx) {
     }), state: { intent: null, slots } };
   }
 
-  const modelRanked = rank.available === true;
+  // Same split as find_players: `scored` is "the weighted formula ran", `modelBadge`
+  // is "a trained model shaped this", and reco_rank.py is only ever the first.
+  const scored = rank.available === true;
+  const modelBadge = rank.source === 'model';
   const near = list.filter((t) => t.withinBand === true).length;
   const mineElo = mine.displayElo == null ? null : Number(mine.displayElo);
   const bits = [`${list.length} team${list.length === 1 ? '' : 's'} you could play`];
   if (mineElo != null) bits.push(`${one.name} is rated ${mineElo}`);
   if (near) bits.push(`${near} within ${d.preferredBand} points`);
-  const why = modelRanked ? 'Closest match first.'
+  const why = scored ? 'Closest match first.'
     : (rank.fallbackNote ? `${rank.fallbackNote}.` : 'Ordered by rating proximity.');
 
   return {
     reply: reply(`${bits.join(' — ')}. ${why}`, {
-      source: modelRanked ? SOURCES.MODEL : SOURCES.LIVE,
+      source: modelBadge ? SOURCES.MODEL : SOURCES.LIVE,
       action: 'find_opponents', actionOk: true,
       cards: list.slice(0, TOP_PEOPLE).map((t) => teamCard({
         id: t.id, name: t.name, sport: t.sport, city: t.city, logo_url: t.logoUrl,

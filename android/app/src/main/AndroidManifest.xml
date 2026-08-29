@@ -43,5 +43,13 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Scout's map cards hand a `geo:` pin to whatever the phone uses for maps.
+             Without this, Android 11+ hides every maps app from us and the pin falls
+             back to a browser page. Declared as a query only — nothing is launched
+             that the user did not tap. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="geo"/>
+        </intent>
     </queries>
 </manifest>

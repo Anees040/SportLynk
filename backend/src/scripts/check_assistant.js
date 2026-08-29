@@ -43,17 +43,33 @@ const kb = require('../services/assistantKb');
 const ml = require('../services/mlClient');
 const replyUtil = require('../utils/assistantReply');
 const policyText = require('../utils/policyText');
+const teamStats = require('../utils/teamStats');
 const { POLICY, asNum, round2, depositFor } = require('../utils/escrow');
+const evidence = require('./lib/evidence');
 
 const failures = [];
 const skips = [];
 let passed = 0;
 
+// Off unless --evidence is passed, and when off every method is a no-op -- which is why
+// the harness below can call it unconditionally. See src/scripts/lib/evidence.js.
+const ev = evidence.recorder({
+  key: 'service',
+  title: 'Block 1 -- the service layer, driven through `dialogManager.handleTurn`',
+  subtitle: 'Real classification by model #4, a real booking, a real cancellation, a real escalation '
+    + 'answered by a real owner, all inside ONE transaction that is rolled back at the end. Every '
+    + 'assertion reads the ROWS rather than the reply text: the reply is the thing under test, not the '
+    + 'evidence.',
+  command: 'cd backend && node src/scripts/check_assistant.js --evidence',
+});
+
 function section(title) {
+  ev.section(title);
   console.log(`\n── ${title} ${'─'.repeat(Math.max(0, 66 - title.length))}`);
 }
 
 function check(ok, label, detail = '') {
+  if (ok) ev.pass(label); else ev.fail(label, detail);
   if (ok) { passed += 1; console.log(`  ✓ ${label}`); return true; }
   failures.push(label);
   console.log(`  ✗ ${label}${detail ? `  → ${detail}` : ''}`);
@@ -61,6 +77,7 @@ function check(ok, label, detail = '') {
 }
 
 function skip(label, why) {
+  ev.skip(label, why);
   skips.push(label);
   console.log(`  ~ ${label}  (skipped: ${why})`);
   return false;
@@ -107,13 +124,15 @@ async function say(client, { userId, threadId = null, text = null, action = null
   const out = await dialog.handleTurn({
     userId, threadId, text: text || '', action, args, persona, client,
   });
-  transcript.push({
+  const row = {
     said: text ? `"${text}"` : `[${action}]`,
     intent: out.nlu ? out.nlu.intent : null,
     conf: out.nlu && out.nlu.confidence != null ? Number(out.nlu.confidence).toFixed(2) : null,
     source: out.reply ? out.reply.source : null,
     said_back: out.reply ? String(out.reply.text || '').slice(0, 90) : out.message,
-  });
+  };
+  transcript.push(row);
+  ev.turn(row);
   if (!out.ok) console.log(`     ! turn failed: ${out.error || out.message}`);
   return out;
 }
@@ -231,6 +250,36 @@ async function preflight(client) {
              ('assistant_kb','asked_count'), ('assistant_escalations','status'))`,
   );
   eq(cols.length, 8, `migration 018 columns present (${cols.map((r) => r.c).sort().join(', ')})`);
+
+  // Provenance for the evidence pack: exactly what was serving on both sides of the
+  // language boundary, gathered here because the connection is open and the model has
+  // just answered. No credentials -- and deliberately not /health's apiKeyFingerprint.
+  if (ev.on) {
+    const spec = await ml.nluSpec();
+    const d = spec.data || {};
+    const m = d.model || {};
+    const c = d.corpus || {};
+    const { rows: [dbv] } = await client.query(
+      `SELECT current_database() AS db, split_part(version(), ' on ', 1) AS v`,
+    );
+    ev.addMeta('model #4 (intent NLU)',
+      `${m.modelVersion || nlu.modelVersion} · threshold ${m.threshold != null ? m.threshold : nlu.threshold}`
+      + ` (from the ${m.thresholdSource || 'artifact'}) · ${m.artifact || 'intent_latest.joblib'}`
+      + ` · trained ${m.trainedAt || 'unknown'}`);
+    ev.addMeta('label contract',
+      `${c.intentSpecVersion || '?'} fp ${c.intentSpecFingerprint || '?'}`
+      + ` · dataset ${c.datasetSpecVersion || '?'} fp ${c.datasetSpecFingerprint || '?'}`
+      + ` · ${(d.intents || []).length} intents in ${(d.groups || []).length} groups`);
+    ev.addMeta('rule extractors (no model, no training)',
+      `entities ${(d.entities || {}).specVersion} fp ${(d.entities || {}).fingerprint}`
+      + ` · text ${(d.text || {}).specVersion} fp ${(d.text || {}).fingerprint}`);
+    ev.addMeta('parse limits',
+      `${(d.limits || {}).maxTextChars} chars max · ${(d.limits || {}).latencyBudgetMs}ms budget`
+      + ` · ${(d.limits || {}).alternatives} alternatives returned`);
+    ev.addMeta('action registry', `${routable.labels} trained labels + ${routable.buttonOnly} button-only`
+      + ` = ${routable.actions} actions, boot-asserted`);
+    ev.addMeta('database', `${dbv.db} · ${dbv.v} · this run is ONE transaction, rolled back`);
+  }
   return true;
 }
 
@@ -707,7 +756,7 @@ async function conversationC2(client, ctx) {
  * on the menu instead of a dead end.
  */
 async function conversationD(client, ctx) {
-  section('D  reads: wallet · bookings · policy · tournaments · help · out of scope');
+  section('D  reads: wallet · bookings · policy · tournaments · team rating · help · out of scope');
   const { player, thread } = ctx;
 
   const w = await say(client, { userId: player.id, threadId: thread, action: 'wallet_balance' });
@@ -769,6 +818,74 @@ async function conversationD(client, ctx) {
     `${open.length} open tournaments → ${cardsOf(tl, 'tournament').length} cards`);
   check((tl.reply.chips || []).length > 0,
     `and the turn still offers somewhere to go: "${tl.reply.text.slice(0, 70)}"`);
+
+  // ── TEAM RATING: the checklist's "my_elo", which on SportLynk is team_stats ──
+  // SportLynk rates TEAMS and not players (FR2.6), so there is no my_elo action to
+  // call: the intent is team_stats, and every number on the card comes from
+  // teamStats.profileStats — the same function the team profile screen reads. So
+  // this asserts the card against THAT function rather than against a literal, and
+  // it is driven by a real captain, because ctx.player may not be in a team at all
+  // and "you are not in a team yet" is a different branch, checked after it.
+  if (!ctx.adminTeam || !ctx.adminTeam.adminId) {
+    skip('team rating', 'no team fixture with a captain in this database');
+  } else {
+    const cap = ctx.adminTeam.adminId;
+    const said = 'hamari team ki rating kitni hai';
+    let ts = await say(client, { userId: cap, text: said });
+    eq(ts.nlu && ts.nlu.intent, 'team_stats',
+      `"${said}" → team_stats (there is no my_elo intent: FR2.6 rates TEAMS)`);
+    const tthread = ts.threadId;
+    const which = (ts.reply.chips || []).find((c) => c.action === 'team_stats' && c.args && c.args.teamId);
+    if (!cardsOf(ts, 'team').length && which) {
+      check(true, 'a captain of more than one team is asked WHICH, by chip, not guessed at');
+      ts = await say(client, { userId: cap, threadId: tthread, action: 'team_stats', args: which.args });
+    }
+    eq(ts.reply.source, 'live', 'a rating is read live, never remembered');
+    const tcard = cardsOf(ts, 'team')[0];
+    if (check(!!tcard, `the team card is painted: "${ts.reply.text.slice(0, 70)}"`)) {
+      const s = await teamStats.profileStats(client, tcard.data.id);
+      eq(tcard.data.matchesPlayed, s.played, `played count is profileStats' own (${s.played})`);
+      eq(tcard.data.wins, s.wins, 'the wins are the same wins');
+      eq(tcard.data.losses, s.losses, 'and the losses the same losses');
+      eq(tcard.data.elo, s.elo, `the raw elo is the stored elo (${s.elo})`);
+      eq(tcard.data.isRanked, s.ranked, `isRanked is profileStats' verdict (${s.ranked})`);
+      eq(tcard.data.displayElo, s.display_elo,
+        `and displayElo agrees with it (${JSON.stringify(s.display_elo)})`);
+      if (s.ranked) {
+        check(ts.reply.text.includes(String(s.display_elo)),
+          `a ranked team is told its number (${s.display_elo})`, ts.reply.text);
+        check(ts.reply.text.includes(`${s.wins}W-${s.losses}L-${s.draws}D`),
+          `and its record, in one string (${s.wins}W-${s.losses}L-${s.draws}D)`, ts.reply.text);
+      } else {
+        // FR2.6 under RANKED_MIN. The failure mode this guards is the friendly lie:
+        // printing the 1000 seed as though it had been earned on the pitch.
+        eq(s.display_elo, null,
+          `unranked at ${s.played}/${s.ranked_min_matches} played → display_elo is NULL, not a seed`);
+        check(/unranked/i.test(ts.reply.text), 'and the sentence says unranked', ts.reply.text);
+        check(!/\b1000\b/.test(ts.reply.text),
+          'and never shows 1000 as if it were a rating', ts.reply.text);
+        check(ts.reply.text.includes(String(s.ranked_min_matches)),
+          `while saying how many matches it takes (${s.ranked_min_matches})`, ts.reply.text);
+      }
+      check((ts.reply.chips || []).some((c) => c.action === 'elo_help'),
+        'and offers the how-does-rating-work explainer next to the number');
+    }
+    const { rows: loner } = await client.query(
+      `SELECT u.id FROM users u
+        WHERE u.role = 'player' AND u.is_active
+          AND NOT EXISTS (SELECT 1 FROM team_members m WHERE m.user_id = u.id)
+        LIMIT 1`,
+    );
+    if (!loner.length) {
+      skip('the teamless branch', 'every active player in this database is in a team');
+    } else {
+      const nt = await say(client, { userId: loner[0].id, action: 'team_stats' });
+      check(/not in a team/i.test(nt.reply.text),
+        `a player with no team is told so: "${nt.reply.text.slice(0, 60)}"`, nt.reply.text);
+      eq(cardsOf(nt, 'team').length, 0, 'and no team is invented to fill the card');
+      check((nt.reply.chips || []).length > 0, 'with somewhere to go instead (ER2.6)');
+    }
+  }
 
   // ── HELP and OUT OF SCOPE: no dead ends (ER2.6) ───────────────────────────
   const ah = await say(client, { userId: player.id, threadId: thread, text: 'app kaise use karun' });
@@ -980,8 +1097,16 @@ async function conversationF(client, ctx) {
     eq(cards.length, Math.min(list.length, actions.TOP_PEOPLE),
       `${list.length} suggestions for ${teamName} → ${cards.length} player cards`);
     if (!list.length) return;
-    eq(out.reply.source, ranked ? 'model' : 'live',
-      `the badge names what ranked them (ranking source: ${sp.data.ranking.source})`);
+    // The badge answers a NARROWER question than "is this list well ordered": did a
+    // TRAINED model shape it? For players the honest answer is never yes. reco_rank.py
+    // is a deterministic weighted scorer whose weights S.5 Wave B states literally, so
+    // mlClient gives it its own value, 'ranked', and this reply stays `live` whether or
+    // not the formula ran. The scored-vs-recent-activity distinction is not lost — it
+    // is asserted one line down, in meta.ranking, the field that can hold a name.
+    eq(out.reply.source, 'live',
+      `a weighted scorer does not earn the AI badge (ranking source: ${sp.data.ranking.source})`);
+    eq(out.reply.meta && out.reply.meta.ranking, sp.data.ranking.source,
+      `and meta.ranking keeps what the badge cannot say: ${sp.data.ranking.source}`);
     check(cards.every((c) => (c.data.matchPct != null) === ranked),
       ranked ? 'a ranked answer carries a match percentage'
         : 'an UNRANKED answer carries no percentage — no fabricated numbers');
@@ -1032,8 +1157,13 @@ async function conversationF(client, ctx) {
       const oppIds = new Set(opps.slice(0, actions.TOP_PEOPLE).map((o) => String(o.id)));
       check(cardsOf(fo, 'team').every((c) => oppIds.has(String(c.data.id))),
         'every opponent card is one the ranking service returned, in its order');
-      eq(fo.reply.source, so.data.ranking && so.data.ranking.available ? 'model' : 'live',
-        'and the badge tells the truth about who ranked them');
+      // Same rule as find_players: pairing PROXIMITY is arithmetic, not inference,
+      // so the badge stays `live` and meta.ranking carries 'ranked' vs 'heuristic'.
+      eq(fo.reply.source, 'live',
+        'and the badge does not call a weighted mean a model');
+      eq(fo.reply.meta && fo.reply.meta.ranking,
+        so.data.ranking ? so.data.ranking.source : null,
+        `while meta.ranking still names the scorer: ${so.data.ranking && so.data.ranking.source}`);
     }
   }
   return ctx;
@@ -1264,6 +1394,10 @@ async function conversationH(client, ctx) {
   eq(inserts[0] && inserts[0].file, 'src/services/bookingService.js',
     'and it is the shared service, not a route and not the assistant');
   eq(inserts[0] && inserts[0].n, 1, 'written once inside it, not twice');
+  ev.addFact('FR8.15 holds by census, not by assertion',
+    `\`INSERT INTO bookings\` appears in exactly ${inserts.length} of ${files.length} backend source `
+    + 'files (`services/bookingService.js`), and `assistantActions.js` contains none of the six money '
+    + 'primitives. Scout prepares; the shared service spends.');
 
   const scout = path.join(__dirname, '..', 'services', 'assistantActions.js');
   const scoutBody = fs.readFileSync(scout, 'utf8');
@@ -1355,6 +1489,10 @@ async function conversationH(client, ctx) {
       'answer_source', 'fsm_state', 'error_code'].includes(c.column_name));
   eq(texty.map((c) => c.column_name).join(','), '',
     'and not one free-text column that could hold what the user typed');
+  ev.addFact('The telemetry cannot become a transcript',
+    `\`assistant_turns\` has ${cols.length} columns and not one of them can hold what the user typed `
+    + '(`text_chars int` records the length only), which is also the property an external rephrasing '
+    + 'API would have reversed -- see the Wave S6-E decision in PROGRESS.md.');
   check(cols.some((c) => c.column_name === 'text_chars'),
     'the length is logged instead — enough to study long questions, useless as a transcript');
   const said = 'yahan ka refund kaisay milta hai bhai';
@@ -1382,6 +1520,115 @@ async function conversationH(client, ctx) {
 // ════════════════════════════════════════════════════════════════════════════
 
 /** A day after PKT today, as YYYY-MM-DD — the date every "kal" assertion uses. */
+// ════════════════════════════════════════════════════════════════════════════
+// I — THE MILESTONE LINE  ("kal shaam football islamabad" → a booked row)
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * The first line of the S.6 acceptance checklist, run as one continuous chain
+ * instead of argued from two halves that touch.
+ *
+ * Everything here is already covered: A books through the picker, and the HTTP
+ * check parses this exact sentence. What was NOT covered is the JOIN — that the
+ * committee's own utterance, with its Roman-Urdu date and no venue id anywhere in
+ * it, reaches a row in `bookings` with the ledger behind it. So this drives the
+ * sentence and then taps only what Scout painted: the card's See-times button, the
+ * picker's first slot, the confirm card's Yes. No fixture id is used, and the date
+ * is never computed here — if the extractor read "kal" wrongly the picker is for
+ * the wrong day and the assertion below says so.
+ *
+ * It runs LAST on purpose. It spends real balance, and every earlier section
+ * asserts against a wallet it measured itself, so a second booking must not land
+ * in the middle of them. The whole run is one rolled-back transaction regardless.
+ */
+async function conversationI(client, ctx) {
+  section('I  the milestone utterance — "kal shaam football islamabad", end to end');
+  const { player } = ctx;
+  const said = 'kal shaam football islamabad';
+
+  const i1 = await say(client, { userId: player.id, text: said });
+  const thread = i1.threadId;
+  eq(i1.nlu && i1.nlu.intent, 'find_venue', `"${said}" → find_venue`);
+  check(['live', 'model'].includes(i1.reply.source),
+    `answered rather than sent to the abstain menu (source ${i1.reply.source})`);
+  check(i1.nlu && i1.nlu.via === 'model' && i1.nlu.confidence > 0,
+    `and it was the MODEL that read it, not a chip (${i1.nlu && i1.nlu.confidence})`);
+  const slots = (i1.state && i1.state.slots) || {};
+  eq(slots.sport, 'football', 'the sport came out of the sentence, not out of a fixture');
+  eq(slots.date, ctx.tomorrow, `"kal" resolved to tomorrow in PKT (${ctx.tomorrow})`);
+  eq(slots.time, '18:00', 'and "shaam" reached the slots as the 18:00-21:00 window start');
+  check(String(slots.area || '').toLowerCase().includes('islamabad'),
+    `and the city survived the parse (${slots.area || 'none'})`);
+  const cards = cardsOf(i1, 'venue');
+  if (!check(cards.length > 0, `Scout offered grounds to tap (${cards.length})`, i1.reply.text)) return ctx;
+  check(cards.every((c) => String(c.data.sport || '').toLowerCase() === 'football'),
+    'every ground offered is a football ground', cards.map((c) => c.data.sport).join(','));
+
+  // Tap See-times on each offered card until one has a free slot. A full ground is
+  // not a failure of the chain -- it is what the next card is for.
+  const seen = [];
+  let picker = null; let target = null;
+  for (const c of cards) {
+    const b = (c.data.buttons || []).find((x) => x.action === 'check_availability');
+    if (!b) continue;
+    const turn = await say(client, { userId: player.id, threadId: thread,
+      action: b.action, args: b.args || { venueId: c.data.id } });
+    const p = cardsOf(turn, 'slot_picker')[0];
+    seen.push(`${c.data.name}: ${p ? `${p.data.slots.length} free` : 'none'}`);
+    if (p && p.data.slots.length) { picker = p; target = c; break; }
+  }
+  if (!picker) return skip('the milestone chain', `no free slot on ${ctx.tomorrow} — ${seen.join(' · ')}`);
+  eq(String(picker.data.venueId), String(target.data.id), 'the picker is for the ground that was tapped');
+  eq(picker.data.date, ctx.tomorrow,
+    `and for the day the utterance asked for, not for today (${picker.data.date})`);
+
+  const pick = picker.data.buttons[0];
+  const i3 = await say(client, { userId: player.id, threadId: thread,
+    action: 'pick_slot', args: pick.args });
+  const conf = cardsOf(i3, 'confirm')[0];
+  if (!check(!!conf, 'tapping a time arms a confirm card', i3.reply.text)) return ctx;
+  const price = asNum(picker.data.slots[0].price);
+  eq(conf.data.what, 'book_venue', 'armed for book_venue');
+  eq(asNum(conf.data.total), price, 'quoting the price the picker showed');
+
+  const purse = await walletOf(client, player.id);
+  if (purse.balance < price) {
+    return skip('the milestone booking', `wallet has ${purse.balance}, the slot costs ${price}`);
+  }
+  const yes = (conf.data.buttons || []).find((b) => b.action === 'confirm');
+  const i4 = await say(client, { userId: player.id, threadId: thread, action: yes.action });
+  check(i4.reply.actionOk === true && i4.reply.action === 'book_venue',
+    `the chain ends in a booking: "${i4.reply.text.slice(0, 80)}"`,
+    JSON.stringify({ ok: i4.reply.actionOk, action: i4.reply.action }));
+  const bcard = cardsOf(i4, 'booking')[0];
+  if (!check(!!bcard, 'and a booking card to show for it')) return ctx;
+
+  const row = await bookingRow(client, bcard.data.id);
+  if (!check(!!row, 'THE BOOKING EXISTS — the checklist line, as a row')) return ctx;
+  eq(String(row.slot_id), String(pick.args.slotId), 'it is the slot that was tapped');
+  eq(String(row.player_id), String(player.id), 'booked for the player who typed the sentence');
+  eq(String(row.venue_id), String(target.data.id), 'at the ground Scout offered');
+  eq(asNum(row.total_amount), price, 'for the quoted price');
+  eq(asNum(row.deposit_amount), depositFor(price), 'with the POLICY deposit held');
+  eq(row.slot_status, 'booked', 'and the slot is no longer on sale');
+  const when = await client.query('SELECT slot_date::text d FROM slots WHERE id = $1', [row.slot_id]);
+  eq(when.rows[0].d, ctx.tomorrow, 'ON THE DAY "kal" MEANT — the whole point of the Roman-Urdu parse');
+
+  const after = await walletOf(client, player.id);
+  eq(after.balance, round2(purse.balance - price),
+    `the ledger is correct: balance fell by the price (${purse.balance} → ${after.balance})`);
+  eq(after.frozen, round2(purse.frozen + price), 'the same money sits in escrow, not nowhere');
+  eq(round2(after.balance + after.frozen), round2(purse.balance + purse.frozen),
+    'and nothing was minted or burned on the way');
+  const txns = await txnsFor(client, row.id);
+  const pay = txns.find((t) => t.type === 'booking_payment');
+  if (check(!!pay, `one booking_payment row in the ledger (${txns.map((t) => t.type).join(',')})`)) {
+    eq(pay.amount, round2(-price), 'for the negative of the price');
+    eq(pay.balance_after, after.balance, 'and balance_after matches the wallet the user will see');
+  }
+  return ctx;
+}
+
 function pktTomorrow(now) {
   const d = new Date(`${now.date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + 1);
@@ -1477,6 +1724,7 @@ async function main() {
         ctx = await conversationF(client, ctx);
         ctx = await conversationG(client, ctx);
         await conversationH(client, ctx);
+        await conversationI(client, ctx);
       }
     }
   } catch (err) {
@@ -1504,6 +1752,10 @@ async function main() {
   }
 
   const total = passed + failures.length;
+  if (ev.on) {
+    const w = await ev.write({ passed, failed: failures.length, skipped: skips.length });
+    if (w) console.log(`  evidence written to ${path.relative(process.cwd(), w.path)} (${w.lines} lines)`);
+  }
   console.log(`\n${'═'.repeat(72)}`);
   if (skips.length) {
     console.log(`\n${skips.length} skipped (the seed could not supply the case):`);

@@ -28,6 +28,7 @@ import 'screens/player/tournaments_screen.dart';
 import 'screens/player/player_booking_detail_screen.dart';
 import 'screens/player/rate_experience_screen.dart';
 import 'screens/player/venue_reviews_screen.dart';
+import 'screens/player/assistant_screen.dart';
 import 'screens/owner/owner_qr_scanner_screen.dart';
 import 'screens/owner/owner_wallet_screen.dart';
 import 'screens/owner/owner_match_verify_screen.dart';
@@ -210,6 +211,7 @@ class SportLynkApp extends StatelessWidget {
           '/find-opponents': (_) => const AuthGuard(requiredRole: 'player', child: FindOpponentsScreen()),
           '/team-rankings': (_) => const AuthGuard(requiredRole: 'player', child: TeamRankingsScreen()),
           '/tournaments': (_) => const AuthGuard(requiredRole: 'player', child: TournamentsScreen()),
+          '/assistant': (_) => const AuthGuard(requiredRole: 'player', child: AssistantScreen()),
           '/booking-detail': (ctx) {
             final args = ModalRoute.of(ctx)!.settings.arguments as Map<String, dynamic>;
             return AuthGuard(requiredRole: 'player', child: PlayerBookingDetailScreen(bookingId: args['bookingId']));

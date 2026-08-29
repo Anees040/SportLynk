@@ -681,7 +681,7 @@ def expected_calibration_error(
     and therefore whether a 0.45 threshold is a policy or a coin flip. Equal-width
     bins over [0, 1] on the top-class probability; empty bins contribute nothing.
 
-    Reported on VALIDATION for the gate (348 template-disjoint rows) and on the exam
+    Reported on VALIDATION for the gate (538 template-disjoint rows) and on the exam
     for the record. Note the direction of the exam number: calibration there is
     BETTER (0.10) than on validation (0.18), because the model is less accurate on
     the exam AND appropriately less confident about it.
