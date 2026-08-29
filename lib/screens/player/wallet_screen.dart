@@ -274,11 +274,11 @@ class _WalletScreenState extends State<WalletScreen> {
     final type = t['type'] as String;
     final amount = asNum(t['amount']);
     final isCredit = isCreditTxn(type);
-    final isFrozen = type == 'booking_payment';
+    final isFrozen = isHeldTxn(type);
 
     final icon = isFrozen ? Icons.lock_outline : txnIcon(type);
     final color = isFrozen ? Colors.orange : (isCredit ? AppColors.success : AppColors.error);
-    final label = isFrozen ? 'Security Deposit' : txnLabel(type);
+    final label = txnRowLabel(type);
 
     // FR7.9 — tap for the full receipt. No extra request: GET
     // /wallet/transactions already returns every field the sheet shows.

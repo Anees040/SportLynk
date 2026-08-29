@@ -33,6 +33,9 @@ import 'screens/owner/owner_qr_scanner_screen.dart';
 import 'screens/owner/owner_wallet_screen.dart';
 import 'screens/owner/owner_match_verify_screen.dart';
 import 'screens/owner/owner_venue_reviews_screen.dart';
+import 'screens/owner/owner_tournaments_screen.dart';
+import 'screens/owner/owner_create_tournament_screen.dart';
+import 'screens/player/tournament_detail_screen.dart';
 import 'screens/admin/admin_moderation_screen.dart';
 
 /// Removes scrollbar overlay on all platforms (fixes white line on web).
@@ -212,6 +215,16 @@ class SportLynkApp extends StatelessWidget {
           '/team-rankings': (_) => const AuthGuard(requiredRole: 'player', child: TeamRankingsScreen()),
           '/tournaments': (_) => const AuthGuard(requiredRole: 'player', child: TournamentsScreen()),
           '/assistant': (_) => const AuthGuard(requiredRole: 'player', child: AssistantScreen()),
+          // Not role-guarded: a tournament page is public reading (SRS FE-8), and the
+          // organiser controls on it are gated by the server's own `organiser` block
+          // rather than by which role opened the route.
+          '/tournament-detail': (ctx) {
+            final a = ModalRoute.of(ctx)!.settings.arguments as Map<String, dynamic>;
+            return TournamentDetailScreen(
+              tournamentId: a['tournamentId'] as String,
+              autoRegister: a['autoRegister'] == true,
+            );
+          },
           '/booking-detail': (ctx) {
             final args = ModalRoute.of(ctx)!.settings.arguments as Map<String, dynamic>;
             return AuthGuard(requiredRole: 'player', child: PlayerBookingDetailScreen(bookingId: args['bookingId']));
@@ -219,6 +232,14 @@ class SportLynkApp extends StatelessWidget {
           '/owner-scan-qr': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerQrScannerScreen()),
           '/owner-wallet': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerWalletScreen()),
           '/owner-verify-matches': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerMatchVerifyScreen()),
+          '/owner-tournaments': (_) => const AuthGuard(requiredRole: 'owner', child: OwnerTournamentsScreen()),
+          '/owner-create-tournament': (ctx) {
+            final a = ModalRoute.of(ctx)!.settings.arguments as Map<String, dynamic>?;
+            return AuthGuard(
+              requiredRole: 'owner',
+              child: OwnerCreateTournamentScreen(venueId: a?['venueId'] as String?),
+            );
+          },
           '/owner-venue-reviews': (context) {
             final a = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
             return AuthGuard(

@@ -53,8 +53,14 @@ trained ML models — never replace them with external AI API calls.
 - generate_bookings.py must NOT touch the DB and must NOT import from app/routers/.
 
 ## Status
-S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D), S.5 (A–C) and S.6 (A–E) are all code-complete — **Wave C landed on
-BOTH halves**: the v2 label contract + model #4 retrained to 23 intents (ml-service), and Scout's dialog
+S.1, S.2 (A–D), S.3 (A–E), S.4 (A–D), S.5 (A–C) and S.6 (A–E) are all code-complete, and **S.7 Wave A (the
+tournament module, SRS Module 6) is code-complete but NOT yet database-verified**: migration 019 has never been
+applied to any Postgres, so the tournament check script, the demo seeder, the S.2/S.6 no-regression runs and the
+generated `doc/tournament_evidence.md` are all still owed and TESTING.md §4.22 marks them ⛔ NOT YET RUN. The two
+numbers that were observed are `npm test` **128/128** with the DB down and `flutter analyze` **0**. Applying 019
+needs the user's explicit go-ahead — Supabase is the only database.
+
+**S.6 Wave C landed on BOTH halves**: the v2 label contract + model #4 retrained to 23 intents (ml-service), and Scout's dialog
 manager, action executor, chat persistence and the three FR8.15 service extractions (Node), verified live
 at `PASS 326/326`. Wave D is the Flutter chat screen — built and `flutter analyze`-clean in a parallel
 session, so that receipt is that session's and was not re-run here. Wave E is the honesty pass: no LLM in
@@ -670,6 +676,47 @@ acceptance list (TESTING.md §4.21) instead of declaring it done.
   0.8033 / exam 0.6652 (real: 0.8086 / 0.6696), 18,809 features (real: 18,849), and a "12 exam rows" cost
   that is 13 on the released artifact. All propagated, and the last one now has a script instead of a
   memory: `training/diff_intent_exam.py`.
+- S7-A (the tournament module — SRS Module 6, FE-1…FE-8) — 013 created `tournaments`, `tournament_teams` and
+  `fixtures` and **nothing had ever read them**; this wave adds migration 019, `utils/fixtures.js` (pure
+  bracket/standings/waterfall math), `utils/fixtureSchedule.js` (the slot allocator), `services/tournamentService.js`
+  (the only writer, 2.7k lines), `services/tournamentScheduler.js`, 12 routes at `/api/tournaments`,
+  `jobs/tournamentJob.js` (6 background jobs now, not 4), three chip-only Scout actions, and the Flutter surface
+  (browse · detail with a scrolling bracket · owner create with a LIVE economics preview · owner manage).
+  DECISION — **the money model is a waterfall, not a percentage.** "Owner takes 30%" loses the owner money and
+  the project's own numbers prove it: 8 × 2,000 = 16,000 of pool against ~7 hours of inventory worth ~14,000, so
+  a 30% cut pays 4,800 for slots that would have sold for 14,000. So `venue_cost` (SUM of the fixtures' **real**
+  `slots.price`, × `1 − venue_discount_percent`) is recovered FIRST, then `prize = surplus × prize_percent`
+  (winner/runner-up 70/30) and the owner keeps `venue_cost + the rest`. PKR 4,000 × 8 over 7h@2,000 → owner
+  **21,200 vs 14,000 for selling the same slots**, ~571/player. `POST /tournaments/preview` quotes it — including
+  a recommended entry fee — before the tournament exists, and the **underwater guard** (pool < venue_cost → prize
+  0, owner takes the pool) means money is never taken FROM the owner. Under `min_teams` 4 → cancel + refund all.
+  DECISION — **a fixture reserves a slot, it does not create a booking.** Real `bookings` rows would drag in
+  wallet holds and, fatally, `noShowJob` would sweep them and dock both captains' trust scores. So
+  `fixtures.slot_id` + `status='blocked'`, and `PATCH /owner/slots/:id/unblock` now answers `409 fixture_reserved`.
+  DECISION — **one ELO ladder, K by stakes** (friendly 32 · early 40 · semi 48 · final 56 · bye/walkover **0**).
+  A second rating would seed the first bracket off all-1000s — brackets are seeded BY ELO — and 3 tournament
+  matches make a meaningless rating. `applyResult` already took `kFactor` and `elo_history` already stored it, so
+  this cost no refactor; "why does this count more" is `SELECT k_factor`. Four counters on `teams`
+  (`tournament_played/wins/finals_reached/titles`) give the tournament record without a second number.
+  AI, no retraining: ELO-seeded bracket + byes to top seeds (pure math), the Elo win-probability line (labelled
+  as the formula, not as ML), and **trained model #1 re-used for scheduling** — `forecastDemand` puts early
+  rounds in the owner's deadest hours and the final in the busiest, which lowers `venue_cost` (and so the entry
+  fee) while protecting sellable peak inventory; `meta.scheduling.source = 'model' | 'chronological'` proves
+  which ran. Scout gains 3 chip-only actions and **no new labels**, so model #4's 23-label release is untouched.
+  THREE recon bugs fixed, not worked around: `tournament_teams.status` defaulted `registered` while
+  `discoveryService` counted `accepted`, so **every capacity count in the app was 0**; `matches` had no
+  `tournament_id` (added with `chk_matches_one_context` — a booking or a tournament, never both); and
+  `MATCH_VIEW_FROM` reached venue/time through `bookings`, so tournament matches would have printed "Booking
+  unavailable" on four screens — now COALESCEd from the fixture's slot.
+  VERIFIED: `npm test` **128/128** with the DB down (42 new — the whole waterfall is a pure function on purpose)
+  and `flutter analyze` **0**. NOT VERIFIED, and said so in TESTING.md §4.22 rather than ticked: **migration 019
+  has never been applied** (needs the user's go-ahead; Supabase is the only DB), so `check_tournaments.js`,
+  `seed_tournament_demo.js`, `verify_schema` 113→**174**, the S.2/S.6 no-regression runs, the scheduler A/B and
+  the generated `doc/tournament_evidence.md` are all still owed. Steps 203-214 carry ⛔ NOT YET RUN with the
+  blocker named. GOTCHA — `check_tournaments.js --evidence` WAS run once against Supabase before 019 existed,
+  so `doc/tournament_evidence.md` exists as a **FAIL 2/3** stub carrying only its two rollback lines: proof the
+  harness cleans up when it dies mid-way, not proof of a tournament. Regenerate it after 019; do not cite it
+  until it reads `PASS n/n`.
 
 ## Docs
 - PROGRESS.md = historical changelog, append per wave (the detailed rationale for a viva;

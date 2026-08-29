@@ -300,36 +300,64 @@ async function slotById(client, { slotId, userId = null } = {}) {
 // ==========================================================================
 
 /**
- * listTournaments — Scout's `tournament_list`, and the future GET /api/tournaments.
+ * listTournaments — Scout's `tournament_list` and `GET /api/tournaments` (FE-2).
  *
  * "Open" is a compound fact, not just a status: a tournament is joinable while
  * status='open', the registration deadline has not passed, and it is not already
- * full. The count of accepted teams is therefore part of the row rather than
+ * full. The count of teams holding a spot is therefore part of the row rather than
  * something a caller works out afterwards, so `spotsLeft` and `isFull` cannot
  * disagree between the assistant and a screen.
  *
- * The table is empty today, which is a real answer and not a failure — Scout says
- * "nothing open right now" and offers what it CAN do instead of an error.
+ * WHY `teams_in` COUNTS 'registered' AS WELL AS 'accepted'
+ * ------------------------------------------------------
+ * `tournament_teams.status` defaults to 'registered' (013) and only becomes
+ * 'accepted' once the organiser approves — and on a tournament with
+ * `requires_approval = false` that approval never happens, because payment IS the
+ * acceptance. Counting only 'accepted' therefore reported 0 of 8 spots taken for
+ * every open tournament and would have let a ninth team pay into a full bracket.
+ * A team whose entry fee is frozen pending approval is occupying a spot, so it is
+ * counted; `teams_accepted` is published alongside for screens that need the
+ * confirmed subset.
+ *
+ * FE-2's filters (sport, city, start date) are all applied in SQL rather than by
+ * the caller, so `limit` means "10 matching tournaments" and not "10 rows, some of
+ * which you will throw away".
  */
 async function listTournaments(client, {
-  sport = null, openOnly = true, limit = 10,
+  sport = null, city = null, startFrom = null, status = null, q = '',
+  venueId = null, ownerId = null, openOnly = true, limit = 10,
 } = {}) {
   const runner = client || pool;
   const params = [];
   const where = ['1 = 1'];
   if (sport) { params.push(String(sport)); where.push(`LOWER(t.sport) = LOWER($${params.length})`); }
+  if (city) { params.push(`%${access.squash(city)}%`); where.push(`v.city ILIKE $${params.length}`); }
+  if (startFrom) { params.push(String(startFrom)); where.push(`t.start_date >= $${params.length}::date`); }
+  if (status) { params.push(String(status)); where.push(`t.status = $${params.length}`); }
+  if (venueId) { params.push(String(venueId)); where.push(`t.venue_id = $${params.length}`); }
+  if (ownerId) { params.push(String(ownerId)); where.push(`t.owner_id = $${params.length}`); }
+  const term = access.squash(q || '');
+  if (term) { params.push(`%${term}%`); where.push(`t.name ILIKE $${params.length}`); }
   if (openOnly) where.push("t.status = 'open'", 't.registration_deadline > NOW()');
   params.push(clampLimit(limit, 10, 50));
   const { rows } = await runner.query(
-    `SELECT t.id, t.name, t.sport, t.format, t.entry_fee, t.max_teams,
-            t.registration_deadline, t.start_date, t.status,
+    `SELECT t.id, t.name, t.description, t.sport, t.format, t.entry_fee,
+            t.max_teams, t.min_teams, t.requires_approval,
+            t.registration_deadline, t.start_date, t.status, t.rounds,
+            t.prize_percent, t.winner_percent, t.runnerup_percent,
+            t.pool_amount, t.prize_amount, t.owner_id,
             v.name AS venue_name, v.city AS venue_city, v.id AS venue_id,
             u.name AS organiser_name,
+            wt.name AS winner_name,
             (SELECT count(*)::int FROM tournament_teams tt
-              WHERE tt.tournament_id = t.id AND tt.status = 'accepted') AS teams_in
+              WHERE tt.tournament_id = t.id
+                AND tt.status IN ('registered','accepted')) AS teams_in,
+            (SELECT count(*)::int FROM tournament_teams tt
+              WHERE tt.tournament_id = t.id AND tt.status = 'accepted') AS teams_accepted
        FROM tournaments t
        LEFT JOIN venues v ON v.id = t.venue_id
        LEFT JOIN users u ON u.id = t.owner_id
+       LEFT JOIN teams wt ON wt.id = t.winner_team
       WHERE ${where.join(' AND ')}
       ORDER BY t.registration_deadline ASC, t.start_date ASC NULLS LAST
       LIMIT $${params.length}`,

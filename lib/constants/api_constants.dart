@@ -142,4 +142,26 @@ class ApiConstants {
       '/assistant/threads/$threadId/messages';
   static String assistantFeedback(String messageId) =>
       '/assistant/messages/$messageId/feedback';
+
+  // ── Tournaments (S.7 Wave A) ────────────────────────────────
+  /// Module 6. `/mine` and `/preview` are declared BEFORE `/:id` on the server, so
+  /// they are real endpoints and not a tournament whose id happens to be "mine" —
+  /// spelled out here in the same order for anyone comparing the two files.
+  ///
+  /// `preview` is a POST that writes nothing: the economics quote depends on the
+  /// whole draft configuration (format, both team counts, four percentages, slot
+  /// length, deadline), and a dozen fields in a query string would be worse than
+  /// POSTing a read.
+  static const String tournaments = '/tournaments';
+  static const String myTournaments = '/tournaments/mine';
+  static const String tournamentPreview = '/tournaments/preview';
+  static String tournament(String id) => '/tournaments/$id';
+  static String tournamentRegister(String id) => '/tournaments/$id/register';
+  static String tournamentGenerate(String id) => '/tournaments/$id/generate';
+  static String tournamentCancel(String id) => '/tournaments/$id/cancel';
+  static String tournamentTeam(String id, String teamId) => '/tournaments/$id/teams/$teamId';
+  static String tournamentFixtureResult(String id, String fixtureId) =>
+      '/tournaments/$id/fixtures/$fixtureId/result';
+  static String tournamentFixtureWalkover(String id, String fixtureId) =>
+      '/tournaments/$id/fixtures/$fixtureId/walkover';
 }

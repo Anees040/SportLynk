@@ -472,7 +472,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
             )
           else if (m.waitingOnOwner)
             _hint(
-                'Both captains agreed. ${m.booking?.venueName ?? 'The venue'} is verifying — ratings move once they do.',
+                'Both captains agreed. ${m.isTournamentMatch ? 'The organiser' : (m.venueName ?? 'The venue')} is verifying — ratings move once they do.',
                 Icons.verified_user_outlined)
           else if (m.waitingOnOpponent)
             _hint('Your score is in. Waiting for ${m.theirTeam.name} to report theirs.',
@@ -619,12 +619,8 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
   }
 
   String _historySubtitle(MatchModel m) {
-    final b = m.booking;
-    final where = b?.venueName;
-    final when = b?.slotDate == null
-        ? null
-        : '${b!.slotDate!.day}/${b.slotDate!.month}/${b.slotDate!.year}';
-    return [?when, ?where].join('  ·  ');
+    final stage = m.tournament?.stageLine;
+    return [?m.slotDateLabel, ?m.venueName, ?stage].join('  ·  ');
   }
 
   // ── Shared bits ────────────────────────────────────────────
@@ -682,15 +678,16 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
       );
 
   Widget _slotLine(MatchModel m) {
-    final b = m.booking;
-    if (b == null) {
-      return _hint('The linked booking is no longer available.', Icons.error_outline,
+    if (m.hasNoSlot) {
+      return _hint(
+          m.isTournamentMatch
+              ? 'This fixture has no slot yet.'
+              : 'The linked booking is no longer available.',
+          Icons.error_outline,
           color: AppColors.warning);
     }
-    final date = b.slotDate;
-    final when = date == null
-        ? ''
-        : '${date.day}/${date.month}/${date.year}';
+    final when = m.slotDateLabel ?? '';
+    final stage = m.tournament?.stageLine;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -706,7 +703,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  b.venueName ?? 'Venue',
+                  m.venueName ?? 'Venue',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.poppins(
@@ -716,12 +713,42 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
                   ),
                 ),
                 Text(
-                  '$when  ·  ${b.timeRange}',
+                  '$when  ·  ${m.timeRange}',
                   style: GoogleFonts.poppins(
                     fontSize: 11,
                     color: AppColors.textSecondary,
                   ),
                 ),
+                // Which cup and which round. A knockout captain's next question
+                // after "where" is always "what is this one for" — and the one
+                // after that is "who do I play if I win", which is the bracket,
+                // so the line is the way through to it.
+                if (stage != null && stage.isNotEmpty)
+                  InkWell(
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      '/tournament-detail',
+                      arguments: {'tournamentId': m.tournament!.id},
+                    ),
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            stage,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.accent,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right,
+                            size: 13, color: AppColors.accent),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),

@@ -36,8 +36,26 @@ test('assertRoutable: every intent label the model can emit has a handler', () =
   const out = actions.assertRoutable();
   assert.equal(out.ok, true);
   assert.equal(out.labels, 23, 'intents-v2 has 23 labels');
-  assert.equal(out.buttonOnly, 4);
+  assert.equal(out.buttonOnly, 7);
   assert.equal(out.actions, out.labels + out.buttonOnly);
+});
+
+// The three tournament actions are executable but UNTRAINED, and that is the whole
+// point: model #4 v2 was released with 23 labels and S.7 does not retrain it, so the
+// classifier cannot start a tournament entry no matter what a user types. If a later
+// wave ever adds a label for one of these, this test is where it has to be argued.
+test('the tournament actions are reachable by chip only, never by the classifier', () => {
+  for (const key of ['tournament_detail', 'tournament_register', 'my_tournaments']) {
+    assert.equal(actions.isAction(key), true, `${key} has no handler`);
+    assert.ok(actions.BUTTON_ONLY.includes(key), `${key} must be button-only`);
+    assert.equal(actions.INTENT_LABELS.includes(key), false,
+      `${key} is a trained label — model #4 would have to be retrained and re-released`);
+  }
+  // And the one that spends is behind the confirm gate, not just behind a chip.
+  assert.equal(typeof actions.EXECUTORS.tournament_register, 'function',
+    'tournament_register must be confirmed before it moves money');
+  assert.equal(actions.EXECUTORS.tournament_detail, undefined);
+  assert.equal(actions.EXECUTORS.my_tournaments, undefined);
 });
 
 test('every ACTIONS value is a function and every label is an action', () => {

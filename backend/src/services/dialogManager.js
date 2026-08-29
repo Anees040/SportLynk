@@ -114,7 +114,8 @@ const PENDING_SLOT = Object.freeze({
  * the user chose ten turns ago and has forgotten. So these are dropped the moment the
  * subject changes.
  */
-const DECISION_SLOTS = Object.freeze(['slotId', 'bookingId', 'question', 'offset', 'n']);
+const DECISION_SLOTS = Object.freeze(['slotId', 'bookingId', 'tournamentId',
+  'question', 'offset', 'n']);
 
 /** The four fsm_state values migration 018 allows, and what each one means. */
 const FSM = Object.freeze({
@@ -182,7 +183,7 @@ function verdictOf(text) {
  */
 const SLOT_KEYS = Object.freeze([
   'sport', 'date', 'time', 'area', 'city', 'locality', 'budget', 'sort', 'offset',
-  'venueId', 'venueName', 'slotId', 'bookingId', 'teamId', 'teamName',
+  'venueId', 'venueName', 'slotId', 'bookingId', 'teamId', 'teamName', 'tournamentId',
   'q', 'opponentName', 'status', 'topic', 'question', 'name', 'n', 'minRating',
   // `screen` is a NAVIGATION hint, not a search preference: it rides on the
   // deep-link chips ("Open team", "Open wallet") so that a client which posts one

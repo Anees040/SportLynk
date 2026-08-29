@@ -35,11 +35,21 @@ Measured on this database: `sslmode=require` fails, no `sslmode` connects,
 | 012 | `012_hardening_indexes` | S1-C | Performance indexes; only `bookings(venue_id, slot_id)` was genuinely missing |
 | 013 | `013_fyp2_foundation` | S1-D | 12 tables for milestones S.2–S.7 (teams/matches/tournaments/chat/settings) + columns + 14 indexes. Nothing reads them yet, by design. |
 | 014 | `014_withdrawals` | S1-F | `withdrawals` + the partial unique index that enforces one pending request per user |
+| 015 | `015_teams_chat` | S2-A | `chat_channel_members`, `chat_reactions`, 31 columns and 11 indexes that only became necessary once the team endpoints and the chat UI were written — including the per-sport unique team name FR2.1 asked for and nothing enforced |
+| 016 | `016_matches_elo` | S2-B/C | 14 columns + 7 indexes for the match lifecycle and the ELO ledger: the `matches.status` CHECK, the one-submission-per-team key, and `elo_applied` as the exchange latch |
+| 017 | `017_reviews_moderation` | S4-C | `review_flags` (the moderation queue, FR9.9) + 4 indexes; the Trust Score 2.0 cold-start baseline |
+| 018 | `018_assistant` | S6-C | `assistant_kb`, `assistant_escalations`, `assistant_turns`, `assistant_feedback` + 12 indexes — Scout's session state, so a slot-filling machine can hold a conversation across turns |
+| 019 | `019_tournaments` | S7-A | The tournament module. **Adds nothing new to `public`'s table count** — 013 already created `tournaments`, `tournament_teams` and `fixtures`, and nothing had ever read them. 019 is 38 `ADD COLUMN IF NOT EXISTS` (20 on `tournaments`, 5 on `tournament_teams`, 7 on `fixtures`, 4 counters on `teams`, `matches.tournament_id`, `transactions.tournament_id`), 16 guarded CHECK/UNIQUE constraints, 7 indexes, **3 new `txn_type` values** (`tournament_entry`, `tournament_prize`, `tournament_commission`) and one `global_settings` row |
 
-**28 tables in `public` after 014** (27 after 013, plus `withdrawals`). Verified
-against Supabase on 2026-08-21: all 12 of 013's tables present, 010's 5 escrow
-columns present, `uq_withdrawals_one_pending` present as a partial unique index on
-`status='pending'`, and all 31 key columns typed `uuid`.
+**28 tables in `public` after 014** (27 after 013, plus `withdrawals`), **35 after 018**
+(015 adds 2, 017 adds 1, 018 adds 4), and **still 35 after 019** — the tournament
+module needed columns and constraints, not tables.
+
+The 014 census was verified against Supabase on 2026-08-21: all 12 of 013's tables
+present, 010's 5 escrow columns present, `uq_withdrawals_one_pending` present as a
+partial unique index on `status='pending'`, and all 31 key columns typed `uuid`.
+**019 has NOT been applied to any database yet** — the SQL and its runner are written
+and reviewed, and nothing in this section has been confirmed live.
 
 Each has a `backend/run_migration_0XX.js` runner with machine-checked assertions.
 013 and 014 were each verified **idempotent** — run twice, the second run creates
@@ -59,6 +69,8 @@ All run from `backend/`, all against whatever `DATABASE_URL` points at.
 |---|---|---|
 | `src/scripts/add_future_slots.js` | **No** — only inserts | Keeps every active venue supplied with bookable slots. Without future slots nothing can be booked and no acceptance script can run. Idempotent via `NOT EXISTS (venue_id, slot_date, start_time)` — `slots` has **no unique constraint** on that triple, so the guard is the only thing preventing duplicates. `--days N` `--venue <uuid>` `--from H --to H` `--dry`. |
 | `src/scripts/reconcile_wallets.js` | Yes, with `--apply` (dry-run by default) | Repairs drift between `wallets.frozen_balance` and `SUM(bookings.security_deposit)` over `pending`/`confirmed` bookings. Releases over-frozen escrow with a `refund` ledger row; **reports but never fixes** under-frozen. |
+| `src/scripts/check_tournaments.js` | **No** — one transaction, always `ROLLBACK` | The S.7 Wave A acceptance harness: 10 blocks over configuration refusals, the economics quote, entry fees and refunds, the under-minimum refund-all, the draw and the waterfall, results/K-by-stake/podium, a 5-team field with byes, round robin, the match-flow door, and a closing ledger audit. `--evidence` writes `doc/tournament_evidence.md`; `--verify-clean` re-checks that nothing was left behind. |
+| `seed_tournament_demo.js` | **Yes**, with `--undo` | 8 teams with funded wallets and a 2-minute registration deadline, so the deadline job can be watched drawing a real bracket. Idempotent; `--verify` re-reads what it made. |
 | `src/scripts/seed_venues.js` | **Yes** — deletes the first owner's venues, slots, bookings and their transactions | Rebuilds the 10 demo grounds. Releases any escrow those bookings held *before* deleting them, prints a delete summary, and waits 5 s for `Ctrl-C` (`--yes` skips). |
 
 ### The escrow invariant
@@ -189,6 +201,7 @@ Both the cause and the damage are fixed — see PROGRESS.md, "Post-wave fixes".
 | wallet_id | UUID | FK→wallets |
 | user_id | UUID | FK→users |
 | booking_id | UUID | FK→bookings (nullable) |
+| tournament_id | UUID | FK→tournaments (nullable) — added by **019**; a row carries one context or neither |
 | type | VARCHAR(50) | See Transaction Types below |
 | amount | DECIMAL(10,2) | Positive = credit, Negative = debit |
 | balance_after | DECIMAL(10,2) | Wallet balance snapshot after transaction |
@@ -208,6 +221,9 @@ Both the cause and the damage are fixed — see PROGRESS.md, "Post-wave fixes".
 | `no_show_penalty` | Player's 20% deposit forfeited for no-show |
 | `owner_payout` | Owner withdrew balance |
 | `withdrawal` | Withdrawal requested — debited at request time, not at settlement (see `withdrawals`) |
+| `tournament_entry` | Entry fee **frozen** at registration (019) — `balance −E`, `frozen +E` |
+| `tournament_commission` | Organiser's earning at the draw: the reserved venue hours **plus** the margin |
+| `tournament_prize` | The prize pool — held in the organiser's `frozen` at the draw, then credited to the champion's and runner-up's captains at the final. Logged **positive both times**; the `description` says which |
 
 ### withdrawals
 Added by **migration 014** (Wave F). A deliberate single exception to "no schema
@@ -257,6 +273,87 @@ The hold is a plain `balance` debit and **not** `frozen_balance` —
 `frozen_balance` means *booking escrow*, and `GET /api/wallet/frozen` itemises it
 per booking. Mixing withdrawal holds in would make that breakdown disagree with
 its own total.
+
+### tournaments
+Created bare by **013**, made real by **019** (S.7 Wave A). One row is an owner's cup
+at one of their own venues. The four `*_percent` columns and the four `*_amount`
+columns are the whole economic contract: the percentages are **copied onto the row at
+create time** rather than read live at payout, so an admin editing
+`global_settings.tournament` cannot rewrite the terms of a tournament that is already
+holding eight captains' entry fees.
+
+| Column | Type | Note |
+|---|---|---|
+| id · owner_id · venue_id | UUID | 013. `owner_id`→`users`, `venue_id`→`venues` |
+| name · sport · format | text | 013. `format` CHECK `knockout \| round_robin` (019) |
+| description | text | 019 |
+| entry_fee | numeric | 013. What one team pays, once |
+| max_teams · min_teams | int | `max_teams` 013; `min_teams` 019 DEFAULT 4. CHECK: power of 2 for knockout, ≤ `max_round_robin_teams` for a league, and `min_teams ≤ max_teams` |
+| requires_approval | boolean | 019 DEFAULT false — false lands a registration straight on `accepted` |
+| registration_deadline | timestamptz | 013. The deadline job's trigger (FE-4) |
+| start_date | date | 013. **Corrected at generation** to the date the bracket actually landed on |
+| status | text | 013. CHECK `open \| active \| completed \| cancelled` (019) |
+| rounds | int | 019. `log2(bracket size)`, written at generation |
+| slot_minutes | int | 019 DEFAULT 60 — one fixture's length |
+| prize_percent · winner_percent · runnerup_percent | int | 019 DEFAULT 60 / 70 / 30. CHECK 0–100, and winner + runner-up = 100 |
+| venue_discount_percent | int | 019 DEFAULT 0 — the owner's lever on their own inventory |
+| pool_amount · venue_cost_amount · prize_amount · owner_earning_amount | numeric(10,2) | 019, all `DEFAULT 0` and CHECK `>= 0`. Zero until the draw; from then on the **settled** figures the ledger actually moved. `pool = venue_cost + prize + margin` |
+| winner_team · runner_up_team | UUID | 019 →`teams` |
+| fixtures_generated_at | timestamptz | 019. **The generation latch** — the one column that makes drawing a bracket twice impossible |
+| activated_at · completed_at · cancelled_at · cancel_reason | timestamptz / text | 019 |
+| created_at | timestamptz | 013 |
+
+### tournament_teams
+One row is "this team is in this cup". `UNIQUE (tournament_id, team_id)` from 013.
+
+| Column | Type | Note |
+|---|---|---|
+| id · tournament_id · team_id | UUID | 013, `tournament_id` `ON DELETE CASCADE` |
+| status | text | 013, CHECK `registered \| accepted \| rejected \| withdrawn \| eliminated` (019). `registered` = **paid, awaiting approval**; both it and `accepted` hold money, so capacity counts **both** |
+| seed | int | 019. Written at generation, ELO-descending |
+| paid_amount | numeric(10,2) | 019 DEFAULT 0, CHECK `>= 0` — what was actually frozen, so a refund can never exceed it |
+| approved_at · withdrawn_at | timestamptz | 019 |
+| eliminated_round | int | 019. Which round ended their run |
+| created_at | timestamptz | 013 |
+
+### fixtures
+The bracket. `(round, position)` locates a node, 1-based; `team_a`/`team_b` are NULL
+until the previous round resolves and feeds them.
+
+| Column | Type | Note |
+|---|---|---|
+| id · tournament_id | UUID | 013, `ON DELETE CASCADE` |
+| round · position | int | 013. `UNIQUE (tournament_id, round, position)` + CHECK `>= 1` (019) |
+| team_a · team_b · winner | UUID | 013 →`teams`. CHECK `team_a <> team_b` (019) |
+| score_a · score_b | int | 013. CHECK: a `played` fixture **must** have both, and neither may be negative (019) |
+| status | text | 013. CHECK `upcoming \| played \| walkover \| cancelled` (019) |
+| played_at | timestamptz | 013 |
+| match_id | UUID | 019 →`matches`. Set by either settlement door |
+| slot_id | UUID | 019 →`slots` `ON DELETE SET NULL`. **A reservation, not a booking** — the slot flips to `blocked` and `uq_fixtures_slot_id` (partial unique) makes two fixtures on one hour impossible |
+| scheduled_at | timestamptz | 019 |
+| label | text | 019 — "Final", "Semi-final", "Round 1" |
+| is_bye | boolean | 019 DEFAULT false. CHECK: a bye has `team_a` and **`team_b IS NULL`** — without it, `is_bye = true` with two teams would advance a side that never played |
+| next_round · next_position | int | 019. Where the winner goes; NULL means this is the final |
+
+**Indexes added by 019:** `uq_fixtures_slot_id` (unique, partial on `slot_id IS NOT NULL`),
+`idx_fixtures_match`, `idx_fixtures_sched`, `idx_matches_tournament`,
+`idx_transactions_tournament`, `idx_tournaments_due` (partial on
+`status='open' AND fixtures_generated_at IS NULL` — the deadline job's candidate scan),
+`idx_tournaments_owner`.
+
+**019 also touches three existing tables:** `teams` gains `tournament_played`,
+`tournament_wins`, `finals_reached`, `titles` (all `int NOT NULL DEFAULT 0`, CHECK
+`>= 0`) — the counted achievements that stand in for a second ELO ladder;
+`matches` gains `tournament_id` plus `chk_matches_one_context`, because a match is a
+booked friendly **or** a tournament fixture, never both; `transactions` gains
+`tournament_id` so the ledger is auditable per cup.
+
+**`global_settings.tournament`** (inserted by 019, 14 keys): `min_teams` 4,
+`prize_percent` 60, `winner_percent` 70, `runnerup_percent` 30,
+`venue_discount_percent` 0, `slot_minutes` 60, `round_gap_days` 1,
+`round_rest_minutes` 60, `max_knockout_teams` 32, `max_round_robin_teams` 6,
+`target_margin_percent` 25, `k_early` 40, `k_semi` 48, `k_final` 56. The three K
+values sit next to `elo.k_factor` (32, friendlies) so the whole ladder is one place.
 
 ## Escrow & Booking Flow (Phase 5)
 

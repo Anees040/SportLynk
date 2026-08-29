@@ -152,7 +152,6 @@ class _OwnerMatchVerifyScreenState extends State<OwnerMatchVerifyScreen> {
 
   Widget _card(MatchModel m) {
     final busy = _busy.contains(m.id);
-    final b = m.booking;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -178,9 +177,16 @@ class _OwnerMatchVerifyScreenState extends State<OwnerMatchVerifyScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    b == null
-                        ? 'Booking unavailable'
-                        : '${b.venueName ?? 'Venue'}  ·  ${b.slotDate == null ? '' : '${b.slotDate!.day}/${b.slotDate!.month}/${b.slotDate!.year}'}  ·  ${b.timeRange}',
+                    m.hasNoSlot
+                        ? (m.isTournamentMatch
+                            ? 'Tournament fixture — slot unavailable'
+                            : 'Booking unavailable')
+                        : [
+                            m.venueName ?? 'Venue',
+                            ?m.slotDateLabel,
+                            m.timeRange,
+                            ?m.tournament?.stageLine,
+                          ].where((x) => x.isNotEmpty).join('  ·  '),
                     maxLines: 2,
                     style: GoogleFonts.poppins(
                       fontSize: 11.5,

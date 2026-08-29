@@ -39,6 +39,7 @@ const { reply, chip, card, menu, SOURCES, CARDS, CAPABILITIES } = require('../ut
 const discovery = require('./discoveryService');
 const roster = require('./rosterService');
 const booking = require('./bookingService');
+const T = require('./tournamentService');
 const kb = require('./assistantKb');
 const ml = require('./mlClient');
 const teamStats = require('../utils/teamStats');
@@ -1111,13 +1112,95 @@ function pktDay(ts) {
 }
 
 /**
+ * "closes in 4 hours" — the sentence a countdown makes, not the timer itself.
+ *
+ * The phone gets `secondsToDeadline` from the REST payload and animates it; a chat
+ * bubble is written once and read later, so it says the size of the gap rather than
+ * a precise number that will be wrong by the time it is read. Past deadlines are
+ * reported as closed instead of as a negative, which is how a stale card betrays
+ * itself.
+ */
+function untilLabel(when) {
+  const ms = new Date(when).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return null;
+  if (ms <= 0) return 'closed';
+  const mins = Math.round(ms / 60000);
+  if (mins < 90) return `${mins} minute${mins === 1 ? '' : 's'} left`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `${hrs} hours left`;
+  return `${Math.round(hrs / 24)} days left`;
+}
+
+/**
+ * A tournament card, built once — the same rule bookingCard follows.
+ *
+ * It reads EITHER shape on purpose. `tournament_list` has snake_case rows straight
+ * from discoveryService, and `tournament_detail` has the camelCase payload
+ * `GET /api/tournaments/:id` returns; making two card builders would mean the browse
+ * bubble and the detail bubble could render the same cup differently, which is the
+ * exact failure this file avoids for venues, bookings and players already.
+ *
+ * Nothing is invented: a value that neither shape carries stays null, so a Flutter
+ * widget can tell "no prize pool yet" from "prize pool of zero".
+ */
+function tournamentCard(t, { buttons = null } = {}) {
+  const venue = t.venue || {};
+  const fee = asNum(t.entry_fee == null ? t.entryFee : t.entry_fee, 0);
+  const maxTeams = Number(t.max_teams == null ? t.maxTeams : t.max_teams) || null;
+  const teamsIn = Number((t.teams_in == null ? t.teamsRegistered : t.teams_in) || 0);
+  const start = t.start_date || t.startDate || null;
+  const startDay = start ? dateStr(start) : null;
+  const raw = t.registration_deadline == null ? t.registrationDeadline : t.registration_deadline;
+  // Coerced to a Date before pktDay sees it: the camelCase payload carries the
+  // deadline as an ISO STRING, and pktDay's string path takes the UTC day, which is
+  // the wrong day for anything after 7pm PKT. See pktDay's own comment.
+  const rawDeadline = raw instanceof Date ? raw : (raw ? new Date(raw) : null);
+  const deadline = rawDeadline && !Number.isNaN(rawDeadline.getTime()) ? pktDay(rawDeadline) : null;
+  const prize = t.prize_amount == null ? t.prize : t.prize_amount;
+  const spots = maxTeams == null ? null : Math.max(0, maxTeams - teamsIn);
+
+  return card(CARDS.TOURNAMENT, {
+    id: t.id,
+    name: t.name,
+    sport: t.sport || null,
+    format: t.format || null,
+    status: t.status || null,
+    venueId: t.venue_id || venue.id || null,
+    venueName: t.venue_name || venue.name || null,
+    city: t.venue_city || venue.city || null,
+    organiser: t.organiser_name || t.organiserName || t.ownerName || null,
+    entryFee: fee,
+    entryFeeLabel: fee > 0 ? money(fee) : 'Free entry',
+    startDate: startDay,
+    startLabel: startDay ? day(startDay) : null,
+    deadline,
+    deadlineLabel: deadline ? day(deadline) : null,
+    closesIn: rawDeadline ? untilLabel(rawDeadline) : null,
+    maxTeams,
+    teamsIn,
+    spotsLeft: t.spotsLeft == null ? spots : Number(t.spotsLeft),
+    isFull: t.isFull == null ? (maxTeams != null && teamsIn >= maxTeams) : Boolean(t.isFull),
+    prize: prize == null ? null : asNum(prize, 0),
+    prizeLabel: prize == null || asNum(prize, 0) <= 0 ? null : money(prize),
+    winnerName: t.winner_name || t.winnerName || null,
+    runnerUpName: t.runner_up_name || t.runnerUpName || null,
+    buttons: buttons || [chip('Details', 'tournament_detail', { tournamentId: t.id })],
+  });
+}
+
+/**
  * `tournament_list`. The table is empty on a fresh database, and that is a real
  * answer rather than an error — Scout says nothing is open and offers the things
  * that ARE, instead of implying the feature is broken.
  *
- * Every field below is a column listTournaments actually selects. `city` comes
- * from the VENUE (tournaments has no city of its own) and there is no prize pool
- * in 013 at all, so the card does not pretend there is one.
+ * The card itself is `tournamentCard`, shared with `tournament_detail` so browse and
+ * detail cannot render the same cup two ways. `city` comes from the VENUE, because
+ * tournaments have no city of their own.
+ *
+ * The chips are the module's whole front door: `Details` opens the bracket and
+ * `Enter this cup` opens the entry flow. Neither spends anything — 019 gave every
+ * tournament a real entry fee, so the ONLY path to a charge is the confirm card that
+ * `tournament_register` arms.
  */
 async function tournamentList(ctx) {
   const { client, slots = {} } = ctx;
@@ -1138,32 +1221,481 @@ async function tournamentList(ctx) {
   return { reply: reply(
     `${rows.length} tournament${rows.length === 1 ? '' : 's'} open for registration:`, {
       source: SOURCES.LIVE,
-      cards: rows.map((t) => card(CARDS.TOURNAMENT, {
-        id: t.id,
-        name: t.name,
-        sport: t.sport || null,
-        format: t.format || null,
-        venueId: t.venue_id || null,
-        venueName: t.venue_name || null,
-        city: t.venue_city || null,
-        organiser: t.organiser_name || null,
-        entryFee: Number(t.entry_fee || 0),
-        entryFeeLabel: Number(t.entry_fee || 0) > 0 ? money(t.entry_fee) : 'Free entry',
-        startDate: t.start_date ? dateStr(t.start_date) : null,
-        startLabel: t.start_date ? day(dateStr(t.start_date)) : null,
-        deadline: pktDay(t.registration_deadline),
-        deadlineLabel: day(pktDay(t.registration_deadline)),
-        maxTeams: t.max_teams == null ? null : Number(t.max_teams),
-        teamsIn: Number(t.teams_in || 0),
-        spotsLeft: Number(t.spotsLeft || 0),
-        isFull: !!t.isFull,
+      cards: rows.map((t) => tournamentCard(t, {
         buttons: [
+          chip('Details', 'tournament_detail', { tournamentId: t.id }),
+          // Offered on the CARD, never fired by it: the chip opens the entry flow,
+          // which resolves the team, checks the wallet and asks for a confirmation
+          // before a rupee moves. `isFull` is respected here so the button is not
+          // painted onto a cup that cannot accept it.
+          ...(t.isFull ? [] : [chip('Enter this cup', 'tournament_register', { tournamentId: t.id })]),
           ...(t.venue_id ? [chip('Ground info', 'venue_info', { venueId: t.venue_id })] : []),
-          chip('Find opponents', 'find_opponents'),
         ],
       })),
-      chips: [chip('My teams', 'team_stats'), chip('Find opponents', 'find_opponents')],
+      chips: [chip('My tournaments', 'my_tournaments'), chip('My teams', 'team_stats'),
+        chip('Find opponents', 'find_opponents')],
     }) };
+}
+
+
+/**
+ * `tournament_detail` — one cup: the field, the bracket and the money.
+ *
+ * CHIP-ONLY, and it must stay that way. The classifier has 23 labels and none of them
+ * is "that tournament": a sentence cannot carry a uuid, so a trained label here would
+ * mean Scout guessing WHICH cup a user meant and showing them somebody else's bracket.
+ * The id arrives in a chip's args instead — the same door `pick_slot` uses, for the
+ * same reason. Wave A adds no trained labels at all, so the released artifact and its
+ * 23 labels stay byte-identical.
+ *
+ * Every number below comes from `tournamentService.detail`, which is exactly what
+ * `GET /api/tournaments/:id` calls. Scout computes no standing, no countdown and no
+ * prize share of its own (FR8.15): the bubble and the screen read one implementation,
+ * so they cannot disagree about who is winning or what the champion gets paid.
+ */
+async function tournamentDetail(ctx) {
+  const { client, userId, slots = {} } = ctx;
+  const id = String(slots.tournamentId || '').trim();
+  // A chip that arrived without its argument is an integration slip, not a
+  // conversation problem — and the useful answer is the list the user was about to
+  // pick from, with the ids attached, rather than an apology.
+  if (!id) return tournamentList(ctx);
+
+  const out = await T.detail(client, { tournamentId: id, userId });
+  if (!out.ok) {
+    return {
+      reply: reply(out.message, {
+        source: SOURCES.LIVE, action: 'tournament_detail', actionOk: false,
+        meta: { code: out.code },
+        chips: [chip('Tournaments', 'tournament_list'), chip('My tournaments', 'my_tournaments')],
+      }),
+      state: { intent: null, pending: null, slots: {}, confirm: null },
+    };
+  }
+
+  const d = out.data;
+  const t = d.tournament;
+  const e = d.economics || {};
+  const v = d.viewer || {};
+  const b = d.bracket || {};
+  const deadline = t.registrationDeadline ? new Date(t.registrationDeadline) : null;
+  const shape = t.format === 'round_robin' ? 'round robin' : 'knockout';
+  const where = [t.venue.name, t.venue.city].filter(Boolean).join(', ');
+
+  const said = [`${t.name} — ${shape}${where ? ` at ${where}` : ''}.`];
+  said.push(`${t.teamsRegistered}/${t.maxTeams} teams in`
+    + `${t.entryFee > 0 ? ` at ${money(t.entryFee)} entry` : ', free entry'}.`);
+
+  // The four states a cup can be read in, each one a different question the user is
+  // actually asking: can I still enter, when is my match, who won, what happened.
+  if (t.status === 'cancelled') {
+    said.push('It was cancelled and every entry fee went back to the team that paid it.');
+  } else if (t.status === 'completed' && t.winnerName) {
+    said.push(`${t.winnerName} won it${t.runnerUpName ? `, with ${t.runnerUpName} runner-up` : ''}`
+      + `${asNum(e.winnerShare) > 0 ? ` — ${money(e.winnerShare)} to the champions` : ''}.`);
+  } else if (b.generated) {
+    said.push(`The bracket is drawn: ${b.played} of ${b.total} fixtures played over `
+      + `${b.rounds} round${b.rounds === 1 ? '' : 's'}`
+      + `${b.byes ? `, ${b.byes} bye${b.byes === 1 ? '' : 's'} to the top seeds` : ''}.`);
+  } else if (deadline) {
+    const left = untilLabel(deadline);
+    said.push(left === 'closed'
+      ? 'Registration has closed — the bracket is drawn automatically on the next sweep.'
+      : `Registration closes ${day(pktDay(deadline))} (${left}), and the bracket is drawn `
+        + 'automatically at the deadline, seeded on ELO.');
+  }
+
+  // Where the user personally stands. `myRegistration` is the captain's own entry; a
+  // round robin has a table worth reciting in a sentence and a knockout does not, so
+  // the two formats answer "how is it going" differently.
+  const mine = v.myRegistration;
+  if (mine) {
+    said.push(`${mine.teamName} is entered${mine.seed ? ` as seed ${mine.seed}` : ''}`
+      + `${mine.status === 'registered' ? ', waiting on the organiser' : ''}.`);
+    const next = (d.fixtures || []).find((f) => f.status === 'upcoming'
+      && (f.teamA === mine.teamId || f.teamB === mine.teamId));
+    if (next) {
+      const foe = next.teamA === mine.teamId ? next.teamBName : next.teamAName;
+      const odds = next.teamA === mine.teamId ? next.winProbabilityA : next.winProbabilityB;
+      said.push(`Next: ${next.label || `round ${next.round}`} against `
+        + `${foe || 'a team still to be decided'}`
+        + `${next.slotDate ? ` on ${day(dateStr(next.slotDate))} at ${clock(next.startTime)}` : ''}`
+        // The Elo formula, named as itself. It is arithmetic on two ratings, not a
+        // trained model, and calling it one would be a claim a viva panel can check.
+        + `${odds == null ? '' : ` — Elo gives you ${Math.round(odds * 100)}%`}.`);
+    }
+  } else if (t.format === 'round_robin' && (d.standings || []).length) {
+    const top = d.standings[0];
+    said.push(`${top.teamName} leads the table on ${top.points} point${top.points === 1 ? '' : 's'}.`);
+  }
+
+  if (asNum(e.prize) > 0) {
+    said.push(`${e.settled ? 'Prize pool' : 'Projected prize pool'} ${money(e.prize)}: `
+      + `${money(e.winnerShare)} to the winner, ${money(e.runnerupShare)} to the runner-up.`);
+  }
+  if (t.format === 'knockout' && b.generated && !e.settled) {
+    said.push('A drawn knockout tie goes to the higher seed.');
+  }
+
+  const enter = chip('Enter this cup', 'tournament_register', { tournamentId: t.id });
+  const chips = [];
+  // `canRegister` is the service's answer to "may I, personally, press this" — open,
+  // not full, not the organiser, has an eligible squad, can afford the fee. Scout does
+  // not re-derive any of it: painting a button the API would refuse is worse than
+  // painting none.
+  if (v.canRegister) chips.push(enter);
+  else if (v.canAfford === false && t.registrationOpen) chips.push(chip('Add money', 'topup_help'));
+  if (t.venue.id) chips.push(chip('Ground info', 'venue_info', { venueId: t.venue.id }));
+  chips.push(chip('My tournaments', 'my_tournaments'));
+  chips.push(chip('Open Tournaments', 'app_help', { screen: 'tournaments' }));
+
+  return {
+    reply: reply(said.join(' '), {
+      source: SOURCES.LIVE, action: 'tournament_detail', actionOk: true,
+      cards: [tournamentCard(t, {
+        buttons: [
+          ...(v.canRegister ? [enter] : []),
+          ...(t.venue.id ? [chip('Ground info', 'venue_info', { venueId: t.venue.id })] : []),
+        ],
+      })],
+      chips,
+      meta: {
+        rounds: b.rounds || null,
+        fixtures: b.total || 0,
+        played: b.played || 0,
+        generated: Boolean(b.generated),
+      },
+    }),
+    // The id survives the turn so a follow-up ("enter it", "kitna hai?") is about THIS
+    // cup. `tournamentId` is a DECISION slot in dialogManager, so the moment the user
+    // changes subject it is dropped rather than carried into the next errand.
+    state: {
+      intent: 'tournament_detail',
+      pending: null,
+      confirm: null,
+      slots: { tournamentId: t.id },
+    },
+  };
+}
+
+
+/**
+ * `tournament_register` — the entry flow, and the only tournament money door.
+ *
+ * CHIP-ONLY, for a harder reason than `tournament_detail`. This one SPENDS: the entry
+ * fee leaves the captain's balance the moment it succeeds. The S.6 rule stands
+ * unchanged — money is reached by a chip and confirmed by the frozen lexicon, NEVER by
+ * a probability — so there is no trained label for it, and the classifier cannot start
+ * an entry no matter what a user types. The path is: a card Scout painted → this
+ * action → a confirm card → `executeTournamentEntry`.
+ *
+ * Nothing here writes. Every branch below either refuses with the service's own reason
+ * or ARMS a confirmation, which lives exactly one turn (see dialogManager's confirm
+ * gate). That is what makes it impossible for yesterday's "haan" to enter a cup today.
+ */
+async function tournamentRegister(ctx) {
+  const { client, userId, slots = {} } = ctx;
+  const id = String(slots.tournamentId || '').trim();
+  // Which cup is not a guess Scout is allowed to make: the list it just painted has
+  // the ids on its buttons, so re-offering it is both the safe answer and the useful
+  // one. `tournamentList` puts an "Enter this cup" chip on every cup with room.
+  if (!id) return tournamentList(ctx);
+
+  const out = await T.detail(client, { tournamentId: id, userId });
+  if (!out.ok) {
+    return {
+      reply: reply(out.message, {
+        source: SOURCES.LIVE, action: 'tournament_register', actionOk: false,
+        meta: { code: out.code },
+        chips: [chip('Tournaments', 'tournament_list')],
+      }),
+      state: { intent: null, pending: null, slots: {}, confirm: null },
+    };
+  }
+
+  const d = out.data;
+  const t = d.tournament;
+  const v = d.viewer || {};
+  const e = d.economics || {};
+  const detailChip = chip('Bracket and details', 'tournament_detail', { tournamentId: t.id });
+  // Every refusal ends the same way: say why, offer the way forward, keep the cup as
+  // the subject so the next sentence is still about it.
+  const no = (text, extra = []) => ({
+    reply: reply(text, {
+      source: SOURCES.LIVE, action: 'tournament_register', actionOk: false,
+      chips: [...extra, detailChip, chip('Tournaments', 'tournament_list')],
+    }),
+    state: { intent: 'tournament_register', pending: null, confirm: null,
+      slots: { tournamentId: t.id } },
+  });
+
+  // ---- may this cup be entered at all -------------------------------------
+  // Read in the order a person would ask it, and every answer is the state the
+  // service would refuse with anyway, said in a sentence instead of a code.
+  if (v.isOwner) {
+    return no(`You are the organiser of ${t.name} — an owner cannot enter their own `
+      + 'tournament. Teams enter it, and you keep the venue cost plus the margin.');
+  }
+  if (v.myRegistration) {
+    return no(`${v.myRegistration.teamName} is already entered in ${t.name}`
+      + `${v.myRegistration.status === 'registered' ? ', waiting on the organiser to approve it' : ''}.`);
+  }
+  if (t.status !== 'open') {
+    return no(t.status === 'cancelled'
+      ? `${t.name} was cancelled.`
+      : `${t.name} has already started — the bracket is drawn and the field is closed.`);
+  }
+  if (t.spotsLeft <= 0) {
+    return no(`${t.name} is full at ${t.maxTeams} teams.`);
+  }
+  if (!t.registrationOpen) {
+    return no(`Registration for ${t.name} closed on ${day(pktDay(new Date(t.registrationDeadline)))}.`);
+  }
+
+  // ---- which squad --------------------------------------------------------
+  // `eligibleTeams` is the service's list: teams this user CAPTAINS, in this
+  // tournament's sport, not already entered. Only a captain can enter a team and only
+  // a captain can be paid a prize, so a member of somebody else's squad is told the
+  // truth rather than shown a button that would 403.
+  const teams = v.eligibleTeams || [];
+  if (!teams.length) {
+    return no(`You need a ${t.sport} team you captain to enter ${t.name}`
+      + `${v.isCaptain ? ' — the squads you captain are either in it already or play another sport.' : '.'}`,
+    [chip('My teams', 'team_stats'), chip('Create a team', 'create_team_help')]);
+  }
+  const asked = String(slots.teamId || '').trim();
+  const chosen = teams.find((x) => String(x.id) === asked)
+    || (teams.length === 1 ? teams[0] : null);
+  if (!chosen) {
+    return {
+      reply: reply(`Which squad is entering ${t.name}?`, {
+        source: SOURCES.LIVE,
+        cards: teams.slice(0, 5).map((x) => teamCard(
+          { id: x.id, name: x.name, sport: t.sport, elo: x.elo, logo_url: x.logoUrl },
+          { buttons: [chip('Enter with this team', 'tournament_register',
+            { tournamentId: t.id, teamId: x.id })] },
+        )),
+        chips: teams.slice(0, 4).map((x) => chip(x.name, 'tournament_register',
+          { tournamentId: t.id, teamId: x.id })),
+      }),
+      // `pending: 'team'` is a TAP question (see dialogManager's TAP_PENDING), so the
+      // turn is recorded as awaiting a choice rather than as slot filling.
+      state: { intent: 'tournament_register', pending: 'team', confirm: null,
+        slots: { tournamentId: t.id } },
+    };
+  }
+
+  // ---- the money ----------------------------------------------------------
+  const fee = asNum(t.entryFee, 0);
+  const balance = v.walletBalance;
+  if (balance != null && balance < fee) {
+    return no(`${t.name} costs ${money(fee)} to enter and you have ${money(balance)} available`
+      + ` — ${money(round2(fee - balance))} short.`,
+    [chip('Add money', 'topup_help'), chip('Wallet', 'wallet_balance')]);
+  }
+
+  // ---- arm the confirmation ------------------------------------------------
+  // The card states the four things a captain is agreeing to: what leaves the wallet,
+  // what it buys, what happens if they win, and when the money stops being theirs to
+  // take back. `withdraw` is allowed until the bracket is drawn, which is the honest
+  // version of "held" and the reason the note says it out loud.
+  const held = t.requiresApproval
+    ? 'The organiser approves entries, so the fee is held until they decide — rejected, and it comes straight back.'
+    : 'The fee is held in escrow until the bracket is drawn; withdraw before the deadline and you get all of it back.';
+  const winnerShare = asNum(e.winnerShare, 0);
+  return {
+    reply: reply(
+      `Entering ${chosen.name} in ${t.name} costs ${money(fee)}`
+      + `${balance == null ? '' : `, leaving ${money(round2(balance - fee))} available`}. `
+      + `${winnerShare > 0 ? `The champions take ${money(winnerShare)}. ` : ''}Confirm?`, {
+        source: SOURCES.LIVE,
+        cards: [confirmCard({
+          what: 'tournament_register',
+          title: `Enter ${t.name}`,
+          lines: [
+            { label: 'Team', value: chosen.name },
+            { label: 'Format', value: t.format === 'round_robin' ? 'Round robin' : 'Knockout' },
+            { label: 'Venue', value: [t.venue.name, t.venue.city].filter(Boolean).join(', ') || '—' },
+            { label: 'Entry fee', value: money(fee) },
+            ...(balance == null ? []
+              : [{ label: 'Wallet after', value: money(round2(balance - fee)) }]),
+            ...(winnerShare > 0 ? [{ label: 'If you win', value: money(winnerShare) }] : []),
+            { label: 'Registration closes', value: day(pktDay(new Date(t.registrationDeadline))) },
+          ],
+          total: fee,
+          note: held,
+          yes: 'Yes, enter',
+          no: 'Not now',
+        })],
+      }),
+    state: {
+      intent: 'tournament_register',
+      pending: null,
+      slots: { tournamentId: t.id, teamId: chosen.id, teamName: chosen.name },
+      // What the executor reads. The quote is carried so the reply can own up to a
+      // change: an organiser may edit the fee between this turn and the next one.
+      confirm: {
+        action: 'tournament_register',
+        tournamentId: t.id,
+        tournamentName: t.name,
+        teamId: chosen.id,
+        teamName: chosen.name,
+        fee,
+        requiresApproval: Boolean(t.requiresApproval),
+      },
+    },
+  };
+}
+
+/**
+ * The executor behind a confirmed entry. Reached ONLY through dialogManager's confirm
+ * gate, which fires on the chip or on a whole-utterance affirm from the frozen
+ * lexicon — never on a model score. By the time this runs the captain has seen the
+ * fee, the wallet after, and the prize, on a card.
+ *
+ * The write itself belongs to `tournamentService.register`: it takes the tournament
+ * FOR UPDATE, re-checks the deadline and the cap, and moves the fee balance → frozen
+ * in the same transaction. Scout does not re-implement one line of that, which is
+ * what keeps the FR8.15 census (no wallet or ledger calls in this file) true.
+ */
+async function executeTournamentEntry(ctx) {
+  const { client, userId } = ctx;
+  const c = ctx.confirm || {};
+  if (!c.tournamentId || !c.teamId) {
+    return { reply: reply('I lost track of which tournament that was.', {
+      source: SOURCES.LIVE, chips: [chip('Tournaments', 'tournament_list')],
+    }), state: { intent: null, pending: null, slots: {}, confirm: null } };
+  }
+
+  const out = await withSavepoint(client, () => T.register(client, {
+    userId, tournamentId: c.tournamentId, teamId: c.teamId }));
+
+  if (!out.ok) {
+    // The service re-checks everything under a row lock, so a refusal here is a real
+    // race — the last spot went, or the deadline passed while the card was on screen.
+    return { reply: reply(`I could not enter that: ${out.message}`, {
+      source: SOURCES.LIVE, actionOk: false, action: 'tournament_register',
+      meta: { code: out.code },
+      chips: [
+        ...(out.code === 'insufficient_funds' ? [chip('Add money', 'topup_help')] : []),
+        chip('Bracket and details', 'tournament_detail', { tournamentId: c.tournamentId }),
+        chip('Tournaments', 'tournament_list'),
+      ],
+    }), state: { intent: null, pending: null, slots: {}, confirm: null } };
+  }
+
+  const r = out.data.registration;
+  const cup = out.data.tournament || {};
+  const paid = asNum(r.paidAmount, 0);
+  // Own up to a changed quote rather than quietly charging a different number: the
+  // organiser can edit the fee while the confirmation is on screen.
+  const drifted = c.fee != null && round2(asNum(c.fee)) !== round2(paid);
+  const note = drifted
+    ? ` The fee changed while we were talking — ${money(paid)} is what was actually held.`
+    : '';
+  const pending = r.status === 'registered' && r.requiresApproval;
+  return {
+    reply: reply(
+      pending
+        ? `Entry submitted. ${money(paid)} is held while ${cup.ownerName || 'the organiser'} `
+          + `reviews it — if they reject it, every rupee comes straight back.${note}`
+        : `${r.teamName} is in ${cup.name || 'the tournament'}. ${money(paid)} is held in escrow`
+          + ` until the bracket is drawn, and you can withdraw for a full refund until then.`
+          + `${note}`,
+      {
+        source: SOURCES.LIVE, action: 'tournament_register', actionOk: true,
+        cards: [tournamentCard(cup, { buttons: [
+          chip('Bracket and details', 'tournament_detail', { tournamentId: c.tournamentId })] })],
+        chips: [chip('My tournaments', 'my_tournaments'), chip('Wallet', 'wallet_balance'),
+          chip('Tournaments', 'tournament_list')],
+      }),
+    // The subject stays the cup: "kab shuru hoga" right after this should not have to
+    // name it again.
+    state: { intent: 'tournament_register', pending: null, confirm: null,
+      slots: { tournamentId: c.tournamentId } },
+  };
+}
+
+/**
+ * `my_tournaments` — CHIP-ONLY, and a read.
+ *
+ * Chip-only not because it spends but because it does not exist in the released
+ * classifier's 23 labels, and S.6's rule is that the label set is frozen: adding a
+ * trained label means retraining and re-releasing model #4, which this wave does not
+ * do. A user who types "meray tournaments" lands on `my_bookings`-style routing or a
+ * clarify, and the chip on every tournament card gets them here in one tap.
+ *
+ * Two lists, because a venue owner is both organiser and — through a team they
+ * captain — potentially a competitor. Organising comes first for them; a player only
+ * ever sees the one they are in.
+ */
+async function myTournaments(ctx) {
+  const { client, userId } = ctx;
+  const out = await T.mine(client, { userId });
+  if (!out.ok) {
+    return { reply: reply(out.message, {
+      source: SOURCES.LIVE, actionOk: false, action: 'my_tournaments',
+      meta: { code: out.code },
+      chips: [chip('Tournaments', 'tournament_list')],
+    }) };
+  }
+  const organising = out.data.organising || [];
+  const playing = out.data.playing || [];
+  if (!organising.length && !playing.length) {
+    return { reply: reply(
+      'You are not in any tournament yet. Owners post them and captains enter a squad'
+      + ' — the entry fee is the only thing you pay, and the venue slots come with it.', {
+        source: SOURCES.LIVE, action: 'my_tournaments', actionOk: true,
+        chips: [chip('Open tournaments', 'tournament_list'), chip('My teams', 'team_stats'),
+          chip('Find opponents', 'find_opponents')],
+      }) };
+  }
+
+  // The entry's own state, in the words a captain would use for it. 'registered' is
+  // deliberately not softened to "entered": the fee is held and the organiser has not
+  // said yes yet, and Scout claiming otherwise is Scout lying about money.
+  const entryWord = (s) => ({
+    registered: 'waiting on the organiser', accepted: 'confirmed',
+    eliminated: 'knocked out', withdrawn: 'withdrawn',
+  }[String(s)] || String(s || ''));
+  const cupWord = (s) => ({
+    open: 'registration open', active: 'in progress',
+    completed: 'finished', cancelled: 'cancelled',
+  }[String(s)] || String(s || ''));
+
+  // One sentence, then the cards carry the structure — the house style
+  // everywhere in this file. A bulleted block would read as a report; Scout answers
+  // in prose, and the separator is the same middle dot the rest of the file uses.
+  const DOTS = ' · ';
+  const said = [];
+  playing.slice(0, 4).forEach((t) => {
+    const m = t.myEntry || {};
+    const seed = m.seed ? `, seed ${m.seed}` : '';
+    const won = t.status === 'completed' && t.winnerTeam && t.winnerTeam === m.teamId;
+    said.push(`${t.name} with ${m.teamName}${seed} — `
+      + `${won ? 'CHAMPIONS' : entryWord(m.status)}, ${cupWord(t.status)}`);
+  });
+  organising.slice(0, 4).forEach((t) => {
+    said.push(`${t.name}, yours to run — ${t.teamsRegistered}/${t.maxTeams} teams`
+      + `, ${cupWord(t.status)}`);
+  });
+
+  const head = [
+    playing.length ? `You are in ${playing.length} tournament${playing.length === 1 ? '' : 's'}` : null,
+    organising.length ? `running ${organising.length}` : null,
+  ].filter(Boolean).join(' and ');
+  const show = [...playing, ...organising].slice(0, 5);
+  return {
+    reply: reply(`${head}.${DOTS}${said.join(DOTS)}.`, {
+      source: SOURCES.LIVE, action: 'my_tournaments', actionOk: true,
+      cards: show.map((t) => tournamentCard(t, { buttons: [
+        chip('Bracket and details', 'tournament_detail', { tournamentId: t.id })] })),
+      chips: [chip('Open tournaments', 'tournament_list'), chip('Wallet', 'wallet_balance'),
+        chip('My teams', 'team_stats')],
+      meta: { organising: organising.length, playing: playing.length },
+    }),
+    state: { intent: 'my_tournaments', pending: null, confirm: null, slots: {} },
+  };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2038,16 +2570,22 @@ const INTENT_LABELS = Object.freeze([
  * Actions that exist only as a BUTTON. The classifier has no label for them and never
  * will: they are steps inside a flow, reached by tapping a chip Scout itself painted.
  */
-const BUTTON_ONLY = Object.freeze(['pick_slot', 'confirm', 'cancel_confirm', 'capability_menu']);
+// Executable, but NOT trained labels: nothing in this list can be reached by the
+// classifier, only by a chip Scout itself painted. The three tournament actions are
+// here because S.6 released model #4 with 23 labels and this wave does not retrain
+// it -- and because `tournament_register` SPENDS, so it must stay behind the chip.
+const BUTTON_ONLY = Object.freeze(['pick_slot', 'confirm', 'cancel_confirm', 'capability_menu',
+  'tournament_detail', 'tournament_register', 'my_tournaments']);
 
 /** Confirmed writes, keyed by the `action` in the armed confirm block. */
 const EXECUTORS = Object.freeze({
   book_venue: executeBooking,
   cancel_booking: executeCancel,
+  tournament_register: executeTournamentEntry,
 });
 
 /**
- * EVERY key Scout can execute. The 23 trained labels plus the four button-only steps.
+ * EVERY key Scout can execute. The 23 trained labels plus the seven button-only steps.
  *
  * dialogManager looks a handler up here by intent; routes/assistant.js looks one up by
  * the `action` on a chip. Both go through this object, which is why a chip can skip the
@@ -2063,12 +2601,15 @@ const ACTIONS = Object.freeze({
   find_opponents: findOpponents,
   find_teams: findTeams,
   tournament_list: tournamentList,
+  tournament_detail: tournamentDetail,
   team_stats: teamRating,
   // ── booking and money ──────────────────────────────────────────────────────
   book_venue: bookVenue,
   pick_slot: pickSlot,
   cancel_booking: cancelBooking,
+  tournament_register: tournamentRegister,
   my_bookings: myBookings,
+  my_tournaments: myTournaments,
   wallet_balance: walletBalance,
   confirm: runConfirmed,
   cancel_confirm: cancelConfirm,
@@ -2148,8 +2689,10 @@ module.exports = {
   resolveVenue, resolveTeam,
   // handlers, so check_assistant.js can drive one without a chat turn
   findVenue, checkAvailability, venueInfo, navigate, findPlayers, findOpponents,
-  findTeams, tournamentList, teamRating, bookVenue, pickSlot, cancelBooking,
+  findTeams, tournamentList, tournamentDetail, tournamentRegister, myTournaments,
+  teamRating, bookVenue, pickSlot, cancelBooking,
   myBookings, walletBalance, runConfirmed, cancelConfirm, executeBooking, executeCancel,
+  executeTournamentEntry,
   greeting, strayAffirm, strayDeny, refundPolicy, topupHelp, eloHelp, createTeamHelp,
   contactOwner, appHelp, capabilityMenu, outOfScope,
 };

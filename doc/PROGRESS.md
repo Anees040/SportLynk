@@ -3938,3 +3938,125 @@ inside the trainer itself — that function's docstring described validation as 
 - **No milestone tags exist.** `git tag` lists only `S1-Wave-2`, `S1-Wave-3`, `S1-Wave-4`, so `s3-done`,
   `s5-done` and `s6-done` are still unmade — worth making at the closing commit, because every "as of"
   claim in this file is otherwise anchored to a commit subject a reader has to go looking for.
+
+---
+
+## Wave S7-A (The tournament module — an owner's cup, a waterfall, and a bracket nobody draws by hand)
+
+SRS Module 6 (FE-1…FE-8) went from three empty tables to a working module. Migration 013 had created
+`tournaments`, `tournament_teams` and `fixtures` many waves ago and **nothing had ever read them** — no route,
+no service, no job, no screen; `tournaments_screen.dart` was a hardcoded "Ramadan Futsal Cup 2026" with fake
+spot counts. This wave writes the module those tables were waiting for, under the business rule the user set:
+**only venue owners create and run tournaments, they earn a commission, and the venue's slots must actually be
+consumed.**
+
+### The money model is a waterfall, not a percentage split — and that is the wave's real decision
+
+The obvious design is "owner takes 30% of the pool". It is economically wrong here and the project's own
+numbers say so: 8 teams x PKR 2,000 = 16,000 of pool, but a 7-fixture knockout eats ~7 hours of inventory
+worth ~14,000 at retail. A 30% commission pays the owner 4,800 for slots they could have *sold* for 14,000 —
+the tournament would lose them money, which inverts the point of the product. So the venue cost is recovered
+**first**:
+
+```
+pool       = entry_fee x teams_in_field
+venue_cost = SUM(slots.price) over the fixtures' reserved slots x (1 - venue_discount_percent/100)
+surplus    = pool - venue_cost
+prize      = surplus x prize_percent      -> winner x winner_percent, runner-up the remainder
+owner      = venue_cost + (surplus - prize)
+```
+
+`venue_cost` is summed from the **real `slots.price` rows the bracket landed on**, not estimated. Worked
+example, PKR 4,000 x 8 teams over 7 hours at 2,000: pool 32,000 - venue 14,000 = 18,000 surplus -> prize
+10,800 (winner 7,560 · runner-up 3,240), owner **21,200 vs 14,000 for selling the same slots (+51%)** — and
+~PKR 571 per player for 1-3 matches, comparable per match to a friendly. Two mechanisms stop that arithmetic
+from being a hope: `POST /tournaments/preview` quotes the whole breakdown **and a recommended entry fee**
+before the tournament exists (FE-1), and the **underwater guard** sets prize = 0 and gives the owner the whole
+pool if `pool < venue_cost`, so money is never taken *from* the owner. Below `min_teams` (4) the job cancels
+and refunds everyone. Four money columns are stored on the row so no auditor re-derives them, and the prize
+sits in the organiser's **frozen** balance where a withdrawal cannot reach it.
+
+**A fixture reserves a slot; it does not create a booking.** Real `bookings` rows for fixtures would pull in
+wallet holds, pollute the owner's booking list and — the actual killer — `noShowJob` would sweep them and dock
+both captains' trust scores. So a fixture carries `slot_id` + `scheduled_at`, the slot flips to `blocked`, and
+`PATCH /api/owner/slots/:id/unblock` now answers `409 fixture_reserved` on a slot a live fixture stands on.
+Teams pay one entry fee and never pay for a tournament slot.
+
+### Where the AI is (and the two trained models it does not retrain)
+
+1. **Seeded bracket generation** — ELO-ordered seeding, 1 vs lowest, `rounds = log2(n)`, byes padded to the
+   next power of 2 and awarded to top seeds, winners auto-advanced into the next round's TBD. Pure math in
+   `utils/fixtures.js`, unit-tested with the database down.
+2. **Elo win probability per fixture**, labelled in the UI as the Elo formula — *not* as ML.
+3. **Demand-aware scheduling (trained model #1, untouched)** — `tournamentScheduler.js` asks
+   `mlClient.forecastDemand` for P(booked) on each candidate window, puts **early rounds in the owner's
+   deadest hours** and the **final in the busiest** one (crowd). Because `venue_cost` is the sum of the chosen
+   slots' real prices, off-peak placement *lowers the fee teams pay* while *protecting sellable peak
+   inventory* — the model earns its keep instead of decorating a screen. Chronological fallback when
+   ml-service is down, stamped `meta.scheduling.source = 'model' | 'chronological'` so a demo can prove which
+   one ran.
+4. **Scout (model #4, untouched)** — three **chip-only** actions (`tournament_detail`, `tournament_register`,
+   `my_tournaments`). No new trained labels, so the released 23-label classifier and its fingerprint stay
+   byte-identical and the money door stays chip+confirm-only.
+
+### ELO: one ladder, K weighted by stakes
+
+Tournament results *are* more authoritative than friendlies, but a second rating is the wrong way to say so — a
+team with 3 tournament matches has a meaningless tournament rating, and brackets are seeded **by** ELO, so a
+separate ladder would seed the first cup off all-1000s and kill the seeding feature. FIDE's answer is one
+rating with a per-tier K, and `elo.applyResult` already accepts `kFactor` while `elo_history` already stores it
+per row — so this is a zero-refactor change: friendly **32**, early rounds **40**, semi **48**, final **56**,
+bye or walkover **0** (no game was played, so nothing moves). "Why does this count more?" is answered by
+`SELECT k_factor FROM elo_history` rather than by a second leaderboard. For the "strong in tournaments"
+visibility the user asked for, 019 adds four cheap counters to `teams` — `tournament_played`,
+`tournament_wins`, `finals_reached`, `titles` — so a team card shows a concrete record instead of a second
+abstract number.
+
+### Three inconsistencies found in recon and fixed, not worked around
+
+1. `tournament_teams.status` defaulted to `'registered'` (013) while `discoveryService` counted
+   `status = 'accepted'` — so **every capacity count in the app was 0**. `accepted` is now the post-payment
+   state and the count accepts both holding states.
+2. `matches` had **no `tournament_id`**, though the result flow needs one. Added in 019 with
+   `chk_matches_one_context` — a match belongs to a booking or a tournament, never both.
+3. `matchCore.MATCH_VIEW_FROM` joined venue and time through `bookings`, so a booking-less tournament match
+   returned NULL venue and NULL `slot_started` — four match screens would have printed "Booking unavailable".
+   Fixed by COALESCE-ing the fixture's slot and the tournament name into the view.
+
+### Results reach one settle function through two doors
+
+Captains submit through the existing S.2 match flow and the **owner verifies** -> `advanceAfterMatch` runs in
+that same transaction (authority derives from `tournaments.owner_id` when `booking_id IS NULL`); or the
+organiser types the score straight onto the fixture (FE-7), which writes the match row and runs the same
+ELO + advance path. Both are idempotent via `matches.elo_applied` and `fixtures.status`.
+
+### Wave S7-A — what was actually observed, and what was not
+
+Two green numbers, both real: **`npm test` 128/128 with the database down** (42 new — 22 in
+`test/fixtures.test.js`, 20 in `test/fixtureSchedule.test.js`; the whole money waterfall is a pure function
+precisely so that a split needing a database to be checked is not a split nobody checks) and **`flutter
+analyze` 0 issues** across the new models, service, four screens and the widget library.
+
+Everything else is **written and reviewed but has never touched Postgres**, because migration 019 has not been
+applied and applying it needs the user's go-ahead — Supabase is the only database. Blocked on it:
+`node run_migration_019.js` (845 lines, never executed) and the `verify_schema` census going 113/113 ->
+**174/174** (019 adds 38 columns, 16 constraints, 7 indexes, 3 `txn_type` values and one `global_settings`
+row, and **no new table**); `check_tournaments.js` (10 assertion blocks, one transaction, always rolled back)
+including the four economics assertions — `pool = venue_cost + prize + margin` to the paisa,
+`owner_earning >= venue_cost`, `winner + runner_up = prize`, and K 56/48/40 with **no `elo_history` row at
+all** for a bye; `seed_tournament_demo.js` (8 funded teams, 2-minute deadline, `--undo`); the S.2
+(`run_match_flow_check.js`) and S.6 (`check_assistant.js`) no-regression runs; the A/B that proves
+`source:'model'` against `'chronological'`; and the generated `doc/tournament_evidence.md`, whose copy in the
+tree is a **FAIL 2/3** stub — the harness was run once against Supabase before 019 existed, died on the first
+missing column and recorded only its own two rollback lines, which is a real (if small) receipt that the
+transaction cleans up after itself and is **not** a receipt that the module works. `doc/TESTING.md` §4.22 (steps 203-214) marks every one of
+those ⛔ NOT YET RUN with its blocker named, which is the honest alternative to a section full of ticks nobody
+earned.
+
+Also open: round-robin is capped at `max_round_robin_teams` 6 in validation, because `n(n-1)/2` means 8 teams
+would be 28 fixtures ~ 28 hours of venue — the preview endpoint surfaces that immediately instead of letting
+an owner discover it after the draw. `doc/API.md` and `doc/DATABASE.md` were both stale before this wave (API
+documented nothing after S.2; the migration history skipped 015-018), so the four missing history rows were
+filled in from the migration headers — otherwise the new 019 row would have sat in a table a reader could not
+trust. And carried forward from S6-E: **`ML_API_KEY` must be rotated in both `.env` files before S.7 puts
+ml-service on a public URL** (compare by `/health` `apiKeyFingerprint`; never print the key).

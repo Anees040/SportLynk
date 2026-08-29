@@ -10,10 +10,12 @@ import '../utils/num_util.dart';
 // wallet_screen, wallet_history_screen and owner_wallet_screen — and all three
 // copies were missing `escrow_release` and `escrow_received`, so a late
 // cancellation or an owner receiving a deposit rendered as a bare
-// "Transaction" with a generic arrow. One copy, all nine types.
+// "Transaction" with a generic arrow. One copy, all twelve types.
 //
-// The nine types are exactly the `txn_type` enum: seven from schema.sql:120 plus
-// escrow_release / escrow_received added by migration 007.
+// The twelve types are exactly the `txn_type` enum: seven from schema.sql:120,
+// escrow_release / escrow_received added by migration 007, and the three
+// tournament types added by migration 019 (tournament_entry,
+// tournament_commission, tournament_prize).
 
 /// Human label for a `transactions.type` value.
 String txnLabel(String type) => switch (type) {
@@ -26,6 +28,9 @@ String txnLabel(String type) => switch (type) {
   'withdrawal' => 'Withdrawal',
   'escrow_release' => 'Escrow Released',
   'escrow_received' => 'Escrow Received',
+  'tournament_entry' => 'Tournament Entry',
+  'tournament_commission' => 'Tournament Earnings',
+  'tournament_prize' => 'Prize Money',
   _ => 'Transaction',
 };
 
@@ -41,16 +46,46 @@ IconData txnIcon(String type) => switch (type) {
   'withdrawal' => Icons.north_east,
   'escrow_release' => Icons.lock_open_outlined,
   'escrow_received' => Icons.south_west,
+  'tournament_entry' => Icons.confirmation_number_outlined,
+  'tournament_commission' => Icons.storefront_outlined,
+  'tournament_prize' => Icons.emoji_events_outlined,
   _ => Icons.swap_horiz,
 };
 
 /// True when this type puts money *into* the wallet.
 ///
-/// Matches the backend's signs exactly: `refund` and `escrow_received` are
-/// always logged positive, everything else negative (see routes/bookings.js and
-/// jobs/noShowJob.js).
+/// Matches the backend's signs exactly: `refund`, `escrow_received`,
+/// `tournament_commission` and `tournament_prize` are always logged positive,
+/// everything else negative (see routes/bookings.js, jobs/noShowJob.js and
+/// services/tournamentService.js).
+///
+/// `tournament_prize` is positive in both of the places it is written — into the
+/// organiser's *frozen* balance when the bracket is drawn, and into the champion's
+/// and runner-up's spendable balance when the final settles. The row's own
+/// `description` says which, so this sheet prints that rather than guessing.
 bool isCreditTxn(String type) =>
-    type == 'topup' || type == 'refund' || type == 'escrow_received';
+    type == 'topup' ||
+    type == 'refund' ||
+    type == 'escrow_received' ||
+    type == 'tournament_commission' ||
+    type == 'tournament_prize';
+
+/// True when this type parks money in the frozen bucket instead of spending it,
+/// so its row is coloured orange and worded "held" rather than "money out".
+///
+/// Both members are logged negative (`balance −X, frozen +X`): a booking's
+/// security deposit, released at check-in, and a tournament entry fee, released
+/// into the prize pool when the bracket is drawn.
+bool isHeldTxn(String type) =>
+    type == 'booking_payment' || type == 'tournament_entry';
+
+/// The label a ledger row shows.
+///
+/// `booking_payment` is the one type the app renames — the ledger calls it a
+/// payment, the user is told it is a deposit. A tournament entry keeps its own
+/// name, because calling an entry fee a security deposit would be a lie.
+String txnRowLabel(String type) =>
+    type == 'booking_payment' ? 'Security Deposit' : txnLabel(type);
 
 /// Format a backend timestamp for display, in the phone's local time.
 ///
@@ -116,7 +151,12 @@ class TransactionDetailSheet extends StatelessWidget {
     final credit = isCreditTxn(type);
     // booking_payment is money moved into escrow, not spent — the wallet screens
     // colour it orange and call it a deposit, so this sheet must agree.
-    final frozen = type == 'booking_payment';
+    // A tournament entry fee is the same ledger shape (`balance −E, frozen +E`),
+    // so it gets the same orange "held" treatment — but not the same words: an
+    // entry fee is released into the pool when the bracket is drawn, and nobody
+    // checks in for it.
+    final frozen = isHeldTxn(type);
+    final title = txnRowLabel(type);
     final accent = frozen
         ? AppColors.warning
         : (credit ? AppColors.success : AppColors.error);
@@ -167,7 +207,7 @@ class TransactionDetailSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        frozen ? 'Security Deposit' : txnLabel(type),
+                        title,
                         style: GoogleFonts.poppins(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -222,10 +262,23 @@ class TransactionDetailSheet extends StatelessWidget {
             const SizedBox(height: 8),
             // Escrow is the one thing users ask about, so say it here rather
             // than making them find the help icon.
-            if (frozen)
+            if (type == 'booking_payment')
               _note(
                 'This amount is held in escrow, not spent. It is released when '
                 'you check in at the venue.',
+              ),
+            if (type == 'tournament_entry')
+              _note(
+                'This entry fee is held, not spent. You get it back in full if '
+                'you withdraw before the registration deadline, if the organiser '
+                'turns your team down, or if the tournament is called off. Once '
+                'the bracket is drawn it goes into the prize pool.',
+              ),
+            if (type == 'tournament_commission')
+              _note(
+                'This covers the venue hours your fixtures reserved, plus your '
+                'margin on top. The prize money is held separately until the '
+                'final is settled.',
               ),
             if (type == 'withdrawal')
               _note(

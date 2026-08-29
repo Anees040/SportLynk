@@ -57,6 +57,10 @@ const elo = require('../utils/elo');
 const settings = require('../utils/globalSettings');
 const ml = require('../services/mlClient');
 const roster = require('../services/rosterService');
+// S.7 Wave A: the tournament hook. Only two entry points are used from here —
+// matchContext (authority + K for a booking-less fixture) and advanceAfterMatch
+// (the bracket, in this transaction). Every tournament rule stays in the service.
+const tournaments = require('../services/tournamentService');
 const bus = require('../realtime/bus');
 const { PREVIEW_LABEL } = require('../utils/matchPreview');
 const { notify } = require('../utils/notify');
@@ -339,17 +343,28 @@ router.get('/linkable-bookings', async (req, res, next) => {
  * venues this account owns, each with BOTH submissions attached so the verify
  * screen can show what the two captains said side by side.
  *
- * Authority is `v.owner_id = $1` in the WHERE clause, not a role check on the
+ * Authority is the ownership test in the WHERE clause, not a role check on the
  * token. Ownership of the specific venue is the actual permission, and enforcing
  * it in the query means a player who calls this gets an empty list rather than a
  * list filtered by something else.
+ *
+ * For a tournament fixture the authority is the ORGANISER rather than the venue
+ * owner, and a fixture has no booking to reach a venue through, so the test is on
+ * the coalesced column: see the note on the query.
  */
 router.get('/owner/pending', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
+      // COALESCE, not v.owner_id: a tournament match has no booking and therefore
+      // no `v`, so with the plain column every fixture the two captains submitted
+      // was invisible on the organiser's verify screen — the result sat in
+      // awaiting_owner with nobody able to see it. The coalesced column is the same
+      // one the view exposes as `venue_owner`, and for a tournament it resolves to
+      // the organiser (tournaments.owner_id).
       `SELECT ${mc.MATCH_VIEW_COLUMNS} ${mc.MATCH_VIEW_FROM}
-        WHERE m.status = $2 AND v.owner_id = $1
-        ORDER BY b.slot_date DESC, b.start_time DESC
+        WHERE m.status = $2 AND COALESCE(v.owner_id, tr.owner_id) = $1
+        ORDER BY COALESCE(b.slot_date, tf.slot_date) DESC,
+                 COALESCE(b.start_time, tf.start_time) DESC
         LIMIT 50`,
       [req.user.id, STATUS.AWAITING_OWNER],
     );
@@ -1030,19 +1045,41 @@ router.post('/:id/result', async (req, res, next) => {
         });
 
         // The owner is the one who has to act next, so they are the one told.
+        //
+        // Resolved from the match rather than from the booking: a tournament
+        // fixture has no booking at all, and the old `FROM bookings b JOIN venues`
+        // returned nothing for it, so the organiser was never told that two
+        // captains had agreed a score. The party who must act is whoever
+        // `owner/pending` and the verify route treat as the authority — the venue
+        // owner for a friendly, `tournaments.owner_id` for a fixture — so this
+        // coalesces exactly the way `matchCore.venue_owner` does.
         const { rows: own } = await client.query(
-          `SELECT v.owner_id, v.name AS venue_name
-             FROM bookings b JOIN venues v ON v.id = b.venue_id WHERE b.id = $1`,
-          [m.booking_id],
+          `SELECT COALESCE(v.owner_id, tr.owner_id) AS owner_id,
+                  COALESCE(v.name, tv.name)         AS venue_name,
+                  tr.name                           AS tournament_name
+             FROM matches m
+             LEFT JOIN bookings    b  ON b.id  = m.booking_id
+             LEFT JOIN venues      v  ON v.id  = b.venue_id
+             LEFT JOIN tournaments tr ON tr.id = m.tournament_id
+             LEFT JOIN venues      tv ON tv.id = tr.venue_id
+            WHERE m.id = $1`,
+          [id],
         );
         if (own[0]?.owner_id) {
+          const where = own[0].tournament_name
+            ? `in ${own[0].tournament_name}`
+            : `at ${own[0].venue_name || 'your venue'}`;
           await notify(client, {
             userId: own[0].owner_id,
             bookingId: m.booking_id,
             type: 'match_verify_pending',
             title: 'A match result needs your verification',
-            body: `${cName} vs ${oName} at ${own[0].venue_name || 'your venue'} — ${detail}.`,
-            payload: { matchId: id, venueName: own[0].venue_name || null },
+            body: `${cName} vs ${oName} ${where} — ${detail}.`,
+            payload: {
+              matchId: id,
+              venueName: own[0].venue_name || null,
+              tournamentName: own[0].tournament_name || null,
+            },
           });
         }
         await client.query('COMMIT');
@@ -1164,17 +1201,41 @@ router.patch('/:id/verify', async (req, res, next) => {
 
     // Authority: the owner of the venue this match is booked at. Expressed as a
     // WHERE clause so ownership of THIS venue is the permission, not a role claim.
-    if (!m.booking_id) {
-      return bail(client, res, 409, 'This match has no linked booking to verify against.');
-    }
-    const { rows: ownRows } = await client.query(
-      `SELECT v.owner_id, v.name AS venue_name
-         FROM bookings b JOIN venues v ON v.id = b.venue_id
-        WHERE b.id = $1 AND v.owner_id = $2`,
-      [m.booking_id, req.user.id],
-    );
-    if (!ownRows.length) {
-      return bail(client, res, 403, 'Only the venue owner can verify this match.');
+    //
+    // S.7 Wave A added a SECOND kind of match that reaches this handler. A
+    // tournament fixture reserves its slot instead of booking it, so there is no
+    // `bookings` row to join through and the old `if (!m.booking_id) 409` refused
+    // every tournament result. For those, authority comes from
+    // `tournaments.owner_id` — the organiser — and the rating's K comes from the
+    // round (40 early / 48 semi / 56 final) instead of the global 32, because a
+    // final is not worth the same as a Tuesday friendly.
+    //
+    // Both branches produce the same two facts, `verifierName` and an authorised
+    // caller, so everything below this point is unchanged.
+    const tctx = m.booking_id ? null : await tournaments.matchContext(client, id);
+    let verifierName = null;
+    if (tctx) {
+      if (String(tctx.ownerId || '') !== String(req.user.id)) {
+        return bail(client, res, 403, 'Only the organiser can verify this tournament match.');
+      }
+      if (!tctx.fixtureId) {
+        return bail(client, res, 409, 'This tournament match is not linked to a fixture.');
+      }
+      verifierName = tctx.tournamentName || tctx.venueName || 'the organiser';
+    } else {
+      if (!m.booking_id) {
+        return bail(client, res, 409, 'This match has no linked booking to verify against.');
+      }
+      const { rows: ownRows } = await client.query(
+        `SELECT v.owner_id, v.name AS venue_name
+           FROM bookings b JOIN venues v ON v.id = b.venue_id
+          WHERE b.id = $1 AND v.owner_id = $2`,
+        [m.booking_id, req.user.id],
+      );
+      if (!ownRows.length) {
+        return bail(client, res, 403, 'Only the venue owner can verify this match.');
+      }
+      verifierName = ownRows[0].venue_name || null;
     }
 
     // Nothing to rate if the agreed result never made it onto the row.
@@ -1187,6 +1248,11 @@ router.patch('/:id/verify', async (req, res, next) => {
     const oName = features.get(String(m.opponent_team))?.name || 'the opponent';
 
     const { base, kFactor } = await settings.elo({ client });
+    // elo.applyResult already takes a kFactor and elo_history already stores it per
+    // row, so weighting a final more heavily than a friendly needs no new column
+    // and no second rating ladder — the answer to "why did this count more?" is
+    // SELECT k_factor FROM elo_history.
+    const k = tctx && Number.isFinite(tctx.kFactor) ? tctx.kFactor : kFactor;
 
     // The rating exchange. Participates in THIS transaction — a rating that
     // committed separately could survive a rolled-back verification, and every
@@ -1198,7 +1264,7 @@ router.patch('/:id/verify', async (req, res, next) => {
       opponentTeam: m.opponent_team,
       winnerTeam: m.winner_team,
       base,
-      kFactor,
+      kFactor: k,
     });
 
     await client.query(
@@ -1208,6 +1274,20 @@ router.patch('/:id/verify', async (req, res, next) => {
         WHERE id = $1`,
       [id, STATUS.COMPLETED, req.user.id],
     );
+
+    // THE TOURNAMENT HOOK. Inside this transaction, after the rating, so a bracket
+    // that advances and a rating that was applied can never disagree: if the
+    // advance fails, the whole verification rolls back and the owner retries.
+    //
+    // `applyElo: false` inside — the exchange above already ran, and applying it a
+    // second time is the one mistake nobody can detect after the fact. A friendly
+    // returns `not_tournament` and touches nothing, which is why this is called
+    // unconditionally rather than behind an `if`.
+    const advance = await tournaments.advanceAfterMatch(client, id);
+    if (!advance.ok) {
+      return bail(client, res, advance.status || 409,
+        advance.message || 'The result could not be applied to the bracket.');
+    }
 
     const line = mc.scoreline(m.score_challenger, m.score_opponent);
     const wordFor = (teamId) => {
@@ -1235,7 +1315,7 @@ router.patch('/:id/verify', async (req, res, next) => {
             title: exchange.frozen
               ? `Match verified — ${cName} rating frozen`
               : `${mc.signed(exchange.challenger.delta)} ELO — now ${exchange.challenger.after}`,
-            body: `${cName} ${line} ${oName}, verified by ${ownRows[0].venue_name || 'the venue'}.`,
+            body: `${cName} ${line} ${oName}, verified by ${verifierName || 'the venue'}.`,
             extra: {
               eloDelta: exchange.challenger.delta,
               eloAfter: exchange.challenger.after,
@@ -1254,7 +1334,7 @@ router.patch('/:id/verify', async (req, res, next) => {
             title: exchange.frozen
               ? `Match verified — ${oName} rating frozen`
               : `${mc.signed(exchange.opponent.delta)} ELO — now ${exchange.opponent.after}`,
-            body: `${cName} ${line} ${oName}, verified by ${ownRows[0].venue_name || 'the venue'}.`,
+            body: `${cName} ${line} ${oName}, verified by ${verifierName || 'the venue'}.`,
             extra: {
               eloDelta: exchange.opponent.delta,
               eloAfter: exchange.opponent.after,
@@ -1280,6 +1360,16 @@ router.patch('/:id/verify', async (req, res, next) => {
           kFactor: exchange.kFactor,
           challenger: exchange.challenger,
           opponent: exchange.opponent,
+        },
+        // Null for a friendly. For a tournament match this is what the bracket did
+        // with the result: who advanced, and whether that closed the tournament.
+        bracket: advance.code === 'not_tournament' ? null : {
+          code: advance.code,
+          advanced: advance.data?.advanced === true,
+          fixture: advance.data?.fixture || null,
+          winnerName: advance.data?.winnerName || null,
+          remaining: advance.data?.remaining ?? null,
+          completed: advance.data?.completed || null,
         },
       },
       exchange.frozen

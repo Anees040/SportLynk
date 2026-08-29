@@ -170,13 +170,30 @@ async function applyWallet(client, walletId, { balance = 0, frozen = 0 }) {
  * Append one row to the transaction ledger. Returns the new row's id so a caller
  * that needs to point at the ledger entry it just created (withdrawals.txn_id)
  * can do so without a second query. Existing callers ignore the return value.
+ *
+ * `tournamentId` (019) is the tournament equivalent of `bookingId`: a tournament
+ * moves money for up to 32 captains plus the owner across four events, none of
+ * which has a booking, so without it the entry fees, the commission and the prize
+ * would be loose rows identifiable only by parsing `description`.
+ *
+ * The column is only NAMED when a caller supplies one. That is deliberate: every
+ * booking, wallet and match caller passes nothing, so their INSERT stays exactly
+ * the statement it was before 019 and cannot break on a database where 019 has not
+ * been applied yet. A tournament caller gets the 019 column and, if the migration
+ * is missing, a loud 42703 — which is the right outcome, because a tournament whose
+ * ledger rows silently lost their tournament_id would break the "pool in equals
+ * venue cost plus prize plus margin out" audit without breaking anything visible.
  */
-async function logTxn(client, { walletId, userId, bookingId, type, amount, balanceAfter, description, counterparty }) {
+async function logTxn(client, {
+  walletId, userId, bookingId, tournamentId = null, type, amount, balanceAfter, description, counterparty,
+}) {
   if (!walletId) return null;
+  const withTournament = tournamentId != null;
   const r = await client.query(
     `INSERT INTO transactions
-       (wallet_id, user_id, booking_id, type, amount, balance_after, description, counterparty_name)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       (wallet_id, user_id, booking_id, type, amount, balance_after, description, counterparty_name${
+       withTournament ? ', tournament_id' : ''})
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8${withTournament ? ',$9' : ''})
      RETURNING id`,
     [
       walletId,
@@ -187,6 +204,7 @@ async function logTxn(client, { walletId, userId, bookingId, type, amount, balan
       round2(balanceAfter),
       description,
       counterparty || null,
+      ...(withTournament ? [tournamentId] : []),
     ],
   );
   return r.rows[0] ? r.rows[0].id : null;

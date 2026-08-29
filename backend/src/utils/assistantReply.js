@@ -153,6 +153,8 @@ const CAPABILITIES = Object.freeze([
     gloss: 'How to start a squad and invite players.' },
   { action: 'tournament_list', label: 'Tournaments', group: 'Discover',
     gloss: 'What is running on SportLynk and how to enter.' },
+  { action: 'my_tournaments', label: 'My tournaments', group: 'Team',
+    gloss: 'Cups you are in or running, and where your squad stands.' },
   { action: 'wallet_balance', label: 'Wallet balance', group: 'Money',
     gloss: 'Available and escrowed amounts.' },
   { action: 'topup_help', label: 'Add money', group: 'Money',

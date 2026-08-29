@@ -63,6 +63,14 @@ class Team {
   final DateTime? createdAt;
   final List<TeamMember> roster;
 
+  /// The four tournament counters migration 019 put on the `teams` row.
+  ///
+  /// They are counted achievements, not a second rating: the squad plays on one
+  /// ELO ladder and a tournament match simply moves it harder (a higher K). Read
+  /// them as a [TeamRecord] through the `tournamentRecord` extension in
+  /// models/tournament.dart, which is where the wording lives.
+  final int tournamentPlayed, tournamentWins, finalsReached, titles;
+
   Team({
     required this.id,
     required this.name,
@@ -81,6 +89,10 @@ class Team {
     this.memberCount = 0,
     this.createdAt,
     this.roster = const [],
+    this.tournamentPlayed = 0,
+    this.tournamentWins = 0,
+    this.finalsReached = 0,
+    this.titles = 0,
   });
 
   bool get isPublic => visibility == 'public';
@@ -114,6 +126,10 @@ class Team {
             .whereType<Map>()
             .map((x) => TeamMember.fromJson(Map<String, dynamic>.from(x)))
             .toList(),
+        tournamentPlayed: asNum(j['tournament_played']).round(),
+        tournamentWins: asNum(j['tournament_wins']).round(),
+        finalsReached: asNum(j['finals_reached']).round(),
+        titles: asNum(j['titles']).round(),
       );
 }
 

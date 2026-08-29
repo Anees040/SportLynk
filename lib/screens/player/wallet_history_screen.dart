@@ -123,9 +123,9 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
     final type = (t['type'] ?? '').toString();
     final amount = asNum(t['amount']);
     final isCredit = isCreditTxn(type);
-    final isFrozen = type == 'booking_payment';
+    final isFrozen = isHeldTxn(type);
 
-    final label = isFrozen ? 'Security Deposit' : txnLabel(type);
+    final label = txnRowLabel(type);
     final color = isFrozen ? Colors.orange : (isCredit ? AppColors.success : AppColors.error);
     final iconData = isFrozen ? Icons.lock_outline : txnIcon(type);
 

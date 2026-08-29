@@ -17,7 +17,7 @@ lower layer makes every result above it meaningless.
 | Layer | What it catches | Cost | When |
 |---|---|---|---|
 | **Static** — `flutter analyze`, `node --check` | Typos, dead code, type errors, bad imports | seconds | Every save |
-| **Unit** — `npm test` (ELO math) | Wrong formulas, wrong rounding, bad edge cases | seconds | Every backend change |
+| **Unit** — `npm test` (ELO, escrow, brackets, the tournament waterfall) | Wrong formulas, wrong rounding, bad edge cases | seconds | Every backend change |
 | **Integration** — `run_match_flow_check.js` | Broken multi-step flows, bad SQL, transaction bugs | ~30s | Before every commit |
 | **Schema** — `verify_schema.js` | Drift between code's assumptions and the real DB | ~5s | After any migration |
 | **Manual E2E** — two phones | Real UX, real timing, real race conditions | ~30 min | End of each wave |
@@ -40,12 +40,12 @@ node --check src/routes/teams.js
 node --check src/utils/teamStats.js
 node --check src/services/mlClient.js
 
-npm test                                  # ELO unit tests   → expect 10/10
-node src/scripts/verify_schema.js         # schema drift      → expect 113/113
+npm test                                  # unit suites      → expect 128/128
+node src/scripts/verify_schema.js         # schema drift      → expect 174/174 (113 before 019)
 node run_match_flow_check.js              # match E2E         → expect 69/69
 node src/scripts/check_ml_service.js      # ML integration    → expect 0 FAILED
 
-node src/server.js                        # expect a clean boot + 4 jobs, then Ctrl-C
+node src/server.js                        # expect a clean boot + 6 jobs, then Ctrl-C
 ```
 
 ```bash
@@ -66,14 +66,17 @@ flutter analyze                           # expect: No issues found
 ```
 
 **Interpreting failures.** A `node --check` failure is a typo — fix and rerun. A
-`npm test` failure means the ELO math changed; never "fix" the test to match the code
+`npm test` failure means one of the pure-math layers changed — ELO, escrow rounding, the
+fixture bracket or the tournament money waterfall; never "fix" the test to match the code
 without deciding which one is actually right. A `verify_schema` failure means a
 migration did not run on Supabase. A `run_match_flow_check` failure prints the failing
 check number — that number tells you the exact step in the match lifecycle that broke.
 A `check_ml_service` failure names the check; `skip` lines are not failures, they mean
 the ML service was not running, which is a supported state.
 
-**Record the numbers.** `10/10 · 113/113 · 69/69 · analyze 0` is your green baseline.
+**Record the numbers.** `128/128 · 174/174 · 69/69 · analyze 0` is your green baseline
+(it was `10/10 · 113/113` when this section was written at S.2; the unit suites grew with
+every wave, and `verify_schema` grew by 61 objects when S.7 Wave A added migration 019).
 Write it in the commit message. When something breaks three waves later, you will want
 to know which commit last had all four green.
 
@@ -2037,6 +2040,232 @@ does not claim the money path is safe because Scout is accurate; the money path 
 can spend PKR (step 192 section C/C2, step 201 section J, where a `model` affirm at 0.5898 — above threshold,
 with a booking armed — moved bookings 27→27 and the balance 8300.00→8300.00).
 
+### 4.22 Tournaments — the owner's cup, the waterfall and the automated bracket (S.7 Wave A)
+
+**Read this paragraph before running anything.** Migration 019 has **not** been applied to any database, so
+every step below that touches Postgres is written as an expectation and marked **NOT YET RUN**. The only
+numbers in this section that have actually been observed are step 203 (`npm test` → **128/128** with the
+database **down**) and step 204 (`flutter analyze` → **0 issues**, whole project). One step was
+*attempted* and is recorded as a failure rather than quietly dropped: `check_tournaments.js --evidence` was
+run once against Supabase before 019 existed, and `doc/tournament_evidence.md` still carries that run's
+**FAIL 2/3** — see step 208. Nothing else here should
+be quoted as a result until step 205 has been done and the runs are green. All Node commands run from
+`D:\sportlynk\backend`.
+
+What the section proves, in the order a panel would ask for it: the money is arithmetic and not a promise
+(the waterfall, to the paisa), the bracket is generated rather than typed, a fixture *reserves* venue hours
+rather than booking them, a result moves ratings **harder** for a final than for a friendly, and every rupee
+that goes in comes out.
+
+203. **The unit suite, with the database DOWN — `npm test` → 128/128.** ✅ **observed.**
+     42 of those are new: `test/fixtures.test.js` (22) and `test/fixtureSchedule.test.js` (20). Running them
+     with Postgres off is the whole point — seeding, bracket shape, byes, round-robin scheduling, standings
+     with tie-breaks, `kFactorFor`, `winProbability` and **`splitPool` (the entire economic waterfall)** are
+     pure functions in `src/utils/fixtures.js` and `src/utils/fixtureSchedule.js`. A money split that needs a
+     database to be checked is a money split nobody checks.
+     ```
+     cd backend && npm test
+     # ✔ 128 pass  0 fail   (elo · assistant · fixtures · fixtureSchedule)
+     ```
+204. **`flutter analyze` → "No issues found!"** ✅ **observed**, whole project, after the last Dart change.
+     Wave A's Flutter surface is `models/tournament.dart`, `services/tournament_service.dart`,
+     `widgets/tournament_widgets.dart`, `screens/player/tournaments_screen.dart` (the hardcoded
+     "Ramadan Futsal Cup" mock is **gone**), `screens/player/tournament_detail_screen.dart`,
+     `screens/owner/owner_create_tournament_screen.dart`, `screens/owner/owner_tournaments_screen.dart`,
+     the three new types in `widgets/transaction_detail_sheet.dart`, and the `MatchTournament` façade on
+     `models/match.dart` that stopped four match screens printing "Booking unavailable" over a tournament
+     fixture that had a perfectly good venue and time.
+205. **Apply migration 019 — 38 columns, 16 constraints, 7 indexes, 3 enum values, 1 settings row.**
+     ⛔ **NOT YET RUN — needs a decision, because it is the only step in this section that writes to
+     Supabase.** `node run_migration_019.js`. It is idempotent (`ADD COLUMN IF NOT EXISTS`, guarded
+     `DO $$` blocks for every constraint, `CREATE INDEX IF NOT EXISTS`) and creates **no new table** — 013
+     already made `tournaments`, `tournament_teams` and `fixtures` as bare shells that nothing ever read.
+     The three `ALTER TYPE txn_type ADD VALUE` statements are split out on `-- @@SPLIT@@` because an enum
+     add cannot share a transaction with the statements that use the new value.
+     Then the census: `node src/scripts/verify_schema.js`, whose 019 block asserts the 38 new columns, the
+     7 new indexes and the **16 named constraints** by name — so the whole file should go from
+     `113/113` to **`174/174`**, and any number in between names exactly which object the runner missed.
+     The two highest-signal constraints to eyeball:
+     ```sql
+     -- the power-of-2 rule a knockout bracket cannot exist without
+     SELECT conname FROM pg_constraint WHERE conname = 'chk_tournaments_max_teams';
+     -- "a match belongs to a booking or a tournament, never both"
+     SELECT conname FROM pg_constraint WHERE conname = 'chk_matches_one_context';
+     -- and the three new enum values
+     SELECT unnest(enum_range(NULL::txn_type));
+     ```
+     **Check the host before trusting the ticks** — see the caveat in `DATABASE.md`; 013's runner was twice
+     reported as "applied to Supabase" while `DATABASE_URL` still pointed at localhost.
+206. **A note on what 019 makes load-bearing.** `src/utils/teamAccess.js`'s `TEAM_COLUMNS` now selects the
+     four counters (`tournament_played`, `tournament_wins`, `finals_reached`, `titles`), so
+     `routes/teams.js` (4 call sites) and `discoveryService` are 019-dependent too. Until 205 is done, a
+     team read will fail on the missing column — that is expected, not a regression, and it is why 205 comes
+     before every step that follows.
+207. **THE GATE: `node src/scripts/check_tournaments.js` → `PASS n/n`, exit 0, rolled back.**
+     ⛔ **RUN ONCE, FAILED — 2/3, blocked on 205.** It was fired at Supabase before 019 was applied and died on
+     the first missing column, which is the correct behaviour and the reason 205 is numbered before it; the two
+     assertions it did record are the rollback pair, so the harness proved its cleanup and nothing else (see
+     step 208). One `BEGIN … ROLLBACK`, real money through the real service — no
+     HTTP, no mocks — then it proves the rollback by re-reading outside the transaction. Ten blocks:
+     ```
+     Block 1  configuration refusals (FE-1)          non-power-of-2 knockout, round robin over the cap,
+                                                     a venue the caller does not own, bad percentages
+     Block 2  the economics quote (FE-1)             venue cost from REAL slots.price, the recommended
+                                                     entry fee, and the same waterfall the draw will run
+     Block 3  entry fees, refusals, refunds          insufficient balance · wrong sport · double register ·
+              (FE-3/4/5)                             capacity full · deadline passed · someone else's team
+                                                     (403) · withdraw → refunded in full · organiser
+                                                     rejects → refunded in full
+     Block 4  under the minimum field (FE-4)         3 teams at the deadline → cancelled, every entry back
+     Block 5  the draw, the reservation, the          8-team bracket shape, seeds 1 v 8, slots flipped to
+              waterfall (FE-6)                       'blocked' and NOT booked, pool = venue_cost + prize
+                                                     + margin to the paisa, owner_earning >= venue_cost
+     Block 6  results, K by stake, advancement,      a win, a draw, a rout, a walkover; K = 40 / 48 / 56
+              the podium (FE-7)                      by round and K = 0 for the walkover; the winner lands
+                                                     in the next round's TBD; champion AND runner-up paid
+     Block 7  a five-team field                      padding to 8, byes to the TOP seeds, resolved at once
+     Block 8  round robin                            circle method, 3/1/0, goal difference, head-to-head,
+                                                     a champion read off the table
+     Block 9  the match-flow door                    the S.2 captains' path: a match row with
+                                                     booking_id NULL, authority from tournaments.owner_id,
+                                                     one ELO exchange, advanceAfterMatch idempotent
+     Block 10 the closing ledger audit               every wallet, every transaction: the money sums to zero
+     The rollback                                    not one row this run wrote still exists
+     ```
+     A `SKIP` is printed **beside** the pass count and never inside it — a case the seeded data could not
+     supply is a case that did not run. `--verify-clean` re-checks that nothing was left behind;
+     `--evidence` regenerates `doc/tournament_evidence.md`.
+     If the run stops on "no venue qualifies": the economics are denominated in `slots.price`, so it needs a
+     real, priced, owned venue with enough genuinely free hours for a 7-fixture bracket spread over several
+     days. Run `node src/scripts/add_future_slots.js --days 10` and try again — the script refuses to invent
+     inventory rather than quietly test against fake prices.
+208. **`doc/tournament_evidence.md` is a GENERATED file, and the copy in the tree is a FAILED run.**
+     ⛔ **NOT GREEN** (blocked on 207). `node src/scripts/check_tournaments.js --evidence` writes it:
+     every assertion in the order it was made, stamped with timestamp, node version and the short commit
+     hash plus a count of uncommitted paths, so a stale page is visible as a stale page. The file on disk
+     was produced **2026-08-29 22:35 PKT** against a database that does **not** have 019, and it says so
+     itself: `**FAIL 2/3**`, and the only assertions it managed to record are the two rollback lines —
+     *"after ROLLBACK not one captain this run created still exists"* and *"and not one tournament"*. So the
+     one thing that page currently proves is that the harness connects, opens a transaction and **cleans up
+     after itself when it dies mid-way**, which is worth knowing and is not the module working. Treat it as
+     a stub: it must be regenerated after 205, and until it reads `PASS n/n` it must not be cited as
+     evidence of anything except its own rollback.
+209. **No regression in S.2 or S.6 — the two suites Wave A reached into.**
+     ⛔ **NOT YET RUN** (blocked on 205). Wave A edited `routes/matches.js` (tournament authority when
+     `booking_id IS NULL`, plus the `advanceAfterMatch` call inside the existing verify transaction) and
+     `utils/matchCore.js` (COALESCE the fixture's slot and the cup name into the match view). Both are
+     surgical, and both are exactly the kind of edit that breaks something else:
+     ```
+     node run_match_flow_check.js                   # S.2 — the match lifecycle end to end
+     node src/scripts/check_assistant.js            # S.6 — 326/326 + conversation J's tournament chips
+     ```
+     `check_assistant.js` matters here for a second reason: Wave A added three **chip-only** Scout actions
+     (`tournament_detail`, `tournament_register`, `my_tournaments`) with **no new trained labels**, so
+     model #4's 23 labels and its fingerprint must come back **byte-identical**. If that script's preflight
+     reports a different fingerprint, the cause is ml-service serving another artifact (§4.19 step 185), not
+     this wave.
+210. **The scheduler's provenance, proved by an A/B rather than asserted.**
+     ⛔ **NOT YET RUN** (blocked on 205, and needs ml-service up). Trained model #1 (demand) places early
+     rounds in the venue's **lowest**-P(booked) hours and the final in the **highest** one. That is not
+     cosmetic: `venue_cost` is the sum of the chosen slots' real prices, so off-peak placement lowers the
+     entry fee teams pay *and* protects the owner's sellable peak inventory.
+     ```
+     # ml-service up (uvicorn, /health 4/4):
+     POST /api/tournaments/:id/generate            {}                  → meta.scheduling.source = 'model'
+     # ml-service stopped, or forced:
+     POST /api/tournaments/:id/generate            {"useModel": false} → meta.scheduling.source = 'chronological'
+     ```
+     Both must **succeed**. A scheduler that fails when the model is down would make a trained model a
+     single point of failure for a cup eight teams have already paid into; `meta.scheduling.reason` carries
+     why the fallback ran. Compare `venue_cost_amount` between the two runs on the same field — the model
+     path should be the cheaper one, and if it is not, say so rather than claiming the feature works.
+211. **The acceptance run — the one to demo.** ⛔ **NOT YET RUN** (blocked on 205).
+     ```
+     # 1. start the server with a fast sweep, or the 5-minute default means 5 minutes of staring
+     $env:SL_TEST_SWEEP_SECONDS=20 ; npm run dev      # look for "[TournamentJob] Started — sweeps every 20s"
+     # 2. eight funded captains, eight teams on descending ELO, a 2-minute deadline
+     node seed_tournament_demo.js
+     # 3. watch the job draw the bracket by itself. Then:
+     node seed_tournament_demo.js --verify            # bracket, standings, money, audit
+     ```
+     It **commits** (it is a demo seed, not a check) and is idempotent — captains keyed on an email prefix,
+     teams on a marker in `teams.bio`, the cup on its name. `--generate` skips the wait by drawing through
+     the organiser's endpoint path; `--play` settles every unplayed fixture; `--fee=` and `--deadline=`
+     override the quote and the clock; **`--undo` removes exactly what it created.** The entry fee is
+     **quoted by `POST /api/tournaments/preview`**, not picked out of the air, which is the point: the
+     economics screen is what stops an owner setting a fee that loses them money.
+     The deadline is moved to two minutes out **after** the eight registrations, because `register` correctly
+     refuses once the deadline has passed and a two-minute deadline set at creation would race the last
+     captains into `deadline_passed`.
+     What to show a panel, in this order: the capacity bar filling → the job's log line drawing the bracket →
+     the bracket screen with seeds 1 v 8 and the Elo odds per tie → one result entered through the **owner's**
+     verify flow → the winner appearing in the next round's TBD → the final → the champion and runner-up
+     credited → and the owner's earning printed next to what the same slots would have fetched if sold.
+212. **The security cases, all with a token in hand.** ⛔ **NOT YET RUN** (blocked on 205). Every one of
+     these is asserted in-process by step 207; doing them over HTTP once is worth it because a panel will
+     ask "what stops a player doing this?", and the answer is a status code.
+
+     | # | Attempt | Expect |
+     |---|---|---|
+     | 1 | No `Authorization` header on any `/api/tournaments` route | **401** — `router.use(auth)` is the first line |
+     | 2 | **Player** token → `POST /api/tournaments` | **403** — `checkRole('owner')`; only venue owners run cups |
+     | 3 | **Owner A** posts a tournament at **owner B's** venue | **403** `not_your_venue` — read from `venues.owner_id` in SQL, never from the body |
+     | 4 | Captain of team X registers **team Y** (`{"teamId": Y}`) | **403** `not_captain` — `teams.captain_id` is re-read inside the locked transaction |
+     | 5 | Register the same team twice, twice at once | **409** `already_registered` — counted under `FOR UPDATE`, so two simultaneous POSTs cannot both win |
+     | 6 | Register a 9th team into an 8-team cup | **409** `full` — the count includes `registered` **and** `accepted`, so an approval-gated cup with 8 pending teams is full, not empty |
+     | 7 | Register with `balance` < entry fee | **409** `insufficient_funds` — on the locked wallet row |
+     | 8 | Register after the deadline | **409** `deadline_passed` — FE-4 enforced on read, not only by the job |
+     | 9 | A **non-organiser owner** calls `/generate`, `/cancel`, `/teams/:id`, `/fixtures/:fid/result` | **403** `not_organiser` — `tournaments.owner_id`, same transaction as the write |
+     | 10 | `/generate` twice | **409** `already_generated`; `uq_fixtures_slot` is the backstop if the latch is ever raced |
+     | 11 | `PATCH /api/owner/slots/:id/unblock` on an hour a live fixture stands on | **409** `fixture_reserved` — the ground cannot be freed from under a fixture |
+     | 12 | Withdraw after the bracket is drawn | **409** `too_late` — the fee is in the pool and a slot is reserved |
+     | 13 | Ask Scout to register a team by **typing** it | the money door stays **chip + confirm only** (`decisive = via === 'chip' \|\| via === 'lexicon'`), unchanged from S.6 |
+     | 14 | Read `GET /api/tournaments/:id` as a stranger | **200** — a tournament page is public reading (FE-8); `organiser` comes back `null`, and withdrawn/rejected entries are not listed |
+213. **The economics assertions, spelled out, because this is the argument the wave rests on.**
+     ⛔ **NOT YET RUN** (blocked on 207, which asserts all four).
+     - `pool_amount = venue_cost_amount + prize_amount + margin`, **to the paisa**, where
+       `margin = owner_earning_amount − venue_cost_amount`.
+     - `owner_earning_amount >= venue_cost_amount` — **never underwater.** If the pool cannot cover the venue
+       hours, prize = 0 and the owner takes the whole pool; money is never taken *from* the owner.
+     - `winner_share + runnerup_share = prize_amount`, and both land in the **captains'** wallets while the
+       hold came out of the organiser's **frozen** balance.
+     - `k_factor` in `elo_history` is **56** for the final, **48** for a semi, **40** earlier, and there is
+       **no `elo_history` row at all** for a bye or a walkover.
+     Worked example to sanity-check the numbers against (PKR 4,000 entry, 8 teams, 7 hours @ 2,000):
+     pool 32,000 − venue 14,000 = 18,000 surplus → prize 10,800 (winner 7,560 · runner-up 3,240), owner
+     14,000 + 7,200 = **21,200, against 14,000 for selling the same slots**. Print both figures from real
+     rows in step 211 rather than quoting this paragraph.
+214. **The Flutter pass, by hand.** ⛔ **NOT YET RUN** (blocked on 205 — every screen reads the API).
+     `flutter run`, then: browse (filter by sport and city, watch the countdown and the capacity bar) →
+     open a cup → register a team from the sheet, which shows **per-player cost and the prize on the table**
+     before the fee is confirmed → the bracket tab scrolls horizontally with TBD placeholders and the Elo
+     odds per tie → the standings tab for a round-robin cup → as the **owner**: the create screen's live
+     economics preview ("you earn X vs Y for selling these slots", and the recommended entry fee), then
+     approve · remove · enter a result. Check the wallet screens too: the three new transaction types must
+     read "Tournament Entry" (held, not spent), "Tournament Earnings" and "Prize Money" — and a tournament
+     match in Match Center must show a **venue and a time**, plus a tappable stage line ("Ramadan Cup ·
+     Semi-final") that opens the bracket.
+
+#### What this section leaves open
+
+| # | Open item | Why it is not done here |
+|---|---|---|
+| 1 | **Apply migration 019 (step 205)** | The only write to Supabase in the whole wave, and it gates steps 206–214. Held for an explicit decision. |
+| 2 | Steps 207–213 run green | All blocked on 205. Until then this section states expectations; it must not be read as a result. |
+| 3 | `doc/tournament_evidence.md` | Generated by `check_tournaments.js --evidence`. The copy in the tree is a **FAIL 2/3** stub from 2026-08-29 22:35 PKT, run before 019 existed — it proves the rollback and nothing else. Regenerate after step 205; do not cite it until it reads `PASS n/n`. |
+| 4 | ml-service up for step 210 | The `source:'model'` half of the A/B needs `uvicorn` running with `/health` 4/4. The `'chronological'` half is what proves the fallback, and runs without it. |
+| 5 | Round-robin at scale | `n(n−1)/2` means 8 teams = 28 fixtures ≈ 28 venue hours, four times a knockout's cost. `max_round_robin_teams` is capped at **6** (15 fixtures) in the create validation and the preview endpoint surfaces the cost immediately — but no step here has played a 6-team league end to end. |
+| 6 | **Rotate `ML_API_KEY`** in both `backend/.env` and `ml-service/.env` | Carried over from §4.21 and now urgent: S.7 is the sprint that puts ml-service on a public URL. Compare the two by `/health`'s `apiKeyFingerprint` (sha256[:8]) — never print or commit the key. |
+
+And one thing this section deliberately does **not** claim: it does not claim a tournament has ever been
+played. The maths is unit-tested with the database down (**128/128**) and the Dart compiles clean
+(**0 issues**), and that is the honest extent of it until 205 is done. Everything between those two facts —
+the escrow moves, the bracket, the podium, the ledger summing to zero — is written, reviewed, and asserted by
+a script whose one contact with a real database so far ended in `FAIL 2/3` on a schema that does not have 019
+in it. That failure is the correct outcome of running the gate too early, and it is left in the tree with its
+timestamp on it rather than deleted, because a missing file looks like a step nobody reached and a failed one
+looks like exactly what it is.
+
 ---
 
 ## 5. Non-functional tests
@@ -2360,8 +2589,8 @@ asked "what happens if a user does X maliciously" — §6 is your prepared answe
 Wave: ____            Date: ____
 
 [ ] flutter analyze .............. 0 issues
-[ ] npm test ..................... 85/85 (DB may be down)
-[ ] verify_schema.js ............. 113/113
+[ ] npm test ..................... 128/128 (DB may be down)                (S.7-A: was 85/85)
+[ ] verify_schema.js ............. 174/174                                 (S.7-A: 113 + 61 for 019)
 [ ] run_match_flow_check.js ...... 69/69
 [ ] check_ml_service.js .......... 71/71 up · 31/31+4 skipped down   (S.3+)
 [ ] check_price_sanity.js ........ 20/20 required, source='model'    (S.3+)
@@ -2380,7 +2609,10 @@ Wave: ____            Date: ____
 [ ] check_booking_service.js ..... PASS 60/60, ledger matches escrow  (S.6-C+, any money change)
 [ ] check_assistant_http.js ...... PASS 173/173, 0 skips, residue gone (S.6-C+, API + ml UP; ~2m40s)
 [ ] npm run evidence ............. scout_evidence.md 326/326 + 173/173 (S.6-E+, before the viva)
-[ ] server boots, 4 jobs registered
+[ ] check_tournaments.js ......... PASS n/n, 0 skips, rolled back      (S.7-A+, needs migration 019)
+[ ] tournament_evidence.md ....... regenerated, reads PASS n/n         (S.7-A+, on disk it is FAIL 2/3)
+[ ] /tournaments/:id/generate .... meta.scheduling.source model | chronological (S.7-A+, A/B both must pass)
+[ ] server boots, 6 jobs registered                                    (S.7-A added tournamentJob)
 [ ] this wave's feature steps (§3/§4)
 [ ] IDOR spot-check (§6.2)
 [ ] mass-assignment spot-check (§6.3)

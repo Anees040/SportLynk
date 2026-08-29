@@ -123,11 +123,31 @@ const MATCH_VIEW_COLUMNS = `
   ot.name AS ot_name, ot.logo_url AS ot_logo, ot.elo AS ot_elo,
   ot.wins AS ot_wins, ot.losses AS ot_losses, ot.draws AS ot_draws,
   ot.elo_frozen AS ot_frozen, ot.city AS ot_city,
-  b.slot_date, b.start_time, b.end_time, b.status::text AS booking_status,
+  -- S.7 Wave A: a tournament fixture reserves a slot instead of creating a
+  -- booking, so WHEN and WHERE come from the booking for a friendly and from the
+  -- fixture's slot for a tournament match. Before the COALESCE every tournament
+  -- match rendered with a null venue, a null time and slot_started = NULL, which
+  -- made lib/models/match.dart's canSubmitResult (isAccepted && slotStarted &&
+  -- ...) refuse every tournament result, and left the owner's verify screen blank.
+  COALESCE(b.slot_date, tf.slot_date) AS slot_date,
+  COALESCE(b.start_time, tf.start_time) AS start_time,
+  COALESCE(b.end_time, tf.end_time) AS end_time,
+  b.status::text AS booking_status,
   b.player_id AS booking_player,
-  v.id AS venue_id, v.name AS venue_name, v.city AS venue_city,
-  v.owner_id AS venue_owner,
-  ((b.slot_date::DATE + b.start_time::TIME) <= (NOW() AT TIME ZONE '${TIMEZONE}')) AS slot_started,
+  COALESCE(v.id, tv.id) AS venue_id,
+  COALESCE(v.name, tv.name) AS venue_name,
+  COALESCE(v.city, tv.city) AS venue_city,
+  -- Authority, not just a label: for a tournament match the person entitled to
+  -- verify is the ORGANISER (tournaments.owner_id), which is why this coalesces
+  -- to tr.owner_id and not to tv.owner_id.
+  COALESCE(v.owner_id, tr.owner_id) AS venue_owner,
+  ((COALESCE(b.slot_date, tf.slot_date)::DATE
+      + COALESCE(b.start_time, tf.start_time)::TIME)
+     <= (NOW() AT TIME ZONE '${TIMEZONE}')) AS slot_started,
+  m.tournament_id, tr.name AS tournament_name, tr.format AS tournament_format,
+  tr.rounds AS tournament_rounds, tr.status AS tournament_status,
+  tf.id AS fixture_id, tf.round AS fixture_round, tf.position AS fixture_position,
+  tf.label AS fixture_label, tf.is_bye AS fixture_is_bye,
   (SELECT eh.elo_delta FROM elo_history eh
     WHERE eh.match_id = m.id AND eh.team_id = m.challenger_team LIMIT 1) AS ct_delta,
   (SELECT eh.elo_delta FROM elo_history eh
@@ -145,7 +165,23 @@ const MATCH_VIEW_FROM = `
   JOIN teams ct ON ct.id = m.challenger_team
   JOIN teams ot ON ot.id = m.opponent_team
   LEFT JOIN bookings b ON b.id = m.booking_id
-  LEFT JOIN venues   v ON v.id = b.venue_id`;
+  LEFT JOIN venues   v ON v.id = b.venue_id
+  LEFT JOIN tournaments tr ON tr.id = m.tournament_id
+  LEFT JOIN venues     tv ON tv.id = tr.venue_id
+  -- LATERAL … LIMIT 1 rather than a plain LEFT JOIN on fixtures: match_id is
+  -- indexed (idx_fixtures_match, 019) but NOT unique, and one duplicated link
+  -- would multiply every row of every list query that touched it. A LATERAL
+  -- cannot return more than the one row it is limited to, so the view's row count
+  -- is the match count no matter what the fixtures table holds.
+  LEFT JOIN LATERAL (
+    SELECT f.id, f.round, f.position, f.label, f.is_bye,
+           s.slot_date, s.start_time, s.end_time
+      FROM fixtures f
+      LEFT JOIN slots s ON s.id = f.slot_id
+     WHERE f.match_id = m.id
+     ORDER BY f.round, f.position
+     LIMIT 1
+  ) tf ON TRUE`;
 
 function intOrNull(v) {
   if (v === null || v === undefined) return null;
@@ -234,6 +270,28 @@ function shapeMatch(row, { viewerTeamIds = [], viewerUserId = null, base = 1000 
       startTime: row.start_time,
       endTime: row.end_time,
       status: row.booking_status,
+      venueId: row.venue_id || null,
+      venueName: row.venue_name || null,
+      venueCity: row.venue_city || null,
+    } : null,
+    // S.7: the same two facts a friendly reads off its booking — where and when —
+    // for a match that has a fixture instead of one. Published as a separate block
+    // rather than a fake `booking`, because a client that saw a booking id it could
+    // not fetch would be worse than a client that knows this is a fixture.
+    tournament: row.tournament_id ? {
+      id: row.tournament_id,
+      name: row.tournament_name || null,
+      format: row.tournament_format || null,
+      status: row.tournament_status || null,
+      rounds: intOrNull(row.tournament_rounds),
+      fixtureId: row.fixture_id || null,
+      round: intOrNull(row.fixture_round),
+      position: intOrNull(row.fixture_position),
+      label: row.fixture_label || null,
+      isBye: row.fixture_is_bye === true,
+      slotDate: row.slot_date,
+      startTime: row.start_time,
+      endTime: row.end_time,
       venueId: row.venue_id || null,
       venueName: row.venue_name || null,
       venueCity: row.venue_city || null,

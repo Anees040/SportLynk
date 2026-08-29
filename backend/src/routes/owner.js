@@ -815,6 +815,15 @@ router.patch("/slots/:id/block", async (req, res, next) => {
 });
 
 // PATCH /api/owner/slots/:id/unblock
+//
+// S.7 Wave A added a second reason a slot can read 'blocked': a tournament fixture
+// is standing on that hour. `fixtures.slot_id` is a reservation, not a booking — no
+// bookings row exists to protect it — so without the guard below an owner tidying
+// up their calendar could free an hour the bracket is scheduled to play on, and the
+// slot would then be sellable to a player while a fixture still points at it.
+//
+// The refusal is specific rather than a bare 409: an owner who wants that hour back
+// has to cancel or move the fixture, and the message says so.
 router.patch("/slots/:id/unblock", async (req, res, next) => {
   try {
     const check = await pool.query(
@@ -826,6 +835,25 @@ router.patch("/slots/:id/unblock", async (req, res, next) => {
       return res
         .status(404)
         .json({ success: false, message: "Slot not found or not blocked" });
+
+    const fixture = await pool.query(
+      `SELECT f.id, f.label, f.round, t.name AS tournament_name
+         FROM fixtures f
+         JOIN tournaments t ON t.id = f.tournament_id
+        WHERE f.slot_id = $1 AND f.status <> 'cancelled'
+        LIMIT 1`,
+      [req.params.id],
+    );
+    if (fixture.rows.length) {
+      const f = fixture.rows[0];
+      return res.status(409).json({
+        success: false,
+        message: `This hour is reserved for ${f.tournament_name}`
+          + `${f.label ? ` (${f.label})` : ""}. Cancel or reschedule the fixture first.`,
+        code: "fixture_reserved",
+      });
+    }
+
     await pool.query("UPDATE slots SET status='available' WHERE id=$1", [
       req.params.id,
     ]);

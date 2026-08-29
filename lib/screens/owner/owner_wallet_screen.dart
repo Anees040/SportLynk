@@ -238,11 +238,11 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
     final type = (t['type'] ?? '').toString();
     final amount = asNum(t['amount']);
     final isCredit = isCreditTxn(type);
-    final isFrozen = type == 'booking_payment';
+    final isFrozen = isHeldTxn(type);
 
     final icon = isFrozen ? Icons.lock_outline : txnIcon(type);
     final color = isFrozen ? Colors.orange : (isCredit ? AppColors.success : AppColors.error);
-    final label = isFrozen ? 'Security Deposit' : txnLabel(type);
+    final label = txnRowLabel(type);
 
     return InkWell(
       onTap: () => TransactionDetailSheet.show(context, t),

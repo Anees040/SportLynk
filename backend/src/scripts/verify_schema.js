@@ -134,6 +134,61 @@ const EXPECTED = [
       ['disputes', 'resolved_at'],
     ],
   },
+  {
+    migration: '019_tournaments.sql',
+    // No new tables: 013 already created tournaments, tournament_teams and
+    // fixtures as bare shells. 019 is the migration that makes them usable, so
+    // its evidence is entirely columns, constraints and indexes.
+    tables: [],
+    // The four tournament indexes 013 already made (idx_tournaments_status,
+    // idx_tournaments_venue, idx_tournament_teams_team, idx_fixtures_tournament)
+    // are listed under 013 above and deliberately NOT repeated here — 019 does
+    // not create them, and CREATE INDEX IF NOT EXISTS matches on the name, so a
+    // second entry over different columns would have silently no-opped.
+    indexes: ['uq_fixtures_slot_id', 'idx_fixtures_match', 'idx_fixtures_sched',
+      'idx_matches_tournament', 'idx_transactions_tournament',
+      'idx_tournaments_due', 'idx_tournaments_owner'],
+    // Every CHECK 019 adds, plus the one UNIQUE. These are the highest-signal
+    // objects in the whole file: chk_tournaments_max_teams is the power-of-2
+    // knockout rule, chk_fixtures_bye is "a bye has exactly one team", and
+    // chk_matches_one_context is "a match belongs to a booking or a tournament,
+    // never both" — the invariants tournamentService relies on rather than
+    // re-checks.
+    constraints: ['chk_tournaments_status', 'chk_tournaments_format',
+      'chk_tournaments_max_teams', 'chk_tournaments_min_teams',
+      'chk_tournaments_percents', 'chk_tournaments_money_nonneg',
+      'chk_tournament_teams_status', 'chk_tournament_teams_paid',
+      'chk_fixtures_status', 'chk_fixtures_coords', 'chk_fixtures_distinct_teams',
+      'chk_fixtures_bye', 'chk_fixtures_scores', 'chk_teams_tournament_counters',
+      'chk_matches_one_context', 'uq_fixtures_slot'],
+    // The columns the application code actually reads or writes. The four money
+    // columns on tournaments are the stored waterfall (pool = venue_cost + prize
+    // + owner margin), fixtures.slot_id is the slot reservation that replaces a
+    // bookings row, and the teams counters are the tournament record shown on the
+    // team card in place of a second ELO ladder.
+    columns: [
+      ['tournaments', 'description'], ['tournaments', 'min_teams'],
+      ['tournaments', 'requires_approval'], ['tournaments', 'prize_percent'],
+      ['tournaments', 'winner_percent'], ['tournaments', 'runnerup_percent'],
+      ['tournaments', 'venue_discount_percent'], ['tournaments', 'slot_minutes'],
+      ['tournaments', 'rounds'], ['tournaments', 'winner_team'],
+      ['tournaments', 'runner_up_team'], ['tournaments', 'pool_amount'],
+      ['tournaments', 'venue_cost_amount'], ['tournaments', 'prize_amount'],
+      ['tournaments', 'owner_earning_amount'],
+      ['tournaments', 'fixtures_generated_at'], ['tournaments', 'activated_at'],
+      ['tournaments', 'completed_at'], ['tournaments', 'cancelled_at'],
+      ['tournaments', 'cancel_reason'],
+      ['tournament_teams', 'seed'], ['tournament_teams', 'paid_amount'],
+      ['tournament_teams', 'approved_at'], ['tournament_teams', 'withdrawn_at'],
+      ['tournament_teams', 'eliminated_round'],
+      ['fixtures', 'match_id'], ['fixtures', 'slot_id'],
+      ['fixtures', 'scheduled_at'], ['fixtures', 'label'], ['fixtures', 'is_bye'],
+      ['fixtures', 'next_round'], ['fixtures', 'next_position'],
+      ['teams', 'tournament_played'], ['teams', 'tournament_wins'],
+      ['teams', 'finals_reached'], ['teams', 'titles'],
+      ['matches', 'tournament_id'], ['transactions', 'tournament_id'],
+    ],
+  },
 ];
 
 async function main() {

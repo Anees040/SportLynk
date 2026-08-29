@@ -490,6 +490,179 @@ gate decorative.
 
 ---
 
+## Tournaments (Token required) — S.7 Wave A
+
+Mounted at `/api/tournaments`, all of SRS Module 6 (FE-1…FE-8). `/mine` and
+`/preview` are declared **before** `/:id` so neither word is ever parsed as an id.
+**Only a venue owner posts or runs a tournament**, and only at a venue they own:
+every owner write is `checkRole('owner')` **and** re-reads `tournaments.owner_id`
+(via `venues.owner_id` at create) inside the locked transaction, so holding an
+owner token is not authority over *this* cup. Every reply is the house shape —
+`{success, data, message, code}` or `{success:false, message, code}`.
+
+### The three state machines — SINGLE SOURCE OF TRUTH
+```
+tournaments.status        open ──▶ active ──▶ completed
+                            └──▶ cancelled       (only before the draw; every entry refunded)
+
+tournament_teams.status   registered ──▶ accepted ──▶ eliminated
+                               │   (organiser approved)      (lost a knockout tie / league over)
+                               ├──▶ rejected                 (organiser said no  → refund)
+                               └──▶ withdrawn                (captain pulled out → refund)
+
+fixtures.status           upcoming ──▶ played        (a scoreline exists)
+                              ├──▶ walkover          (nobody played — K = 0, no ELO moves)
+                              └──▶ cancelled
+```
+`registered` = **paid, awaiting approval**; `accepted` = **in the field**. Both are
+holding money, so capacity and the pool count *both* — a tournament created with
+`requiresApproval:false` lands straight on `accepted`. The champion and runner-up
+keep `accepted`; only a knocked-out side becomes `eliminated` (with
+`eliminated_round`).
+
+### Endpoints
+| Method | Endpoint | Auth | Body / Query | Response |
+|--------|----------|------|--------------|----------|
+| GET | `/tournaments` | any | `?sport=&city=&startFrom=&status=&q=&venueId=&ownerId=&openOnly=&limit=` | `{tournaments:[{…, teamsRegistered, teamsAccepted, spotsLeft, isFull, secondsToDeadline, pool, prize, winnerName}]}` — **object, not array**; **`openOnly` defaults to `true`**, `false` widens to the archive (FE-2) |
+| GET | `/tournaments/mine` | any | `?limit=` | `{organising:[…], playing:[…]}` — both roles in one call; `playing` follows **team membership**, not captaincy, so a squad member finds their own bracket |
+| POST | `/tournaments/preview` | **owner** | `{venueId, format, entryFee, minTeams, maxTeams, registrationDeadline, startDate, slotMinutes?, prizePercent?, winnerPercent?, runnerupPercent?, venueDiscountPercent?}` | `{venue, config, capacity, minimum, economics:{atCapacity, atMinimum}, recommended, candidateHours, scan, meta}` — **writes nothing** (FE-1) |
+| GET | `/tournaments/:id` | any | — | `{tournament, teams, counts, bracket:{rounds, size, byes, total, played, generated, roundsList}, fixtures, standings, economics, viewer, organiser}` — `organiser` is `null` unless the caller owns it (FE-8) |
+| POST | `/tournaments` | **owner** | same as `/preview` + `{name, sport, description?, requiresApproval?}` | **201** `{tournament, warning?}` (FE-1) |
+| POST | `/tournaments/:id/generate` | **organiser** | `{useModel?}` | `{tournament, generated, teams, seeds:[{teamId, seed, elo}], bracket:{rounds,size,byes,fixtures}, fixtures, economics, rejectedPending, meta:{scheduling:{source, reason}}}` — draws the bracket now (FE-6) |
+| PATCH | `/tournaments/:id/teams/:teamId` | **organiser** | `{decision:'approve'\|'reject'\|'remove', reason?}` | `{tournament, teamId, status}` — reject/remove refunds in the same transaction (FE-5) |
+| PATCH | `/tournaments/:id/fixtures/:fid/result` | **organiser** | `{scoreA, scoreB}` | `{tournament, fixture, elo, advanced, completed?, payouts?}` (FE-7) |
+| POST | `/tournaments/:id/fixtures/:fid/walkover` | **organiser** | `{winnerTeamId, reason?}` | same shape, `elo.kFactor = 0` — **not** a 3-0 |
+| POST | `/tournaments/:id/cancel` | **organiser** | `{reason?}` | `{tournament, refunded:{teams, amount}}` — open tournaments only |
+| POST | `/tournaments/:id/register` | **player** | `{teamId}` | **201** `{tournament, registration}` — freezes the entry fee (FE-3) |
+| DELETE | `/tournaments/:id/register` | **player** | `?teamId=` | `{tournament, refunded}` — before the deadline, full refund |
+
+`POST /preview` is a POST that reads: the quote depends on the whole draft — both
+team counts, four percentages, the slot length, the format and the deadline — and a
+dozen fields in a query string would be a worse dishonesty than the verb.
+
+**Authority is never the body.** `POST /:id/register` takes `teamId` from the
+request but reads `teams.captain_id` inside the locked transaction, so sending
+someone else's team id is a **403**, not an entry.
+
+### The money model — the venue cost is recovered FIRST
+A percentage split of the pool would be wrong, because the venue cost is **fixed**
+while the pool is **variable**: 8 teams × PKR 2,000 is a 16,000 pool, but a 7-fixture
+knockout consumes ~7 hours of inventory worth ~14,000 at the list price, so a 30%
+commission would pay the owner 4,800 for slots they could have sold for 14,000. So
+the split is a waterfall, computed by the pure `splitPool()` in
+`src/utils/fixtures.js` and stored on the row at generation:
+
+```
+pool       = entry_fee × teams_in_field
+venue_cost = SUM(slots.price) over the fixtures' reserved slots     ← real prices, not an estimate
+             × (1 − venue_discount_percent/100)                     ← the owner's lever, default 0
+surplus    = pool − venue_cost
+prize      = surplus × prize_percent/100        (default 60)
+               winner    = prize × winner_percent/100     (default 70)
+               runner_up = prize − winner
+owner      = venue_cost + (surplus − prize)
+```
+`pool_amount`, `venue_cost_amount`, `prize_amount` and `owner_earning_amount` are all
+written onto the `tournaments` row, so nobody re-derives them later:
+**`pool = venue_cost + prize + margin` to the paisa**, asserted by
+`src/scripts/check_tournaments.js`.
+
+**Underwater guard.** If `pool < venue_cost` the prize is 0, the owner takes the
+whole pool, and the response message says so — money is never taken *from* the
+owner. Below `min_teams` at the deadline the tournament is cancelled and every entry
+refunded instead.
+
+| Event | Ledger move | `txn_type` |
+|---|---|---|
+| Register | captain `balance −E`, `frozen +E` | `tournament_entry` |
+| Withdraw before deadline · organiser rejects/removes · cancelled | captain `frozen −E`, `balance +E` | `refund` |
+| Bracket drawn | every captain `frozen −E`; organiser `balance += venue_cost + margin`; organiser `frozen += prize` | `escrow_release`, `tournament_commission`, `tournament_prize` |
+| Final settled | organiser `frozen −prize`; champion captain `+winner share`; runner-up captain `+runner-up share` | `escrow_release`, `tournament_prize` |
+
+The prize sits in the organiser's **frozen** balance, so the existing withdrawal
+paths already refuse to touch it — the same rule that protects a booking's escrow,
+not a new one. `tournament_prize` is therefore logged **positive twice** (the
+organiser's hold, then the champion's credit); the row's own `description` says
+which, which is why `lib/widgets/transaction_detail_sheet.dart` prints the
+description rather than branching on the type.
+
+**A fixture reserves a slot; it does not create a booking.** The slot flips to
+`status='blocked'` and the fixture holds `slot_id` + `scheduled_at`. Writing real
+`bookings` rows would pull in wallet holds, pollute the owner's booking list and —
+the real danger — let `noShowJob` sweep them and dock both captains' trust scores.
+`PATCH /owner/slots/:id/unblock` therefore **refuses** a slot a live fixture stands
+on. Teams pay **one** fee and never book or pay for a tournament slot.
+
+### Guard rails (all `{success:false, message, code}`)
+| Condition | Status | `code` | Why |
+|---|---|---|---|
+| non-owner posts a tournament | 403 | — | `checkRole('owner')` on the route |
+| owner posts at a venue they do not own, or an inactive one | 403 / 409 | `not_your_venue` · `venue_inactive` | ownership is read **in SQL** from `venues.owner_id`, never from the body |
+| knockout `maxTeams` that is not a power of 2, or round-robin over 6 teams | 400 | `invalid` | a bracket that cannot be halved, and `n(n−1)/2` = 28 fixtures ≈ 28 venue hours for 8 teams |
+| register with someone else's `teamId` | 403 | `not_captain` | `teams.captain_id` is re-read inside the locked transaction |
+| register a team in the wrong sport | 409 | `sport_mismatch` | cross-sport ratings would be meaningless |
+| register after `registration_deadline`, or on a closed/cancelled cup | 409 | `deadline_passed` · `not_open` | FE-4 is enforced **on read**, not only by the job |
+| the same team registers twice | 409 | `already_registered` | counted under `FOR UPDATE`, so two simultaneous POSTs cannot both win |
+| the cap is reached | 409 | `full` | the count includes `registered` **and** `accepted`: an approval-gated cup with 8 pending teams is full, not empty |
+| captain's `balance` < entry fee | 409 | `insufficient_funds` | checked on the locked wallet row |
+| withdraw after the bracket is drawn | 409 | `too_late` | the fee is already in the pool and a slot is already reserved |
+| a non-organiser generates, cancels, approves, or types a result | 403 | `not_organiser` | `tournaments.owner_id` compared in the same transaction as the write |
+| generating twice | 409 | `already_generated` | `fixtures_generated_at` is the latch; `uq_fixtures_slot` (`tournament_id, round, position`) is the backstop |
+| a field that cannot be drawn or scheduled | 409 | `no_fixtures` | **the whole transaction rolls back** — a cup is never left half-drawn with eight captains' money in the wrong place |
+| `unblock` a slot a live fixture stands on | 409 | `fixture_reserved` | `PATCH /owner/slots/:id/unblock`, so the ground cannot be freed from under a fixture |
+
+### ELO: one ladder, K weighted by stakes
+Tournament results are more authoritative than friendlies, and the correct place to
+say that is **K**, not a second rating — `elo.applyResult` already accepts `kFactor`
+and `elo_history` already stores `k_factor` per row, so this needed no refactor. A
+separate tournament ELO would also be self-defeating: brackets are *seeded by* ELO, so
+a fresh ladder would seed the first cup off all-1000s.
+
+| Match | K |
+|---|---|
+| Friendly | 32 (`global_settings.elo.k_factor`, unchanged) |
+| Tournament, early rounds | 40 |
+| Semi-final | 48 |
+| Final | 56 |
+| Bye / walkover | **0** — no game was played, so no rating moves |
+
+"Why does this count more?" is answered by `SELECT k_factor FROM elo_history` instead
+of by a second leaderboard. For the *achievement* side of the question, 019 adds four
+counters to `teams` — `tournament_played`, `tournament_wins`, `finals_reached`,
+`titles` — returned by `TEAM_COLUMNS` and shown on the team card as
+"12 played · 8 W · 2 titles 🏆".
+
+### Two doors, one settle function
+1. **The captains' door.** A tournament fixture writes a real `matches` row with
+   `tournament_id` set and `booking_id NULL`, so the existing S.2 flow works
+   unchanged: both captains submit, the owner verifies, and
+   `advanceAfterMatch(client, matchId)` runs **inside that same verify transaction**.
+   Authority for such a match derives from `tournaments.owner_id` rather than from the
+   booking's venue.
+2. **The organiser's door.** `PATCH /:id/fixtures/:fid/result` writes the match row
+   itself and runs the same ELO + advance path (FE-7).
+
+Both are idempotent — `matches.elo_applied` and `fixtures.status` are the latches —
+and both feed the same advancement, standings refresh, counter bumps and podium
+payout. `matchCore`'s match view COALESCEs the fixture's slot and the tournament name,
+so a tournament match reports a venue and a time like any other instead of NULL.
+
+### Where the AI is (no retraining — models #1 and #4 untouched)
+| # | What | Where |
+|---|---|---|
+| 1 | **Seeded bracket generation** — ELO-descending seeds, 1 v lowest, `rounds = log2(n)`, byes to the top seeds, winners auto-advanced into the next round's TBD | `src/utils/fixtures.js` — pure, unit-tested with the DB down |
+| 2 | **Elo win probability per fixture** — `1/(1+10^((Rb−Ra)/400))`, labelled as the Elo formula, **not** as ML | `fixtures.winProbability`, shown on the bracket |
+| 3 | **Demand-aware scheduling (trained model #1)** — early rounds go into the **lowest**-P(booked) windows, the final into the **highest** one | `src/services/tournamentScheduler.js` → `mlClient.forecastDemand` |
+| 4 | **Scout** — three **chip-only** actions (`tournament_detail`, `tournament_register`, `my_tournaments`) | `src/services/assistantActions.js`; **no new trained labels**, so model #4's 23 labels stay byte-identical |
+
+Scheduling is not cosmetic: because `venue_cost` is the sum of the chosen slots' real
+prices, off-peak placement **lowers the entry fee teams must pay** while **protecting
+the owner's sellable peak inventory**. When ml-service is down the allocator falls back
+to chronological order and stamps `meta.scheduling.source = 'chronological'` with a
+`reason`, so the demo can prove which path ran rather than assert it.
+
+---
+
 ## Escrow & Payment Flow
 ```
 1. Player books slot → Full amount deducted from player.balance → added to player.frozen_balance
@@ -529,3 +702,6 @@ gate decorative.
 | `no_show_penalty` | Player's deposit forfeited for no-show |
 | `owner_payout` | Owner withdrew balance |
 | `withdrawal` | User requested a withdrawal — debited at request time, not at settlement |
+| `tournament_entry` | Tournament entry fee **frozen** at registration (S.7 Wave A) — refunded in full on withdraw, rejection or cancellation |
+| `tournament_commission` | Organiser's earning at the draw: the venue hours the fixtures reserved **plus** the margin on top |
+| `tournament_prize` | The prize pool — logged **twice**: held in the organiser's `frozen` at the draw, then credited to the champion's and runner-up's captains at the final. The `description` says which |

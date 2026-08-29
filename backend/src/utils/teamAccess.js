@@ -331,7 +331,8 @@ async function requireRole(client, teamId, userId, need = 'captain') {
  */
 const TEAM_COLUMNS = `
   t.id, t.name, t.sport::text AS sport, t.logo_url, t.bio, t.visibility,
-  t.city, t.elo, t.wins, t.losses, t.draws, t.captain_id, t.created_at`;
+  t.city, t.elo, t.wins, t.losses, t.draws, t.captain_id, t.created_at,
+  t.tournament_played, t.tournament_wins, t.finals_reached, t.titles`;
 
 /**
  * One roster row as the app wants it. LEFT JOIN, not JOIN, on player_profiles —

@@ -54,11 +54,13 @@ const matchRoutes = require("./routes/matches");
 const reviewRoutes = require("./routes/reviews");
 const internalRoutes = require("./routes/internal");
 const assistantRoutes = require("./routes/assistant");
+const tournamentRoutes = require("./routes/tournaments");
 const { startNoShowJob } = require("./jobs/noShowJob");
 const { startAutoApproveJob } = require("./jobs/autoApproveJob");
 const { startWithdrawalJob } = require("./jobs/withdrawalJob");
 const { startMatchExpiryJob } = require("./jobs/matchExpiryJob");
 const { startSentimentBackfillJob } = require("./jobs/sentimentBackfillJob");
+const { startTournamentJob } = require("./jobs/tournamentJob");
 const { ACTIVE_TEST_OVERRIDES } = require("./utils/escrow");
 
 app.use("/api/auth", authRoutes);
@@ -73,6 +75,10 @@ app.use("/api/slots", slotRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/matches", matchRoutes);
+// Tournaments (S.7 Wave A). routes/tournaments.js declares /mine and /preview
+// BEFORE /:id — Express matches in declaration order, so the reverse would send
+// GET /api/tournaments/mine to the detail handler as id="mine".
+app.use("/api/tournaments", tournamentRoutes);
 app.use("/api/internal", internalRoutes);
 // Scout (S.6). Requiring routes/assistant also requires services/assistantActions,
 // whose assertRoutable() THROWS at load time if any trained intent label has no
@@ -160,4 +166,8 @@ server.listen(PORT, () => {
   startWithdrawalJob();
   startMatchExpiryJob();
   startSentimentBackfillJob();
+  // FE-4: enforces the registration deadline whether or not the organiser opens
+  // the app. Without it a tournament nobody generated would hold every captain's
+  // entry fee frozen indefinitely.
+  startTournamentJob();
 });

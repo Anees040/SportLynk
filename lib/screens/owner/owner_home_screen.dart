@@ -345,6 +345,23 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
                     () => setState(() => _tab = 2),
                   ),
                 ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  // Only owners run tournaments (SRS Module 6), so this is the only
+                  // door into creating one — and it fills hours that are hard to sell
+                  // one booking at a time.
+                  _quickActionTile(
+                    Icons.emoji_events_rounded, 'Tournaments',
+                    const Color(0xFFFEF9C3), const Color(0xFFB45309),
+                    () => Navigator.pushNamed(context, '/owner-tournaments'),
+                  ),
+                  const SizedBox(width: 12),
+                  _quickActionTile(
+                    Icons.rule_rounded, 'Verify Results',
+                    const Color(0xFFE0E7FF), const Color(0xFF4338CA),
+                    () => Navigator.pushNamed(context, '/owner-verify-matches'),
+                  ),
+                ]),
               ]),
             ),
           ),

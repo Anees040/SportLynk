@@ -196,6 +196,96 @@ class MatchBooking {
   }
 }
 
+/// Where and when for a match that has a tournament fixture instead of a booking
+/// (S.7 Wave A), plus which round it is.
+///
+/// A tournament fixture *reserves* a venue slot rather than creating a booking:
+/// a real booking row would appear in the owner's booking list, carry a wallet
+/// hold nobody paid, and — the actual danger — be swept by `noShowJob`, docking
+/// both captains' trust scores for a match they turned up to. So the backend
+/// publishes the same five facts (`venueName`, `slotDate`, `startTime`,
+/// `endTime`, `venueCity`) under `tournament` rather than faking a booking, and
+/// this mirrors that block instead of inventing one.
+class MatchTournament {
+  final String id;
+  final String? name;
+  final String? format;
+  final String? status;
+  final int? rounds;
+  final String? fixtureId;
+  final int? round;
+  final int? position;
+
+  /// The round's own name — "Final", "Semi-final", "Round 1" — set by the server
+  /// when the bracket is drawn, so the phone never has to work out that round 3
+  /// of 3 is the final.
+  final String? label;
+  final bool isBye;
+
+  final DateTime? slotDate;
+  final String? startTime;
+  final String? endTime;
+  final String? venueId;
+  final String? venueName;
+  final String? venueCity;
+
+  const MatchTournament({
+    required this.id,
+    this.name,
+    this.format,
+    this.status,
+    this.rounds,
+    this.fixtureId,
+    this.round,
+    this.position,
+    this.label,
+    this.isBye = false,
+    this.slotDate,
+    this.startTime,
+    this.endTime,
+    this.venueId,
+    this.venueName,
+    this.venueCity,
+  });
+
+  factory MatchTournament.fromJson(Map<String, dynamic> j) => MatchTournament(
+        id: '${j['id']}',
+        name: _str(j['name']),
+        format: _str(j['format']),
+        status: _str(j['status']),
+        rounds: _intOrNull(j['rounds']),
+        fixtureId: _str(j['fixtureId']),
+        round: _intOrNull(j['round']),
+        position: _intOrNull(j['position']),
+        label: _str(j['label']),
+        isBye: _bool(j['isBye']),
+        slotDate: _date(j['slotDate']),
+        startTime: _str(j['startTime']),
+        endTime: _str(j['endTime']),
+        venueId: _str(j['venueId']),
+        venueName: _str(j['venueName']),
+        venueCity: _str(j['venueCity']),
+      );
+
+  /// Same wall-clock formatting as a booking's, for the same reason: these are
+  /// TIME columns at the pitch, not instants to be shifted into the phone's zone.
+  String get timeRange {
+    final a = MatchBooking.prettyTime(startTime);
+    final b = MatchBooking.prettyTime(endTime);
+    if (a.isEmpty) return '';
+    return b.isEmpty ? a : '$a – $b';
+  }
+
+  /// "Ramadan Cup · Semi-final". Falls back to the round number when the bracket
+  /// was drawn without labels, and to the cup's name alone before it is drawn.
+  String get stageLine {
+    final stage = label ?? (round == null ? null : 'Round $round');
+    final cup = name;
+    if (cup == null || cup.isEmpty) return stage ?? '';
+    return stage == null ? cup : '$cup  ·  $stage';
+  }
+}
+
 /// A match in any of its eight states.
 class MatchModel {
   final String id;
@@ -234,6 +324,10 @@ class MatchModel {
   final bool slotStarted;
 
   final MatchBooking? booking;
+
+  /// Present exactly when this match is a tournament fixture, in which case
+  /// [booking] is null — the two are alternatives, never both.
+  final MatchTournament? tournament;
 
   /// Which side is the viewer's, and which seat they sit in. Null for a viewer
   /// who is only the venue owner.
@@ -276,6 +370,7 @@ class MatchModel {
     this.createdAt,
     required this.slotStarted,
     this.booking,
+    this.tournament,
     this.myTeamId,
     required this.iAmChallenger,
     required this.iAmVenueOwner,
@@ -288,6 +383,7 @@ class MatchModel {
     final ch = Map<String, dynamic>.from(j['challenger'] as Map? ?? const {});
     final op = Map<String, dynamic>.from(j['opponent'] as Map? ?? const {});
     final bk = j['booking'];
+    final tr = j['tournament'];
     return MatchModel(
       id: '${j['id']}',
       status: '${j['status'] ?? MatchStatus.challengeSent}',
@@ -310,6 +406,9 @@ class MatchModel {
       createdAt: _date(j['createdAt']),
       slotStarted: _bool(j['slotStarted']),
       booking: bk is Map ? MatchBooking.fromJson(Map<String, dynamic>.from(bk)) : null,
+      tournament: tr is Map
+          ? MatchTournament.fromJson(Map<String, dynamic>.from(tr))
+          : null,
       myTeamId: _str(j['myTeamId']),
       iAmChallenger: _bool(j['iAmChallenger']),
       iAmVenueOwner: _bool(j['iAmVenueOwner']),
@@ -325,6 +424,33 @@ class MatchModel {
   /// The state to render. Prefers the server's `effectiveStatus` so a challenge
   /// that has timed out but not yet been swept never looks answerable.
   String get shownStatus => effectiveStatus ?? status;
+
+  // ── Where and when ──────────────────────────────────────────
+  //
+  // Every match has a pitch and a kickoff, but it hangs off one of two anchors:
+  // a booking for a friendly, a reserved fixture slot for a tournament. Screens
+  // ask these three instead of reaching for `booking`, because doing that showed
+  // "the linked booking is no longer available" and "Booking unavailable" on
+  // tournament fixtures that had a perfectly good venue and time — the row was
+  // never missing, it was simply never a booking.
+
+  bool get isTournamentMatch => tournament != null;
+
+  String? get venueName => booking?.venueName ?? tournament?.venueName;
+  String? get venueCity => booking?.venueCity ?? tournament?.venueCity;
+  DateTime? get slotDate => booking?.slotDate ?? tournament?.slotDate;
+  String get timeRange => booking?.timeRange ?? tournament?.timeRange ?? '';
+
+  /// True when neither anchor could tell us where this is played — a genuinely
+  /// broken row, and the only case that deserves a warning.
+  bool get hasNoSlot => venueName == null && slotDate == null;
+
+  /// `5/9/2026`, or null when there is no date to print. Four screens had their
+  /// own copy of this expression.
+  String? get slotDateLabel {
+    final d = slotDate;
+    return d == null ? null : '${d.day}/${d.month}/${d.year}';
+  }
 
   // ── State predicates ────────────────────────────────────────
   bool get isPending => shownStatus == MatchStatus.challengeSent;

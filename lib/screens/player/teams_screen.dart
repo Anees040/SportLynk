@@ -6,10 +6,12 @@ import 'package:provider/provider.dart';
 
 import '../../constants/colors.dart';
 import '../../models/team.dart';
+import '../../models/tournament.dart' show TeamTournamentRecord;
 import '../../providers/auth_provider.dart';
 import '../../services/realtime_service.dart';
 import '../../services/team_service.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/tournament_widgets.dart' show TeamRecordLine;
 import 'chat_screen.dart';
 import 'create_team_screen.dart';
 import 'match_center_screen.dart';
@@ -290,6 +292,15 @@ class _TeamsScreenState extends State<TeamsScreen> {
                         _stat('L', t.losses),
                         _stat('D', t.draws),
                       ]),
+                      // Counted achievements rather than a second rating: a
+                      // tournament match moves this same ELO harder (K 40–56)
+                      // instead of feeding a separate ladder, so "2 titles" is
+                      // what actually distinguishes a cup squad. The line hides
+                      // itself for a team that has never entered one.
+                      if (!t.tournamentRecord.isEmpty) ...[
+                        const SizedBox(height: 6),
+                        TeamRecordLine(t.tournamentRecord, dense: true),
+                      ],
                     ],
                   ),
                 ),

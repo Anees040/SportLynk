@@ -39,6 +39,7 @@ const threads = require('../services/assistantThreads');
 const discovery = require('../services/discoveryService');
 const roster = require('../services/rosterService');
 const booking = require('../services/bookingService');
+const tsvc = require('../services/tournamentService');
 const kb = require('../services/assistantKb');
 const ml = require('../services/mlClient');
 const replyUtil = require('../utils/assistantReply');
@@ -226,7 +227,8 @@ async function preflight(client) {
   section('0  preflight — registry, model #4, migration 018');
 
   const routable = actions.assertRoutable();
-  check(routable.ok && routable.labels === 23 && routable.actions === 27,
+  check(routable.ok && routable.labels === 23 && routable.actions === 30
+    && routable.buttonOnly === 7,
     `action registry routes every trained label (${routable.labels} labels, ${routable.actions} actions, `
     + `${routable.buttonOnly} button-only)`, JSON.stringify(routable));
 
@@ -1396,8 +1398,18 @@ async function conversationH(client, ctx) {
   eq(inserts[0] && inserts[0].n, 1, 'written once inside it, not twice');
   ev.addFact('FR8.15 holds by census, not by assertion',
     `\`INSERT INTO bookings\` appears in exactly ${inserts.length} of ${files.length} backend source `
-    + 'files (`services/bookingService.js`), and `assistantActions.js` contains none of the six money '
-    + 'primitives. Scout prepares; the shared service spends.');
+    + 'files (`services/bookingService.js`), `INSERT INTO tournament_teams` and `INSERT INTO fixtures` in exactly one each (`services/tournamentService.js`), and `assistantActions.js` contains none of the nine money or tournament write primitives. Scout prepares; the shared service spends.');
+
+  // S.7 puts a SECOND spender behind Scout, so the census has to grow with it: a
+  // tournament entry is the same money rule as a booking and gets the same treatment.
+  const entries = countIn(files, /INSERT INTO tournament_teams/g);
+  eq(entries.length, 1, 'exactly ONE file in the whole backend enters a team in a tournament');
+  eq(entries[0] && entries[0].file, 'src/services/tournamentService.js',
+    'and it is the tournament service, not a route, not the job and not the assistant');
+  const draws = countIn(files, /INSERT INTO fixtures/g);
+  eq(draws.length, 1, 'exactly ONE file draws a bracket');
+  eq(draws[0] && draws[0].file, 'src/services/tournamentService.js',
+    'so the deadline job and the organiser button cannot draw two different brackets');
 
   const scout = path.join(__dirname, '..', 'services', 'assistantActions.js');
   const scoutBody = fs.readFileSync(scout, 'utf8');
@@ -1408,11 +1420,18 @@ async function conversationH(client, ctx) {
     ['split a penalty', /penaltySplit\s*\(/],
     ['lock a wallet', /lockWallet\s*\(/],
     ['free a slot', /UPDATE slots SET status/i],
+    // The three added for the tournament module. `tournament_register` spends, so the
+    // same rule applies to it: Scout may prepare a confirmation and nothing else.
+    ['enter a team in a tournament', /INSERT INTO tournament_teams/],
+    ['draw a bracket', /INSERT INTO fixtures/],
+    ['edit a tournament row', /UPDATE tournaments/],
   ]) {
     check(!re.test(scoutBody), `Scout cannot ${name} — it has no such code at all`);
   }
   check(/require\(['"]\.\/bookingService['"]\)/.test(scoutBody),
     'it goes through bookingService for all of it');
+  check(/require\(['"]\.\/tournamentService['"]\)/.test(scoutBody),
+    'and through tournamentService for every tournament read and the one write');
 
   const routeBody = fs.readFileSync(path.join(__dirname, '..', 'routes', 'bookings.js'), 'utf8');
   check(/createBookingTx/.test(routeBody) && /cancelBookingTx/.test(routeBody),
@@ -1663,6 +1682,200 @@ async function adminTeamFor(client, playerId) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// J — TOURNAMENTS: A CHIP-ONLY DOOR ONTO A SECOND SPENDER
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * S.7 gives Scout a second way to spend a user's money, and this section is the proof
+ * that it spends it under the same rules as the first.
+ *
+ * Three properties are asserted, in the order that matters:
+ *
+ *   1. The classifier CANNOT open this door. `tournament_register` is not one of model
+ *      #4's 23 labels, so a sentence — any sentence — cannot reach it. That is checked
+ *      live, by typing the most direct request there is and reading the intent back.
+ *   2. Arming a confirmation moves NOTHING. The wallet is read before and after the
+ *      card appears, and the two numbers must be identical.
+ *   3. Only the confirm turn spends, and the row it writes is the tournament service's
+ *      own — Scout has no INSERT of its own (section H counts that).
+ *
+ * The whole section skips itself with a named reason when migration 019 is not on this
+ * database, so this script stays runnable before the migration is applied.
+ */
+async function conversationJ(client, ctx) {
+  section('J  tournaments — browse → detail → entry, by chip, money last');
+  const { player, players } = ctx;
+
+  const gate = await probe(client, () => client.query(
+    `SELECT count(*)::int AS n FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'tournaments'
+        AND column_name IN ('min_teams', 'prize_percent', 'pool_amount', 'rounds')`,
+  ));
+  if (!gate.ok || Number(gate.out.rows[0].n) < 4) {
+    skip('the tournament turns', 'migration 019 is not on this database yet');
+    return ctx;
+  }
+
+  // ── 1. the three actions exist, and the model cannot reach any of them ─────
+  for (const key of ['tournament_detail', 'tournament_register', 'my_tournaments']) {
+    check(actions.isAction(key) && actions.BUTTON_ONLY.includes(key)
+      && !actions.INTENT_LABELS.includes(key),
+    `${key} is executable by chip and is NOT a trained label`);
+  }
+  const begged = await say(client, { userId: player.id,
+    text: 'mujhe tournament mein apni team enter karwa do abhi' });
+  check(begged.ok && (!begged.nlu || begged.nlu.intent !== 'tournament_register'),
+    'asking for it in words in the plainest way does NOT reach tournament_register'
+    + `${begged.nlu ? ` (model #4 said ${begged.nlu.intent})` : ''}`);
+  check(!(begged.reply && (begged.reply.cards || []).some((c) => c.type === replyUtil.CARDS.CONFIRM)),
+    'and no confirm card is armed by a sentence — the money door needs a chip');
+
+  // ── 2. browse, by the same chip the capability menu offers ────────────────
+  const list = await say(client, { userId: player.id, action: 'tournament_list' });
+  if (!check(list.ok, 'the Tournaments chip answers', list.error || list.message)) return ctx;
+  const cups = cardsOf(list, replyUtil.CARDS.TOURNAMENT);
+  if (!cups.length) {
+    skip('the tournament detail and entry turns', 'no open tournament in the seeded data');
+    return ctx;
+  }
+  check(cups.length >= 1, `${cups.length} tournament card(s) painted from live rows`);
+  const shape = cups[0].data;
+  check(shape.id != null && shape.name != null && shape.entryFeeLabel != null,
+    'each card carries the id its own buttons post back, the name, and the fee as text');
+  check(shape.maxTeams == null || shape.spotsLeft != null,
+    'and the capacity, so FE-4 is visible before a captain taps anything');
+  check(offers(list, 'tournament_detail'),
+    'the card offers the detail chip — which is the ONLY way in, by design');
+
+  // ── 3. find a cup this run can actually enter ──────────────────────────────
+  // Chosen from the seed, never created: the same discipline as every other section.
+  const open = await tsvc.browse(client, { openOnly: true, limit: 10 });
+  let cand = null;
+  for (const t of (open.ok ? open.data.tournaments : []).slice(0, 6)) {
+    for (const p of [player, ...players].slice(0, 6)) {
+      const d = await probe(client, () => tsvc.detail(client, { tournamentId: t.id, userId: p.id }));
+      if (!d.ok || !d.out.ok) continue;
+      const v = d.out.data.viewer || {};
+      if (v.canRegister && (v.eligibleTeams || []).length) { cand = { t, p, v }; break; }
+    }
+    if (cand) break;
+  }
+
+  // ── 4. the detail turn, on a real cup ─────────────────────────────────────
+  const subject = cand ? cand.t : { id: shape.id, name: shape.name };
+  const who = cand ? cand.p : player;
+  const det = await say(client, { userId: who.id, action: 'tournament_detail',
+    args: { tournamentId: subject.id } });
+  if (!check(det.ok, 'the detail chip answers', det.error || det.message)) return ctx;
+  check(String(det.reply.text || '').includes(subject.name),
+    'the answer names the cup it was asked about');
+  eq(cardsOf(det, replyUtil.CARDS.TOURNAMENT).length, 1, 'with exactly one tournament card');
+  check((det.reply.meta || {}).fixtures != null,
+    `and meta the UI can trust (${(det.reply.meta || {}).fixtures} fixtures, `
+    + `${(det.reply.meta || {}).rounds} rounds)`);
+
+  // ── 5. the entry flow — arm, prove nothing moved, THEN confirm ────────────
+  if (!cand) {
+    // Not a silent skip: the refusal ladder is the interesting half when the seed has
+    // nobody who can enter, and it is asserted rather than assumed.
+    const refused = await say(client, { userId: player.id, action: 'tournament_register',
+      args: { tournamentId: subject.id } });
+    check(refused.ok, 'the entry chip still answers when the user cannot enter');
+    check(!cardsOf(refused, replyUtil.CARDS.CONFIRM).length,
+      'and refuses with a reason instead of arming a confirmation');
+    skip('the tournament entry money path',
+      'the seed has no captain with a matching-sport team and the fee available');
+    return ctx;
+  }
+
+  const wallet = () => client.query(
+    'SELECT balance, frozen_balance FROM wallets WHERE user_id = $1', [cand.p.id],
+  ).then((r) => r.rows[0] || { balance: 0, frozen_balance: 0 });
+  const before = await wallet();
+  const team = cand.v.eligibleTeams[0];
+
+  let armed = await say(client, { userId: cand.p.id, action: 'tournament_register',
+    args: { tournamentId: cand.t.id } });
+  if (armed.ok && !cardsOf(armed, replyUtil.CARDS.CONFIRM).length) {
+    // Several eligible squads: Scout asks which one, and the answer is another chip.
+    eq(armed.state && armed.state.pending, 'team', 'with more than one squad Scout asks WHICH');
+    armed = await say(client, { userId: cand.p.id, action: 'tournament_register',
+      args: { tournamentId: cand.t.id, teamId: team.id } });
+  }
+  if (!check(armed.ok, 'the entry chip arms a confirmation', armed.error || armed.message)) return ctx;
+  const cc = cardsOf(armed, replyUtil.CARDS.CONFIRM)[0];
+  if (!check(!!cc, 'a confirm card is on screen before any money moves')) return ctx;
+  eq(cc.data.what, 'tournament_register', 'the card names the action it will run');
+  eq(round2(asNum(cc.data.total)), round2(asNum(cand.t.entryFee)),
+    `and states the fee the service will actually charge (PKR ${round2(asNum(cand.t.entryFee))})`);
+  check((cc.data.lines || []).some((l) => /entry fee/i.test(l.label || '')),
+    'the fee is a labelled line, not buried in prose');
+  check(cc.data.note != null && /refund|held|reject/i.test(cc.data.note),
+    'and the card says what happens to the money if the entry does not stand');
+  const mid = await wallet();
+  eq(round2(asNum(mid.balance)), round2(asNum(before.balance)),
+    'ARMING A CONFIRMATION MOVED NOTHING — the balance is unchanged to the paisa');
+  eq(round2(asNum(mid.frozen_balance)), round2(asNum(before.frozen_balance)),
+    'and nothing was frozen either');
+
+  // ── 6. the confirm turn is the one that spends ─────────────────────────────
+  const fee = round2(asNum(cand.t.entryFee));
+  const done = await say(client, { userId: cand.p.id, action: 'confirm' });
+  if (!check(done.ok && done.reply.actionOk === true,
+    'confirming enters the team', done.error || (done.reply || {}).text)) return ctx;
+  eq(done.reply.action, 'tournament_register', 'the turn is recorded as the entry it was');
+  const after = await wallet();
+  eq(round2(asNum(after.balance)), round2(asNum(before.balance) - fee),
+    `the fee left the balance exactly once (PKR ${fee})`);
+  eq(round2(asNum(after.frozen_balance)), round2(asNum(before.frozen_balance) + fee),
+    'and landed in frozen, not in the owner pocket — it is escrow until the bracket is drawn');
+
+  const { rows: entry } = await client.query(
+    `SELECT status, paid_amount FROM tournament_teams
+      WHERE tournament_id = $1 AND team_id = $2`, [cand.t.id, team.id],
+  );
+  eq(entry.length, 1, 'exactly one registration row exists for that team');
+  check(['registered', 'accepted'].includes(entry[0].status),
+    `its status is the one the cup's approval setting implies (${entry[0].status})`);
+  eq(round2(asNum(entry[0].paid_amount)), fee, 'and it records what was actually paid');
+
+  const { rows: txn } = await client.query(
+    `SELECT txn_type, amount, tournament_id FROM transactions
+      WHERE user_id = $1 AND tournament_id = $2 ORDER BY created_at DESC LIMIT 1`,
+    [cand.p.id, cand.t.id],
+  );
+  eq(txn.length, 1, 'one ledger row was written for it');
+  eq(txn[0] && txn[0].txn_type, 'tournament_entry', 'typed as a tournament entry, not as a booking');
+  eq(txn[0] && round2(asNum(txn[0].amount)), fee, 'for the fee, to the paisa');
+  check(txn[0] && String(txn[0].tournament_id) === String(cand.t.id),
+    'and carries the tournament id, so an auditor never has to guess which cup it was');
+
+  // ── 7. a second confirm cannot double-charge ───────────────────────────────
+  const again = await say(client, { userId: cand.p.id, action: 'confirm' });
+  const afterAgain = await wallet();
+  eq(round2(asNum(afterAgain.balance)), round2(asNum(after.balance)),
+    'a SECOND confirm on the same turn charges nothing — the armed block is consumed');
+  check(!again.reply || again.reply.actionOk !== true,
+    'and Scout says there is nothing to confirm rather than pretending it worked');
+
+  // ── 8. the entry is visible where a captain would look for it ─────────────
+  const mineOut = await say(client, { userId: cand.p.id, action: 'my_tournaments' });
+  check(mineOut.ok && cardsOf(mineOut, replyUtil.CARDS.TOURNAMENT).length >= 1,
+    'My tournaments shows the cup the captain just entered');
+  check(String(mineOut.reply.text || '').includes(team.name),
+    `and names the squad that is in it (${team.name})`);
+
+  ev.addFact('Scout can spend on a tournament only through a chip and a confirmation',
+    `Typing the plainest possible request ("tournament mein apni team enter karwa do") did not reach `
+    + `\`tournament_register\` — it is not one of model #4's ${actions.intentLabels().length} labels. `
+    + `The chip armed a confirm card stating PKR ${fee} and moved nothing: balance was `
+    + `${round2(asNum(before.balance))} before and after arming. The confirm turn moved `
+    + `PKR ${fee} from balance to frozen, wrote ONE \`tournament_entry\` ledger row carrying the `
+    + 'tournament id, and a repeat confirm charged nothing.');
+  return ctx;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // MAIN
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -1724,7 +1937,8 @@ async function main() {
         ctx = await conversationF(client, ctx);
         ctx = await conversationG(client, ctx);
         await conversationH(client, ctx);
-        await conversationI(client, ctx);
+        ctx = await conversationI(client, ctx);
+        await conversationJ(client, ctx);
       }
     }
   } catch (err) {

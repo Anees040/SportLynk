@@ -54,6 +54,27 @@ const DEFAULTS = Object.freeze({
     dispute_freeze_ratio: 0.30, // ER2.3
     dispute_freeze_min: 3,     // ER2.3
   }),
+  // Migration 019. These are the defaults a NEW tournament is created with, not
+  // live policy: min_teams / prize_percent / winner_percent / runnerup_percent /
+  // venue_discount_percent / slot_minutes are copied onto the tournament row at
+  // create time, and the ROW wins from then on. A tournament already holding
+  // captains' entry fees must not have its prize split changed underneath them.
+  tournament: Object.freeze({
+    min_teams: 4,
+    prize_percent: 60,
+    winner_percent: 70,
+    runnerup_percent: 30,
+    venue_discount_percent: 0,
+    slot_minutes: 60,
+    round_gap_days: 1,
+    round_rest_minutes: 60,
+    max_knockout_teams: 32,
+    max_round_robin_teams: 6,
+    target_margin_percent: 25,
+    k_early: 40,
+    k_semi: 48,
+    k_final: 56,
+  }),
 });
 
 const TTL_MS = 60_000;
@@ -227,4 +248,59 @@ async function assistant({ client = null, fresh = false } = {}) {
   };
 }
 
-module.exports = { DEFAULTS, get, elo, match, assistant, invalidate, clampNum };
+/**
+ * Tournament policy (migration 019), validated and camelCased.
+ *
+ * Read at two moments and no others: `create`, which copies the split onto the
+ * new row, and `preview`, which quotes a recommended entry fee. Once a
+ * tournament exists, `tournamentService` reads its COLUMNS, never this — see the
+ * DEFAULTS comment for why.
+ *
+ * The clamps are the interesting part:
+ *
+ *   winnerPercent / runnerupPercent must sum to 100 or the prize pool either
+ *   leaks money into nothing or pays out more than was collected. A pair that
+ *   does not sum is rejected wholesale rather than field-by-field, because
+ *   {"winner_percent": 80} alone is a half-finished edit, and honouring it with
+ *   the default 30 would silently pay out 110% of the prize. `chk_tournaments_percents`
+ *   would reject the row anyway; this turns a 500 into a sane default.
+ *
+ *   prizePercent may legitimately be 0 — a "the venue keeps the surplus" cup is
+ *   a real configuration, not a typo — so its floor is 0, unlike the ELO K.
+ *
+ *   roundGapDays may be 0: a one-day cup plays every round on one date. That is
+ *   the case fixtureSchedule.js schedules with PICK.EARLY.
+ */
+async function tournament({ client = null, fresh = false } = {}) {
+  const raw = await get('tournament', { client, fresh });
+  const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const d = DEFAULTS.tournament;
+  const int = (a, b, key, min, max) => Math.round(clampNum(a ?? b, d[key], min, max));
+
+  let winner = int(obj.winner_percent, obj.winnerPercent, 'winner_percent', 0, 100);
+  let runnerUp = int(obj.runnerup_percent, obj.runnerupPercent, 'runnerup_percent', 0, 100);
+  if (winner + runnerUp !== 100) {
+    warnOnce('tournament.percents', `winner ${winner} + runner-up ${runnerUp} != 100; using defaults`);
+    winner = d.winner_percent;
+    runnerUp = d.runnerup_percent;
+  }
+
+  return {
+    minTeams: int(obj.min_teams, obj.minTeams, 'min_teams', 2, 32),
+    prizePercent: int(obj.prize_percent, obj.prizePercent, 'prize_percent', 0, 100),
+    winnerPercent: winner,
+    runnerupPercent: runnerUp,
+    venueDiscountPercent: int(obj.venue_discount_percent, obj.venueDiscountPercent, 'venue_discount_percent', 0, 100),
+    slotMinutes: int(obj.slot_minutes, obj.slotMinutes, 'slot_minutes', 15, 240),
+    roundGapDays: int(obj.round_gap_days, obj.roundGapDays, 'round_gap_days', 0, 30),
+    roundRestMinutes: int(obj.round_rest_minutes, obj.roundRestMinutes, 'round_rest_minutes', 0, 1440),
+    maxKnockoutTeams: int(obj.max_knockout_teams, obj.maxKnockoutTeams, 'max_knockout_teams', 2, 32),
+    maxRoundRobinTeams: int(obj.max_round_robin_teams, obj.maxRoundRobinTeams, 'max_round_robin_teams', 2, 12),
+    targetMarginPercent: int(obj.target_margin_percent, obj.targetMarginPercent, 'target_margin_percent', 0, 200),
+    kEarly: int(obj.k_early, obj.kEarly, 'k_early', 1, 200),
+    kSemi: int(obj.k_semi, obj.kSemi, 'k_semi', 1, 200),
+    kFinal: int(obj.k_final, obj.kFinal, 'k_final', 1, 200),
+  };
+}
+
+module.exports = { DEFAULTS, get, elo, match, assistant, tournament, invalidate, clampNum };

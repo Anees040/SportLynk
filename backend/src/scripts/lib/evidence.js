@@ -36,12 +36,18 @@ const { execFileSync } = require('child_process');
 const REPO = path.join(__dirname, '..', '..', '..', '..');
 const DEFAULT_OUT = path.join(REPO, 'doc', 'scout_evidence.md');
 
-/** `--evidence` or `--evidence=some/other/path.md`, off unless asked for. */
-function parseFlag(argv = process.argv.slice(2)) {
+/**
+ * `--evidence` or `--evidence=some/other/path.md`, off unless asked for.
+ *
+ * `fallback` is the pack's own destination, so a script that owns a separate file
+ * gets it from a bare `--evidence` and nobody has to type a path to obtain the
+ * document the docs promise. An explicit `=path` still wins.
+ */
+function parseFlag(argv = process.argv.slice(2), fallback = DEFAULT_OUT) {
   const hit = argv.find((a) => a === '--evidence' || a.startsWith('--evidence='));
-  if (!hit) return { on: false, out: DEFAULT_OUT };
+  if (!hit) return { on: false, out: fallback };
   const eq = hit.indexOf('=');
-  return { on: true, out: eq === -1 ? DEFAULT_OUT : path.resolve(hit.slice(eq + 1)) };
+  return { on: true, out: eq === -1 ? fallback : path.resolve(hit.slice(eq + 1)) };
 }
 
 /** The commit this evidence was produced from, and whether the tree was dirty. */
@@ -79,7 +85,7 @@ function stamps() {
 const cell = (v) => (v === null || v === undefined ? '—'
   : String(v).replace(/\r?\n/g, ' ').replace(/\|/g, '&#124;').trim());
 
-const MARK = (key, side) => `<!-- scout-evidence:${key} ${side} -->`;
+const MARK = (key, side, prefix = 'scout-evidence') => `<!-- ${prefix}:${key} ${side} -->`;
 
 const HEADER = `# Scout — the evidence pack
 
@@ -103,12 +109,16 @@ order, or separately. A block absent from this file was not run — it is not a 
  * A recorder. Off by default and cheap when off: every method is a no-op, so the
  * calls can sit in the harness permanently without a flag check at each site.
  */
-function recorder({ key, title, subtitle = '', command, argv } = {}) {
-  const flag = parseFlag(argv);
+function recorder({
+  key, title, subtitle = '', command, argv,
+  out = DEFAULT_OUT, header = HEADER, markPrefix = 'scout-evidence',
+} = {}) {
+  const flag = parseFlag(argv, out);
   const rec = {
     on: flag.on,
     out: flag.out,
     key,
+    markPrefix,
     lines: [],       // the assertion ledger, in the order the run made them
     meta: [],        // provenance rows: [label, value]
     facts: [],       // headline numbers a reader should not have to hunt for
@@ -132,7 +142,7 @@ function recorder({ key, title, subtitle = '', command, argv } = {}) {
     addMeta(label, value) { rec.meta.push([label, value]); return rec; },
     addFact(label, value) { rec.facts.push([label, value]); return rec; },
     turn(t) { rec.turns.push(t); return rec; },
-    write: (totals) => write(rec, { key, title, subtitle, command, totals }),
+    write: (totals) => write(rec, { key, title, subtitle, command, totals, header }),
   });
   return rec;
 }
@@ -193,15 +203,15 @@ function render(rec, { title, subtitle, command, totals }) {
  */
 function write(rec, opts) {
   const body = render(rec, opts);
-  const block = `${MARK(rec.key, 'BEGIN')}\n\n${body}\n${MARK(rec.key, 'END')}\n`;
+  const block = `${MARK(rec.key, 'BEGIN', rec.markPrefix)}\n\n${body}\n${MARK(rec.key, 'END', rec.markPrefix)}\n`;
   let doc = '';
   try {
     doc = fs.readFileSync(rec.out, 'utf8');
   } catch {
-    doc = `${HEADER}\n`;
+    doc = `${opts.header || HEADER}\n`;
   }
-  const b = MARK(rec.key, 'BEGIN');
-  const e = MARK(rec.key, 'END');
+  const b = MARK(rec.key, 'BEGIN', rec.markPrefix);
+  const e = MARK(rec.key, 'END', rec.markPrefix);
   const i = doc.indexOf(b);
   const j = doc.indexOf(e);
   if (i !== -1 && j > i) {
