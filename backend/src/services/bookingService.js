@@ -64,6 +64,7 @@ const {
   asNum,
   round2,
   depositFor,
+  setDepositPercent,
   penaltySplit,
   isLateCancellation,
   lockWallet,
@@ -71,6 +72,8 @@ const {
   logTxn,
 } = require('../utils/escrow');
 const { notify } = require('../utils/notify');
+const settings = require('../utils/globalSettings');
+const chat = require('../utils/chatCore');
 
 /** Uniform failure. `code` is for machines, `message` is for humans. */
 function fail(status, code, message) {
@@ -108,7 +111,7 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
   //    simultaneous bookings; the checkout hold below is only a courtesy so two
   //    players don't both fill in the same form (SRS ER1.5).
   const slotRes = await client.query(
-    `SELECT s.*, v.name as venue_name, v.price_per_hour, v.owner_id,
+    `SELECT s.*, v.name as venue_name, v.price_per_hour, v.owner_id, v.sport_type AS venue_sport,
             (s.locked_until IS NOT NULL AND s.locked_until > NOW()) AS is_held
        FROM slots s JOIN venues v ON v.id = s.venue_id
       WHERE s.id=$1 AND s.venue_id=$2
@@ -130,10 +133,31 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
       'Another player is checking out this slot. Try again in a few minutes.');
   }
 
-  // Escrow = FULL slot price. Deposit = 20% of it (server-side only).
+  // S.7 Wave D. A sport an admin has switched off must stop taking money, not just
+  // disappear from a dropdown -- a deep link, a stale app or a saved slot id all
+  // reach this line without ever seeing the UI. Checked AFTER the slot lock so the
+  // message can name the sport, and it fails OPEN (`isSportEnabled` returns true for
+  // anything it cannot resolve) so a settings outage cannot close the whole venue.
+  if (slot.venue_sport && !(await settings.isSportEnabled(slot.venue_sport, { client }))) {
+    return fail(409, 'sport_disabled',
+      `${slot.venue_sport} bookings are paused on SportLynk right now.`);
+  }
+
+  // Escrow = FULL slot price. Deposit = the admin-configured percent of it, read
+  // INSIDE this transaction and stamped onto the row below.
+  //
+  // WHY THE VALUE IS ALSO PUSHED INTO `POLICY`
+  // ~30 places describe the policy in synchronous copy ("20% is at risk") off
+  // `POLICY.DEPOSIT_PERCENT`. Syncing it here means the sentence a player read on
+  // the quote screen and the amount this row holds are the same number even in a
+  // process that booted before the admin changed it. What is HELD is this column;
+  // every refund reads `bookings.deposit_amount`, so a later change cannot rewrite
+  // a deal a player already agreed to.
+  const depositPct = await settings.deposit({ client });
+  setDepositPercent(depositPct, 'booking');
   const basePrice = round2(slot.price);
   const escrowAmount = basePrice;
-  const depositAmount = depositFor(basePrice);
+  const depositAmount = depositFor(basePrice, depositPct);
 
   // 2. Lock + check player wallet
   const playerWallet = await lockWallet(client, userId);
@@ -360,7 +384,17 @@ async function cancelBooking(client, { userId, bookingId }) {
     ? `Booking cancelled within ${POLICY.CANCELLATION_WINDOW_HOURS} hours — PKR ${refund} refunded, PKR ${penalty} deposit forfeited to the venue.`
     : `Booking cancelled — PKR ${refund} refunded to your wallet.`;
 
-  return done(200, {
+  // S.7 Wave B -- close the room's story. The thread is NOT deleted: the owner
+  // and the player may still need to argue about the refund, and a conversation
+  // that vanishes the moment it gets inconvenient is the one thing a venue owner
+  // will never trust. A booking cancelled while still pending never had a room,
+  // and `announceInRoom` returns null for that without touching anything.
+  const roomId = await chat.bookingChannelId(client, bookingId);
+  const chatPill = await chat.announceInRoom(client, roomId, 'booking_cancelled', {
+    value: lateCancel ? 'late cancellation' : null,
+  });
+
+  const result = done(200, {
     bookingId,
     venueName: booking.venue_name,
     slotDate: localDateStr(booking.slot_date),
@@ -370,6 +404,12 @@ async function cancelBooking(client, { userId, bookingId }) {
     late: lateCancel,
     escrow,
   }, message);
+  // Rides on the envelope, not in `data`: `data` is the JSON the player sees, and
+  // a message id is not part of the cancellation receipt. Callers that commit and
+  // then emit it get the live pill; callers that ignore it lose nothing but the
+  // socket frame, because the row is already written.
+  result.chatPill = chatPill;
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -443,6 +483,12 @@ async function runInTx(fn) {
     const result = await fn(client);
     if (result && result.ok) await client.query('COMMIT');
     else await client.query('ROLLBACK');
+    // AFTER the commit, never before: a socket frame that arrives mid-transaction
+    // makes the app re-read a row it still cannot see. Only emitted on the commit
+    // branch -- a rolled-back cancellation has no pill to announce.
+    if (result && result.ok && result.chatPill) {
+      await chat.emitPills(pool, result.chatPill);
+    }
     return result;
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch { /* connection already gone */ }
@@ -455,12 +501,102 @@ async function runInTx(fn) {
 const createBookingTx = (input) => runInTx((c) => createBooking(c, input));
 const cancelBookingTx = (input) => runInTx((c) => cancelBooking(c, input));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// REJECT (owner-side, and the admin suspension cascade)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Why this is here and not in the route any more.
+ *
+ * S.7 Wave D needs to reject-and-refund every pending request against a venue
+ * whose owner has just been suspended — otherwise players keep paying into a dead
+ * venue and their money stays frozen. That is the same money movement the owner's
+ * own "reject" button performs, and having two copies of a refund is the exact
+ * failure mode this file's header exists to prevent. So the body was MOVED here
+ * from `routes/owner.js` verbatim: same SELECT, same lock, same ledger type, same
+ * rounding, same notification type. Only the reason wording branches.
+ *
+ * Ledger: player balance +P, frozen -P (full refund — nothing was ever at risk on
+ * a request the owner never accepted), slot back to `available`.
+ */
+const REJECT_REASONS = Object.freeze({
+  owner_rejected: {
+    dbReason: 'owner_rejected',
+    body: (venue, amount) =>
+      `${venue} could not take your booking. PKR ${amount} has been refunded to your wallet.`,
+    message: 'Booking rejected. Player refunded.',
+  },
+  owner_suspended: {
+    dbReason: 'owner_suspended',
+    body: (venue, amount) =>
+      `${venue} is no longer taking bookings, so your request was cancelled. PKR ${amount} has been refunded to your wallet.`,
+    message: 'Booking cancelled. Player refunded.',
+  },
+});
+
+async function rejectBooking(client, { bookingId, ownerId, reason = 'owner_rejected' }) {
+  const spec = REJECT_REASONS[reason] || REJECT_REASONS.owner_rejected;
+
+  const bookingRes = await client.query(
+    `SELECT b.id, b.security_deposit, b.player_id, b.slot_id, v.name AS venue_name
+       FROM bookings b JOIN venues v ON b.venue_id = v.id
+      WHERE b.id = $1 AND v.owner_id = $2 AND b.status = 'pending'
+      FOR UPDATE OF b`,
+    [bookingId, ownerId],
+  );
+  if (!bookingRes.rows.length) {
+    return fail(404, 'booking_not_found', 'Booking not found or not pending');
+  }
+  const b = bookingRes.rows[0];
+  const escrow = round2(b.security_deposit);
+
+  await client.query(
+    `UPDATE bookings SET status='rejected', cancelled_at=NOW(), cancellation_reason=$2
+      WHERE id=$1`,
+    [b.id, spec.dbReason],
+  );
+  await client.query("UPDATE slots SET status='available' WHERE id=$1", [b.slot_id]);
+
+  const wallet = await lockWallet(client, b.player_id);
+  if (wallet && escrow > 0) {
+    const after = await applyWallet(client, wallet.id, { balance: escrow, frozen: -escrow });
+    await logTxn(client, {
+      walletId: wallet.id,
+      userId: b.player_id,
+      bookingId: b.id,
+      type: 'refund',
+      amount: escrow,
+      balanceAfter: after.balance,
+      description: reason === 'owner_suspended'
+        ? 'Venue unavailable — full refund'
+        : 'Booking rejected by venue owner — full refund',
+      counterparty: b.venue_name,
+    });
+  }
+
+  await notify(client, {
+    userId: b.player_id,
+    bookingId: b.id,
+    type: 'booking_rejected',
+    title: reason === 'owner_suspended' ? 'Booking cancelled' : 'Booking rejected',
+    body: spec.body(b.venue_name, escrow),
+  });
+
+  return done(200, {
+    bookingId: b.id,
+    playerId: b.player_id,
+    refunded: escrow,
+    venueName: b.venue_name,
+  }, spec.message);
+}
+
 module.exports = {
   createBooking,
   createBookingTx,
   previewCancellation,
   cancelBooking,
   cancelBookingTx,
+  rejectBooking,
   listCancellable,
   listMyBookings,
   runInTx,

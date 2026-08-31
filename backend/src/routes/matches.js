@@ -53,6 +53,7 @@ const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const access = require('../utils/teamAccess');
 const mc = require('../utils/matchCore');
+const chat = require('../utils/chatCore');
 const elo = require('../utils/elo');
 const settings = require('../utils/globalSettings');
 const ml = require('../services/mlClient');
@@ -65,6 +66,8 @@ const bus = require('../realtime/bus');
 const { PREVIEW_LABEL } = require('../utils/matchPreview');
 const { notify } = require('../utils/notify');
 const { recomputeForMatch } = require('../utils/trustScore');
+// One definition of "how much rating is at stake", shared with the admin queue.
+const { severityFor } = require('../services/disputeService');
 
 const router = express.Router();
 router.use(auth);
@@ -108,7 +111,11 @@ function friendlyDbError(e) {
         return { status: 409, message: 'Your team has already submitted a result for this match.' };
       case 'ux_disputes_match_team':
         return { status: 409, message: 'Your team has already disputed this match.' };
-      case 'ux_elo_history_team_match':
+      // 022 renamed this index (the key gained `reason` so a dispute ruling can
+      // write its reversal+ruling pair). The NAME is what this switch keys on, so
+      // the rename has to land here too or a double-rating degrades to the generic
+      // "That has already been recorded." — run_migration_022.js asserts this line.
+      case 'ux_elo_history_team_match_reason':
         return { status: 409, message: 'This match has already been rated.' };
       default:
         return { status: 409, message: 'That has already been recorded.' };
@@ -147,6 +154,41 @@ function parseScore(raw, label) {
     return { ok: false, message: `${label} must be a whole number from 0 to ${SCORE_MAX}.` };
   }
   return { ok: true, value: Number.parseInt(s, 10) };
+}
+
+/**
+ * How much rating this match can still move — stamped onto the dispute row when it
+ * is raised (S.7 Wave D).
+ *
+ * WHY IT IS STORED AND NOT COMPUTED IN THE QUEUE
+ * The admin queue sorts by it (`idx_disputes_queue`), and a value recomputed per
+ * page would drift as the two teams play other matches — so a dispute could move
+ * between pages while an admin is reading them. Stamped once, the order an admin
+ * pages through is the order that existed when they opened the screen.
+ *
+ * WHY THE GLOBAL K AND NOT THE TOURNAMENT'S
+ * This is a TRIAGE number, not a payout: the ruling itself re-reads the fixture's
+ * own K (`tournaments.matchContext`) and rates with that. A fixture K only ever
+ * makes the true stake larger, so using the global one here can under-rank a
+ * final — never over-rank a friendly — and it keeps a released, verified path from
+ * gaining a tournament lookup it does not otherwise need.
+ *
+ * `disputeService.severityFor` is the single definition of the arithmetic, so the
+ * queue and this stamp cannot disagree about what "at stake" means.
+ */
+async function severityAtStake(client, features, m) {
+  try {
+    const { kFactor } = await settings.elo({ client });
+    return severityFor({
+      ratingChallenger: features.get(String(m.challenger_team))?.elo ?? 1000,
+      ratingOpponent: features.get(String(m.opponent_team))?.elo ?? 1000,
+      kFactor,
+    });
+  } catch {
+    // A null here costs nothing: the queue falls back to computing it live, and a
+    // dispute must never fail to be RAISED because a triage number was unavailable.
+    return null;
+  }
 }
 
 const DISPUTE_REASON_MIN = 10;
@@ -821,8 +863,25 @@ router.patch('/:id/respond', async (req, res, next) => {
     const title = accepted
       ? `${opponentName} accepted your challenge`
       : `${opponentName} declined your challenge`;
+
+    // FR8.5 -- the coordination room. Opened HERE, on accept, and nowhere else:
+    // a declined or expired challenge is not a fixture and must not leave a
+    // thread behind in either captain's list. Created before the fan-out so the
+    // "coordinate here" pill lands in the same transaction as the acceptance,
+    // and idempotent, so a retried request finds the room instead of a duplicate.
+    let coordChannelId = null;
+    if (accepted) {
+      const leads = await mc.leadIdsOf(client, [m.challenger_team, m.opponent_team]);
+      coordChannelId = await chat.ensureCaptainChannel(client, {
+        matchId: id,
+        title: `${challengerName} vs ${opponentName}`,
+        memberIds: leads,
+      });
+    }
+
     const { pills, memberIds } = await mc.fanOut(client, {
       matchId: id,
+      ...(accepted ? { coord: { event: 'match_coordinate', channelId: coordChannelId } } : {}),
       sides: [
         {
           teamId: m.challenger_team,
@@ -980,6 +1039,9 @@ router.post('/:id/result', async (req, res, next) => {
       // First submission. Nothing changes state; the other captain is nudged.
       const { pills, memberIds } = await mc.fanOut(client, {
         matchId: id,
+        // The coordination room gets ONE neutral line naming who submitted --
+        // both captains are reading it, so "you submitted" would be wrong for one.
+        coord: { event: 'match_result_in', teamName: nameOfTeam(submittedByTeam) },
         sides: [
           {
             teamId: submittedByTeam,
@@ -1032,6 +1094,7 @@ router.post('/:id/result', async (req, res, next) => {
 
         const fan = await mc.fanOut(client, {
           matchId: id,
+          coord: { event: 'match_both_results_in' },
           sides: [
             {
               teamId: m.challenger_team, event: 'match_awaiting_owner',
@@ -1101,17 +1164,21 @@ router.post('/:id/result', async (req, res, next) => {
         // This matters for ER2.3 — counting a conflict against both teams would
         // freeze an honest side for an opponent's typo.
         await client.query(
-          `INSERT INTO disputes (match_id, raised_by_team, reason, status)
-           VALUES ($1, NULL, $2, 'open')`,
+          `INSERT INTO disputes (match_id, raised_by_team, reason, status, severity_elo)
+           VALUES ($1, NULL, $2, 'open', $3)`,
           [id, `Submitted results do not match: ${nameOfTeam(a.submitted_by_team)} recorded `
             + `${mc.scoreline(a.score_challenger, a.score_opponent)}, `
             + `${nameOfTeam(b.submitted_by_team)} recorded `
-            + `${mc.scoreline(b.score_challenger, b.score_opponent)}.`],
+            + `${mc.scoreline(b.score_challenger, b.score_opponent)}.`,
+            await severityAtStake(client, features, m)],
         );
         detail = 'the two submissions do not match';
 
         const fan = await mc.fanOut(client, {
           matchId: id,
+          // Neutral wording for the shared room: neither captain filed this one,
+          // the mismatch did, so "they disputed you" would be a lie to both.
+          coord: { event: 'match_under_review' },
           sides: [
             {
               teamId: m.challenger_team, event: 'match_disputed', otherTeamName: oName,
@@ -1304,6 +1371,15 @@ router.patch('/:id/verify', async (req, res, next) => {
 
     const { pills, memberIds } = await mc.fanOut(client, {
       matchId: id,
+      // The coordination room gets the scoreline WITHOUT the win/loss word and
+      // without either side's ELO delta: it is one room holding both teams, and
+      // "(win), +18 ELO" is only true for half of the people reading it.
+      coord: {
+        event: 'match_settled',
+        detail: exchange.frozen
+          ? `${cName} ${line} ${oName} — rating frozen, no change`
+          : `${cName} ${line} ${oName}`,
+      },
       sides: [
         {
           teamId: m.challenger_team,
@@ -1435,9 +1511,9 @@ router.post('/:id/dispute', async (req, res, next) => {
     const actorName = await nameOf(client, req.user.id);
 
     await client.query(
-      `INSERT INTO disputes (match_id, raised_by_team, reason, status)
-       VALUES ($1, $2, $3, 'open')`,
-      [id, raisedBy, reason.value],
+      `INSERT INTO disputes (match_id, raised_by_team, reason, status, severity_elo)
+       VALUES ($1, $2, $3, 'open', $4)`,
+      [id, raisedBy, reason.value, await severityAtStake(client, features, m)],
     );
 
     // Freezes ELO if it has not been applied yet: `disputed` is not a status the
@@ -1462,6 +1538,9 @@ router.post('/:id/dispute', async (req, res, next) => {
 
     const { pills, memberIds } = await mc.fanOut(client, {
       matchId: id,
+      // Neutral: the room holds the team that filed AND the team it was filed
+      // against. It says a dispute exists, not who is right.
+      coord: { event: 'match_under_review' },
       sides: [
         {
           teamId: raisedBy,

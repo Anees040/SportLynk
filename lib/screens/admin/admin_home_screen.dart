@@ -6,9 +6,11 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/notification_bell.dart';
 import '../../services/review_service.dart';
 import 'admin_registration_detail_screen.dart';
 import 'admin_moderation_screen.dart';
+import '../../services/admin_service.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -27,6 +29,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
   bool _loadingStats = true;
   bool _loadingList = true;
   int _openFlags = 0; // reviews awaiting moderation (not yet hidden)
+  // Open disputes, for the desk tile. There is no cheap COUNT for this: the queue
+  // is a keyset page sorted by what is at stake, so one page is read and the tile
+  // says "50+" rather than inventing a total the server never sent.
+  int _openDisputes = 0;
+  bool _moreDisputes = false;
 
   @override
   void initState() {
@@ -46,6 +53,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     _loadList('pending');
     _loadVenues();
     _loadFlags();
+    _loadDisputes();
   }
 
   @override
@@ -139,6 +147,16 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
   // decision (not yet hidden) — a review the admin already hid is "handled"
   // and should not keep the badge lit. Failure is silent: the badge simply
   // stays at its last value, never blocking the dashboard.
+  Future<void> _loadDisputes() async {
+    final page = await AdminService().disputes(_token, limit: 50);
+    if (mounted) {
+      setState(() {
+        _openDisputes = page.items.length;
+        _moreDisputes = page.hasMore;
+      });
+    }
+  }
+
   Future<void> _loadFlags() async {
     try {
       final q = await ReviewService().moderationQueue(_token);
@@ -213,6 +231,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
                   color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         ]),
         actions: [
+          // Wave C. Admins receive notifications like anyone else -- a dispute
+          // raised, an owner application, a suspension they issued -- and this is
+          // also the widget that starts the notification stack for the session,
+          // which is why it is on all three home screens and not just the two
+          // player-facing ones.
+          const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Center(child: NotificationBell()),
+          ),
           _moderationAction(),
           Container(
             margin: const EdgeInsets.only(right: 14),
@@ -351,6 +378,32 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
                   ? 'No reviews awaiting moderation'
                   : '$_openFlags ${_openFlags == 1 ? 'review' : 'reviews'} awaiting moderation',
               _openModeration),
+          const SizedBox(height: 8),
+          // -- S.7 Wave D -- the admin desk ------------------------------------
+          // Disputes first: a disputed match is frozen until someone rules on it, so
+          // it is the only queue here where waiting costs the players something.
+          _quickAction(Icons.gavel_rounded, 'Match Disputes',
+              _openDisputes == 0
+                  ? 'Nothing waiting'
+                  : '$_openDisputes${_moreDisputes ? '+' : ''} '
+                      '${_openDisputes == 1 && !_moreDisputes ? 'match' : 'matches'} '
+                      'waiting on a ruling',
+              () async {
+            await Navigator.pushNamed(context, '/admin-disputes');
+            if (mounted) await _loadDisputes();
+          }),
+          const SizedBox(height: 8),
+          _quickAction(Icons.manage_accounts_outlined, 'Users',
+              'Search, suspend and reinstate accounts',
+              () => Navigator.pushNamed(context, '/admin-users')),
+          const SizedBox(height: 8),
+          _quickAction(Icons.tune_rounded, 'Platform Settings',
+              'Commission, deposits, Elo, sports -- applies with no restart',
+              () => Navigator.pushNamed(context, '/admin-settings')),
+          const SizedBox(height: 8),
+          _quickAction(Icons.summarize_outlined, 'Platform Report',
+              'Commission earned per owner, exportable as CSV',
+              () => Navigator.pushNamed(context, '/admin-reports')),
           const SizedBox(height: 8),
           _quickAction(Icons.refresh_rounded, 'Refresh Stats', 'Pull latest data',
               () async {

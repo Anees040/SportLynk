@@ -95,6 +95,33 @@ class ApiConstants {
   static String chatReactions(String channelId, String messageId) => '/chat/$channelId/messages/$messageId/reactions';
   static String chatMessage(String channelId, String messageId) => '/chat/$channelId/messages/$messageId';
 
+  // ── Chat: the inbox and the other two channel types (S.7 Wave B) ──
+  /// The inbox itself. `type` filters to one of booking/captain/team; `cursor` is
+  /// the previous page's `sortAt`, passed back VERBATIM — it is keyed on the same
+  /// expression the server sorts by, so building one client-side would page wrong.
+  static const String chats = '/chat';
+  static const String chatUnreadCount = '/chat/unread-count';
+  static String chatForBooking(String bookingId) => '/chat/booking/$bookingId';
+  static String chatForMatch(String matchId) => '/chat/match/$matchId';
+  static String chatMute(String channelId) => '/chat/$channelId/mute';
+  static String chatQuickReplies(String channelId) => '/chat/$channelId/quick-replies';
+
+  // -- Notifications (S.7 Wave C) ------------------------------
+  /// The feed. `cursor` is the previous page's `nextCursor`, passed back VERBATIM:
+  /// it is a `"<createdAt>~<id>"` PAIR, not a timestamp, because one transaction
+  /// routinely writes several notifications (a booking approval alerts the player
+  /// and the owner) and a timestamp-only cursor silently drops every tied row
+  /// after the first at a page boundary. The client must never build or parse it.
+  static const String notifications = '/notifications';
+  static const String notificationSummary = '/notifications/summary';
+  static const String notificationPrefs = '/notifications/preferences';
+  static const String notificationReadAll = '/notifications/read-all';
+  static const String notificationDevices = '/notifications/devices';
+  static const String notificationTest = '/notifications/test';
+  static String notificationRead(String id) => '/notifications/$id/read';
+  static String notificationUnread(String id) => '/notifications/$id/unread';
+  static String notification(String id) => '/notifications/$id';
+
   // ── Matches (S2 Wave C) ─────────────────────────────────────
   /// The match list is `?team_id=` (snake) because it mirrors the SQL column,
   /// while the pairing reads take `teamId`/`challengerTeam` — the backend is the
@@ -164,4 +191,33 @@ class ApiConstants {
       '/tournaments/$id/fixtures/$fixtureId/result';
   static String tournamentFixtureWalkover(String id, String fixtureId) =>
       '/tournaments/$id/fixtures/$fixtureId/walkover';
+
+  // -- Admin: disputes, users, settings (S.7 Wave D) -----------
+  /// All of these sit under `/api/admin`, which mounts ONE
+  /// `auth + checkRole('admin')` above every sub-router -- so there is no
+  /// per-path authorisation to remember here, and a new admin path cannot ship
+  /// without a gate. See the header of `backend/src/routes/admin.js`.
+  ///
+  /// Both list cursors (`adminDisputes`, `adminUsers`) are OPAQUE and must be
+  /// passed back verbatim. The dispute cursor is a
+  /// `"<severityElo>~<createdAt>~<id>"` triple because the queue is sorted by
+  /// what is at stake and only then by age; the user cursor is
+  /// `"<createdAt>~<id>"`. Building either client-side pages wrong.
+  static const String adminDisputes = '/admin/disputes';
+  static String adminDispute(String id) => '/admin/disputes/$id';
+  static const String adminUsers = '/admin/users';
+  static String adminSuspendUser(String id) => '/admin/users/$id/suspend';
+  static String adminReinstateUser(String id) => '/admin/users/$id/reinstate';
+  static const String adminSettings = '/admin/settings';
+  static const String adminSettingsReset = '/admin/settings/reset';
+
+  // -- Financial export (S.7 Wave D / FR4.16) ------------------
+  /// One generator, two scopes. `?from&to` are REQUIRED `YYYY-MM-DD` and the span
+  /// is capped server-side at 366 days; `?format=json` previews the same walk the
+  /// CSV streams, so the screen's totals cannot disagree with the file.
+  ///
+  /// The CSV is NOT fetched through [ApiClient] -- it answers `text/csv`, not the
+  /// `{success, ...}` envelope every other route uses. See `ReportService`.
+  static const String ownerFinancialReport = '/owner/reports/financial';
+  static const String adminPlatformReport = '/admin/reports/platform';
 }

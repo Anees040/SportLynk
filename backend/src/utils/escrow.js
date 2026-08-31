@@ -100,9 +100,43 @@ function round2(n) {
   return Math.round(asNum(n) * 100) / 100;
 }
 
-/** 20% of the slot price — the at-risk deposit. Computed server-side only. */
-function depositFor(price) {
-  return round2(asNum(price) * (POLICY.DEPOSIT_PERCENT / 100));
+/**
+ * The at-risk deposit for a slot price. Computed server-side only.
+ *
+ * `pct` (S.7 Wave D) lets the ONE caller that stamps the number onto a booking row
+ * pass the admin-configured `deposit_pct` it just read inside its transaction.
+ * Every other caller omits it and gets `POLICY.DEPOSIT_PERCENT`, which
+ * `setDepositPercent` keeps in step with that setting — so the copy that describes
+ * the policy and the amount actually held cannot disagree.
+ */
+function depositFor(price, pct = POLICY.DEPOSIT_PERCENT) {
+  const p = Number.isFinite(Number(pct)) ? Number(pct) : POLICY.DEPOSIT_PERCENT;
+  return round2(asNum(price) * (Math.min(Math.max(p, 0), 100) / 100));
+}
+
+/**
+ * Point `POLICY.DEPOSIT_PERCENT` at the admin's configured value.
+ *
+ * WHY A SETTER AND NOT A READ
+ * `POLICY.DEPOSIT_PERCENT` is read from ~30 places, most of them building a
+ * SENTENCE ("20% of the total is your at-risk deposit") in synchronous code that
+ * cannot await a settings row. Rather than make thirty call sites async — each a
+ * chance to forget — the value is pushed in once at boot and again whenever an
+ * admin saves settings, exactly the way `applyTestOverride` above writes it.
+ *
+ * This does NOT retroactively change any money: what a booking holds is the
+ * `deposit_amount` column stamped when it was created, and every refund reads
+ * that column. Out-of-band values are ignored rather than clamped, because a
+ * settings row that says "abc" should leave the documented default in place, not
+ * silently become 0% and stop protecting venues.
+ */
+function setDepositPercent(pct, source = 'settings') {
+  const n = Number(pct);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return POLICY.DEPOSIT_PERCENT;
+  if (round2(n) === round2(POLICY.DEPOSIT_PERCENT)) return POLICY.DEPOSIT_PERCENT;
+  POLICY.DEPOSIT_PERCENT = round2(n);
+  console.log(`[escrow] deposit percent → ${POLICY.DEPOSIT_PERCENT}% (${source})`);
+  return POLICY.DEPOSIT_PERCENT;
 }
 
 /**
@@ -184,6 +218,59 @@ async function applyWallet(client, walletId, { balance = 0, frozen = 0 }) {
  * ledger rows silently lost their tournament_id would break the "pool in equals
  * venue cost plus prize plus margin out" audit without breaking anything visible.
  */
+/**
+ * Is the `platform_commission` ledger type available in this database?
+ *
+ * WHY A PROBE AND NOT A TRY/CATCH
+ * `transactions.type` is a Postgres ENUM, and an unknown label is a 22P02 that
+ * ABORTS the whole transaction -- which at check-in means the escrow release and
+ * the check-in itself roll back too. A player standing at the ground with a valid
+ * QR code must not be turned away because a migration has not been run, so the
+ * capability is checked BEFORE any write and the commission is skipped (loudly,
+ * once) when the label is missing.
+ *
+ * Cached true-only, exactly like `elo.supportsCorrection`: an enum value cannot be
+ * removed by `ALTER TYPE`, so once present it is present for the life of the
+ * process, and a false is worth re-checking after `run_migration_021.js` runs.
+ */
+let commissionTxnReady = false;
+async function supportsCommissionTxn(client) {
+  if (commissionTxnReady) return true;
+  try {
+    const { rows } = await client.query(
+      `SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+        WHERE t.typname = 'txn_type' AND e.enumlabel = 'platform_commission' LIMIT 1`,
+    );
+    // No such enum type at all (a text column) means nothing to violate.
+    if (rows.length) { commissionTxnReady = true; return true; }
+    const { rows: isEnum } = await client.query(
+      "SELECT 1 FROM pg_type WHERE typname = 'txn_type' LIMIT 1",
+    );
+    if (!isEnum.length) { commissionTxnReady = true; return true; }
+    return false;
+  } catch {
+    // A probe that cannot run must not decide policy; assume unavailable and let
+    // the caller skip, which is the outcome that keeps money correct.
+    return false;
+  }
+}
+
+/**
+ * The platform's cut of one released escrow, and what is left for the venue.
+ *
+ * Rounded so that `net + commission === gross` EXACTLY, with the rounding
+ * remainder given to the owner rather than the platform. Two independently
+ * rounded halves can differ from the whole by a paisa, and a ledger that does not
+ * add up is worth more trouble than a paisa.
+ */
+function commissionSplit(gross, pct) {
+  const g = round2(gross);
+  const p = Number.isFinite(Number(pct)) ? Math.min(Math.max(Number(pct), 0), 100) : 0;
+  if (p <= 0 || g <= 0) return { gross: g, commission: 0, net: g, pct: 0 };
+  const commission = round2(g * (p / 100));
+  return { gross: g, commission, net: round2(g - commission), pct: p };
+}
+
 async function logTxn(client, {
   walletId, userId, bookingId, tournamentId = null, type, amount, balanceAfter, description, counterparty,
 }) {
@@ -217,6 +304,9 @@ module.exports = {
   asNum,
   round2,
   depositFor,
+  setDepositPercent,
+  supportsCommissionTxn,
+  commissionSplit,
   penaltySplit,
   hoursUntilSlot,
   isLateCancellation,

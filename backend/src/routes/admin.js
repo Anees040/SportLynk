@@ -8,6 +8,17 @@ const { recomputeTrust } = require('../utils/trustScore');
 // All admin routes require authentication + admin role
 router.use(auth, checkRole('admin'));
 
+// ── S.7 Wave D ───────────────────────────────────────────────────────────────
+// The Wave D surfaces are separate FILES but the SAME router, mounted here and
+// therefore behind the single `auth + checkRole('admin')` line above. Splitting
+// them by concern keeps each one reviewable; mounting them here means a new admin
+// screen cannot accidentally ship without an authorisation check, which is the
+// mistake this arrangement exists to make impossible.
+router.use(require('./adminUsers'));
+router.use(require('./adminDisputes'));
+router.use(require('./adminSettings'));
+router.use(require('./reports').platformReports);
+
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**

@@ -1,7 +1,14 @@
 /**
- * Chat API (S2 Wave A) — the REST half of the team group chat. The live half
- * (typing, receipts, presence) is Socket.IO in realtime/; this file owns history,
- * sending, read-marks, membership watermarks, reactions and delete-for-everyone.
+ * Chat API (S2 Wave A, extended in S.7 Wave B) — the REST half of chat. The live
+ * half (typing, receipts, presence) is Socket.IO in realtime/; this file owns the
+ * inbox, history, sending, read-marks, membership watermarks, reactions,
+ * delete-for-everyone, mute and the FR8.10 reply suggestions.
+ *
+ * THREE CHANNEL TYPES, ONE SET OF HANDLERS. A team chat, a booking room and a
+ * match coordination room differ in who is in them and what the header shows —
+ * never in how a message is sent or read. Membership on chat_channel_members is
+ * the only authorisation rule, so adding a type costs a creator in chatCore and
+ * nothing at all here.
  *
  * TWO INVARIANTS, same as routes/teams.js:
  *   1. Membership is authority. Every handler proves the caller is a live member
@@ -19,6 +26,8 @@ const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const chat = require('../utils/chatCore');
 const access = require('../utils/teamAccess');
+const list = require('../utils/chatList');
+const qr = require('../utils/quickReplies');
 
 const router = express.Router();
 router.use(auth);
@@ -50,6 +59,51 @@ async function member(client, channelId, userId) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// THE CHAT LIST  (S.7 Wave B)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Every channel the caller belongs to, most-recent first — the inbox. Until this
+// existed the app could only open a chat it already knew the id of (a team, from
+// the team screen), which is why a booking room nobody navigates to might as well
+// not exist.
+//
+// MOUNTED BEFORE '/:channelId/*' — and that is not a style choice. Express matches
+// in declaration order, so a '/:channelId' route declared above '/unread-count'
+// would swallow the literal string as a channel id and answer 404 forever.
+//
+// The queries live in utils/chatList.js and take a client, so check_chat.js drives
+// these EXACT reads inside a transaction it rolls back.
+
+/**
+ * GET /api/chat?limit&cursor&type — the inbox page.
+ *
+ * Cursor-paginated on the same expression it sorts by, so a room that receives a
+ * message mid-scroll cannot make a row appear twice or vanish.
+ */
+router.get('/', async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 50);
+    const type = ['booking', 'captain', 'team'].includes(req.query.type) ? req.query.type : null;
+    const page = await list.listChats(pool, {
+      userId: req.user.id, limit, cursor: req.query.cursor || null, type,
+    });
+    return ok(res, page);
+  } catch (e) { next(e); }
+});
+
+/**
+ * GET /api/chat/unread-count — the header badge, one round trip.
+ *
+ * Muted rooms are excluded here and counted in the list; a badge that counts a
+ * conversation the user silenced on purpose is why people switch badges off.
+ */
+router.get('/unread-count', async (req, res, next) => {
+  try {
+    return ok(res, await list.unreadCounts(pool, req.user.id));
+  } catch (e) { next(e); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // CHANNEL LOOKUP
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -71,6 +125,35 @@ router.get('/team/:teamId', async (req, res, next) => {
     return ok(res, { channelId: q.rows[0].id });
   } catch (e) { next(e); }
 });
+
+/**
+ * Resolve a booking's room, or a match's coordination room, from the thing it is
+ * about — the entry points behind "Message venue" on a booking and "Coordinate"
+ * on a match.
+ *
+ * 404, NEVER 403, when the caller is not a member: the two are indistinguishable
+ * to an honest client and telling a stranger "that room exists but is not yours"
+ * confirms a booking they have no business knowing about. Same reason
+ * /team/:teamId answers 404 for a non-member.
+ *
+ * A null answer is also the correct answer for anything that predates Wave B: a
+ * booking confirmed last month has no room and never will, so the client renders
+ * no button rather than an error.
+ */
+function refLookup(type, param) {
+  return async (req, res, next) => {
+    try {
+      const refId = req.params[param];
+      if (!access.isUuid(refId)) return fail(res, 404, 'Chat not found.');
+      const channelId = await list.channelForRef(pool, { type, refId, userId: req.user.id });
+      if (!channelId) return fail(res, 404, 'Chat not found.');
+      return ok(res, { channelId });
+    } catch (e) { next(e); }
+  };
+}
+
+router.get('/booking/:bookingId', refLookup('booking', 'bookingId'));
+router.get('/match/:matchId', refLookup('captain', 'matchId'));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HISTORY
@@ -148,6 +231,16 @@ router.post('/:channelId/messages', async (req, res, next) => {
 
     await client.query('BEGIN');
     const out = await chat.insertMessage(client, insert);
+    // Inside the SAME transaction as the insert, and only for a message that was
+    // actually new: a retried clientId returns the original row, and notifying again
+    // would ping a phone twice for one message. chatCore skips anybody with the thread
+    // open or the channel muted, and is SAVEPOINT-wrapped so a notifications failure
+    // cannot roll the message back (S.7 Wave C).
+    if (!out.duplicate) {
+      await chat.notifyNewMessage(client, {
+        channelId: req.params.channelId, message: out.message,
+      });
+    }
     await client.query('COMMIT');
 
     const hydrated = await chat.emitPersistedMessage(client, req.params.channelId, out.message.id);
@@ -305,6 +398,71 @@ router.delete('/:channelId/messages/:messageId', async (req, res, next) => {
     await client.query('ROLLBACK').catch(() => {});
     next(e);
   } finally { client.release(); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MUTE  (S.7 Wave B)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/chat/:channelId/mute — body `{hours}` or `{muted:false}`.
+ *
+ * `muted_until` has existed on chat_channel_members since migration 013 and
+ * nothing has ever written it. A TIMESTAMP rather than a boolean is the point:
+ * "mute for 8 hours" is what somebody actually wants from a booking room the night
+ * before a match, and it lifts by itself so nobody finds out three weeks later
+ * that they silenced their own team.
+ */
+router.post('/:channelId/mute', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const m = await member(client, req.params.channelId, req.user.id);
+    if (!m) return fail(res, 403, 'You are not a chat member.');
+
+    const body = req.body || {};
+    let until = null;
+    if (body.muted !== false) {
+      // Capped at a year, floored at an hour. An unbounded number here is a
+      // permanent mute somebody set by typing a zero too many.
+      const hours = Number.isFinite(Number(body.hours)) ? Number(body.hours) : 8760;
+      const capped = Math.min(Math.max(hours, 1), 8760);
+      until = new Date(Date.now() + capped * 3600 * 1000);
+    }
+    return ok(res, await list.setMute(client, {
+      channelId: m.id, userId: req.user.id, until,
+    }));
+  } catch (e) { next(e); } finally { client.release(); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FR8.10 — AI QUICK REPLIES  (S.7 Wave B)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/chat/:channelId/quick-replies — body `{text}` or `{messageId}`.
+ *
+ * Classifies the other side's last message with model #4 (the released 23-label
+ * classifier, unchanged) and returns three sendable replies chosen by the caller's
+ * role in THIS room. ADVISORY ONLY: tapping a chip fills the composer, and the
+ * send goes through POST /:channelId/messages like any other message. See
+ * utils/quickReplies.js for why the replies are a table and not generated.
+ */
+router.post('/:channelId/quick-replies', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const m = await member(client, req.params.channelId, req.user.id);
+    if (!m) return fail(res, 403, 'You are not a chat member.');
+    const body = req.body || {};
+    const r = await qr.suggestFor(client, {
+      channel: m,
+      userId: req.user.id,
+      userRole: req.user.role,
+      text: body.text,
+      messageId: body.messageId,
+    });
+    if (r.error) return fail(res, r.error.status, r.error.message);
+    return ok(res, r.data);
+  } catch (e) { next(e); } finally { client.release(); }
 });
 
 module.exports = router;

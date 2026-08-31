@@ -259,12 +259,17 @@ async function makeCast(client, {
     );
     const captainId = u[0].id;
     const { rows: t } = await client.query(
+      // $5 AND $6 both carry `elo`, on purpose. `teams.elo` is integer and the
+      // legacy `teams.elo_rating` is numeric(8,2); one placeholder feeding both
+      // makes Postgres deduce two conflicting types for one parameter and the
+      // INSERT dies with 42P08. Two placeholders let each column infer its own
+      // type -- the same rule `utils/elo.js` writes ratings under.
       `INSERT INTO teams (name, sport, captain_id, city, elo, elo_rating, visibility)
-       VALUES ($1,$2,$3,$4,$5,$5,'public') RETURNING id, name, elo`,
-      [teamName, sport, captainId, city, elo],
+       VALUES ($1,$2,$3,$4,$5,$6,'public') RETURNING id, name, elo`,
+      [teamName, sport, captainId, city, elo, elo],
     );
     await client.query(
-      `INSERT INTO team_members (team_id, user_id, role) VALUES ($1,$2,'admin')`,
+      `INSERT INTO team_members (team_id, user_id, role) VALUES ($1,$2,'captain')`,
       [t[0].id, captainId],
     );
     await client.query(
@@ -413,7 +418,10 @@ async function blockEconomics(client, ctx) {
   const p = q.out.data;
   ctx.preview = p;
 
-  check(p.capacity && p.capacity.ok === true,
+  // `schedulable`, not `ok`: that is the field `preview` emits and the field
+  // `lib/models/tournament.dart` parses. Asserting `.ok` read undefined and
+  // reported a failure on a quote that was fine.
+  check(p.capacity && p.capacity.schedulable === true,
     'the full 8-team bracket can be placed on this venue\'s free hours',
     p.capacity ? `${p.capacity.code} — ${p.capacity.message}` : 'no capacity block');
   eq(p.capacity.fixtures, 7, 'an 8-team knockout is quoted as 7 fixtures');
@@ -1588,8 +1596,12 @@ async function block9(client, ctx) {
   if (mctx) {
     eq(String(mctx.ownerId), String(ctx.venue.owner_id),
       'AUTHORITY: the person entitled to verify is the ORGANISER, reached through tournaments.owner_id');
-    eq(Number(mctx.kFactor), ctx.policy.kEarly,
-      `K: the round supplies ${ctx.policy.kEarly}, not the global friendly 32`);
+    // kSemi, not kEarly. This block posts a FOUR-team cup, so it has two rounds
+    // and round 1 IS the semi-final -- `fx.kFactorFor` returns table.semi for
+    // `round === rounds - 1`. Expecting the early K here asserted the shape of an
+    // eight-team bracket against a four-team one.
+    eq(Number(mctx.kFactor), ctx.policy.kSemi,
+      `K: round 1 of a four-team cup is the semi-final, so the stake is ${ctx.policy.kSemi}`);
     eq(String(mctx.fixtureId), String(semi.id), 'and it resolves back to the right fixture');
     eq(Number(mctx.round), 1, 'with the round it belongs to');
     eq(mctx.fixtureStatus, 'upcoming', 'and the fixture is still open');
@@ -1603,14 +1615,14 @@ async function block9(client, ctx) {
     opponentTeam: semi.teamB,
     winnerTeam: semi.teamA,
     base: eloPolicy.base,
-    kFactor: mctx ? mctx.kFactor : ctx.policy.kEarly,
+    kFactor: mctx ? mctx.kFactor : ctx.policy.kSemi,
   });
   await client.query(
     `UPDATE matches SET winner_team = $2, status = 'completed', verified_by = $3,
             verified_at = now(), elo_applied = TRUE, results_locked = TRUE
       WHERE id = $1`,
     [matchId, semi.teamA, ctx.venue.owner_id]);
-  eq(Number(exchange.kFactor), ctx.policy.kEarly, 'the exchange was rated at the tournament K');
+  eq(Number(exchange.kFactor), ctx.policy.kSemi, 'the exchange was rated at the tournament K');
 
   // ── Step 4: advanceAfterMatch moves the bracket, and rates nothing ─────────
   const adv = await probe(client, () => T.advanceAfterMatch(client, matchId));
@@ -1673,7 +1685,7 @@ async function block9(client, ctx) {
   const { rows: fr } = await client.query(
     `INSERT INTO matches
        (challenger_team, opponent_team, booking_id, tournament_id, sport, status, created_by)
-     VALUES ($1,$2,NULL,NULL,$3,'pending',$4) RETURNING id`,
+     VALUES ($1,$2,NULL,NULL,$3,'challenge_sent',$4) RETURNING id`,
     [four[0].teamId, four[1].teamId, t.sport, four[0].captainId]);
   const friendly = fr[0].id;
   eq(await T.matchContext(client, friendly), null,
@@ -1947,6 +1959,14 @@ async function main() {
     }
   } catch (err) {
     console.error(`\n  ✗ the run stopped: ${err.message}`);
+    // The stack, not just the message. A bare pg message like "inconsistent types
+    // deduced for parameter $5" names no file and no query, and hunting it by eye
+    // across 1900 lines is the slowest possible way to fix a one-line bug.
+    if (err.stack) {
+      const NL = String.fromCharCode(10);
+      console.error(String(err.stack).split(NL).slice(1, 7).join(NL));
+    }
+    if (err.code) console.error(`  sqlstate ${err.code}`);
     failures.push(`the run completed without throwing (${err.message})`);
   } finally {
     if (!VERIFY_CLEAN) {

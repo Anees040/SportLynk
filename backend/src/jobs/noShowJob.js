@@ -24,6 +24,7 @@ const {
 } = require('../utils/escrow');
 const { notify } = require('../utils/notify');
 const { recomputeTrust } = require('../utils/trustScore');
+const chat = require('../utils/chatCore');
 
 const SWEEP_INTERVAL_MS = POLICY.SWEEP_INTERVAL_MS;
 
@@ -175,7 +176,14 @@ async function settleNoShow(bookingId) {
       body: `${b.player_name} missed their slot. PKR ${penalty} deposit credited to your wallet.`,
     });
 
+    // S.7 Wave B -- same pill as the owner's manual mark, so the room reads the
+    // same whether a person or the sweep decided it.
+    const nsPill = await chat.announceInRoom(
+      client, await chat.bookingChannelId(client, b.id), 'booking_no_show', {},
+    );
+
     await client.query('COMMIT');
+    await chat.emitPills(pool, nsPill);
     console.log(
       `[NoShowJob] ✓ ${b.id} (${b.player_name} @ ${b.venue_name}) → no_show. Player +${refund}, owner +${penalty}.`,
     );

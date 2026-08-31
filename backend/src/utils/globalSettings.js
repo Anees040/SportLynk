@@ -161,6 +161,80 @@ async function elo({ client = null, fresh = false } = {}) {
   };
 }
 
+/**
+ * Platform commission as a PERCENTAGE of a booking's price (FR10.9).
+ *
+ * Seeded 0, which is why nothing read this until now: at 0 there is nothing to
+ * take. `routes/owner.js`'s QR check-in is the one place it applies — the moment
+ * escrow is released is the moment the platform's cut is knowable and final.
+ *
+ * The clamp stops at 50 rather than 100 on purpose. A commission that takes the
+ * whole slot price is not a business decision, it is a fat-fingered "100" where
+ * "10" was meant, and it would credit a venue owner nothing for a game that was
+ * played. An admin who genuinely wants more than half has to change this line.
+ */
+async function commission({ client = null, fresh = false } = {}) {
+  const raw = await get('commission_pct', { client, fresh });
+  return clampNum(raw, DEFAULTS.commission_pct, 0, 50);
+}
+
+/**
+ * The player's at-risk deposit, as a percentage of the slot price (FR10.10).
+ *
+ * WHERE THIS IS AUTHORITATIVE, AND WHERE IT IS NOT
+ * Authoritative at ONE moment: `bookingService.createBooking` stamps
+ * `bookings.deposit_amount` from it. Every refund afterwards works from that
+ * STORED amount (`escrow.penaltySplit(escrowHeld, depositAmount)`), so lowering
+ * the percentage tomorrow cannot retroactively change what a player already
+ * agreed to — which is the whole reason the amount is a column and not a formula.
+ *
+ * `escrow.POLICY.DEPOSIT_PERCENT` is the same number kept in sync for the ~30
+ * places that only DESCRIBE the policy ("20% of the total is at risk"). Copy that
+ * disagrees with the row is worse than either value alone, so the settings writer
+ * pushes it there (`escrow.setDepositPercent`) as well as into the cache.
+ *
+ * Floor 0 is legal — a venue network that wants no deposit at all is a real
+ * configuration. Ceiling 100 is the full price, which is what escrow already
+ * holds; above that the refund arithmetic would owe the player negative money.
+ */
+async function deposit({ client = null, fresh = false } = {}) {
+  const raw = await get('deposit_pct', { client, fresh });
+  return clampNum(raw, DEFAULTS.deposit_pct, 0, 100);
+}
+
+/**
+ * Which sports may be booked or listed right now (FR10.9).
+ *
+ * Returned as a plain object of booleans keyed by the sport enum. A key that is
+ * ABSENT is treated as enabled by `isSportEnabled` below: adding `padel` to the
+ * database enum must not silently disable it because nobody remembered to add a
+ * `true` here.
+ */
+async function sportsEnabled({ client = null, fresh = false } = {}) {
+  const raw = await get('sports_enabled', { client, fresh });
+  const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const out = {};
+  for (const [k, v] of Object.entries({ ...DEFAULTS.sports_enabled, ...obj })) {
+    out[String(k).toLowerCase()] = v !== false;
+  }
+  return out;
+}
+
+/**
+ * `false` only when an admin has explicitly switched this sport off.
+ *
+ * Fails OPEN, and that is deliberate: the cost of a wrongly-allowed booking is a
+ * refund, the cost of a wrongly-blocked one is every player in the city being
+ * told the app is broken. An unknown sport, an unreadable settings row and a
+ * missing key all mean "allowed".
+ */
+async function isSportEnabled(sport, { client = null, fresh = false } = {}) {
+  const key = String(sport || '').trim().toLowerCase();
+  if (!key) return true;
+  const map = await sportsEnabled({ client, fresh });
+  return map[key] !== false;
+}
+
 /** Drop cached values so the next read hits the database. */
 function invalidate(key) {
   if (key) cache.delete(key);
@@ -303,4 +377,9 @@ async function tournament({ client = null, fresh = false } = {}) {
   };
 }
 
-module.exports = { DEFAULTS, get, elo, match, assistant, tournament, invalidate, clampNum };
+module.exports = {
+  DEFAULTS, get, clampNum, invalidate,
+  // typed accessors, one per settings key
+  elo, match, assistant, tournament,
+  commission, deposit, sportsEnabled, isSportEnabled,
+};

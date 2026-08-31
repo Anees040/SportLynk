@@ -119,7 +119,11 @@ const EXPECTED = [
   {
     migration: '016_matches_elo.sql',
     tables: [],
-    indexes: ['ux_matches_booking_live', 'ux_elo_history_team_match',
+    // ux_elo_history_team_match is NOT listed: 022 supersedes it (the key gained
+    // `reason`, so a dispute ruling can record its reversal and its re-ruling).
+    // The successor is censused under 022 below, and listing the retired name here
+    // would report a MISS on a database that is correctly up to date.
+    indexes: ['ux_matches_booking_live',
       'ux_disputes_match_team', 'idx_matches_expiry', 'idx_matches_awaiting_owner',
       'idx_disputes_raised_by', 'idx_teams_elo_frozen'],
     constraints: ['chk_matches_status', 'chk_matches_distinct_teams',
@@ -188,6 +192,72 @@ const EXPECTED = [
       ['teams', 'finals_reached'], ['teams', 'titles'],
       ['matches', 'tournament_id'], ['transactions', 'tournament_id'],
     ],
+  },
+  {
+    migration: '020_notifications_admin.sql',
+    // user_devices replaces the vestigial users.fcm_token (one token per user,
+    // "last login wins") with one row per phone, revocable one at a time.
+    // admin_audit is the before/after trail behind every admin write in S.7 D.
+    tables: ['user_devices', 'admin_audit'],
+    // ux_notifications_group is the load-bearing one: notify() collapses with
+    // ON CONFLICT (user_id, group_key) WHERE group_key IS NOT NULL AND
+    // is_read = false AND dismissed_at IS NULL, and Postgres can only infer a
+    // PARTIAL unique index when the index predicate is implied by that WHERE.
+    // If this index is missing or its predicate drifts, every grouped
+    // notification raises 42P10 *inside a money transaction* — so its absence
+    // must fail here rather than at 2am in a booking.
+    indexes: ['idx_notifications_unread', 'idx_notifications_outbox',
+      'idx_notifications_category', 'ux_notifications_group',
+      'ux_user_devices_token', 'idx_user_devices_user',
+      'idx_admin_audit_created', 'idx_admin_audit_entity', 'idx_admin_audit_admin',
+      'idx_users_role_active', 'idx_disputes_queue'],
+    // chk_notifications_category is the opt-out vocabulary the push drain reads
+    // notification_prefs against; chk_notifications_priority decides whether FCM
+    // fires at all; chk_disputes_ruling is what makes a ruling countable instead
+    // of a sentence in resolution_notes.
+    constraints: ['chk_notifications_category', 'chk_notifications_priority',
+      'chk_notifications_group_count', 'chk_notifications_entity',
+      'chk_notifications_push_attempts', 'chk_user_devices_platform',
+      'chk_disputes_ruling', 'chk_disputes_ruled_scores'],
+    // The feed columns routes/notifications.js selects, the four outbox columns
+    // pushJob stamps, and the suspension audit trio authMiddleware and the admin
+    // routes read. notifications.created_at is listed because 020 converts it to
+    // timestamptz — the type itself is asserted by run_migration_020.js.
+    columns: [
+      ['notifications', 'read_at'], ['notifications', 'dismissed_at'],
+      ['notifications', 'category'], ['notifications', 'priority'],
+      ['notifications', 'group_key'], ['notifications', 'group_count'],
+      ['notifications', 'deep_link'], ['notifications', 'actor_id'],
+      ['notifications', 'image_url'], ['notifications', 'entity_type'],
+      ['notifications', 'entity_id'], ['notifications', 'expires_at'],
+      ['notifications', 'sent_push'], ['notifications', 'push_attempts'],
+      ['notifications', 'pushed_at'], ['notifications', 'push_error'],
+      ['user_devices', 'fcm_token'], ['user_devices', 'platform'],
+      ['user_devices', 'app_version'], ['user_devices', 'device_label'],
+      ['user_devices', 'last_seen_at'], ['user_devices', 'revoked_at'],
+      ['user_devices', 'revoke_reason'],
+      ['admin_audit', 'admin_id'], ['admin_audit', 'action'],
+      ['admin_audit', 'entity_type'], ['admin_audit', 'entity_id'],
+      ['admin_audit', 'before'], ['admin_audit', 'after'], ['admin_audit', 'note'],
+      ['users', 'notification_prefs'], ['users', 'suspended_at'],
+      ['users', 'suspended_reason'], ['users', 'suspended_by'],
+      ['disputes', 'ruling'], ['disputes', 'ruled_score_challenger'],
+      ['disputes', 'ruled_score_opponent'], ['disputes', 'severity_elo'],
+    ],
+  },
+  {
+    migration: '022_elo_history_correction.sql',
+    tables: [],
+    // One index, replacing 016's. 021 gave elo_history.reason the two labels an
+    // admin correction writes (admin_reversal, admin_ruling); 016's UNIQUE
+    // (team_id, match_id) forbade the second row either label needs, so the
+    // overturn branch of a dispute ruling died on a 23505 mid-transaction. The
+    // successor adds reason to the key: a second VERIFICATION still collides, a
+    // correction's reversal+ruling pair does not. If this index is absent, ruling
+    // an already-rated match fails and nothing else shows why.
+    indexes: ['ux_elo_history_team_match_reason'],
+    constraints: [],
+    columns: [],
   },
 ];
 

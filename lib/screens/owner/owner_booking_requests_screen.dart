@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../shared/chat_thread_screen.dart';
 
 class OwnerBookingRequestsScreen extends StatefulWidget {
   const OwnerBookingRequestsScreen({super.key});
@@ -201,6 +202,29 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
     );
   }
 
+  /// Open the booking's room from the owner's side.
+  ///
+  /// No channel id is resolved first, and that is deliberate: this is a LIST, and
+  /// resolving one id per card would be a request per row on every tab switch. The
+  /// thread screen resolves the booking itself on open and says so plainly when
+  /// there is no room — which is the only case this can be wrong about, a booking
+  /// confirmed before chat shipped.
+  void _openChat(Map<String, dynamic> b) {
+    final start = b['start_time']?.toString();
+    final hhmm = (start != null && start.length >= 5) ? start.substring(0, 5) : null;
+    final when = [_fmtDate(b['slot_date']), ?hhmm].where((x) => x.isNotEmpty).join(' · ');
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatThreadScreen.booking(
+          bookingId: '${b['id']}',
+          title: '${b['player_name'] ?? 'Player'}',
+          contextLine: when.isEmpty ? null : when,
+        ),
+      ),
+    );
+  }
+
   Widget _bookingCard(Map<String, dynamic> b, String status) {
     final trust = (b['trust_score'] as num?)?.toInt() ?? 100;
     final isPending = status == 'pending';
@@ -344,25 +368,44 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
             ]),
           ),
 
+        // A confirmed booking has a room, so the owner can answer "is there parking?"
+        // without leaving the screen they approve from. Check-in stays the primary
+        // action — it is the one with a deadline.
         if (isConfirmed)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.qr_code_scanner, size: 18),
+            child: Row(children: [
+              OutlinedButton.icon(
+                onPressed: () => _openChat(b),
+                icon: const Icon(Icons.chat_bubble_outline, size: 16),
                 label: Text(
-                  'Scan QR to Check In',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+                  'Message',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12.5),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.accent),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 ),
-                onPressed: () => Navigator.pushNamed(context, '/owner-scan-qr'),
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.qr_code_scanner, size: 18),
+                  label: Text(
+                    'Scan QR to Check In',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () => Navigator.pushNamed(context, '/owner-scan-qr'),
+                ),
+              ),
+            ]),
           ),
       ]),
     );

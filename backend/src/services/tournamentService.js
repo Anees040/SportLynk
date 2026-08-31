@@ -1632,6 +1632,14 @@ function drawWinner(fixture) {
 
 /** A score is a non-negative integer or it is not a score. */
 function readScore(value) {
+  // The empty box is the trap. `Number(null)`, `Number('')`, `Number(false)` and
+  // `Number([])` are ALL 0, so an organiser who fills the home score and tabs past
+  // the away one used to record a real 2-0: a scoreline nobody entered, rated at
+  // the round's K and advanced into the next node. Rejecting the empty forms
+  // BEFORE coercion is what makes the `bad_score` guard downstream mean anything.
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'boolean' || typeof value === 'object') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
   const n = Number(value);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > 999) return null;
   return n;

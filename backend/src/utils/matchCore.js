@@ -367,6 +367,26 @@ async function captainIdsOf(client, teamIds) {
   return out;
 }
 
+/**
+ * Captains AND vice-captains of these teams, deduped -- the membership of a
+ * coordination room (S.7 Wave B).
+ *
+ * WHY BOTH ROLES
+ * FR8.5 calls it the captains' room, but "the captain is unreachable" is exactly
+ * the failure the room exists to prevent, and a vice-captain is the person who
+ * covers it. Two extra rows remove a single point of failure.
+ */
+async function leadIdsOf(client, teamIds) {
+  const ids = (teamIds || []).filter(Boolean);
+  if (!ids.length) return [];
+  const { rows } = await client.query(
+    `SELECT DISTINCT user_id FROM team_members
+      WHERE team_id = ANY($1::uuid[]) AND role IN ('captain', 'vice_captain')`,
+    [ids],
+  );
+  return rows.map((r) => r.user_id);
+}
+
 /** Every member of these teams, deduped — the socket fan-out list. */
 async function memberIdsOf(client, teamIds) {
   const ids = (teamIds || []).filter(Boolean);
@@ -561,13 +581,14 @@ async function announceToTeam(client, channelId, event, opts) {
  * here: emitting inside the transaction would tell a client to re-fetch a row
  * that is not committed yet, and it would read the old one.
  */
-async function fanOut(client, { matchId, sides }) {
+async function fanOut(client, { matchId, sides, coord = null }) {
   const teamIds = sides.map((s) => s.teamId);
-  const [channels, captains, memberIds] = await Promise.all([
-    channelIdsOf(client, teamIds),
-    captainIdsOf(client, teamIds),
-    memberIdsOf(client, teamIds),
-  ]);
+  // Sequential on purpose: `client` is always the caller's open transaction, and one
+  // pg client runs one query at a time. Promise.all here does not overlap the three
+  // reads -- it queues them, warns, and throws outright in pg@9.
+  const channels = await channelIdsOf(client, teamIds);
+  const captains = await captainIdsOf(client, teamIds);
+  const memberIds = await memberIdsOf(client, teamIds);
 
   const pills = [];
   for (const side of sides) {
@@ -597,6 +618,31 @@ async function fanOut(client, { matchId, sides }) {
       }
     }
   }
+
+  // ONE neutral pill in the coordination room, if this match has one (S.7 Wave B).
+  //
+  // The per-team sentences above are written from one team's point of view --
+  // "you challenged them" -- and a captain room holds BOTH teams, so half the
+  // readers would be told the opposite of what happened. `coord.event` names one
+  // of the neutral sentences in chatSystemMessages, and it is posted once.
+  //
+  // A match accepted before Wave B has no captain channel; captainChannelId
+  // returns null and nothing is posted. That is the whole migration story for
+  // existing matches -- no backfill, no broken read.
+  if (coord && coord.event) {
+    const coordChannel = coord.channelId || await chat.captainChannelId(client, matchId);
+    if (coordChannel) {
+      const messageId = await announceToTeam(client, coordChannel, coord.event, {
+        actorId: coord.actorId || null,
+        actorName: coord.actorName || null,
+        targetName: coord.teamName || null,
+        matchId,
+        detail: coord.detail || null,
+      });
+      if (messageId) pills.push({ channelId: coordChannel, messageId });
+    }
+  }
+
   return { pills, memberIds };
 }
 
@@ -694,6 +740,7 @@ module.exports = {
   roleInTeam,
   myTeamsAmong,
   captainIdsOf,
+  leadIdsOf,
   memberIdsOf,
   channelIdsOf,
   teamFeatures,

@@ -223,14 +223,17 @@ async function ensureCast(client, { sport, city, fund, passwordHash, resetRating
     }
     if (!t.length) {
       t = (await client.query(
+        // $5 and $6 both carry the ELO: `elo` is integer, the legacy `elo_rating`
+        // is numeric(8,2), and a single placeholder feeding both makes Postgres
+        // deduce two conflicting types for one parameter (42P08).
         `INSERT INTO teams (name, sport, captain_id, city, elo, elo_rating, visibility, bio)
-         VALUES ($1,$2,$3,$4,$5,$5,'public',$6) RETURNING id, name, elo`,
-        [s.team, sport, captainId, city, s.elo, MARK],
+         VALUES ($1,$2,$3,$4,$5,$6,'public',$7) RETURNING id, name, elo`,
+        [s.team, sport, captainId, city, s.elo, s.elo, MARK],
       )).rows;
       madeTeams += 1;
     }
     await client.query(
-      `INSERT INTO team_members (team_id, user_id, role) VALUES ($1,$2,'admin')
+      `INSERT INTO team_members (team_id, user_id, role) VALUES ($1,$2,'captain')
        ON CONFLICT (team_id, user_id) DO NOTHING`,
       [t[0].id, captainId],
     );

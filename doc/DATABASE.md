@@ -40,16 +40,24 @@ Measured on this database: `sslmode=require` fails, no `sslmode` connects,
 | 017 | `017_reviews_moderation` | S4-C | `review_flags` (the moderation queue, FR9.9) + 4 indexes; the Trust Score 2.0 cold-start baseline |
 | 018 | `018_assistant` | S6-C | `assistant_kb`, `assistant_escalations`, `assistant_turns`, `assistant_feedback` + 12 indexes — Scout's session state, so a slot-filling machine can hold a conversation across turns |
 | 019 | `019_tournaments` | S7-A | The tournament module. **Adds nothing new to `public`'s table count** — 013 already created `tournaments`, `tournament_teams` and `fixtures`, and nothing had ever read them. 019 is 38 `ADD COLUMN IF NOT EXISTS` (20 on `tournaments`, 5 on `tournament_teams`, 7 on `fixtures`, 4 counters on `teams`, `matches.tournament_id`, `transactions.tournament_id`), 16 guarded CHECK/UNIQUE constraints, 7 indexes, **3 new `txn_type` values** (`tournament_entry`, `tournament_prize`, `tournament_commission`) and one `global_settings` row |
+| 020 | `020_notifications_admin` | S7-C/D | Turns `notifications` from a write-only log line into a feed row, and adds the two tables Wave D audits through. **25 `ADD COLUMN IF NOT EXISTS`** (16 on `notifications`, 4 on `users`, 5 on `disputes`), **2 new tables** (`user_devices`, `admin_audit`), 11 indexes and a backfill. Two of those changes are corrections, not features: `notifications.created_at` is converted `TIMESTAMP → timestamptz` (`USING created_at AT TIME ZONE 'UTC'`, guarded by an `information_schema` check so it is idempotent) because 010 stored it naive and "2 hours ago" was wrong by the server's offset; and `users.notification_prefs` exists so a preference is enforced server-side in `pushJob` rather than honoured by the client. The plan called for an `idx_chat_messages_channel_created`; recon found `idx_chat_messages_channel` is **already** `(channel_id, created_at DESC)` — the exact index the chat list's unread LATERAL uses — so a second index over the same columns under another name would be dead weight on every write, and it was deliberately not created |
+| 021 | `021_dispute_ruling_labels` | S7-D | Two label vocabularies that 020 could not widen, because both are enforced by objects `ADD COLUMN` cannot touch: `chk_elo_history_reason` is dropped and recreated with `admin_reversal` and `admin_ruling` alongside `match_verified`/`frozen_no_change`, and `ALTER TYPE txn_type ADD VALUE 'platform_commission'` (which needs its own `-- @@SPLIT@@` chunk — a new enum value is not usable in the same transaction that added it). Separate from 020 because **020 was already applied**, and editing an applied migration rewrites history: the next person to run the chain from scratch would get a different 020 than this database has, invisibly |
+| 022 | `022_elo_history_correction` | S7-D | One index, replaced. 016 created `ux_elo_history_team_match UNIQUE (team_id, match_id) WHERE match_id IS NOT NULL` and its runner asserts "one rating row per team per match" — correct while the only writer was `elo.applyResult`. An admin overturning a ruling writes a **second** row per team (the reversal) and then a third (the new exchange), so the key becomes `(team_id, match_id, reason)`. The double-apply guard is unchanged: it was always `matches.elo_applied`, and the index was only ever its database-level echo |
 
 **28 tables in `public` after 014** (27 after 013, plus `withdrawals`), **35 after 018**
-(015 adds 2, 017 adds 1, 018 adds 4), and **still 35 after 019** — the tournament
-module needed columns and constraints, not tables.
+(015 adds 2, 017 adds 1, 018 adds 4), **still 35 after 019** — the tournament module
+needed columns and constraints, not tables — and **37 after 020** (`user_devices`,
+`admin_audit`). 021 and 022 add no tables and no columns: one CHECK constraint, one enum
+value, one index.
 
 The 014 census was verified against Supabase on 2026-08-21: all 12 of 013's tables
 present, 010's 5 escrow columns present, `uq_withdrawals_one_pending` present as a
 partial unique index on `status='pending'`, and all 31 key columns typed `uuid`.
-**019 has NOT been applied to any database yet** — the SQL and its runner are written
-and reviewed, and nothing in this section has been confirmed live.
+**019 through 022 are all applied to Supabase** (019 and 020 on 2026-08-30, 021 and 022
+on 2026-08-31) and `node src/scripts/verify_schema.js` reports **233/233** across the
+019 and 020 censuses. Wave A originally shipped on `npm test` alone with 019 unapplied,
+which is why no endpoint answered and no check script could run; every wave since has
+been gated on the migration landing first.
 
 Each has a `backend/run_migration_0XX.js` runner with machine-checked assertions.
 013 and 014 were each verified **idempotent** — run twice, the second run creates
@@ -354,6 +362,113 @@ booked friendly **or** a tournament fixture, never both; `transactions` gains
 `round_rest_minutes` 60, `max_knockout_teams` 32, `max_round_robin_teams` 6,
 `target_margin_percent` 25, `k_early` 40, `k_semi` 48, `k_final` 56. The three K
 values sit next to `elo.k_factor` (32, friendlies) so the whole ladder is one place.
+
+### notifications
+Created by **010**, made readable by **020** (S.7 Wave C). Before 020 this table was
+**write-only**: ~33 call sites inserted into it and nothing read it. The columns below
+are not decoration on a working feature — they are the difference between a row that can
+only be printed and a row that can be grouped, filtered, opened, expired and pushed.
+
+| Column | Type | Note |
+|---|---|---|
+| id · user_id · booking_id | UUID | 010 |
+| type | text | 010 `VARCHAR(40)`, widened by 020. The key into `utils/notificationTypes.js` — **45 registered types**, asserted at boot |
+| title · body | text | 010 |
+| payload | jsonb | 010. The ids the deep link needs |
+| is_read | boolean | 010 |
+| created_at | **timestamptz** | 010 stored it bare `TIMESTAMP`; 020 converts it `USING created_at AT TIME ZONE 'UTC'`. Until then "2 hours ago" was wrong by the server's offset, against the UTC-storage golden rule |
+| read_at · dismissed_at | timestamptz | 020. "When" is a different fact from "whether", and **dismiss ≠ read** |
+| category | text | 020, CHECK over 10 values. The unit a user opts out of, and the filter chips |
+| priority | text | 020, CHECK `high \| normal \| low`. Decides whether FCM fires at all and whether it is a heads-up |
+| group_key · group_count | text · int | 020. The collapse: "Ali sent 3 messages" is one row and one tray banner |
+| deep_link | jsonb | 020. The route **and its args**, computed server-side from the registry so client and server cannot drift |
+| actor_id · image_url | UUID · text | 020. Who caused it, with their avatar — the row reads like a person, not an event |
+| entity_type · entity_id | text · UUID | 020. The polymorphic target of the tap |
+| expires_at | timestamptz | 020. A challenge alert past its 48 h TTL must not render as actionable, and is never pushed |
+| sent_push · push_attempts · pushed_at · push_error | bool · int · timestamptz · text | 020. **The outbox state** — and the answer to "why didn't my phone buzz?", from SQL |
+
+**The row is the outbox.** `notify()` runs inside money transactions holding `FOR UPDATE`
+locks, so an inline HTTPS call to FCM would hold row locks across a network round trip.
+Instead `sent_push = false` **is** the queue and `jobs/pushJob.js` drains it on a ~4 s
+tick — atomic with the money, crash-safe, retryable, and zero changes to the 33 existing
+call sites.
+
+Indexes (020): partial `idx_notifications_unread (user_id, created_at DESC)
+WHERE is_read = false AND dismissed_at IS NULL` (for an active user this holds a handful
+of rows out of thousands); partial `idx_notifications_outbox (created_at)
+WHERE sent_push = false` (**empty when the queue is drained, so the 4-second scan costs
+nothing**); `idx_notifications_category (user_id, category, created_at DESC)`; and
+`ux_notifications_group UNIQUE (user_id, group_key) WHERE group_key IS NOT NULL AND
+is_read = false AND dismissed_at IS NULL`. That last one is UNIQUE rather than a lookup
+because it is what makes `notify()`'s `ON CONFLICT` upsert atomic — two chat messages in
+the same millisecond produce one row reading "2 new messages" instead of two rows or a
+lost update. Its predicate must match the `ON CONFLICT … WHERE` clause exactly for
+Postgres to infer it, and read/dismissed rows are out of it on purpose: once you have
+seen a collapsed row, the next message must start a fresh one.
+
+### user_devices
+**020.** One row per phone. `users.fcm_token` (012) is one-token-per-user — "last login
+wins" — which breaks the instant you use a phone *and* an emulator, and cannot record a
+token as dead. FCM rotates tokens without warning and answers
+`registration-token-not-registered` for a dead one; that must revoke **one device**, not
+log you out everywhere. `users.fcm_token` is still written on device register and still read as a last-resort fallback when a user has no live device row, so migration 012's one-token world keeps working.
+
+| Column | Type | Note |
+|---|---|---|
+| id · user_id | UUID | `user_id` → `users` ON DELETE CASCADE |
+| fcm_token | text | **UNIQUE** (`ux_user_devices_token`) |
+| platform | text | CHECK `android \| ios \| web` |
+| app_version · device_label | text | What the support answer is made of |
+| created_at · last_seen_at | timestamptz | |
+| revoked_at · revoke_reason | timestamptz · text | **Revoked, not deleted** — "this phone stopped getting notifications last Tuesday" is answered rather than guessed at |
+
+The UNIQUE on the token is a correctness rule, not a tidiness one: a token identifies a
+device *installation*, globally, so if it reappears under a different user (a shared
+phone, a reinstall after a logout) the row must **move**, not duplicate — otherwise the
+previous owner keeps receiving the new owner's notifications, which is a privacy failure
+and not merely a bug. It is also what lets the register endpoint be a single
+`ON CONFLICT` upsert. Send path: `idx_user_devices_user (user_id) WHERE revoked_at IS
+NULL` — every live device for one user in one indexed read.
+
+### admin_audit
+**020.** One table behind **every** admin write: dispute ruling, suspend, reinstate,
+settings change, venue approval. "Who changed this, and what did it look like before?" is
+the first question anyone asks about an admin panel, and before this there was no way to
+answer it — the ruling, the suspension and the commission change all just happened.
+
+| Column | Type | Note |
+|---|---|---|
+| id · admin_id | UUID | `admin_id` → `users` ON DELETE SET NULL — the log outlives the account |
+| action | text | e.g. `dispute_ruled`, `user_suspended`, `settings_changed` |
+| entity_type · entity_id | text · UUID | |
+| before · after | jsonb | **jsonb, not columns**: five writes touch five different shapes, and a row that stores the whole prior state can answer a question nobody thought to add a column for |
+| note | text | The admin's own sentence. For a ruling it is required, and the teams are shown it |
+| created_at | timestamptz | |
+
+Indexes: `idx_admin_audit_created (created_at DESC)` — an audit log is only ever read
+backwards; `idx_admin_audit_entity (entity_type, entity_id, created_at DESC)` —
+"everything ever done to THIS match / THIS user"; `idx_admin_audit_admin (admin_id,
+created_at DESC)`.
+
+**Reinstate reads this table back.** It re-lists the venues *that* suspension took down by
+reading `after.cascade.venuesDeactivated` off its own audit row (the one read
+`idx_admin_audit_entity` exists for) — so a venue the owner had closed themselves before the ban stays
+closed. Nothing else is restored: a refunded booking cannot be un-refunded.
+
+**020 also touches two existing tables:** `users` gains `notification_prefs jsonb`
+(per-category × in-app/push toggles plus quiet hours, **enforced in the job**) and
+`suspended_at` / `suspended_reason` / `suspended_by` — audit columns *around*
+`users.is_active` rather than a second `suspended` boolean, because `is_active` is
+already checked at login and two flags for one fact is how they diverge. `disputes` gains
+`ruling` (CHECK `challenger · opponent · draw · custom · dismissed`),
+`ruled_score_challenger`, `ruled_score_opponent` and `severity_elo`.
+
+Two more indexes come with those columns. `idx_users_role_active (role, is_active)`
+serves the admin user search, which always filters by both. `idx_disputes_queue
+(severity_elo DESC NULLS LAST, created_at) WHERE status = 'open'` **is** the queue's
+sort order made durable: `idx_disputes_status` (016) is on `status` alone and cannot
+order, so without this one every page of the triage queue sorts the whole open set in
+memory to answer “what is most at stake, and what has waited longest”.
 
 ## Escrow & Booking Flow (Phase 5)
 

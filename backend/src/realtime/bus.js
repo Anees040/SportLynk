@@ -110,6 +110,31 @@ function isUserOnline(userId) {
   return false;
 }
 
+/**
+ * Is this user LOOKING AT this chat right now?
+ *
+ * The distinction matters because of what Wave C does with the answer: a new chat
+ * message writes a notification row (and therefore a tray push) only when the
+ * recipient will not see the message arrive on its own. Someone with the thread
+ * open already got it through `c:<channelId>` a millisecond ago, and buzzing their
+ * phone about a message visible on screen is the single most irritating thing a
+ * chat app does.
+ *
+ * `socket.rooms` is Socket.IO's own membership set and is maintained by the
+ * join/leave the client already sends on opening and closing a thread
+ * (realtime/index.js), so this is a read of existing state rather than new
+ * bookkeeping. It answers false when no socket server is attached, which is the
+ * correct answer for a job or a script: nobody is viewing anything, so notify.
+ */
+function isUserViewingChannel(userId, channelId) {
+  if (!io || !userId || !channelId) return false;
+  const room = channelRoom(channelId);
+  for (const [, socket] of io.of('/').sockets) {
+    if (socket.userId === userId && socket.rooms && socket.rooms.has(room)) return true;
+  }
+  return false;
+}
+
 module.exports = {
   attach,
   isLive,
@@ -120,4 +145,5 @@ module.exports = {
   emitMessage,
   onlineUserIds,
   isUserOnline,
+  isUserViewingChannel,
 };

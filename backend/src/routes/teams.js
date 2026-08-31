@@ -524,6 +524,10 @@ router.post('/join/:token', async (req, res, next) => {
       await notify(client, {
         userId: uid, type: 'team_join',
         title: inv.name, body: `${joinerName} joined the team.`,
+        // teamId drives the registry's deep link (/team-roster) and, for
+        // team_request, its collapse key. Without it the row taps nowhere.
+        payload: { teamId: inv.team_id, teamName: inv.name, userId: req.user.id },
+        actorId: req.user.id,
       });
     }
     await client.query('COMMIT');
@@ -577,6 +581,8 @@ router.post('/:id/join-request', async (req, res, next) => {
       await notify(client, {
         userId: uid, type: 'team_request',
         title: t.name, body: `${requesterName} asked to join.`,
+        payload: { teamId: t.id, teamName: t.name, userId: req.user.id },
+        actorId: req.user.id,
       });
     }
     await client.query('COMMIT');
@@ -650,6 +656,8 @@ router.patch('/:id/requests/:rid', async (req, res, next) => {
       userId: r.user_id, type: 'team_request',
       title: g.team.name,
       body: approve ? `You're in! Welcome to ${g.team.name}.` : `Your request to join ${g.team.name} was declined.`,
+      payload: { teamId: req.params.id, teamName: g.team.name },
+      actorId: req.user.id,
     });
     await client.query('COMMIT');
 
@@ -716,6 +724,11 @@ router.patch('/:id/members/:uid', async (req, res, next) => {
       body: event === 'member_removed'
         ? `You were removed from ${g.team.name}.`
         : `You are now ${access.ROLE_LABEL[action]} of ${g.team.name}.`,
+      // Removal deliberately keeps the team deep link: the roster read is
+      // membership-gated, so a removed member lands on a "no longer a member"
+      // screen rather than a dead tap, which is the more informative answer.
+      payload: { teamId: req.params.id, teamName: g.team.name },
+      actorId: req.user.id,
     });
     await client.query('COMMIT');
 

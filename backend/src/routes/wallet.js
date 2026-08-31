@@ -226,6 +226,21 @@ router.post('/withdraw', authMiddleware, async (req, res, next) => {
       return res.status(404).json({ success:false, message:'Wallet not found' });
     }
 
+    // S.7 Wave D — belt and braces on the one route that moves money OUT of the
+    // platform. `authMiddleware` already refuses a suspended account on every
+    // request, but it answers from a 30-second cache, and a suspension applied by
+    // a SECOND server instance is only visible here after that window. Everything
+    // else a suspended user could do is reversible; a payout is not, so this one
+    // reads the row inside the transaction that is about to freeze the money.
+    const acct = await client.query('SELECT is_active FROM users WHERE id = $1', [req.user.id]);
+    if (acct.rows.length && acct.rows[0].is_active === false) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({
+        success: false,
+        message: 'Account suspended. Contact support.',
+      });
+    }
+
     const available = asNum(wallet.balance);
     const frozen = asNum(wallet.frozen_balance);
     if (amt > available) {

@@ -12,7 +12,7 @@ import '../../services/realtime_service.dart';
 import '../../services/team_service.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/tournament_widgets.dart' show TeamRecordLine;
-import 'chat_screen.dart';
+import '../shared/chat_thread_screen.dart';
 import 'create_team_screen.dart';
 import 'match_center_screen.dart';
 import 'team_rankings_screen.dart';
@@ -62,7 +62,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ChatScreen(
+        builder: (_) => ChatThreadScreen.team(
           teamId: t.id,
           teamName: t.name,
           channelId: t.channelId,
@@ -164,7 +164,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ChatScreen(
+          builder: (_) => ChatThreadScreen.team(
             teamId: '${jd['teamId']}',
             teamName: teamName,
             channelId: jd['channelId']?.toString(),

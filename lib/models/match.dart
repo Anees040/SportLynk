@@ -818,6 +818,12 @@ class MatchCenterData {
   );
 
   bool get amCaptain => myRole == 'captain';
+
+  /// Whether I am one of the people a match's coordination room admits. It holds
+  /// both teams' captains AND vice-captains (`ensureCaptainChannel`), so this is
+  /// deliberately wider than [amCaptain] — a vice-captain is in that room even
+  /// though they cannot report a score.
+  bool get isTeamOfficial => myRole == 'captain' || myRole == 'vice_captain';
   int get pendingCount => incoming.length;
   bool get isEmpty =>
       incoming.isEmpty && outgoing.isEmpty && upcoming.isEmpty && history.isEmpty;

@@ -4060,3 +4060,436 @@ documented nothing after S.2; the migration history skipped 015-018), so the fou
 filled in from the migration headers — otherwise the new 019 row would have sat in a table a reader could not
 trust. And carried forward from S6-E: **`ML_API_KEY` must be rotated in both `.env` files before S.7 puts
 ml-service on a public URL** (compare by `/health` `apiKeyFingerprint`; never print the key).
+
+### Wave S7-0 — closing out A: the migration lands, and the FAIL 2/3 stub becomes PASS 441/441
+
+The section above was written with 019 unapplied, and the user's verdict on the result was the shortest
+possible review: **"nothing was working."** That is the honest consequence of shipping a wave on `npm test`
+plus `flutter analyze` while its schema sits in a file — the module compiled, the unit tests passed, and not
+one endpoint could answer, because the columns they select did not exist yet. So before a line of B was
+written, 019 was applied to Supabase and Wave A was made to prove itself:
+
+- `node run_migration_019.js` — 845 lines, applied 2026-08-30; `verify_schema.js` went **113/113 → 174/174**.
+- `node src/scripts/check_tournaments.js --evidence` — **PASS 441/441 · 1 skipped**: five tournaments (one
+  cancelled under its minimum, an 8-team knockout played to a champion, a 5-team draw with byes, a 4-team
+  round-robin decided on goal difference, one driven through the S.2 captain-submit door) created, paid into,
+  drawn onto real venue hours, played out and audited inside one transaction that was then rolled back.
+  `doc/tournament_evidence.md` was regenerated over the **FAIL 2/3** stub, and the stub's story is kept in
+  `doc/TESTING.md` §4.22 rather than deleted — a project that overwrites its failed runs cannot show what it
+  learned from them.
+- The waterfall now has measured numbers instead of arithmetic: PKR 3200 × 8 teams = **25600** pool, venue
+  cost **19600** read out of seven real slot prices, prize **3600**, owner **22000** against a 19600 retail
+  value for the same seven hours; `elo_history.k_factor` read back at 40 / 48 / 56 against 32 for a friendly,
+  and **no rating row at all** for a bye.
+
+**The rule that came out of it, and that every wave below is gated on: the migration lands first, a check
+script proves the wave against the live database second, and only then is the wave called done.** `npm test`
+and `flutter analyze` stayed necessary; they were never sufficient, and S7-A is the receipt.
+
+---
+
+## Wave S7-B (Chat — the two rooms nobody created, an inbox, and reply suggestions that train nothing)
+
+`chat_channels` has carried `type text NOT NULL  -- team|captain|booking|assistant` since migration 013,
+and 015's `chk_chat_channels_type` has enforced all four values since. **Nothing on earth ever created a
+`booking` or a `captain` row.** The socket server, the JWT handshake, the flood limiter, presence, ✓/✓✓/blue
+ticks, deliver-on-connect, reactions, tombstones and the whole team-chat REST surface were already shipped and
+working; two of the four rooms the schema promised simply had no author, and the inbox that would have shown
+them did not exist either. So this wave is coverage and wiring rather than a new subsystem, and saying so is
+more useful than dressing it up: the hard part was built in S.2 and left with two of its doors unhung.
+
+### A room opens on a state change, not on a button
+
+The tempting design is a "Message" button that creates a channel on demand. It is wrong twice: the room then
+depends on who tapped first, and a room can exist for a booking that was never confirmed. So
+`chatCore.ensureBookingChannel` and `ensureCaptainChannel` sit at the **state transitions** instead, both
+`ON CONFLICT (type, ref_id) DO UPDATE` idempotent, both inside the caller's transaction, both emitting their
+opening pill only **after commit**:
+
+| room | opened by | members | opening pill |
+| --- | --- | --- | --- |
+| `booking` / booking id | the owner approving (`routes/owner.js`) **and** `autoApproveJob` | player + venue owner | "Booking confirmed — chat with the venue here" |
+| `captain` / match id | the `accepted` branch of `PATCH /api/matches/:id/respond` | both teams' captains **and** vice-captains | "Challenge accepted — coordinate here" (FR8.5, verbatim) |
+
+A pending request therefore has no room at all, which is the correct answer to "where do I message the venue
+about a booking they have not approved" — you do not, because there is nothing to coordinate yet. The venue
+owner is the room admin in a booking room (they moderate their own venue); the player can delete their own
+messages and nothing else. `booking_cancelled` and `booking_no_show` post into the room that already exists
+rather than closing it, because the conversation about a cancellation happens after the cancellation.
+
+### One shared room gets one neutral sentence, not two team-flavoured ones
+
+`matchCore.fanOut` already told each team its own version of a lifecycle event, which is right for a
+notification and wrong for a room both teams are reading. So the six lifecycle call sites in `routes/matches.js`
+resolve the match's captain channel and post **one** neutral pill each — result submitted, awaiting the
+owner, verified, disputed — worded so neither captain can read it as taking a side. This is also what gives
+Wave D's dispute case file something to archive: FR10.6 asks for the chat log of the argument, and until this
+wave there was no room for the argument to happen in. **Wave B is a prerequisite for FR10.6, which is why it
+was sequenced first.**
+
+### The inbox computes its own subtitle, because the client must not join four tables to draw a list
+
+`GET /api/chat` returns rows already carrying the sentence that makes them readable — `Pending · Sat 19 Sept,
+6:00 pm` for a booking, `zzchat-Team A vs zzchat-Team B` with the match status for a coordination room, a
+member count for a team. The alternative is the client fetching the booking, the venue, the slot and the match
+to render one line of a list, which is four round trips per row on a Pakistani mobile connection.
+`unread` is a LATERAL `count(*)` of messages after my `last_read_at` that I did not send (system pills count,
+tombstones do not), and `GET /api/chat/unread-count` returns `{total, byType}` for the header badge.
+
+**The plan's new index was not created, and that is the deviation worth recording.** It called for
+`idx_chat_messages_channel_created`; `idx_chat_messages_channel` from 013 is *already*
+`(channel_id, created_at DESC)`, so a second one would have been a duplicate paying a write cost on every
+message forever. `EXPLAIN` on the unread subquery was read back to confirm it: `Index Scan using
+idx_chat_messages_channel`. Checking before adding an index is unglamorous and it is the difference between a
+schema and a pile of schemas.
+
+### FR8.10 reply suggestions reuse the frozen classifier and train nothing
+
+The requirement asks for AI-suggested replies. The temptation is a fifth model. What it actually needs is the
+23-label intent classifier released in S6-C — byte-identical, `intent-v2-20260828-2315`, no new labels, no
+retraining, nothing about the committee's "genuinely trained models" claim disturbed. `POST
+/api/chat/:channelId/quick-replies` runs the other party's last message through `mlClient.parseNlu` and maps
+the intent to three canned sentences chosen by **the viewer's role in that channel** — the owner is offered
+"Yes, that slot is free." / "Sorry, that one's already booked." / "Let me check and confirm in a few minutes.",
+and the player is offered something else entirely for the same intent.
+
+Two properties matter more than the wording. It is **advisory only**: a chip fills the composer and the send
+goes through the ordinary `POST /:channelId/messages` path, so nothing auto-sends in the user's name and the
+model can never post money-shaped text by itself — the same rule Scout ships under. And it **degrades**: with
+ml-service down the response is `source:'lexicon'` with three still-sensible deposit sentences instead of an
+error, which the check script asserts by pointing the client at a dead port.
+
+### Flutter: one thread screen, and a header that finally does something
+
+`lib/screens/player/chat_screen.dart` was hard-wired to a team and is **deleted**, replaced by
+`lib/screens/shared/chat_thread_screen.dart` (860 lines) where `channelId` is required, `teamId` is optional,
+and the header action varies by type — team → roster, booking → booking detail, captain → match centre.
+`ChatController` needed no change at all: it was already generic over `channelId`, which is the payoff for
+having built S.2's chat around a DB-backed channel id instead of the prompt's literal `team:{id}` room strings.
+`chats_screen.dart` (508 lines) is the sectioned inbox — Bookings / Matches / Teams, unread badges, live off
+the existing `RealtimeService.messages` stream.
+
+The header rework the user asked for landed here too: the logo `Image.asset` and the profile `CircleAvatar`
+are gone from both home screens (the avatar was a second route to a tab that already exists), the wordmark is
+plain `SportLynk`, and the freed space holds the two live actions — chat and bell, each with a badge, in a
+shared `widgets/header_actions.dart`. **The bell was deliberately inert for one wave**, because a bell that
+opens nothing is worse than no bell, and Wave C is what it opens.
+
+### Wave S7-B — what was actually observed, and what was not
+
+**`check_chat.js --evidence` → PASS 120/120 · 0 skipped** (2026-08-30 03:21 PKT), seven blocks in one
+rolled-back transaction: a confirmed booking opens exactly one room with exactly two members and exactly one
+system message; confirming twice does not open a second; an accepted challenge opens the captains' room with
+vice-captains included; six neutral pills, one per lifecycle event; the inbox's unread count matched a
+hand-computed number and the `EXPLAIN` showed the index scan; the suggestions came back three-at-a-time from
+the model and three-at-a-time from the lexicon with ml-service killed; and all six confirm/cancel/no-show call
+sites were read off disk to prove the opener is actually called. `npm test` **159/159** (31 new in
+`test/chat.test.js`), `flutter analyze` **0**.
+
+**Not observed:** the two-account live pass — two phones, one booking room, messages crossing in real time —
+is `doc/TESTING.md` step 221 and is still a human's job. The socket path itself is S.2 code that has been
+exercised before, but "two accounts talked to each other in a booking room" is not a claim this wave can make.
+
+---
+
+## Wave S7-C (Notifications — a write-only table becomes a feed, and push becomes an outbox)
+
+The `notifications` table has existed since migration 010. **Twelve production files wrote into it and nothing
+in the codebase read it** — no route, no provider, no screen; `/api/notifications` did not exist, and the bell
+on the player's home screen was a decorative `Icon` with no `onTap`. So this wave is not "add push to a working
+notification system". It is "build the notification system, then add push", and the user's framing was the
+correct priority: *notification is one of the most important things in this project… like LinkedIn, or other
+professional apps.*
+
+### One server-owned registry, because the client must never guess a route or an icon
+
+`utils/notificationTypes.js` (633 lines) maps every `type` to `{category, priority, icon, deepLink(payload),
+groupKey(payload)}` — **45 registered types, 9 distinct deep-link routes**. The client renders what the server
+sent and navigates where the server said; adding a type is one line in one file; and `assertNotificationTypes()`
+runs at boot and names any type a call site emits that the registry does not know, the same guard shape as
+`mlClient.assertNluLabels`. An unregistered type renders as a blank icon and a dead tap, which is exactly the
+class of silent breakage the user hit by hand.
+
+The guard has a second half that matters more than the first. `check_notifications.js` reads every route the
+registry can emit and asserts the string exists in `lib/main.dart` — **9 for 9**. A deep link is the one place
+where a server and a client can disagree in a way no compiler and no test on either side will catch, because
+each half is individually correct. "The tap does nothing" is now a failing assertion rather than a bug report.
+
+### Push is a transactional outbox, and that is the wave's real design decision
+
+`notify()` is called from inside money transactions that hold `FOR UPDATE` locks on wallet rows. An inline
+HTTPS call to FCM there would hold those locks open across a network round trip to Google — a slow FCM would
+become a stalled booking. So **the notification row is the outbox**: `notify()` inserts with
+`sent_push = false` inside the caller's transaction, and `jobs/pushJob.js` (386 lines, a 4 s tick with the same
+latch and `FOR UPDATE SKIP LOCKED` shape as `matchExpiryJob`) drains it afterwards.
+
+What that buys: **zero changes at any of the existing call sites**, atomicity with the money (a rolled-back
+booking cannot leave a notification behind), survival across a crash, retries with `push_attempts`, and a
+`push_error` column that answers "why didn't my phone buzz?" from SQL instead of from a log file nobody kept.
+What it costs: up to about four seconds of delivery latency, which is invisible on a locked phone. The job also
+emits `notification:new` into `bus.userRoom(userId)` whether or not FCM is configured, so the in-app badge
+moves live without a poll — which is why everything except the tray banner works with no Firebase key at all.
+
+### Collapse is a UNIQUE partial index, not application logic
+
+"Ali sent 3 messages" has to be one row and one tray banner. The naive version reads the last row, decides
+whether to update it, and loses the race the moment two messages arrive in the same millisecond. Instead
+migration 020 adds `ux_notifications_group UNIQUE (user_id, group_key) WHERE group_key IS NOT NULL AND
+is_read = false AND dismissed_at IS NULL`, and `notify()` upserts against it — `group_count = group_count + 1`
+with `created_at` bumped. The predicate has to match the `ON CONFLICT … WHERE` clause exactly for Postgres to
+infer the index, which is the kind of detail that makes the difference between a collapse and a duplicate-key
+error in production.
+
+### Preferences and quiet hours are enforced in the job, on the server
+
+A toggle the client honours is not a preference, it is a suggestion. `notification_prefs jsonb` lives on
+`users`, and `pushJob` checks it before sending: an empty object means everything is on (a newly added category
+is never silently off), `muteAll` and per-category mutes suppress push, and **`system` is deliberately absent
+from the mutable set** — a suspension notice is not something an account can opt out of receiving. Quiet hours
+are evaluated in the user's timezone and correctly wrap midnight: a 22:00→07:00 window was asserted at seven
+instants (21:59 loud, 22:00 quiet, 03:00 quiet, 06:59 quiet, 07:00 loud), a zero-length window reads as OFF
+rather than as always-quiet, and a window without an enabled flag is off because opting in has to be explicit.
+
+In every one of those cases the **in-app row is still written** and the badge still moves. Preferences suppress
+the push, never the record — otherwise "I turned off match alerts" would silently mean "I will never learn my
+challenge was accepted".
+
+### Chat push is presence-aware, and `user_devices` replaces one token per user
+
+A chat message notifies only when the recipient is offline or is not looking at that channel, using the
+`bus.isUserOnline()` that already existed for ticks. That is the prompt's "chat message (if not in-app)", done
+where the information actually lives.
+
+`users.fcm_token` was one token per user — "last login wins" — which breaks the instant you use a phone and an
+emulator, and cannot record a token as dead. FCM tokens rotate and answer
+`registration-token-not-registered`, and that has to revoke **one device**, not sign you out everywhere. So 020
+adds `user_devices` with the token UNIQUE across the whole table: a token identifies a device installation
+globally, so if it reappears under a different user the row must **move**, not duplicate, or the previous owner
+keeps receiving the new owner's notifications — a privacy failure, not a bug. `users.fcm_token` keeps being
+written for backward compatibility and is read as a last-resort fallback.
+
+### `created_at` was the wrong type, and the fix is in the migration rather than in the client
+
+Migration 010 declared `notifications.created_at` as bare `TIMESTAMP`. Every "2 hours ago" in the app was
+therefore wrong by the server's UTC offset — five hours, in Pakistan. 020 converts it to `timestamptz`
+`USING created_at AT TIME ZONE 'UTC'`, guarded by an `information_schema` check so re-running the migration is
+a no-op. Twenty-four other naive timestamp columns elsewhere in the schema were **left alone on purpose**: they
+are not rendered as relative times, and a sprint that rewrites every column type it walks past is a sprint that
+breaks something it never tested.
+
+### Flutter, and the one dependency that was not added
+
+`routes/notifications.js` exposes thirteen endpoints (feed with cursor + category + `unreadOnly`, summary,
+read / unread / dismiss, read-all, clear-read, preferences read and write, device register and revoke, the
+registry itself, and a dev-only `POST /test` that is the demo lever). Against them:
+`services/notification_service.dart`, `services/push_service.dart`, `providers/notification_provider.dart`
+with optimistic mark-read and a socket subscription, `screens/shared/notifications_screen.dart` (457 lines,
+actor avatars, unread dots, category chips, swipe-to-dismiss), `notification_prefs_screen.dart` (439 lines),
+`widgets/notification_bell.dart`, and `utils/deep_link.dart` (162 lines) — the single place a `deepLink` string
+becomes a `Navigator` call, with a cold-start replay after auth resolves so a tray tap on a killed app still
+lands somewhere.
+
+**Deviation: `flutter_local_notifications` was not added.** The plan called for it to draw the foreground
+banner. It is a large dependency with its own Android channel configuration, and the only thing it was needed
+for was drawing a banner while the app is already open and already has a widget tree. So the foreground path is
+`widgets/in_app_banner.dart` plus about twenty lines of Kotlin in `MainActivity.kt` that create the
+`sportlynk_default` channel at `IMPORTANCE_HIGH` — which is what actually makes a *background* FCM banner show
+as a heads-up on Android 8+, and is required whether or not the plugin is present. One dependency fewer, the
+same behaviour, and the part that could not be done in Dart done in Kotlin.
+
+### Wave S7-C — what was actually observed, and what was not
+
+**`check_notifications.js --evidence` → PASS 169/169 · 0 skipped** (2026-08-30 22:28 PKT), eleven blocks: every
+registered type resolves to a category the CHECK allows, a priority, an icon and a route; all 31 types the call
+sites emit are registered (the 14 unemitted ones were Wave D's, and are emitted now); the row is stamped from
+the registry inside the caller's transaction; three messages collapsed into one row reading "3 new messages";
+the feed paged, filtered and matched a hand-computed unread count; unread / read / dismissed are three distinct
+states and dismissed is not deleted; preferences and the midnight-wrapping quiet window suppressed push and not
+the row; the outbox claimed a row once, stamped a reason, and emitted the badge regardless; 9 of 9 deep links
+exist in `lib/main.dart`; and 020's columns, constraints and indexes were censused on the live database.
+Migration 020 applied 2026-08-30. `npm test` **159/159**, `flutter analyze` **0**, and the boot banner reads
+`Notifications: 45 types → 9 routes` above **7 jobs** (noShow · autoApprove · withdrawal · matchExpiry ·
+sentimentBackfill · tournament · **push**).
+
+**Not observed, and it is the one that matters for the demo:** no tray banner has ever appeared on a real phone,
+because `FIREBASE_SERVICE_ACCOUNT` is not set and the banner reads `FCM OFF`. Everything up to the FCM call is
+proven — the row, the collapse, the prefs, the quiet window, the claim, the badge, the deep link — and
+`pushService` no-ops with a single warning when the key is absent, the same discipline as `mlClient.isConfigured()`.
+Adding the service-account JSON switches the tray on with **no code change**; until then `doc/TESTING.md` step
+229 (owner approves → locked phone buzzes → tap lands on booking detail) stays ⛔ with its blocker named.
+
+---
+
+## Wave S7-D (Admin — rulings that correct rather than double-apply, suspension that suspends, and the export)
+
+Three of the four things in this wave had a table and no reader. `disputes` had been written by
+`POST /api/matches/:id/dispute` since S.2 and nothing had ever read a row. `global_settings` had been seeded by
+013 and left *deliberately authoritative over nothing* — its own migration comment says making it authoritative
+over money silently would be a money bug. `users.is_active` was checked at login and nowhere else. And there
+was no CSV anywhere in the codebase: `grep` for `text/csv` returned nothing. **The Flutter Web / responsive
+dashboard half of the wave prompt was excluded at the user's instruction** and every endpoint below is
+dashboard-ready for whenever they come back to it; the admin screens landed in the existing mobile app.
+
+### A ruling goes through the owner's verified path, not a parallel one
+
+The wrong way to build this is a second settlement implementation that writes `matches` and `teams.elo`
+directly. `POST /api/matches/:id/verify` already knows how to settle a match — the ELO exchange, the
+`elo_history` audit row, the `elo_frozen` honouring, the `elo_applied` latch, the bracket advance, the
+after-commit emits. So `disputeService` (893 lines) reuses it: `SELECT … FOR UPDATE` the match, write the ruled
+scoreline and `winner_team`, call the same `elo.applyResult`, stamp `verified_by = <admin>`, then call
+`tournaments.advanceAfterMatch` **unconditionally** (a friendly returns `not_tournament` and touches nothing; a
+fixture advances the bracket inside the same transaction), close the dispute, notify both captains, post one
+neutral pill into the captain channel Wave B created, and write an `admin_audit` row. Nine steps, one
+transaction, and none of them a new way to move money or rating.
+
+### The plan said refuse; reality said correct — and that took two more migrations
+
+The approved plan said: refuse the ruling if `elo_applied` is already true, because applying an exchange twice
+is the one mistake nobody can detect after the fact. That guard is right and the conclusion drawn from it was
+wrong, because of a case the dispute route itself had documented and left to S.7: **a dispute can be filed
+against a COMPLETED match whose rating has already been applied.** Refusing there means the admin cannot rule
+on precisely the disputes that need ruling, and leaves `matches.winner_team` contradicting `teams.elo`
+permanently. So an already-rated match is **corrected**, not refused and not edited:
+
+- `elo.correctResult` writes **two** `elo_history` rows per team — `admin_reversal`, the negative of the
+  original delta applied to the *current* rating (a ledger reversal, so matches played since the disputed one
+  keep counting), and `admin_ruling`, the exchange from the admin's ruled scoreline. Four rows for one match,
+  and `SELECT * FROM elo_history WHERE match_id = …` reads as the whole story in order.
+- **Migration 021** was needed because `chk_elo_history_reason` allowed only `match_verified` and
+  `frozen_no_change`; both new labels were illegal at the database level.
+- **Migration 022** was needed because 016's `ux_elo_history_team_match UNIQUE (team_id, match_id)` forbids the
+  very rows 021 had just legalised — the second write raises 23505 and takes the whole ruling transaction with
+  it. The index becomes `ux_elo_history_team_match_reason (team_id, match_id, reason)`, which keeps 016's real
+  guarantee (`applyResult` still cannot write `match_verified` twice) while making room for a correction.
+
+The `elo_applied` latch is therefore still the double-apply guard for the ordinary path; the correction path is
+a *different* operation that says so in the audit trail. **A bracket that has already advanced is not
+rewritten**: the ruling returns `already_settled` rather than un-playing a final somebody has already lost.
+
+### The case file is the reason Wave B came first
+
+`GET /api/admin/disputes` sorts by **`severityElo`** — the rating actually at stake, computed with the existing
+pure `elo.rate()` at the live K — before it sorts by age, so an admin triages the dispute that will move 56
+points ahead of the one that will move 8. `GET /api/admin/disputes/:id` is the case file FR10.6 asks for: both
+`match_results` rows side by side (the table's `UNIQUE (match_id, submitted_by_team)` guarantees exactly one per
+team), each roster with current ELO and trust score, the booking, the venue, the slot, the owner's check-in
+evidence — and **the captain-channel chat archive**, which is a plain read of the room that did not exist eight
+days ago. FR10.6 was unbuildable before Wave B, which is why the plan sequenced chat first.
+
+### Suspension that suspends: the security fix
+
+`middleware/authMiddleware.js` was 43 lines of pure `jwt.verify` with **no database read**, so a suspended
+user's existing token kept working until it expired. Suspension was cosmetic. It now resolves account state
+through a **30 s TTL in-process cache** keyed per user — one small indexed read per user per half-minute, which
+matters because the home screen alone fires several requests — invalidated *immediately* on suspend so the
+rejection lands on the next request rather than at the end of the TTL. Following `globalSettings.js`'s
+NEVER-THROW rule, a database error falls back to the token's own claims rather than locking every user out of
+the app: an admin panel that can take the whole platform down when Supabase hiccups is a worse bug than the one
+it fixed.
+
+Suspending is a cascade in one transaction, and it reuses the *core* functions rather than the HTTP wrappers so
+it joins that transaction: upcoming bookings cancelled **with refunds** through
+`bookingService.cancelBooking`, open challenges withdrawn, upcoming tournament registrations withdrawn through
+`tournamentService`, the user notified, wallet withdrawals refused while inactive. For a suspended **owner** the
+venues go `is_active = false` and pending requests are rejected and refunded — otherwise players keep paying
+into a dead venue. And reinstate **reads the audit log back**: it re-lists only the venues *that* suspension
+took down, from `after.cascade.venuesDeactivated` on its own `admin_audit` row, so a venue the owner had closed
+themselves before the ban stays closed. A booking for a match that is already completed is deliberately left
+frozen rather than refunded — the match was played.
+
+### Settings: write-bounds are a subset of read-clamps, and reset means DELETE
+
+`utils/globalSettings.js` already clamped every value it read, silently. An admin panel that lets you save 200%
+commission and then quietly serves 100% is lying to the person who typed it. So `settingsCatalog.js` describes
+**26 writable fields** with the min/max the accessor would have enforced, and `PUT /api/admin/settings` rejects
+at the edge what the accessor would have clamped — the invariant being that the write bounds are a *subset* of
+the read clamps, never wider. Refused outright: commission + deposit over 100%, `k_factor` outside 8–64,
+disabling a sport that has future confirmed bookings (reported with the count). A write calls
+`settings.invalidate()` and applies on the very next operation with no restart (FR10.11), and
+`POST /settings/reset` **DELETEs** the override row rather than writing the default back, so `DEFAULTS` in code
+stays the single source of truth for what "default" means.
+
+Migration 021's second half is where the money authority actually moved: `commission_pct` had been authoritative
+over nothing, and the platform's cut of a booking is now deducted from the owner's credit at QR check-in, where
+the escrow is already released under a `FOR UPDATE` lock, writing one `platform_commission` transaction so the
+owner's statement adds up. The default is 0, so the migration changes no number anywhere until an admin sets
+one — **the transfer of authority is what shipped, not a rate.**
+
+### The export: one generator, two scopes, and a formula that must not execute
+
+`GET /api/owner/reports/financial` and `GET /api/admin/reports/platform` are the same walk with a different
+`WHERE` — owner scope is `venues.owner_id`, platform scope is everything, with commission earned per owner as
+subtotals. The CSV is **streamed** (`res.write` per row, not a megabyte of string in memory), the range is
+required and capped at **366 days**, and money is read from the `transactions` ledger rather than recomputed
+from prices, so the export reconciles with the wallet instead of merely resembling it.
+
+The non-obvious correctness item is **CSV injection**. A venue named `=cmd|…` or `+1+1` executes when the file
+opens in Excel, on the accountant's machine, with the accountant's permissions. `utils/csv.js` prefixes any
+field matching `/^[=+\-@\t\r]/` with a `'` and doubles every quote. The export also opens with a UTF-8 BOM,
+which is what makes Excel on Windows render Urdu venue names and em dashes instead of mojibake — and is exactly
+why the download does **not** go through `ApiClient`: that client sends `Accept: application/json` and decodes
+every response into the `{success,…}` envelope, so a perfectly correct `text/csv` answer would come back as
+"the server sent something we could not read". A failure *before* the first byte is a JSON envelope; a failure
+*mid-stream* appends a final `ERROR,` row, because once streaming has started the status code is spent — and the
+Flutter side checks the last line and says "the export failed part-way through" rather than handing over a file
+quietly missing yesterday's bookings.
+
+`?format=json` previews the same walk (at most 500 rows, of which the phone renders 40) with the totals always
+computed over the **whole** range and a `truncated` flag saying so, and the column list itself comes from the
+server — so the table on the phone and the file in Excel cannot disagree, and adding a column is a server change
+with no app release.
+
+### Flutter admin, and one screen serving two scopes
+
+`admin_disputes_screen.dart` (queue with severity badge and age), `admin_dispute_detail_screen.dart` (side-by-side
+submissions, the chat archive, four ruling actions behind a confirm dialog), `admin_users_screen.dart` (search,
+suspend/reinstate with a reason sheet), `admin_settings_screen.dart` (1037 lines: sectioned form, a
+default/override chip per key, and a save-diff confirm that shows exactly what is about to change), and
+`owner_reports_screen.dart` (786 lines) which serves **both** report scopes through a `platform` flag at
+`/owner-reports` and `/admin-reports` — the two screens differ by a `WHERE` clause on the server, so building two
+of them would have been two places to fix every future bug. Six routes under the existing
+`AuthGuard(requiredRole: 'admin')` pattern, four desk tiles plus a live dispute count on
+`admin_home_screen.dart`, and the Wave C bell on the admin home too.
+
+`utils/adminAudit.js` sits behind all five admin writes with `before`/`after` as jsonb, because "who changed
+this?" is the first question a viva panel asks about an admin panel — and five writes touch five different
+shapes, which is why the columns are jsonb rather than a fixed set.
+
+### Wave S7-D — what was actually observed, and what was not
+
+**`check_admin.js --evidence` → PASS 275/275 · 0 skipped** (2026-08-31 01:55 PKT), eleven blocks: the catalog
+describes 26 writable fields and refuses what the accessor would quietly clamp; a settings write changed **the
+very next booking's** commission split with no restart; the queue and the case file assembled, with severity at
+16 ELO points for the ruled dispute; a ruling rated the match **once** (1200→1216 against 1200→1184 at K=32);
+an already-rated match was **corrected** rather than double-applied (challenger 1216→1184, opponent 1184→1216);
+a ruling on a semi-final settled at K=48 and advanced the winner to the final; suspension cancelled 1 booking,
+refunded PKR 2000 and released the slot; the export escaped a formula and reconciled with the ledger; and the
+wiring assertions were read off disk rather than from a request. Migrations 021 and 022 applied 2026-08-31.
+
+Two deliberate exceptions in that run are worth naming. **Block 8 commits** — it has to, because the thing under
+test is whether a *previously issued* JWT is rejected on its next request, and a token check that reads
+uncommitted data proves nothing; it cleans up after itself. And **two smoke-test rows remain in `admin_audit`**:
+deleting audit rows was refused as audit tampering, which is the correct answer, and an audit log with two test
+rows in it is worth more than an audit log with a hole in it.
+
+**The sweep after B, C and D, all observed on 2026-08-31:** `verify_schema.js` **233/233** · `check_booking_service`
+**60/60** · `check_chat` **120/120** · `check_notifications` **169/169** · `check_assistant` **342/342** ·
+`check_admin` **275/275** · `npm test` **159/159** (76 assistant + 31 chat + 10 elo + 20 fixtureSchedule + 22
+fixtures) · `flutter analyze` **0 issues** · server boots clean with **7 jobs**. Waves C and D added no unit-test
+file on purpose: their subject matter is transactions against a real schema, and a mock that proves a ruling
+moved a rating once is a mock that proves nothing.
+
+**What no run above can claim.** Every green number in this sprint came from a script. Not one of them came from
+a human using the app, and the whole reason this sprint exists in this shape is that a human using the app found
+that nothing worked. Four things are therefore still open, each with its blocker named rather than glossed:
+two accounts talking live in a booking room (`doc/TESTING.md` step 221); a locked phone buzzing on a booking
+approval and the tap landing on booking detail (step 229, blocked on the Firebase service-account JSON, which
+the code no-ops around by design); an admin ruling, a suspension, a settings change and a CSV opened in Excel
+done by hand from the admin app (step 238); and §4.22's remaining tournament passes — the `--verify` podium, the
+HTTP-level probes and the Flutter walk. Also still true and carried forward: **`ML_API_KEY` must be rotated in
+both `.env` files before ml-service goes on a public URL** (compare by `/health` `apiKeyFingerprint`; never
+print the key), and the demo cup **`SportLynk Invitational (demo)`** is real data sitting in the shared Supabase
+project — drawn, 7 fixtures, never played out — removable with `node seed_tournament_demo.js --undo`.
+
+That is the end of development for S.7. What follows is the pass the user planned from the start: start at the
+beginning, fix one thing, test it by hand, and only then move to the next.

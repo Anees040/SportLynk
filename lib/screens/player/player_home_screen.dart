@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,7 +11,12 @@ import 'player_profile_screen.dart';
 import 'bookings_screen.dart';
 import 'wallet_screen.dart';
 import 'teams_screen.dart';
+import '../../services/chat_service.dart';
+import '../../services/realtime_service.dart';
 import '../../widgets/assistant/scout_fab.dart';
+import '../../widgets/header_actions.dart';
+import '../../widgets/notification_bell.dart';
+import '../shared/chats_screen.dart';
 import 'assistant_screen.dart';
 
 class PlayerHomeScreen extends StatefulWidget {
@@ -29,10 +35,69 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   /// State outlives every tab switch — the key is the only handle to it.
   final GlobalKey<BookingsScreenState> _bookingsKey = GlobalKey<BookingsScreenState>();
 
+  final ChatService _chat = ChatService();
+
+  /// The header's chat badge. Muted rooms are already excluded server-side, so
+  /// this total is "what the user asked to be told about" and never needs
+  /// filtering here.
+  int _chatUnread = 0;
+  StreamSubscription<Map<String, dynamic>>? _msgSub;
+  Timer? _badgeDebounce;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _watchChat();
+  }
+
+  @override
+  void dispose() {
+    _badgeDebounce?.cancel();
+    _msgSub?.cancel();
+    super.dispose();
+  }
+
+  /// Keep the header badge honest for as long as this screen lives.
+  ///
+  /// The socket is opened HERE, not in the chat screens: a badge that only moves
+  /// while you are already looking at the inbox is not a badge. The service is a
+  /// singleton and connecting is idempotent, so a thread screen re-using it costs
+  /// nothing — and Wave C's bell hangs off this same connection.
+  ///
+  /// The count is RE-READ rather than incremented, because the server decides what
+  /// counts (muted rooms out, my own messages out) and a second copy of that rule
+  /// here is how a badge starts disagreeing with the list it links to. The debounce
+  /// is what keeps the re-read from being one request per message in a busy team
+  /// chat.
+  void _watchChat() {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null || token.isEmpty) return;
+    RealtimeService().ensureConnected(token);
+    _msgSub = RealtimeService().messages.listen((_) {
+      _badgeDebounce?.cancel();
+      _badgeDebounce = Timer(const Duration(seconds: 3), _loadChatBadge);
+    });
+    _loadChatBadge();
+  }
+
+  Future<void> _loadChatBadge() async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null || token.isEmpty) return;
+    final u = await _chat.unreadCount(token);
+    if (!mounted || u.total == _chatUnread) return;
+    setState(() => _chatUnread = u.total);
+  }
+
+  /// Chats opens FULL-SCREEN from the header rather than as a sixth bottom tab:
+  /// five is already as many as a bottom bar can label legibly, and the inbox is
+  /// somewhere you go and come back from, not somewhere you live.
+  Future<void> _openChats() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ChatsScreen()),
+    );
+    if (mounted) _loadChatBadge();
   }
 
   Future<void> _load() async {
@@ -173,8 +238,6 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   Widget _buildHome(AuthProvider auth) {
     final userName = auth.currentUser?.name ?? 'Player';
     final firstName = userName.split(' ').first;
-    final initial = userName.isNotEmpty ? userName[0].toUpperCase() : 'P';
-    final avatarUrl = auth.currentUser?.avatarUrl;
 
     final wallet = _homeData?['wallet'] as Map<String, dynamic>?;
     final profile = _homeData?['profile'] as Map<String, dynamic>?;
@@ -217,68 +280,28 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      // Top row: logo + avatar
+                      // Top row: the wordmark, and the two live actions.
+                      //
+                      // The logo tile and the profile avatar are both gone on
+                      // purpose. The tile and the wordmark said the same thing
+                      // twice — and the asset fell back to a letter in a green
+                      // square whenever it failed to load — while the avatar was
+                      // a second route to a tab that is already in the bottom bar.
+                      // What takes their place is the two things this screen has
+                      // no other way to reach: the inbox and the bell.
                       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                        // Logo + brand
+                        const BrandWordmark(),
                         Row(children: [
-                          Container(
-                            width: 38, height: 38,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: Image.asset('assets/images/logo.png', fit: BoxFit.cover,
-                                errorBuilder: (a, b, c) => Container(
-                                  color: AppColors.accent,
-                                  child: Center(child: Text('S',
-                                    style: GoogleFonts.poppins(color: Colors.white,
-                                      fontSize: 16, fontWeight: FontWeight.bold))))),
-                            ),
+                          HeaderIconButton(
+                            icon: Icons.chat_bubble_outline,
+                            tooltip: 'Chats',
+                            badge: _chatUnread,
+                            onTap: _openChats,
                           ),
                           const SizedBox(width: 10),
-                          RichText(text: TextSpan(children: [
-                            TextSpan(text: 'Sport',
-                              style: GoogleFonts.poppins(color: Colors.white,
-                                fontSize: 16, fontWeight: FontWeight.w800)),
-                            TextSpan(text: 'Lynk',
-                              style: GoogleFonts.poppins(color: AppColors.accent,
-                                fontSize: 16, fontWeight: FontWeight.w800)),
-                          ])),
-                        ]),
-
-                        // Avatar + notification bell
-                        Row(children: [
-                          Container(
-                            width: 36, height: 36,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                            ),
-                            child: const Icon(Icons.notifications_outlined, color: Colors.white, size: 20),
-                          ),
-                          const SizedBox(width: 10),
-                          GestureDetector(
-                            onTap: () => _onTabChanged(4),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: AppColors.accent, width: 2.5),
-                              ),
-                              child: CircleAvatar(
-                                radius: 20,
-                                backgroundColor: AppColors.accent.withValues(alpha: 0.2),
-                                backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
-                                    ? NetworkImage(avatarUrl) : null,
-                                child: (avatarUrl == null || avatarUrl.isEmpty)
-                                    ? Text(initial, style: GoogleFonts.poppins(
-                                        color: AppColors.accent, fontSize: 16, fontWeight: FontWeight.bold))
-                                    : null,
-                              ),
-                            ),
-                          ),
+                          // Live from Wave C. The bell also boots the notification
+                          // stack for the session -- see NotificationBell.
+                          const NotificationBell(),
                         ]),
                       ]),
 

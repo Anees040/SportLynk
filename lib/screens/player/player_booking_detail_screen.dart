@@ -7,6 +7,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/chat_service.dart';
+import '../shared/chat_thread_screen.dart';
 import 'rate_experience_screen.dart';
 
 class PlayerBookingDetailScreen extends StatefulWidget {
@@ -20,10 +22,64 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
   Map<String, dynamic>? _booking;
   bool _loading = true;
 
+  /// The booking's chat room, or null when there is none.
+  ///
+  /// This is RESOLVED rather than inferred from the status. A room is created when the
+  /// booking is confirmed, so a booking cancelled while still pending never had one,
+  /// while a booking cancelled after confirmation still does — and that room is
+  /// exactly where the cancellation notice was posted. Asking the server removes the
+  /// guess: the button appears if and only if there is something behind it, and the
+  /// tap opens the thread with the id already in hand.
+  String? _chatChannelId;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadChat();
+  }
+
+  Future<void> _loadChat() async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null || token.isEmpty) return;
+    final id = await ChatService().channelForBooking(token, widget.bookingId);
+    if (!mounted || id == null || id.isEmpty) return;
+    setState(() => _chatChannelId = id);
+  }
+
+  /// The room is titled with the venue, not the booking: it is a conversation with a
+  /// place, and the slot is already the line underneath.
+  String get _chatTitle {
+    final v = _booking?['venue_name']?.toString();
+    return (v == null || v.isEmpty) ? 'Venue chat' : v;
+  }
+
+  /// The thread header's second line, from the fields already on this screen.
+  String? get _chatContextLine {
+    final b = _booking;
+    if (b == null) return null;
+    final date = b['slot_date']?.toString().split('T').first;
+    final start = b['start_time']?.toString();
+    final hhmm = (start != null && start.length >= 5) ? start.substring(0, 5) : null;
+    final parts = [
+      if (date != null && date.isNotEmpty) date,
+      ?hhmm,
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  Future<void> _openChat() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatThreadScreen.booking(
+          bookingId: widget.bookingId,
+          title: _chatTitle,
+          channelId: _chatChannelId,
+          contextLine: _chatContextLine,
+        ),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -163,6 +219,31 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
                 ),
               ]),
             ),
+            
+            // ── MESSAGE THE VENUE ─────────────────
+            // Rendered only once the room is known to exist — see [_chatChannelId].
+            // It sits above the QR on purpose: on the day of the slot this is what
+            // you reach for, and it must not be below a 200px fold.
+            if (_chatChannelId != null) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _openChat,
+                  icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                  label: Text(
+                    'Message venue',
+                    style: GoogleFonts.poppins(fontSize: 13.5, fontWeight: FontWeight.w600),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.accent),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
 
             // ── QR CODE (confirmed/checked_in) ─────────────

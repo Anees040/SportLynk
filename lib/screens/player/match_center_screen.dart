@@ -12,6 +12,7 @@ import '../../services/realtime_service.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/match_result_dialog.dart';
 import '../../widgets/match_widgets.dart';
+import '../shared/chat_thread_screen.dart';
 import 'find_opponents_screen.dart';
 import 'rate_experience_screen.dart';
 
@@ -28,9 +29,15 @@ import 'rate_experience_screen.dart';
 /// time — the same question the caller has already answered.
 class MatchCenterScreen extends StatefulWidget {
   final String teamId;
-  final String teamName;
+  /// Nullable since S.7 Wave C: a notification deep link carries the match's
+  /// `teamId` but not always a NAME (`notificationTypes.matchLink` only forwards
+  /// what the emitting call site put in its payload). The screen loads the team
+  /// anyway, so the name is a header nicety, not a prerequisite -- and requiring it
+  /// would have forced the deep-link route to invent a placeholder like "My team"
+  /// and show that instead of nothing.
+  final String? teamName;
 
-  const MatchCenterScreen({super.key, required this.teamId, required this.teamName});
+  const MatchCenterScreen({super.key, required this.teamId, this.teamName});
 
   @override
   State<MatchCenterScreen> createState() => _MatchCenterScreenState();
@@ -172,15 +179,16 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
             Text('Match Center',
                 style: GoogleFonts.poppins(
                     color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
-            Text(
-              widget.teamName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.poppins(
-                fontSize: 11.5,
-                color: Colors.white.withValues(alpha: 0.7),
+            if ((widget.teamName ?? '').isNotEmpty)
+              Text(
+                widget.teamName!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 11.5,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
               ),
-            ),
           ],
         ),
         bottom: TabBar(
@@ -434,6 +442,30 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
 
   // ── Tab 2 · Upcoming ───────────────────────────────────────
 
+  /// Open the match's coordination room.
+  ///
+  /// The room was created when the challenge was accepted, so no id is resolved
+  /// first — the thread screen asks the server for it and says plainly when there
+  /// is none (a match accepted before chat shipped). The team is passed through so
+  /// the thread header can offer the jump back to the match centre.
+  void _openCoordinate(MatchModel m) {
+    final where = m.venueName;
+    final when = m.slotDateLabel;
+    final line = [?when, ?where].join(' · ');
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatThreadScreen.forMatch(
+          matchId: m.id,
+          title: 'vs ${m.theirTeam.name}',
+          contextLine: line.isEmpty ? null : line,
+          teamId: m.myTeamId,
+          teamName: m.myTeam.name,
+        ),
+      ),
+    );
+  }
+
   Widget _upcomingCard(MatchModel m) {
     return _shell(
       child: Column(
@@ -452,6 +484,29 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
             ],
           ),
           const SizedBox(height: 12),
+
+          // ── Coordinate ──
+          // Where "which gate?" and "we're ten minutes out" belong. Shown only to
+          // the people the room actually admits — both teams' captains and
+          // vice-captains — so it is never a tap into a room you are not in.
+          if (_data.isTeamOfficial) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _openCoordinate(m),
+                icon: const Icon(Icons.forum_outlined, size: 16),
+                label: const Text('Coordinate'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.accent),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+
           if (m.canSubmitResult)
             SizedBox(
               width: double.infinity,

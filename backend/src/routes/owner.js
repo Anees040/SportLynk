@@ -10,13 +10,23 @@ const {
   lockWallet,
   applyWallet,
   logTxn,
+  commissionSplit,
+  supportsCommissionTxn,
 } = require("../utils/escrow");
 const { notify } = require("../utils/notify");
 const { recomputeTrust } = require("../utils/trustScore");
+const chat = require("../utils/chatCore");
+const bookingService = require("../services/bookingService");
 const mlClient = require("../services/mlClient");
+const settings = require("../utils/globalSettings");
 const { TtlCache, ONE_HOUR_MS } = require("../utils/ttlCache");
 
 router.use(auth, checkRole("owner"));
+
+// S.7 Wave D - D4. The financial export lives in its own file but on THIS router,
+// so it inherits the owner check above and is scoped to req.user.id. See
+// routes/reports.js for why the owner filter is never optional.
+router.use(require("./reports").ownerReports);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AI pricing — S.3 Wave D
@@ -503,6 +513,20 @@ router.post("/venues", async (req, res, next) => {
 
     const sportType = sportTypes && sportTypes.length > 0 ? sportTypes[0].toLowerCase() : 'football';
 
+    // S.7 Wave D (FR10.10). An admin can switch a sport off; a venue for it must not
+    // be creatable afterwards, or the owner builds out slots for something the
+    // platform will refuse to book. Only the CREATE path needs this -- the edit route
+    // below deliberately does not accept `sport_type`, so an existing venue cannot
+    // change sport, and venues already created for a sport that is later switched off
+    // are left alone (their future bookings are the admin's business, and the settings
+    // writer reports the count before allowing the change).
+    if (!(await settings.isSportEnabled(sportType))) {
+      return res.status(409).json({
+        success: false,
+        message: `${sportType} venues are not being accepted on SportLynk right now.`,
+      });
+    }
+
     // Set is_active = false so it requires admin approval
     const vRes = await pool.query(
       `INSERT INTO venues (owner_id, name, description, sport_type, city, address, base_price, price_per_hour, upfront_percent, venue_photos, operating_hours_from, operating_hours_to, is_active, rating, total_reviews)
@@ -622,7 +646,8 @@ router.patch("/bookings/:id/approve", async (req, res, next) => {
   try {
     await client.query("BEGIN");
     const check = await client.query(
-      `SELECT b.id, b.player_id, v.name AS venue_name
+      `SELECT b.id, b.player_id, v.owner_id, v.name AS venue_name,
+              v.image_url AS venue_image
          FROM bookings b JOIN venues v ON b.venue_id=v.id
         WHERE b.id=$1 AND v.owner_id=$2 AND b.status='pending'
         FOR UPDATE OF b`,
@@ -645,7 +670,24 @@ router.patch("/bookings/:id/approve", async (req, res, next) => {
       title: "Booking confirmed",
       body: `${check.rows[0].venue_name} approved your booking. Show your QR code at the venue to check in.`,
     });
+
+    // S.7 Wave B -- the booking room. Opened on CONFIRMED and not on the request:
+    // an unapproved request is not a conversation, and a room per rejected
+    // request would bury the real ones. The other confirm path (autoApproveJob)
+    // calls this identically, and `ux_chat_channels_type_ref` makes whichever
+    // runs second an update rather than a second room.
+    const bk = check.rows[0];
+    const pill = await chat.openBookingRoom(client, {
+      bookingId: bk.id,
+      playerId: bk.player_id,
+      ownerId: bk.owner_id,
+      venueName: bk.venue_name,
+      imageUrl: bk.venue_image || null,
+      event: "booking_confirmed",
+    });
+
     await client.query("COMMIT");
+    await chat.emitPills(pool, pill);
     res.json({ success: true, message: "Booking approved" });
   } catch (e) {
     await client.query("ROLLBACK");
@@ -656,62 +698,27 @@ router.patch("/bookings/:id/approve", async (req, res, next) => {
 });
 
 // PATCH /api/owner/bookings/:id/reject — full refund: player balance +P, frozen -P
+//
+// The money moved here is now ONE implementation shared with the admin
+// suspension cascade (`bookingService.rejectBooking`), which has to reject the
+// pending requests of a suspended owner's venues. The HTTP behaviour is
+// unchanged: same 404 wording when the booking is not pending or not yours, same
+// success message, same ledger row, same notification.
 router.patch("/bookings/:id/reject", async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const bookingRes = await client.query(
-      `SELECT b.id, b.security_deposit, b.player_id, b.slot_id, v.name AS venue_name
-       FROM bookings b JOIN venues v ON b.venue_id=v.id
-       WHERE b.id=$1 AND v.owner_id=$2 AND b.status='pending'
-       FOR UPDATE OF b`,
-      [req.params.id, req.user.id],
-    );
-    if (!bookingRes.rows.length) {
-      await client.query("ROLLBACK");
-      return res
-        .status(404)
-        .json({ success: false, message: "Booking not found or not pending" });
-    }
-    const b = bookingRes.rows[0];
-    const escrow = round2(b.security_deposit);
-
-    await client.query(
-      "UPDATE bookings SET status='rejected', cancelled_at=NOW(), cancellation_reason='owner_rejected' WHERE id=$1",
-      [b.id],
-    );
-    await client.query("UPDATE slots SET status='available' WHERE id=$1", [
-      b.slot_id,
-    ]);
-
-    const wallet = await lockWallet(client, b.player_id);
-    if (wallet && escrow > 0) {
-      const after = await applyWallet(client, wallet.id, {
-        balance: escrow,
-        frozen: -escrow,
-      });
-      await logTxn(client, {
-        walletId: wallet.id,
-        userId: b.player_id,
-        bookingId: b.id,
-        type: "refund",
-        amount: escrow,
-        balanceAfter: after.balance,
-        description: "Booking rejected by venue owner — full refund",
-        counterparty: b.venue_name,
-      });
-    }
-
-    await notify(client, {
-      userId: b.player_id,
-      bookingId: b.id,
-      type: "booking_rejected",
-      title: "Booking rejected",
-      body: `${b.venue_name} could not take your booking. PKR ${escrow} has been refunded to your wallet.`,
+    const out = await bookingService.rejectBooking(client, {
+      bookingId: req.params.id,
+      ownerId: req.user.id,
+      reason: "owner_rejected",
     });
-
+    if (!out.ok) {
+      await client.query("ROLLBACK");
+      return res.status(out.status).json({ success: false, message: out.message });
+    }
     await client.query("COMMIT");
-    res.json({ success: true, message: "Booking rejected. Player refunded." });
+    res.json({ success: true, message: out.message });
   } catch (e) {
     await client.query("ROLLBACK");
     next(e);
@@ -927,6 +934,37 @@ router.post("/scan-qr", async (req, res, next) => {
 
     const escrow = round2(booking.security_deposit);
 
+    // S.7 Wave D (FR10.9). The platform's commission, taken HERE and nowhere else.
+    //
+    // WHY CHECK-IN IS THE RIGHT MOMENT
+    // This is the instant the money stops being contingent: the player showed up,
+    // the ground was used, and the escrow becomes the owner's earnings. Before this
+    // the booking could still be rejected, cancelled or no-showed, each of which
+    // splits the same pot differently — a commission taken earlier would have to be
+    // unwound by every one of those paths. Taken here it is final by construction.
+    //
+    // The player is unaffected either way: they always release exactly the escrow
+    // they agreed to. The commission is deducted from the OWNER's credit, which is
+    // why the ledger gets two rows for one movement — `escrow_received` for the
+    // gross so the owner can reconcile against the booking, and a negative
+    // `platform_commission` for the cut. Netting them into one row would make the
+    // owner's statement disagree with the booking price.
+    const commissionPct = await settings.commission({ client });
+    const canLogCommission = commissionPct > 0
+      ? await supportsCommissionTxn(client)
+      : false;
+    if (commissionPct > 0 && !canLogCommission) {
+      // Loud, and NOT fatal: a player at the gate with a valid QR code is not the
+      // person who should pay for an unrun migration.
+      console.warn(
+        `[checkin] commission ${commissionPct}% skipped — the 'platform_commission' `
+        + 'ledger type is missing. Run `node run_migration_021.js`.',
+      );
+    }
+    const split = canLogCommission
+      ? commissionSplit(escrow, commissionPct)
+      : commissionSplit(escrow, 0);
+
     await client.query(
       "UPDATE bookings SET status='checked_in', checked_in_at=NOW() WHERE id=$1",
       [booking.id],
@@ -938,8 +976,15 @@ router.post("/scan-qr", async (req, res, next) => {
     const playerAfter = await applyWallet(client, playerWallet.id, {
       frozen: -escrow,
     });
-    const ownerAfter = await applyWallet(client, ownerWallet.id, {
-      balance: escrow,
+    // Credited GROSS first, then debited the commission, rather than crediting the
+    // net in one movement. Two movements means each ledger row's `balance_after` is
+    // the balance that row actually produced -- so an owner (and D4's CSV export,
+    // which reads the ledger rather than recomputing from prices) can reconcile the
+    // statement line by line. One netted movement would leave the `escrow_received`
+    // row claiming a gross amount beside a net balance, which is the kind of small
+    // inconsistency that makes a whole statement untrustworthy.
+    let ownerAfter = await applyWallet(client, ownerWallet.id, {
+      balance: split.gross,
     });
 
     await logTxn(client, {
@@ -963,6 +1008,24 @@ router.post("/scan-qr", async (req, res, next) => {
       counterparty: booking.player_name,
     });
 
+    if (split.commission > 0) {
+      ownerAfter = await applyWallet(client, ownerWallet.id, {
+        balance: -split.commission,
+      });
+      await logTxn(client, {
+        walletId: ownerWallet.id,
+        userId: req.user.id,
+        bookingId: booking.id,
+        type: "platform_commission",
+        amount: -split.commission,
+        // The balance the owner is actually left with, so the ledger's running
+        // balance column reconciles row by row.
+        balanceAfter: ownerAfter.balance,
+        description: `SportLynk commission (${split.pct}%)`,
+        counterparty: "SportLynk",
+      });
+    }
+
     await client.query("COMMIT");
     res.json({
       success: true,
@@ -973,6 +1036,9 @@ router.post("/scan-qr", async (req, res, next) => {
         startTime: booking.start_time,
         endTime: booking.end_time,
         amount: escrow,
+        commission: split.commission,
+        netToOwner: split.net,
+        commissionPct: split.pct,
         newOwnerBalance: ownerAfter?.balance || 0,
       },
       message: "Check-in successful!",
@@ -1085,7 +1151,15 @@ router.post("/no-show/:id", async (req, res, next) => {
       body: `You missed your slot at ${b.venue_name}. PKR ${refund} returned, PKR ${penalty} deposit forfeited, and your trust score has been updated.`,
     });
 
+    // S.7 Wave B -- the no-show pill goes in the room where the two of them can
+    // see it together. A player who says "I was there" and an owner who says
+    // otherwise now argue in front of the same timestamped line, which is also
+    // what an admin reads when the dispute lands on their desk.
+    const nsRoom = await chat.bookingChannelId(client, b.id);
+    const nsPill = await chat.announceInRoom(client, nsRoom, "booking_no_show", {});
+
     await client.query("COMMIT");
+    await chat.emitPills(pool, nsPill);
     res.json({
       success: true,
       message: `Marked as no-show. PKR ${penalty} deposit credited to you, PKR ${refund} returned to the player.`,

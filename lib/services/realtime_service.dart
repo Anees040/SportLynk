@@ -33,6 +33,7 @@ class RealtimeService {
   final _teamUpdates = StreamController<Map<String, dynamic>>.broadcast();
   final _teamRequests = StreamController<Map<String, dynamic>>.broadcast();
   final _matchUpdates = StreamController<Map<String, dynamic>>.broadcast();
+  final _notifications = StreamController<Map<String, dynamic>>.broadcast();
   final _connection = StreamController<bool>.broadcast();
 
   /// A newly persisted (or re-emitted) message — the client upserts by id, so
@@ -65,6 +66,20 @@ class RealtimeService {
 
   /// Connected / disconnected transitions — the chat screen re-joins its channel
   /// on every `true` so a reconnect silently restores live delivery.
+  /// Every notification row, the moment `pushJob` drains it from the outbox.
+  ///
+  /// This is the IN-APP half of delivery and it is not conditional on Firebase: the
+  /// job emits `notification:new` after stamping the row whether or not a push was
+  /// sent, suppressed by a preference or skipped because no service account is
+  /// configured. So the bell moves on a dev machine with no FCM key at all -- which
+  /// is exactly the state this feature ships in.
+  ///
+  /// The frame is a summary (id, type, category, priority, title, body, deepLink,
+  /// groupKey, groupCount, imageUrl, createdAt), not the full feed row. Listeners
+  /// use it to bump a badge and raise a banner; anything that needs the whole row
+  /// re-reads the feed.
+  Stream<Map<String, dynamic>> get notifications => _notifications.stream;
+
   Stream<bool> get connection => _connection.stream;
 
   bool get isConnected => _socket?.connected ?? false;
@@ -115,6 +130,7 @@ class RealtimeService {
     s.on('team:update', (d) => _push(_teamUpdates, d));
     s.on('team:request', (d) => _push(_teamRequests, d));
     s.on('match:update', (d) => _push(_matchUpdates, d));
+    s.on('notification:new', (d) => _push(_notifications, d));
   }
 
   void _push(StreamController<Map<String, dynamic>> c, dynamic data) {

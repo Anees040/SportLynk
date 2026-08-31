@@ -6,7 +6,7 @@ import '../models/chat_message.dart';
 import '../services/chat_service.dart';
 import '../services/realtime_service.dart';
 
-/// Owns the live state of ONE open chat. Instantiated locally by ChatScreen
+/// Owns the live state of ONE open chat. Instantiated locally by ChatThreadScreen
 /// (not a global provider) and disposed with it, so nothing leaks between chats.
 ///
 /// It fuses three sources into one coherent timeline:

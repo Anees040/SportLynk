@@ -8,11 +8,15 @@ import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../models/match.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/chat_service.dart';
 import '../../services/match_service.dart';
 import '../../services/pricing_service.dart';
 import '../../services/realtime_service.dart';
 import '../../widgets/apply_price_sheet.dart';
+import '../../widgets/header_actions.dart';
+import '../../widgets/notification_bell.dart';
 import '../../widgets/pricing_widgets.dart';
+import '../shared/chats_screen.dart';
 import 'owner_booking_requests_screen.dart';
 import 'owner_match_verify_screen.dart';
 import 'owner_slot_calendar_screen.dart';
@@ -49,6 +53,15 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
   bool _priceLoading = false;
   String? _priceVenueId;
 
+  // ── Chat (S.7 Wave B) ─────────────────────────────────────
+  // An owner's inbox is mostly booking rooms — the player asking whether the floodlights
+  // work, half an hour before they arrive. That is a message you cannot afford to miss,
+  // which is why the count is live rather than fetched when the inbox opens.
+  final ChatService _chat = ChatService();
+  int _chatUnread = 0;
+  StreamSubscription? _msgSub;
+  Timer? _badgeDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -60,12 +73,46 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
     _matchSub = RealtimeService().matchUpdates.listen((_) {
       if (mounted) _loadToVerify();
     });
+    _watchChat();
   }
 
   @override
   void dispose() {
     _matchSub?.cancel();
+    _badgeDebounce?.cancel();
+    _msgSub?.cancel();
     super.dispose();
+  }
+
+  /// The badge is RE-READ on activity rather than counted up here: the server is what
+  /// decides what counts (muted rooms out, my own messages out), and a second copy of
+  /// that rule on the client is how a badge starts disagreeing with the list it opens.
+  /// The debounce keeps a busy room from turning into a request per message.
+  void _watchChat() {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null || token.isEmpty) return;
+    RealtimeService().ensureConnected(token);
+    _msgSub = RealtimeService().messages.listen((_) {
+      _badgeDebounce?.cancel();
+      _badgeDebounce = Timer(const Duration(seconds: 3), _loadChatBadge);
+    });
+    _loadChatBadge();
+  }
+
+  Future<void> _loadChatBadge() async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null || token.isEmpty) return;
+    final u = await _chat.unreadCount(token);
+    if (!mounted || u.total == _chatUnread) return;
+    setState(() => _chatUnread = u.total);
+  }
+
+  Future<void> _openChats() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ChatsScreen()),
+    );
+    if (mounted) _loadChatBadge();
   }
 
   Future<void> _refreshAll() => Future.wait([_load(), _loadToVerify()]);
@@ -251,18 +298,20 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
                 style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11),
               ),
             ]),
+            // The avatar that used to sit here was a second route to a tab that is
+            // already in the bottom bar. The two icons that replace it are the only
+            // things on this screen you cannot reach any other way.
             actions: [
-              GestureDetector(
-                onTap: () => setState(() => _tab = 4),
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundColor: AppColors.accent,
-                  child: Text(
-                    name[0].toUpperCase(),
-                    style: GoogleFonts.poppins(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                ),
+              HeaderIconButton(
+                icon: Icons.chat_bubble_outline,
+                tooltip: 'Chats',
+                badge: _chatUnread,
+                onTap: _openChats,
               ),
+              const SizedBox(width: 10),
+              // Live from Wave C. Same widget as the player and admin headers, and
+              // the one place the notification stack is started for a session.
+              const NotificationBell(),
               const SizedBox(width: 14),
             ],
           ),
@@ -360,6 +409,18 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
                     Icons.rule_rounded, 'Verify Results',
                     const Color(0xFFE0E7FF), const Color(0xFF4338CA),
                     () => Navigator.pushNamed(context, '/owner-verify-matches'),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                // S.7 Wave D / FR4.16. Full width on purpose: the wallet card above
+                // says what the balance IS, and this is the only place that says where
+                // it came from -- every booking, its commission and its refunds, for a
+                // date range, as a CSV that opens in Excel.
+                Row(children: [
+                  _quickActionTile(
+                    Icons.summarize_outlined, 'Earnings Report',
+                    const Color(0xFFF1F5F9), const Color(0xFF334155),
+                    () => Navigator.pushNamed(context, '/owner-reports'),
                   ),
                 ]),
               ]),

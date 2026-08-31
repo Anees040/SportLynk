@@ -1,4 +1,5 @@
 import '../constants/api_constants.dart';
+import '../models/chat_channel.dart';
 import '../models/chat_message.dart';
 import 'api_service.dart';
 
@@ -86,4 +87,84 @@ class ChatService {
 
   Future<Map<String, dynamic>> deleteMessage(String token, String channelId, String messageId) =>
       _api.delete(ApiConstants.chatMessage(channelId, messageId), token: token);
+
+  // ── The inbox and the other two channel types (S.7 Wave B) ──────────
+
+  /// One page of the inbox, newest activity first. Pass [cursor] back exactly as
+  /// the previous page returned it.
+  Future<ChatInboxPage> chats(
+    String token, {
+    int limit = 30,
+    String? cursor,
+    ChatChannelType? type,
+  }) async {
+    final params = <String, String>{'limit': '$limit'};
+    if (cursor != null) params['cursor'] = cursor;
+    if (type != null && type != ChatChannelType.unknown) params['type'] = type.wire;
+    final r = await _api.get(ApiConstants.chats, token: token, queryParams: params);
+    if (r['success'] != true || r['data'] is! Map) return const ChatInboxPage();
+    return ChatInboxPage.fromJson(Map<String, dynamic>.from(r['data'] as Map));
+  }
+
+  /// The header badge. Never throws and never partially fails — a badge that
+  /// cannot load is a zero, not an error dialog over the home screen.
+  Future<ChatUnread> unreadCount(String token) async {
+    final r = await _api.get(ApiConstants.chatUnreadCount, token: token);
+    if (r['success'] != true || r['data'] is! Map) return const ChatUnread();
+    return ChatUnread.fromJson(Map<String, dynamic>.from(r['data'] as Map));
+  }
+
+  /// The room for a booking, or null when there is none.
+  ///
+  /// Null is a NORMAL answer, not a failure: a booking that is still pending has
+  /// no room yet, one confirmed before this wave shipped never will, and the
+  /// server answers 404 rather than 403 for a non-member so a stranger cannot
+  /// probe it. All three cases render as "no Message button", never as an error.
+  Future<String?> channelForBooking(String token, String bookingId) =>
+      _channelId(ApiConstants.chatForBooking(bookingId), token);
+
+  /// The coordination room for a match, or null when the challenge was never
+  /// accepted (or predates this wave).
+  Future<String?> channelForMatch(String token, String matchId) =>
+      _channelId(ApiConstants.chatForMatch(matchId), token);
+
+  Future<String?> _channelId(String path, String token) async {
+    final r = await _api.get(path, token: token);
+    if (r['success'] != true || r['data'] is! Map) return null;
+    final id = (r['data'] as Map)['channelId'];
+    return id == null ? null : '$id';
+  }
+
+  /// FR8.10 — three suggested replies for the other side's last message.
+  ///
+  /// ADVISORY: the result fills the composer and nothing is sent. Pass either the
+  /// [messageId] of the message being replied to (preferred — the server reads the
+  /// body itself and refuses one from another channel) or raw [text].
+  Future<QuickReplySet> quickReplies(
+    String token,
+    String channelId, {
+    String? messageId,
+    String? text,
+  }) async {
+    final r = await _api.post(ApiConstants.chatQuickReplies(channelId), {
+      'messageId': ?messageId,
+      'text': ?text,
+    }, token: token);
+    if (r['success'] != true || r['data'] is! Map) return const QuickReplySet();
+    return QuickReplySet.fromJson(Map<String, dynamic>.from(r['data'] as Map));
+  }
+
+  /// Mute or unmute one room for me. [hours] is capped server-side (1 hour to a
+  /// year); passing `muted: false` clears it. Returns the server's own state so
+  /// the caller never has to guess what "muted" now means.
+  Future<Map<String, dynamic>> mute(
+    String token,
+    String channelId, {
+    bool muted = true,
+    int? hours,
+  }) =>
+      _api.post(ApiConstants.chatMute(channelId), {
+        'muted': muted,
+        'hours': ?hours,
+      }, token: token);
 }

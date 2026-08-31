@@ -155,3 +155,8 @@ ml-service/data/assistant/*
 !ml-service/data/assistant/assistant_test.csv
 !ml-service/data/assistant/assistant_test_meta.json
 !ml-service/data/assistant/intents_meta.json
+
+# scratch/patch scripts - never commit
+.pt/
+**/.doctmp_*
+**/.m020*

@@ -37,6 +37,25 @@ import 'screens/owner/owner_tournaments_screen.dart';
 import 'screens/owner/owner_create_tournament_screen.dart';
 import 'screens/player/tournament_detail_screen.dart';
 import 'screens/admin/admin_moderation_screen.dart';
+import 'screens/admin/admin_dispute_detail_screen.dart';
+import 'screens/admin/admin_disputes_screen.dart';
+import 'screens/admin/admin_settings_screen.dart';
+import 'screens/admin/admin_users_screen.dart';
+import 'screens/owner/owner_reports_screen.dart';
+// S.7 Wave B/C — the chat inbox, the notification feed, and the deep-link map
+// that a tray tap resolves through.
+import 'providers/notification_provider.dart';
+import 'services/push_service.dart';
+import 'utils/deep_link.dart';
+import 'models/chat_channel.dart';
+import 'screens/shared/chats_screen.dart';
+import 'screens/shared/chat_thread_screen.dart';
+import 'screens/shared/notifications_screen.dart';
+import 'screens/shared/notification_prefs_screen.dart';
+import 'screens/player/match_center_screen.dart';
+import 'screens/player/team_roster_screen.dart';
+import 'screens/player/wallet_screen.dart';
+import 'screens/owner/owner_booking_requests_screen.dart';
 
 /// Removes scrollbar overlay on all platforms (fixes white line on web).
 class _NoScrollbarBehavior extends MaterialScrollBehavior {
@@ -124,6 +143,16 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase initialization failed: $e');
   }
+  // BEFORE runApp, and deliberately so: `getInitialMessage()` is what a tray tap on
+  // a KILLED app arrives as, it resolves exactly once, and it must be read before
+  // the first frame or the link is lost. PushService parks it and
+  // `DeepLink.replayPending()` fires it from the first home screen, once
+  // AuthProvider has resolved -- a deep link pushed before authentication would land
+  // on a screen that immediately bounces to /login.
+  //
+  // Its whole body is try/caught inside the service, so a phone with no Play
+  // Services degrades to "no push" and never to an app that will not start.
+  await PushService().init();
   runApp(const SportLynkApp());
 }
 
@@ -137,10 +166,19 @@ class SportLynkApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => VenueProvider()),
         ChangeNotifierProvider(create: (_) => BookingProvider()),
+        // The bell badge on all three home headers, the feed screen, and the
+        // `notification:new` socket subscription that keeps them live.
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
       ],
       child: ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: MaterialApp(
+        // How a notification tap navigates. A tray tap is handled by PushService,
+        // which has no BuildContext of its own -- and on a cold start there is not a
+        // single mounted widget yet. One app-level key is the only way to reach the
+        // navigator from there, so `DeepLink` owns it and `PushService` goes through
+        // `DeepLink.open`/`park` rather than touching Navigator itself.
+        navigatorKey: DeepLink.navigatorKey,
         title: 'SportLynk',
         debugShowCheckedModeBanner: false,
         scrollBehavior: _NoScrollbarBehavior(),
@@ -240,6 +278,125 @@ class SportLynkApp extends StatelessWidget {
               child: OwnerCreateTournamentScreen(venueId: a?['venueId'] as String?),
             );
           },
+          // ── S.7 Wave C — the deep-link surface ───────────────────────────
+          //
+          // EVERY route `notificationTypes.js` can emit MUST exist here.
+          // `check_notifications.js` asserts exactly that by string-matching this
+          // file, because the failure it prevents is invisible: a notification whose
+          // route was never registered renders perfectly, buzzes the phone, and then
+          // does nothing at all when tapped. That is the class of silent breakage
+          // this sprint exists to close, so the check is a hard gate rather than a
+          // review note.
+          //
+          // NONE OF THESE IS ROLE-GUARDED MORE TIGHTLY THAN ITS AUDIENCE.
+          // `AuthGuard` answers a role mismatch with `pushNamedAndRemoveUntil` —
+          // it WIPES the stack and sends you to your own home. On an ordinary
+          // mis-tap that is fine; on a notification tap it would throw away the very
+          // thing the user opened. So a route reachable by more than one role carries
+          // no `requiredRole`, and `/wallet` — which owners genuinely receive
+          // withdrawal notifications for — resolves to the right screen per role
+          // instead of bouncing the owner off it.
+          '/notifications': (_) => const AuthGuard(child: NotificationsScreen()),
+          '/notification-prefs': (_) => const AuthGuard(child: NotificationPrefsScreen()),
+          '/chats': (_) => const AuthGuard(child: ChatsScreen()),
+          '/chat-thread': (ctx) {
+            final a = (ModalRoute.of(ctx)!.settings.arguments as Map?) ?? const {};
+            final channelId = a['channelId']?.toString();
+            final refId = a['refId']?.toString();
+            // A thread needs one of the two (the constructor asserts it). A link with
+            // neither is a registry bug, not a user error, so it lands on the inbox
+            // rather than tripping an assert in a release build.
+            if (channelId == null && refId == null) return const AuthGuard(child: ChatsScreen());
+            return AuthGuard(
+              child: ChatThreadScreen(
+                type: ChatChannelType.parse(a['type']?.toString()),
+                title: a['title']?.toString() ?? 'Chat',
+                channelId: channelId,
+                refId: refId,
+                imageUrl: a['imageUrl']?.toString(),
+                contextLine: a['contextLine']?.toString(),
+              ),
+            );
+          },
+          '/match-center': (ctx) {
+            final a = (ModalRoute.of(ctx)!.settings.arguments as Map?) ?? const {};
+            // `matchId` rides along in the link but the centre is a list screen: it
+            // opens on the team's fixtures, which is where the match in question is.
+            // `teamName` is optional — the registry forwards it only when the emitting
+            // call site had it, and the screen loads the team regardless.
+            return AuthGuard(
+              requiredRole: 'player',
+              child: MatchCenterScreen(
+                teamId: a['teamId']?.toString() ?? '',
+                teamName: a['teamName']?.toString(),
+              ),
+            );
+          },
+          '/team-roster': (ctx) {
+            final a = (ModalRoute.of(ctx)!.settings.arguments as Map?) ?? const {};
+            return AuthGuard(
+              requiredRole: 'player',
+              child: TeamRosterScreen(
+                teamId: a['teamId']?.toString(),
+                teamName: a['teamName']?.toString(),
+              ),
+            );
+          },
+          // Owners withdraw too (`POST /api/wallet/withdraw` is open to any
+          // authenticated user, which is how a venue owner is paid), so the one
+          // `/wallet` route the registry emits has to mean "my wallet" for both.
+          '/wallet': (ctx) {
+            final role = Provider.of<AuthProvider>(ctx, listen: false).userRole;
+            return AuthGuard(
+              child: role == 'owner' ? const OwnerWalletScreen() : const WalletScreen(),
+            );
+          },
+          // The requests list, not one request: the owner-side booking screens are a
+          // tabbed list and the notification's `bookingId` is the row they land on.
+          '/owner-bookings': (_) =>
+              const AuthGuard(requiredRole: 'owner', child: OwnerBookingRequestsScreen()),
+          // -- S.7 Wave D / D5 -- the admin desk and the financial export ---
+          //
+          // Every one of these is `requiredRole: 'admin'` except the owner's own
+          // report: the notification registry emits none of them (checked -- it
+          // routes to `/chats`, `/match-center`, `/wallet` and friends only), so
+          // there is no deep link here that a role bounce could throw away, and the
+          // tight guard is the right one. `AuthGuard` wiping the stack on a mismatch
+          // is exactly the wanted behaviour for a mis-tapped admin URL.
+          //
+          // The dispute DETAIL route takes its id as an argument and is also pushed
+          // directly by the queue with `MaterialPageRoute`, which is what lets it
+          // return `true` so the queue re-reads itself after a ruling. It is named
+          // here as well so the case file is linkable.
+          '/admin-disputes': (_) =>
+              const AuthGuard(requiredRole: 'admin', child: AdminDisputesScreen()),
+          '/admin-dispute': (ctx) {
+            final a = (ModalRoute.of(ctx)!.settings.arguments as Map?) ?? const {};
+            final id = a['disputeId']?.toString();
+            // No id means the link is malformed, not that the admin wants a blank
+            // case file -- so it lands on the queue.
+            if (id == null || id.isEmpty) {
+              return const AuthGuard(requiredRole: 'admin', child: AdminDisputesScreen());
+            }
+            return AuthGuard(
+              requiredRole: 'admin',
+              child: AdminDisputeDetailScreen(disputeId: id),
+            );
+          },
+          '/admin-users': (_) =>
+              const AuthGuard(requiredRole: 'admin', child: AdminUsersScreen()),
+          '/admin-settings': (_) =>
+              const AuthGuard(requiredRole: 'admin', child: AdminSettingsScreen()),
+          // One screen, two scopes: the owner's own venues, and the platform-wide
+          // report with commission per owner. The route decides the scope rather than
+          // the screen reading the signed-in role, because an admin who also owns
+          // venues is entitled to both reports.
+          '/admin-reports': (_) => const AuthGuard(
+                requiredRole: 'admin',
+                child: OwnerReportsScreen(platform: true),
+              ),
+          '/owner-reports': (_) =>
+              const AuthGuard(requiredRole: 'owner', child: OwnerReportsScreen()),
           '/owner-venue-reviews': (context) {
             final a = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
             return AuthGuard(

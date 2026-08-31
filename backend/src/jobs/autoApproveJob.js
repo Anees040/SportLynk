@@ -22,6 +22,7 @@ const {
   logTxn,
 } = require('../utils/escrow');
 const { notify } = require('../utils/notify');
+const chat = require('../utils/chatCore');
 
 let _running = false;
 
@@ -81,7 +82,8 @@ async function processPendingRequests() {
 async function lockPending(client, bookingId) {
   const res = await client.query(
     `SELECT b.id, b.player_id, b.slot_id, b.security_deposit, b.owner_id,
-            v.owner_id AS venue_owner_id, v.name AS venue_name, u.name AS player_name
+            v.owner_id AS venue_owner_id, v.name AS venue_name,
+            v.image_url AS venue_image, u.name AS player_name
        FROM bookings b
        JOIN venues v ON v.id = b.venue_id
        JOIN users u ON u.id = b.player_id
@@ -125,7 +127,21 @@ async function autoConfirm(bookingId) {
       body: `${b.player_name}'s request was pending for over ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)} and has been auto-confirmed.`,
     });
 
+    // S.7 Wave B -- confirm path #2. Identical call to routes/owner.js so the
+    // room and its opening sentence do not depend on WHO confirmed; the unique
+    // (type, ref_id) index makes a race between the two an update, not a
+    // duplicate room.
+    const pill = await chat.openBookingRoom(client, {
+      bookingId: b.id,
+      playerId: b.player_id,
+      ownerId: b.venue_owner_id || b.owner_id,
+      venueName: b.venue_name,
+      imageUrl: b.venue_image || null,
+      event: 'booking_confirmed',
+    });
+
     await client.query('COMMIT');
+    await chat.emitPills(pool, pill);
     console.log(`[AutoApproveJob] ✓ ${b.id} (${b.player_name} @ ${b.venue_name}) → confirmed.`);
     return true;
   } catch (err) {

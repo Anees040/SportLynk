@@ -55,13 +55,27 @@ const reviewRoutes = require("./routes/reviews");
 const internalRoutes = require("./routes/internal");
 const assistantRoutes = require("./routes/assistant");
 const tournamentRoutes = require("./routes/tournaments");
+const notificationRoutes = require("./routes/notifications");
 const { startNoShowJob } = require("./jobs/noShowJob");
 const { startAutoApproveJob } = require("./jobs/autoApproveJob");
 const { startWithdrawalJob } = require("./jobs/withdrawalJob");
 const { startMatchExpiryJob } = require("./jobs/matchExpiryJob");
 const { startSentimentBackfillJob } = require("./jobs/sentimentBackfillJob");
 const { startTournamentJob } = require("./jobs/tournamentJob");
+const { startPushJob } = require("./jobs/pushJob");
+const { assertNotificationTypes } = require("./utils/notificationTypes");
+const settings = require("./utils/globalSettings");
+const escrow = require("./utils/escrow");
 const { ACTIVE_TEST_OVERRIDES } = require("./utils/escrow");
+
+// ─── Notification registry (S.7 Wave C) ──────────────────────
+// Runs at LOAD, before a single route is mounted, and THROWS on an inconsistent
+// registry — a category the CHECK constraint would reject, a priority that is not
+// high|normal|low, a missing icon, an entity with no id resolver. Same shape as
+// services/assistantActions' assertRoutable(): the failure a registry mistake causes
+// is a notification that renders blank and taps nowhere, which nobody notices until a
+// user complains, so it is made a boot failure instead.
+const NOTIF_REGISTRY = assertNotificationTypes();
 
 app.use("/api/auth", authRoutes);
 app.use("/api/venues", venueRoutes);
@@ -74,6 +88,10 @@ app.use("/api/users", userRoutes);
 app.use("/api/slots", slotRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/chat", chatRoutes);
+// Notifications (S.7 Wave C). routes/notifications.js declares /summary,
+// /preferences, /devices, /read-all, /test and /types BEFORE /:id, for the same
+// declaration-order reason as tournaments below.
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/matches", matchRoutes);
 // Tournaments (S.7 Wave A). routes/tournaments.js declares /mine and /preview
 // BEFORE /:id — Express matches in declaration order, so the reverse would send
@@ -148,6 +166,9 @@ initRealtime(server);
 server.listen(PORT, () => {
   console.log(`🚀 SportLynk API running on port ${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(
+    `   Notifications: ${NOTIF_REGISTRY.types} types → ${NOTIF_REGISTRY.routes} routes`,
+  );
 
   // A sped-up sweep or a shortened auto-decide window must never be mistaken for
   // real behaviour, so it is announced as loudly as a boot banner can manage.
@@ -160,6 +181,20 @@ server.listen(PORT, () => {
     console.warn("");
   }
 
+  // S.7 Wave D. Pull the admin's configured deposit percent into
+  // `escrow.POLICY.DEPOSIT_PERCENT` once, at boot.
+  //
+  // ~30 call sites read that constant to DESCRIBE the policy ("20% of the total is
+  // your at-risk deposit") from synchronous code that cannot await a settings row.
+  // `bookingService` reads the setting itself and stamps the amount it holds onto
+  // the booking, so money is already correct without this; what this fixes is COPY
+  // — a quote screen that says 20% while the next booking holds 25%. Fire-and-forget
+  // and silent on failure: a settings read must never be the reason the API does not
+  // come up, and the documented default is a safe thing to be describing.
+  settings.deposit({ fresh: true })
+    .then((pct) => escrow.setDepositPercent(pct, "boot"))
+    .catch(() => {});
+
   // Start background jobs
   startNoShowJob();
   startAutoApproveJob();
@@ -170,4 +205,10 @@ server.listen(PORT, () => {
   // the app. Without it a tournament nobody generated would hold every captain's
   // entry fee frozen indefinitely.
   startTournamentJob();
+  // The notification outbox drain (S.7 Wave C). notify() writes rows inside money
+  // transactions and never calls FCM there — holding a wallet row's FOR UPDATE lock
+  // across an HTTPS round trip is how a settlement path acquires a network timeout.
+  // This job is what turns those rows into a tray banner and an in-app badge, and it
+  // announces its own Firebase state on the line below rather than failing to boot.
+  startPushJob();
 });

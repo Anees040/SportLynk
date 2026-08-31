@@ -359,6 +359,61 @@ list kept current by live `receipt` events.
 
 ---
 
+### The inbox, the other two rooms, mute & AI quick replies — S.7 Wave B
+S2 shipped team chat only, and the app could open a room **only if it already knew
+the id**. Three things followed from that: `booking` and `captain` were legal in the
+`chk_chat_channels_type` CHECK constraint and nothing ever created one, there was no
+list, and a room nobody can navigate to might as well not exist.
+
+| Method | Endpoint | Body / Query | Response |
+|--------|----------|--------------|----------|
+| GET | `/chat` | `?limit=≤50&cursor=<sortAt>&type=booking\|captain\|team` | `{items:[…], nextCursor}` — the inbox, `last_message_at DESC NULLS LAST` |
+| GET | `/chat/unread-count` | — | `{total, rooms, byType:{booking,captain,team}}` — the header badge, one trip |
+| GET | `/chat/booking/:bookingId` | — | `{channelId}` — 404 to a non-member |
+| GET | `/chat/match/:matchId` | — | `{channelId}` — the captain room for that match |
+| POST | `/chat/:channelId/mute` | `{muted?:bool, hours?}` | `{muted, mutedUntil}` — floored at 1 h, capped at a year |
+| POST | `/chat/:channelId/quick-replies` | `{text}` **or** `{messageId}` | `{suggestions:[{text,intent}], intent, confidence, source}` (FR8.10) |
+
+An inbox row is
+`{id, type, refId, title, imageUrl, lastMessageAt, lastMessagePreview,
+lastMessageSenderId, lastMessageSenderName, messageCount, unread, muted, mutedUntil,
+role, sortAt, context}`.
+
+**`context` is what makes the list readable**, and it is per type: a booking carries
+its status, slot date and venue; a captain room its match status, opponent and
+scoreline; a team its member count. Without it the three room types are an
+indistinguishable list of names.
+
+**`cursor` is `sortAt`, passed back VERBATIM.** It is keyed on the exact expression
+the server sorts by, so a room that receives a message mid-scroll cannot make a row
+appear twice or vanish. `type='assistant'` (Scout has its own screen) and
+`archived_at IS NOT NULL` are excluded. **Muted rooms are counted in the list but not
+in the badge** — a badge that counts a conversation you silenced on purpose is why
+people switch badges off.
+
+**Who creates the two new rooms, and when.** Both are `ON CONFLICT (type, ref_id)`
+idempotent, both post their opening pill through `chatSystemMessages`, and both emit
+**after commit**:
+
+| Room | `type`/`ref_id` | Members | Created at |
+|---|---|---|---|
+| booking | `booking` / booking id | player + venue owner | booking **confirmed** — owner approval *and* `autoApproveJob`. Not on request: an unapproved request is not a conversation |
+| captain | `captain` / match id | both teams' captains **and** vice-captains | challenge **accepted**, in the same transaction as the fan-out — carrying **"Challenge accepted — coordinate here"** (FR8.5, verbatim) |
+
+`matchCore.fanOut` also posts **one neutral pill** into the captain room per lifecycle
+event (result submitted / awaiting owner / verified / disputed) — per-team wording is
+wrong in a shared room. That log is what Wave D's dispute case file archives (FR10.6),
+which is why Wave B was built first.
+
+**Quick replies are advisory, and train nothing.** The message is classified by
+**model #4** (the released 23-label classifier, byte-identical, no new labels) and the
+intent selects three canned replies by the caller's role *in that room*. Tapping a chip
+fills the composer; nothing auto-sends, and the send goes through
+`POST /:channelId/messages` like any other message. `source` is `model`, `lexicon`
+(ml-service down — a small keyword table answers) or `unavailable`.
+
+---
+
 ## Realtime (Socket.IO) — S2 Wave A
 Attached to the same Express HTTP server (`🔌 Realtime (Socket.IO) attached` at
 boot). The client authenticates with its JWT on connect and is auto-joined to a
@@ -660,6 +715,233 @@ prices, off-peak placement **lowers the entry fee teams must pay** while **prote
 the owner's sellable peak inventory**. When ml-service is down the allocator falls back
 to chronological order and stamps `meta.scheduling.source = 'chronological'` with a
 `reason`, so the demo can prove which path ran rather than assert it.
+
+---
+
+## Notifications (Token required) — S.7 Wave C
+Mounted at `/api/notifications`. Before this wave the `notifications` table was
+**write-only**: ~33 call sites inserted into it and nothing on earth read it. So this
+is not "push added to a working notification system" — it is the notification system,
+and then push.
+
+| Method | Endpoint | Body / Query | Response |
+|--------|----------|--------------|----------|
+| GET | `/notifications` | `?limit&cursor&category&unreadOnly` | `{items:[…], nextCursor}` — `created_at DESC` |
+| GET | `/notifications/summary` | — | `{unread, byCategory:{…}, push:{configured, …}}` |
+| GET \| PUT | `/notifications/preferences` | `{muteAll, push:{cat:bool}, inApp:{cat:bool}, quietHours:{enabled,start,end}}` | the **normalised** prefs — unknown keys and a malformed `"25:99"` are dropped, not stored |
+| POST | `/notifications/devices` | `{token, platform?, appVersion?, label?}` | `{deviceId, …}` — call on login, on app start, **and on every `onTokenRefresh`** |
+| DELETE | `/notifications/devices` | `{token?}` | `{revoked:n}` — one device, or every device when the body is empty |
+| POST | `/notifications/read-all` | `{category?}` | `{marked:n, unread, byCategory}` |
+| DELETE | `/notifications` | `?category=` | `{deleted:n, …}` — clear **read** only, and only rows older than an hour |
+| GET | `/notifications/types` | — | `{types, routes, categories}` — the registry, for the prefs screen |
+| POST | `/notifications/test` | `{title?, body?}` | the demo lever — **caller only**, 403 in production |
+| PATCH | `/notifications/:id/read` | — | `{changed, unread, byCategory}` — idempotent |
+| PATCH | `/notifications/:id/unread` | — | resets `group_count` to 1 |
+| DELETE | `/notifications/:id` | — | `{dismissed:true, …}` — `dismissed_at`, **not** a DELETE |
+
+A feed row is
+`{id, type, category, priority, icon, title, body, payload, deepLink, entityType,
+entityId, bookingId, groupKey, groupCount, imageUrl, actor:{id,name,avatarUrl}|null,
+isRead, readAt, expiresAt, isExpired, createdAt}`.
+
+**`cursor` is a `"<createdAt>~<id>"` PAIR and is opaque.** One transaction routinely
+writes several notifications (a booking approval alerts the player *and* the owner), and
+a timestamp-only cursor silently drops every tied row after the first at a page
+boundary. Nothing outside `notificationFeed.js` builds or parses it; a malformed cursor
+decodes to "no cursor" and answers page one rather than 500 on a screen the user reached
+by scrolling.
+
+**One server-owned registry: `utils/notificationTypes.js`.** Every `type` maps to
+`{category, priority, icon, deepLink(payload), groupKey(payload)}` — **45 types → 9
+routes**, printed at boot. The client never guesses a route or an icon, adding a type is
+one line, and `assertNotificationTypes()` at boot names any emitted-but-unregistered
+type. An unregistered type renders as a blank icon and a dead tap, which is exactly the
+class of silent breakage this wave existed to end.
+
+Categories (`booking · match · tournament · chat · team · wallet · assistant · venue ·
+review`, plus a non-mutable `system`) are the unit a user opts out of and the filter
+chips. `priority` (`high · normal · low`) decides whether FCM fires at all and whether
+it is a heads-up.
+
+**Push is a transactional outbox, not an inline call.** `notify()` runs inside money
+transactions holding `FOR UPDATE` locks; an HTTPS call to FCM there would hold row locks
+across a network round trip. So the notification row **is** the outbox
+(`sent_push = false`) and `jobs/pushJob.js` drains it on a ~4 s tick. Consequences: zero
+changes to the 33 existing call sites, atomic with the money, survives a crash,
+retryable, and "why didn't my phone buzz?" is answerable from SQL (`push_attempts`,
+`pushed_at`, `push_error`). Cost: up to ~4 s of delivery latency, invisible on a locked
+phone.
+
+**Prefs and quiet hours are enforced in the job, server-side.** A toggle the client
+honours is a suggestion, not a preference. `inApp` suppresses the foreground banner
+only — it can never suppress the row or the badge, because muting is about interruption,
+not about hiding what happened. An expired row is never pushed.
+
+**Chat push is presence-aware:** a new message notifies only when the recipient is
+offline or not viewing that channel, via the `bus.isUserOnline()` that already existed.
+
+**It ships dormant.** `pushService` no-ops with one warning when
+`FIREBASE_SERVICE_ACCOUNT` is unset (the same discipline as `mlClient.isConfigured()`);
+the boot banner then reads `[PushJob] … FCM OFF`. Bell, badge, feed, deep links, prefs
+and live socket delivery all work without the key. `registration-token-not-registered`
+and `invalid-argument` revoke **one device row** — never a logout everywhere, which is
+why `user_devices` replaced the one-token-per-user `users.fcm_token` (still written, for
+backward compatibility).
+
+---
+
+## Admin (Admin token required) — S.7 Wave D
+Mounted at `/api/admin`, which applies **one** `router.use(auth, checkRole('admin'))`
+above every sub-router (`adminUsers`, `adminDisputes`, `adminSettings`,
+`reports.platformReports`). There is therefore no per-path authorisation to remember,
+and a new admin path cannot ship without a gate. Every write lands in **`admin_audit`**
+with `before`/`after` jsonb — "who changed this?" is the first question a viva panel
+asks about an admin panel.
+
+### Disputes — the queue and the ruling (FR10.6, FR10.7)
+The raise flow shipped in S2 Wave C and **nothing ever read the table**.
+
+| Method | Endpoint | Body / Query | Response |
+|--------|----------|--------------|----------|
+| GET | `/admin/disputes` | `?status=open\|resolved\|dismissed\|all&cursor&limit` | `{items:[…], nextCursor, count}` |
+| GET | `/admin/disputes/:id` | — | the case file (below) |
+| PATCH | `/admin/disputes/:id` | `{action, scoreChallenger?, scoreOpponent?, note}` | `{ruling, eloMoved, bracket, …}` + a sentence |
+
+`action` is `rule_challenger · rule_opponent · rule_draw · rule_custom · dismiss`.
+**`note` is required** — the teams are told what it says, so a ruling with no
+explanation is not a ruling.
+
+**Sorted by what is at stake, then by age.** `severityElo` is the rating actually on the
+line, computed with the same pure `elo.rate()` at the live K, so an admin with ten
+minutes spends them on the match that moves the most rating rather than on whichever
+arrived last. The list cursor is a `"<severityElo>~<createdAt>~<id>"` **triple** and is
+opaque; building it client-side pages wrong.
+
+**The case file** is both `match_results` rows side by side (the table's
+`UNIQUE (match_id, submitted_by_team)` guarantees exactly one per team), each roster with
+current Elo and trust score, the booking + venue + slot, the owner's check-in/QR
+evidence, the match's `elo_history`, and **the captain-channel chat archive** — a plain
+read of the room Wave B now creates. That archive is the literal FR10.6 requirement.
+
+**A ruling goes through the same verified path as the owner's `POST /matches/:id/verify`,
+in one transaction** — not a parallel implementation: lock the match `FOR UPDATE`, write
+the ruled scoreline and `winner_team`, `elo.applyResult()` (same call, same `elo_history`
+audit trail, honours `elo_frozen`), stamp `status = completed` + `verified_by` +
+`elo_applied`, `tournaments.advanceAfterMatch()` unconditionally (a friendly answers
+`not_tournament` and touches nothing; a fixture advances the bracket inside the same
+transaction), close the dispute, `notify()` **both** captains and post one neutral pill
+into the room where they argued about it. `emitAfterCommit` runs **after** COMMIT —
+emitting inside would tell both apps to re-fetch a match that is not committed yet.
+`dismiss` skips the rating work, leaves both submissions intact and returns the match to
+`awaiting_owner`. Escrow is untouched by a ruling: the deposit is settled by
+check-in/no-show, not by who won. A fixture whose bracket already advanced answers
+`code:'already_settled'` rather than rewriting history.
+
+### Users — suspension that actually suspends (FR10.8)
+| Method | Endpoint | Body / Query | Response |
+|--------|----------|--------------|----------|
+| GET | `/admin/users` | `?q=&role=&status=active\|suspended\|all&limit&cursor` | keyset page on `(created_at, id)` |
+| PATCH | `/admin/users/:id/suspend` | `{reason}` — required | `{cascade:{…}}` + a sentence |
+| PATCH | `/admin/users/:id/reinstate` | `{note?}` | what was re-listed |
+
+**The security fix this wave landed.** `middleware/authMiddleware.js` was 43 lines of
+pure `jwt.verify` with **no DB read**, so a suspended user's existing token kept working
+until it expired — `users.is_active` was checked at login only, which made suspension
+cosmetic. It now carries a **30 s-TTL in-process cache** of `(id → {is_active, role})`:
+one small indexed lookup per user per 30 s, `invalidate(id)` called the instant a
+suspension commits, and — following `globalSettings.js`'s NEVER-THROW rule — a DB error
+falls back to the token's claims rather than locking everybody out. Suspended →
+**403** `Account suspended…`, matching the login message.
+
+Suspension is a **cascade in one transaction**: upcoming bookings cancelled *with
+refunds* through the existing `bookingService.cancelBooking` core function (so it joins
+this transaction), open challenges withdrawn, upcoming tournament registrations
+withdrawn, and the user notified. A suspended **owner** additionally has their venues
+set `is_active = false` and their pending requests rejected + refunded — otherwise
+players keep paying into a dead venue. Reinstate lifts the ban and re-lists the venues
+**that suspension** took down, read back from its own audit row; nothing else is
+restored, because a refunded booking cannot be un-refunded. Guards: you cannot suspend
+yourself, you cannot suspend another admin, and wallet withdrawals refuse for an inactive
+user where the wallet row is already locked.
+
+### Global settings, live (FR10.9–FR10.11)
+| Method | Endpoint | Body | Response |
+|--------|----------|------|----------|
+| GET | `/admin/settings` | — | `{sections:[{key,label,description,fields:[…]}], overrides:[…]}` |
+| PUT | `/admin/settings` | `{settings:{key:value}, note?}` (note ≤ 500) | `{changed, sections, overrides}` + a sentence |
+| POST | `/admin/settings/reset` | `{keys:[…]}` **or** `{all:true}` | what went back to default |
+
+A field is
+`{key, label, description, type, unit, step, min, max, maxLen, pairsWith, value,
+default, isOverridden, restartRequired}` in six sections —
+`money · sports · elo · match · tournament · assistant`. **There are exactly five
+types** (`int · number · bool · text · sports`), so a screen that renders those five
+renders the whole catalogue, and adding a key is a server change with no app release.
+Values are read back **through the same accessor the app uses**, so an admin sees
+*effective* values rather than raw rows.
+
+**Written bounds ⊂ read clamps.** `globalSettings.js` already clamps on read; PUT
+rejects at the edge exactly what the accessor would have silently clamped, so the admin
+gets an error instead of a lie. Refused outright: `commission_pct + deposit_pct > 100`;
+`tournament.winner_percent + runnerup_percent ≠ 100` (this is what `pairsWith` marks);
+`min_teams > max_knockout_teams`; `k_factor` outside 8–64; switching off a sport that has
+future confirmed bookings — **409 `code:'sport_has_bookings'`** with the count per sport,
+because the honest answer names what is in the way. `sports_enabled` is a
+`{sportName: bool}` map and at least one must stay on. Sport toggles are enforced on
+venue create/edit **and** on booking, not merely hidden in the UI.
+
+A write calls `settings.invalidate()`, so it **applies to the next operation with no
+restart** (FR10.11) — the hook `globalSettings.js`'s header has advertised since S.4.
+`POST /reset` DELETEs the override row, so the key follows `DEFAULTS` forever after.
+Validation failures answer **400** with `errors:[{key,message}]`; a no-op write is a
+`success:true` `Nothing changed — those are already the saved values.`
+
+> `bad(res, status, message, extra)` spreads `extra` at the **top level** of the
+> envelope. `errors` and `code` are therefore siblings of `message`, **not** nested
+> under `data`.
+
+### Financial export (FR4.16)
+Two scopes, **one generator**, so the CSV and the JSON can never drift: the same
+`eachRow` walk feeds both.
+
+| Method | Endpoint | Query |
+|--------|----------|-------|
+| GET | `/owner/reports/financial` | `?from&to&venueId&format=csv\|json` |
+| GET | `/admin/reports/platform` | `?from&to&venueId&format=csv\|json` |
+
+`from`/`to` are **required** `YYYY-MM-DD` and the span is capped at **366 days**.
+`?format=json` returns `{range:{from,to,days}, columns:[{key,label,money}], totals, rows,
+truncated, byOwner?}` with `rows` capped at 500 — **the totals are always for the whole
+range and only `rows` is a page**, which `truncated` says out loud. CSV is streamed
+(`res.write` per row, never a giant string) with a UTF-8 BOM, one row per booking, one
+per tournament payout, and a `TOTAL` summary row.
+
+**The columns and their order are the server's.** The preview table renders whatever
+`columns` says, so the numbers on the phone cannot disagree with the numbers in the file,
+and adding a column needs no app release.
+
+**Money comes from the ledger** (`transactions`, the shapes `escrow.logTxn` writes), never
+recomputed from prices, so the export reconciles with the wallet to the paisa. `price` and
+`depositAtRisk` are the *agreement*; everything after them is the ledger. `byOwner` is
+where "commission earned per owner" actually lives — commission is a ledger row on the
+owner's wallet, not a column of the booking — and it includes an `(no owner on record)`
+bucket so the subtotals reconcile with TOTAL.
+
+**CSV injection is escaped.** A venue named `=cmd|…` or `+1+1` *executes* when the file
+opens in Excel, so every field starting with `= + - @`, tab or CR is prefixed with `'`
+and quotes are doubled. This is the one non-obvious correctness item in the export.
+
+**A failure has two shapes, and the boundary is the first byte.** Before it: an ordinary
+`{success:false, message}` with a real status code. After streaming starts the status
+code is spent, so a mid-stream failure appends a final `ERROR,…` row instead — a 200
+whose last line starts with `ERROR,` is a truncated export, and the app says so rather
+than handing over a file quietly missing yesterday's bookings.
+
+> The CSV is **not** fetched through Flutter's `ApiClient`: that client sends
+> `Accept: application/json` and decodes every response into the `{success,…}` envelope.
+> `ReportService.downloadCsv` is a direct `http.get` that keeps `bodyBytes` intact, which
+> is why the BOM survives and Excel on Windows opens Urdu venue names readable instead of
+> as mojibake.
 
 ---
 

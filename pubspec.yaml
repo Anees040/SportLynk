@@ -54,6 +54,25 @@ dependencies:
   # version — it only stops `depend_on_referenced_packages` firing on the import.
   url_launcher: ^6.3.2
 
+  # -- S.7 Wave C - Notifications ----------------------------------------------
+  # firebase_messaging pairs with the firebase_core ^3.6.0 already here for OTP,
+  # so this adds a plugin, not a platform: google-services.json, the Gradle
+  # plugin and firebase_options.dart are all already in the tree and working.
+  #
+  # flutter_local_notifications is deliberately NOT added. Its only job would be
+  # a tray banner while the app is in the FOREGROUND -- FCM itself draws the tray
+  # banner when the app is backgrounded or killed, because pushService sends a
+  # `notification` block alongside the `data` block. For the foreground case a
+  # system tray notification is the wrong artefact anyway (the user is looking
+  # straight at the app), and the plugin would cost a Java-8 desugaring change in
+  # the Android Gradle config that can break the release build for a banner we
+  # draw better ourselves. widgets/in_app_banner.dart does it as an Overlay entry.
+  firebase_messaging: ^15.1.0
+  # S.7 Wave D -- the owner's financial CSV. The export needs an Authorization
+  # header, so url_launcher cannot fetch it; the bytes come back through
+  # ApiClient and are handed to the OS share sheet from a temp file.
+  share_plus: ^10.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

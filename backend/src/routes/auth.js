@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
+const push = require('../services/pushService');
 
 // ─── POST /api/auth/register/player ──────────────────────────
 router.post('/register/player', async (req, res, next) => {
@@ -180,6 +181,27 @@ router.post('/login', async (req, res, next) => {
     if (!match) return res.status(401).json({ success: false, message: 'Incorrect password' });
 
     const token = jwt.sign({ id: user.id, role: user.role, phone: user.phone }, process.env.JWT_SECRET, { expiresIn: '30d' });
+
+    // Optional, and deliberately unable to fail the login. A device that cannot be
+    // registered here re-registers from POST /api/notifications/devices the moment the
+    // app finishes booting; a login that 500s because of a push table would lock the
+    // user out of an app whose core function has nothing to do with notifications.
+    if (typeof req.body.fcmToken === 'string' && req.body.fcmToken.trim().length >= 20) {
+      try {
+        await push.registerDevice(pool, {
+          userId: user.id,
+          token: req.body.fcmToken.trim(),
+          platform: typeof req.body.platform === 'string' ? req.body.platform.slice(0, 20) : null,
+          appVersion: typeof req.body.appVersion === 'string' ? req.body.appVersion.slice(0, 30) : null,
+          label: typeof req.body.deviceLabel === 'string' ? req.body.deviceLabel.slice(0, 80) : null,
+        });
+        await pool.query('UPDATE users SET fcm_token = $2 WHERE id = $1',
+          [user.id, req.body.fcmToken.trim()]);
+      } catch (e) {
+        console.warn('[auth] device token not registered at login:', e.message);
+      }
+    }
+
     return res.json({
       success: true,
       data: { token, user: { id: user.id, name: user.name, phone: user.phone, email: user.email, role: user.role, avatarUrl: user.avatar_url } },
@@ -237,6 +259,52 @@ router.get('/me', auth, async (req, res, next) => {
       message: 'User retrieved'
     });
   } catch (err) { next(err); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DEVICE TOKENS AT THE SESSION BOUNDARY  (S.7 Wave C)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// POST /api/notifications/devices is the primary registration path — an FCM token
+// arrives asynchronously from `getToken()` and again from every `onTokenRefresh`,
+// neither of which is a login. Login accepts one anyway because it is the one moment
+// the client already has both the token and a fresh identity, and doing it in the same
+// round trip means a phone that installs, logs in and is immediately locked can still
+// be reached.
+//
+// LOGOUT IS THE HALF THAT MATTERS. An FCM token belongs to an app INSTALL, not to a
+// user, so a token left registered after logout keeps delivering the previous user's
+// notifications to whoever signs in next — on a shared or handed-down phone that is a
+// privacy leak, not a stale badge. Revoking is therefore not optional cleanup.
+
+/**
+ * POST /api/auth/logout — revoke this device's push token.
+ *
+ * `{ fcmToken }` revokes ONE device; omitting it revokes every device for the user
+ * ("log me out everywhere"). The JWT itself is stateless and cannot be revoked, which
+ * is a separate problem solved in Wave D by the suspension check in authMiddleware —
+ * this route is only about where notifications go.
+ */
+router.post('/logout', auth, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const token = typeof req.body.fcmToken === 'string' ? req.body.fcmToken.trim() : null;
+    await client.query('BEGIN');
+    let revoked = 0;
+    if (token) {
+      revoked = await push.revokeDevice(client, token, 'logout');
+    } else {
+      revoked = await push.revokeAllForUser(client, req.user.id, 'logout');
+      // The legacy one-per-user column, cleared only on a logout-everywhere: clearing
+      // it for a single device would silence a second phone that is still signed in.
+      await client.query('UPDATE users SET fcm_token = NULL WHERE id = $1', [req.user.id]);
+    }
+    await client.query('COMMIT');
+    return res.json({ success: true, data: { revoked }, message: 'Logged out' });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    return next(err);
+  } finally { client.release(); }
 });
 
 module.exports = router;
