@@ -1,14 +1,14 @@
 /**
  * adminUsers.js — S.7 Wave D · FR10.8. The user list, and suspension.
  *
- * MOUNTING
- * This router is mounted INTO `routes/admin.js`, after its
+ * Mounting
+ * This router is mounted into `routes/admin.js`, after its
  * `router.use(auth, checkRole('admin'))`. That is deliberate: there is exactly
  * one place in the codebase that decides who is an admin, and a new admin surface
  * must not be able to forget to ask. Paths here are therefore relative to
  * `/api/admin`.
  *
- * WHY SUSPENSION IS A SERVICE CALL AND NOT SQL IN THIS FILE
+ * Why suspension is a service call and not SQL in this file
  * See `services/suspensionService.js`: flipping `is_active` is one line, and
  * unwinding the bookings, tournaments, challenges and venues the account is
  * holding is the other three hundred. The route's whole job is the transaction,
@@ -124,11 +124,11 @@ function shapeUser(u) {
 /**
  * PATCH /api/admin/users/:id/suspend   { reason }
  *
- * ONE transaction: the flag, the cascade (bookings refunded, tournaments
+ * One transaction: the flag, the cascade (bookings refunded, tournaments
  * withdrawn, challenges expired, venues closed), the user's notification and the
  * audit row. Either all of that is true or none of it is.
  *
- * AFTER the commit, three things happen in this order and for these reasons:
+ * After the commit, three things happen in this order and for these reasons:
  *   1. `authMiddleware.invalidate(id)` — the ban takes effect on the very next
  *      request instead of at the end of the 30 s TTL. It must come after COMMIT:
  *      invalidating first would let the next request re-read the still-uncommitted
@@ -170,7 +170,7 @@ router.patch('/users/:id/suspend', async (req, res, next) => {
 /**
  * PATCH /api/admin/users/:id/reinstate   { note? }
  *
- * Lifts the ban and re-lists the venues THIS suspension took down (read back from
+ * Lifts the ban and re-lists the venues this suspension took down (read back from
  * its audit row — see the service). Nothing else is restored, because a refunded
  * booking cannot be un-refunded.
  */

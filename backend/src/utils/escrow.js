@@ -1,5 +1,5 @@
 /**
- * Escrow ledger — the ONE source of truth for SportLynk money math.
+ * Escrow ledger — the one source of truth for SportLynk money math.
  *
  * | Event                      | Player balance | Player frozen | Owner balance | Status      |
  * | -------------------------- | -------------- | ------------- | ------------- | ----------- |
@@ -25,7 +25,7 @@ const POLICY = {
   /** Trust-score penalty applied on a no-show. */
   NO_SHOW_TRUST_PENALTY: 10,
   /**
-   * A pending request older than this is auto-decided (FR4.10). Held in MINUTES
+   * A pending request older than this is auto-decided (FR4.10). Held in minutes
    * rather than hours so a test override can be finer-grained than one hour
    * without pushing a fraction into `('x hours')::INTERVAL`.
    */
@@ -42,7 +42,7 @@ const POLICY = {
   TIMEZONE: 'Asia/Karachi',
 };
 
-// ─── Test-only timing overrides ───────────────────────────────────────────────
+// Test-only timing overrides
 //
 // The S1 acceptance checklist asks for the 2h auto-approve rule to be tested
 // "with a 1-min override constant". Editing the constant by hand works exactly
@@ -89,7 +89,7 @@ function describeDelay(minutes) {
 }
 
 
-/** pg returns DECIMAL as strings — always parse before doing math. */
+/** pg returns decimal as strings — always parse before doing math. */
 function asNum(value, fallback = 0) {
   if (value === null || value === undefined) return fallback;
   const n = typeof value === 'number' ? value : parseFloat(value);
@@ -103,11 +103,11 @@ function round2(n) {
 /**
  * The at-risk deposit for a slot price. Computed server-side only.
  *
- * `pct` (S.7 Wave D) lets the ONE caller that stamps the number onto a booking row
+ * `pct` (S.7 Wave D) lets the one caller that stamps the number onto a booking row
  * pass the admin-configured `deposit_pct` it just read inside its transaction.
  * Every other caller omits it and gets `POLICY.DEPOSIT_PERCENT`, which
  * `setDepositPercent` keeps in step with that setting — so the copy that describes
- * the policy and the amount actually held cannot disagree.
+ * the policy and the amount held cannot disagree.
  */
 function depositFor(price, pct = POLICY.DEPOSIT_PERCENT) {
   const p = Number.isFinite(Number(pct)) ? Number(pct) : POLICY.DEPOSIT_PERCENT;
@@ -117,14 +117,14 @@ function depositFor(price, pct = POLICY.DEPOSIT_PERCENT) {
 /**
  * Point `POLICY.DEPOSIT_PERCENT` at the admin's configured value.
  *
- * WHY A SETTER AND NOT A READ
+ * Why a setter and not a read
  * `POLICY.DEPOSIT_PERCENT` is read from ~30 places, most of them building a
- * SENTENCE ("20% of the total is your at-risk deposit") in synchronous code that
+ * sentence ("20% of the total is your at-risk deposit") in synchronous code that
  * cannot await a settings row. Rather than make thirty call sites async — each a
  * chance to forget — the value is pushed in once at boot and again whenever an
  * admin saves settings, exactly the way `applyTestOverride` above writes it.
  *
- * This does NOT retroactively change any money: what a booking holds is the
+ * This does not retroactively change any money: what a booking holds is the
  * `deposit_amount` column stamped when it was created, and every refund reads
  * that column. Out-of-band values are ignored rather than clamped, because a
  * settings row that says "abc" should leave the documented default in place, not
@@ -141,7 +141,7 @@ function setDepositPercent(pct, source = 'settings') {
 
 /**
  * Split an escrowed amount for a late cancellation / no-show.
- * The penalty can never exceed what is actually held in escrow (protects
+ * The penalty can never exceed what is held in escrow (protects
  * legacy bookings that were escrowed at 30% before this policy landed).
  */
 function penaltySplit(escrowHeld, depositAmount) {
@@ -210,7 +210,7 @@ async function applyWallet(client, walletId, { balance = 0, frozen = 0 }) {
  * which has a booking, so without it the entry fees, the commission and the prize
  * would be loose rows identifiable only by parsing `description`.
  *
- * The column is only NAMED when a caller supplies one. That is deliberate: every
+ * The column is only named when a caller supplies one. That is deliberate: every
  * booking, wallet and match caller passes nothing, so their INSERT stays exactly
  * the statement it was before 019 and cannot break on a database where 019 has not
  * been applied yet. A tournament caller gets the 019 column and, if the migration
@@ -221,12 +221,12 @@ async function applyWallet(client, walletId, { balance = 0, frozen = 0 }) {
 /**
  * Is the `platform_commission` ledger type available in this database?
  *
- * WHY A PROBE AND NOT A TRY/CATCH
+ * Why a probe and not a try/catch
  * `transactions.type` is a Postgres ENUM, and an unknown label is a 22P02 that
- * ABORTS the whole transaction -- which at check-in means the escrow release and
+ * aborts the whole transaction -- which at check-in means the escrow release and
  * the check-in itself roll back too. A player standing at the ground with a valid
  * QR code must not be turned away because a migration has not been run, so the
- * capability is checked BEFORE any write and the commission is skipped (loudly,
+ * capability is checked before any write and the commission is skipped (loudly,
  * once) when the label is missing.
  *
  * Cached true-only, exactly like `elo.supportsCorrection`: an enum value cannot be
@@ -258,7 +258,7 @@ async function supportsCommissionTxn(client) {
 /**
  * The platform's cut of one released escrow, and what is left for the venue.
  *
- * Rounded so that `net + commission === gross` EXACTLY, with the rounding
+ * Rounded so that `net + commission === gross` exactly, with the rounding
  * remainder given to the owner rather than the platform. Two independently
  * rounded halves can differ from the whole by a paisa, and a ledger that does not
  * add up is worth more trouble than a paisa.

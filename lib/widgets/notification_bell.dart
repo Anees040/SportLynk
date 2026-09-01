@@ -10,7 +10,7 @@ import 'header_actions.dart';
 /// The bell in a home-screen header — badge, tap, and the one place the whole
 /// notification stack is started.
 ///
-/// WHY THE BOOTSTRAP LIVES IN A BELL
+/// Why the bootstrap lives in a bell
 /// Three things have to happen once per signed-in session, and all three need a
 /// token that only exists after authentication has resolved:
 ///
@@ -20,8 +20,8 @@ import 'header_actions.dart';
 ///   2. `PushService.registerFor` — asks for the OS permission and posts this
 ///      phone's FCM token to `/notifications/devices`. FCM rotates tokens without
 ///      warning, so this runs on every app start, not once at signup.
-///   3. `DeepLink.replayPending` — fires the tray tap that opened a KILLED app.
-///      `PushService.init()` read it before `runApp` and PARKED it, because at that
+///   3. `DeepLink.replayPending` — fires the tray tap that opened a killed app.
+///      `PushService.init()` read it before `runApp` and parked it, because at that
 ///      moment there was no navigator and no authenticated user to push it for.
 ///
 /// The three home screens (player, owner, admin) are exactly the screens that

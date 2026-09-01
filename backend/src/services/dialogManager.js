@@ -1,33 +1,30 @@
 /**
  * dialogManager.js — one turn of conversation, start to finish.
  *
- * WHY THIS FILE EXISTS
- * --------------------
+ * Why this file exists
  * The wave spec asks for a slot-filling state machine. This is it, and it is the
- * ONLY place that decides what a turn MEANS. `assistantActions.js` decides what a
- * meaning DOES; `routes/assistant.js` is transport. Three files, three jobs, and
+ * only place that decides what a turn means. `assistantActions.js` decides what a
+ * meaning does; `routes/assistant.js` is transport. Three files, three jobs, and
  * the reason for the split is that every one of the questions below has exactly one
  * right answer per turn and a second opinion is a bug:
  *
- *   - was this a SENTENCE or a BUTTON?  A chip carries its own action and never
+ *   - was this a sentence or a button?  A chip carries its own action and never
  *     reaches the classifier, so chip traffic can never flatter model #4's measured
  *     accuracy (assistant_turns.input_mode splits them for exactly this reason).
- *   - is this an ANSWER to what Scout just asked?  "kal" is not a request; it is
+ *   - is this an answer to what Scout just asked?  "kal" is not a request; it is
  *     the missing `date` of the booking already in progress.
- *   - is this an AFFIRMATION?  Money moves on "haan", and that decision is made by
- *     a frozen lexicon in this file, NEVER by a probability. See AFFIRM below.
- *   - and if the model could not place the sentence, WHICH of the five abstain
+ *   - is this an affirmation?  Money moves on "haan", and that decision is made by
+ *     a frozen lexicon in this file, never by a probability. See AFFIRM below.
+ *   - and if the model could not place the sentence, which of the five abstain
  *     reasons was it — because "I could not reach the parser" and "I do not know
- *     those words" are different apologies and one of them is our fault.
+ *     those words" are different apologies, and one of them is the server's fault.
  *
- * IT IS THE ONLY WRITER OF session_state
- * --------------------------------------
- * Actions RETURN a state patch, they never persist one, and the route never touches
+ * It is the only writer of session_state
+ * Actions return a state patch, they never persist one, and the route never touches
  * state at all. So the whole lifecycle of a conversation is readable in `handleTurn`
  * below: read, merge, act, save, once per turn, in that order.
  *
- * THE NLU CALL HAPPENS BEFORE THE TRANSACTION OPENS
- * ------------------------------------------------
+ * The NLU call happens before the transaction opens
  * Deliberate. `POST /nlu/parse` is an HTTP round trip to another process, and doing
  * it with a pg client checked out would hold a Supabase connection open for the
  * length of someone else's cold start. Parse first, then open the transaction that
@@ -44,20 +41,20 @@ const {
 } = require('../utils/assistantReply');
 
 /**
- * THE AFFIRMATION LEXICON — the two words model #4 is not allowed to decide.
+ * The affirmation LEXICON — the two words model #4 is not allowed to decide.
  *
  * `affirm` and `deny` are trained labels, and they are the two the classifier must
- * NOT be trusted with, because the door they open is `EXECUTORS`: a wallet debit and
+ * not be trusted with, because the door they open is `EXECUTORS`: a wallet debit and
  * an escrow hold, or a cancellation with a real refund. A 0.51 confidence is a fine
  * basis for showing a list of grounds and a terrible one for charging PKR 1,600.
  *
  * So a frozen list decides it. It is Roman Urdu first because that is how the users
- * in the demo will actually answer a yes/no question in this app, and every surface
+ * in the demo answer a yes/no question in this app, and every surface
  * below was written down from how people type, not from a dictionary:
  * elongation ("haannn"), the "j" spellings of ji, the bare verb ("karo", "kar do"),
  * and the English that Pakistani chat mixes in mid-sentence.
  *
- * Held to WHOLE utterances only — see `verdictOf`. "haan lekin 7 baje" contains an
+ * Held to whole utterances only — see `verdictOf`. "haan lekin 7 baje" contains an
  * affirmation and a correction, and treating it as a yes would book the wrong hour.
  */
 const AFFIRM = Object.freeze([
@@ -69,7 +66,7 @@ const AFFIRM = Object.freeze([
   'hojaye', 'hojao', 'hogaya', 'agreed', 'affirmative', 'sounds', 'good',
 ]);
 
-/** The same list for "no". `cancel` is here AND is a chip label; see verdictOf. */
+/** The same list for "no". `cancel` is here and is a chip label; see verdictOf. */
 const DENY = Object.freeze([
   'nahi', 'nahin', 'nai', 'nae', 'nah', 'na', 'nhi', 'no', 'nope', 'never', 'negative',
   'ruko', 'rukho', 'rok', 'rokdo', 'chordo', 'chhoddo', 'chhordo', 'rehnedo',
@@ -91,7 +88,7 @@ const FILLER = new Set([
 /**
  * `pending` → the slot that answers it.
  *
- * When Scout asked "Which day at Rawal?" the next thing the user types is an ANSWER,
+ * When Scout asked "Which day at Rawal?" the next thing the user types is an answer,
  * not a new request, and the classifier has no way to know that: "kal" on its own is
  * out_of_scope to any intent model and correctly so. This table is what turns it back
  * into the missing `date` of the booking already in flight.
@@ -147,7 +144,7 @@ function words(text) {
 /**
  * Is this whole utterance a yes, a no, or neither?
  *
- * WHOLE is the load-bearing word. A sentence that contains a yes AND anything with
+ * Whole is the load-bearing word. A sentence that contains a yes and anything with
  * meaning is not a yes — "haan lekin 7 baje" is a correction, and answering it with
  * "booked" would charge for the wrong hour. So every word must be an affirmation, a
  * filler, or a repeat of the same decision; one unknown word and this returns null
@@ -177,7 +174,7 @@ function verdictOf(text) {
  * Every slot key an action reads, and therefore every key a chip is allowed to set.
  *
  * A chip's `args` come from the client, so they are treated as input rather than as
- * something we wrote earlier: an unknown key is dropped instead of being written into
+ * something this file wrote earlier: an unknown key is dropped instead of being written into
  * `session_state`, which keeps a looping client from growing the jsonb without bound
  * and keeps the state readable when something goes wrong at 2am.
  */
@@ -185,7 +182,7 @@ const SLOT_KEYS = Object.freeze([
   'sport', 'date', 'time', 'area', 'city', 'locality', 'budget', 'sort', 'offset',
   'venueId', 'venueName', 'slotId', 'bookingId', 'teamId', 'teamName', 'tournamentId',
   'q', 'opponentName', 'status', 'topic', 'question', 'name', 'n', 'minRating',
-  // `screen` is a NAVIGATION hint, not a search preference: it rides on the
+  // `screen` is a navigation hint, not a search preference: it rides on the
   // deep-link chips ("Open team", "Open wallet") so that a client which posts one
   // back instead of routing locally still gets a useful answer out of app_help.
   'screen',
@@ -224,22 +221,22 @@ function titleCase(s) {
 /**
  * NLU entities → slots. The shape differs per slot, on purpose, in Python.
  *
- * `entities.<key>` is an OBJECT or null, and each one names its value differently
+ * `entities.<key>` is an object or null, and each one names its value differently
  * because each one carries different evidence: a date has an `iso` and maybe an
  * `endIso`, a time has `start`/`end` minutes formatted as HH:MM, a sport has a canon
- * `value` plus an optional `variant` (tapeball vs hardball), an area has BOTH an
+ * `value` plus an optional `variant` (tapeball vs hardball), an area has both an
  * `area` and a `city`, and a budget has an `op` that says whether the number is a
  * ceiling, a floor, or a vague "around 2000". Reading `.value` off all five — the
  * obvious guess — would silently drop four of them.
  *
- * TWO MAPPINGS ARE JUDGEMENT CALLS, not translation:
+ * Two mappings are judgement calls, not translation:
  *
- *   - CITY vs LOCALITY. `searchVenues` filters `city ILIKE`, and "DHA" is not a city;
+ *   - city vs locality. `searchVenues` filters `city ILIKE`, and "DHA" is not a city;
  *     matching it against `city` finds nothing while the ground sits in Lahore with
  *     "DHA Phase 5" in its address. So a city goes to `area` (the city filter the rest
  *     of the codebase already calls that) and a neighbourhood goes to `locality`,
- *     which findVenue passes as the free-text term that searches the ADDRESS.
- *   - "SASTA" HAS NO NUMBER. A qualitative budget cannot become a maxPrice, so it
+ *     which findVenue passes as the free-text term that searches the address.
+ *   - "SASTA" has no number. A qualitative budget cannot become a maxPrice, so it
  *     becomes `sort: 'price_low'` instead — cheapest first is what the user meant, and
  *     an invented ceiling would hide grounds they would have taken.
  */
@@ -269,7 +266,7 @@ const PAIRED = Object.freeze([['venueId', 'venueName'], ['teamId', 'teamName']])
 /**
  * Merge what the user just said over what the conversation already knew.
  *
- * NEW WINS, which is the whole reason a correction works: "actually 7pm" replaces the
+ * New wins, which is the whole reason a correction works: "actually 7pm" replaces the
  * 6pm already in the slot rather than being ignored as "already filled".
  *
  * `keepDecisions` is false when the subject changed — see DECISION_SLOTS. And a new
@@ -304,7 +301,7 @@ function labelFor(intent) {
 const NOT_A_GUESS = new Set(['affirm', 'deny', 'out_of_scope', 'greeting']);
 
 /**
- * DID YOU MEAN — the runner-up intents, as buttons.
+ * "Did you mean" — the runner-up intents, as buttons.
  *
  * `alternatives` is the classifier's own ranking below the winner, so on a
  * low-confidence turn the second and third guesses are the best recovery available
@@ -325,23 +322,23 @@ function guessChips(alternatives = []) {
 }
 
 /**
- * THE SLOTS WE ALREADY HAVE, as a button.
+ * The slots already extracted, as a button.
  *
  * The entity extractor is deterministic and runs beside the classifier, not inside
  * it, so an abstained turn can still be holding a perfectly parsed "football,
  * Islamabad, tomorrow 6pm". Printing a help menu and dropping that on the floor
  * wastes work the user already did -- so offer it back as a chip.
  *
- * This is deliberately NOT an override. A chip carries its own `{action, args}`, so
- * tapping it re-enters `decide()` through the CHIP door and the classifier's
- * abstention stands: the model was unsure, we said so, and the USER decided. A rule
+ * This is deliberately not an override. A chip carries its own `{action, args}`, so
+ * tapping it re-enters `decide()` through the chip door and the classifier's
+ * abstention stands: the model was unsure, the reply said so, and the user decided. A rule
  * that quietly promoted a 0.36 guess to an action would be the other thing, and
  * money-adjacent flows are exactly why this codebase does not do that.
  *
- * Requires a sport or a place. Date and time ALONE must not produce this chip --
- * "kal shaam" is the utterance the model is RIGHT to abstain on, and offering a
+ * Requires a sport or a place. Date and time alone must not produce this chip --
+ * "kal shaam" is the utterance the model is right to abstain on, and offering a
  * venue search for a bare "tomorrow evening" would be inventing the intent that the
- * abstention just declined to invent.
+ * abstention declined to invent.
  */
 function slotSearchChip(slots) {
   const s = cleanSlots(slots || {});
@@ -368,15 +365,15 @@ function slotSearchChip(slots) {
 }
 
 /**
- * The apology, chosen by WHY the model did not answer. Five reasons, three of them
- * the model's own and two of them ours, and they do not deserve the same sentence:
+ * The apology, chosen by why the model did not answer. Five reasons, three of them
+ * the model's own and two of them the server's, and they do not deserve the same sentence:
  *
  *   low_confidence  — it heard words it knows but is not sure enough to act. The
  *                     runner-up intents become buttons, which is the cheapest fix.
  *   no_evidence     — nothing in the sentence pointed at anything SportLynk does.
  *   no_known_terms  — not one word was in the vocabulary; usually another language.
- *   nlu_unavailable — WE are down. Say so plainly instead of blaming the sentence,
- *                     and note that every button still works, because chips carry
+ *   nlu_unavailable — the parser is unreachable. Say so plainly rather than blaming
+ *                     the sentence; every button still works, because chips carry
  *                     their own action and never touch the classifier.
  *   text_too_long   — refused before the call; the parser has a hard char limit.
  *
@@ -386,9 +383,9 @@ function slotSearchChip(slots) {
 function abstainReply({ reason, alternatives = [], name = 'Scout', slotChip = null }) {
   // Mutating the built payload rather than assembling a second one: menu() is the
   // only place the capability card is built, and it must stay that way. One helper
-  // so no branch can forget the lead chips -- the slot chip goes first on ALL five
+  // so no branch can forget the lead chips -- the slot chip goes first on all five
   // reasons, because when the parser got something concrete, the most useful button
-  // is the one that uses it, and that is as true when WE are down as when the model
+  // is the one that uses it, and that is as true when the parser is unreachable as when
   // merely hesitated.
   const withChips = (out, extras = []) => {
     const lead = [slotChip, ...extras].filter(Boolean);
@@ -427,10 +424,10 @@ function abstainReply({ reason, alternatives = [], name = 'Scout', slotChip = nu
 /**
  * An owner-taught answer, if one exists. The other half of the learning loop.
  *
- * `assistantKb` is filled by owners answering escalated questions, so the FIRST
- * player to ask "is there parking at Rawal?" gets an escalation and the SECOND gets
+ * `assistantKb` is filled by owners answering escalated questions, so the first
+ * player to ask "is there parking at Rawal?" gets an escalation and the second gets
  * this — the same reply, instantly, with `source: 'kb'` so the provenance stays
- * honest. Tried on an abstain BEFORE the menu because a real answer beats a help
+ * honest. Tried on an abstain before the menu because a real answer beats a help
  * screen, and tried even when the model is down for the same reason.
  */
 async function kbAnswer(client, { said, venueId = null }) {
@@ -453,24 +450,24 @@ async function kbAnswer(client, { said, venueId = null }) {
 }
 
 /**
- * WHAT DID THE USER JUST DO? — the one decision this file exists to make.
+ * What did the user just do? — the one decision this file exists to make.
  *
  * Three doors, in this order, and the order is the design:
  *
- *   1. A CHIP. It carries its own action, so there is nothing to classify. This is
+ *   1. A chip. It carries its own action, so there is nothing to classify. This is
  *      why `navigate` and `find_players` were fully usable before model #4 had
  *      labels for them, and why a down parser leaves the app operable.
- *   2. THE LEXICON. A whole-utterance yes or no is decided by AFFIRM/DENY above and
+ *   2. The LEXICON. A whole-utterance yes or no is decided by AFFIRM/DENY above and
  *      the classifier is not consulted at all — not as an optimisation, but because
  *      these two answers gate money. A turn decided here records a NULL confidence
  *      and NULL model_version in assistant_turns, which keeps it out of the model's
  *      measured accuracy exactly as chip traffic is kept out.
- *   3. THE MODEL. `parseNlu` never throws and never returns a partial object, so
+ *   3. The MODEL. `parseNlu` never throws and never returns a partial object, so
  *      there is one shape to read whether ml-service answered, refused, or is down.
  *
- * The confidence FLOOR is applied here rather than in Python. The model has its own
+ * The confidence floor is applied here rather than in Python. The model has its own
  * threshold baked into the artifact; `global_settings.assistant.confidence_floor`
- * lets an operator demand MORE certainty before Scout acts, on demo morning, without
+ * lets an operator demand more certainty before Scout acts, on demo morning, without
  * a retrain. Only upward — lowering it below the model's own threshold does nothing,
  * because the model has already abstained by then.
  */
@@ -509,7 +506,7 @@ async function decide({ said, chipAction, chipArgs, settings, threadId }) {
 }
 
 /**
- * IS THIS AN ANSWER TO WHAT SCOUT JUST ASKED? — the slot-filling half of the machine.
+ * Is this an answer to what Scout just asked? — the slot-filling half of the machine.
  *
  * Without this, the state machine has a hole a demo walks straight into. Scout asks
  * "Which day at Rawal?", the user types "kal", and no intent model on earth calls a
@@ -517,16 +514,16 @@ async function decide({ said, chipAction, chipArgs, settings, threadId }) {
  * the user would get a help menu in answer to their own answer.
  *
  * So when something is pending and the model came back with nothing usable, the
- * PENDING intent is re-run instead. The entity extractor still ran (Python extracts
+ * pending intent is re-run instead. The entity extractor still ran (Python extracts
  * slots before it decides whether to abstain), so "kal" arrives here as a resolved
- * `date` and the booking simply moves on to the next question. Where nothing could be
+ * `date` and the booking moves on to the next question. Where nothing could be
  * extracted, the pending intent re-asks — three chips, not a dead end.
  *
- * TWO NARROW EXCEPTIONS, both deliberate:
- *   - `pending: 'question'` swallows ANY text, confident or not. The user has already
+ * Two narrow exceptions, both deliberate:
+ *   - `pending: 'question'` swallows any text, confident or not. The user has already
  *     chosen to ask the owner; "is there parking?" classifying as venue_info would
  *     otherwise answer a question they did not ask and break the KB learning loop.
- *   - a typed answer to "which ground?" / "which team?" becomes a NAME to resolve,
+ *   - a typed answer to "which ground?" / "which team?" becomes a name to resolve,
  *     because those questions are normally answered by tapping and a user who types
  *     is still answering.
  *
@@ -554,7 +551,7 @@ function continuationOf({ prior, said, decided }) {
   return { intent: prior.intent, fill };
 }
 
-/** One telemetry row per turn. Never the text — its LENGTH, and nothing else. */
+/** One telemetry row per turn. Never the text — its length, and nothing else. */
 async function recordTurn(client, row) {
   const { rows } = await client.query(
     `INSERT INTO assistant_turns
@@ -579,22 +576,22 @@ function fail(status, code, message) {
 }
 
 /**
- * ONE TURN, START TO FINISH.
+ * One turn, start to finish.
  *
  * @param {object}  input
  * @param {string}  input.userId    the JWT's user, never a body field
  * @param {string}  [input.threadId] the chat this belongs to; the newest one if omitted
- * @param {string}  [input.text]    what the user typed, or a tapped chip's LABEL
+ * @param {string}  [input.text]    what the user typed, or a tapped chip's label
  * @param {string}  [input.action]  a chip's action — set, and no classification happens
  * @param {object}  [input.args]    a chip's structured args, whitelisted by cleanSlots
  * @param {string}  [input.clientId] the client's idempotency key for the user message
  * @returns {Promise<object>} `{ok, status, code, message, threadId, reply, state, ...}`
  *
- * ORDER OF OPERATIONS, and why it is this order:
+ * Order of operations, and why it is this order:
  *   read thread + state → classify (no DB connection held) → BEGIN → user message →
  *   act → scout message → save state → telemetry → COMMIT.
  *
- * Everything that touches the database is in ONE transaction, so a turn either
+ * Everything that touches the database is in one transaction, so a turn either
  * happened or it did not: no booking without the message that confirms it, and no
  * state saying "awaiting confirm" for a card the user never saw. The money calls
  * inside the actions take a SAVEPOINT rather than a nested transaction, which is what
@@ -617,7 +614,7 @@ async function handleTurn({
   }
 
   // `injected` is a caller-owned client, used by src/scripts/check_assistant.js so a
-  // verification run can drive REAL turns -- real bookings, real ledger rows, real
+  // verification run can drive real turns -- real bookings, real ledger rows, real
   // telemetry -- inside a transaction it then rolls back, leaving the committee's
   // database exactly as it found it. The turn's own transaction becomes a SAVEPOINT
   // in that case, so a failing turn still rolls back only itself. Production never
@@ -634,7 +631,7 @@ async function handleTurn({
   const prior = threads.readState(thread.session_state);
   const settings = await settingsUtil.assistant({});
 
-  // ---- classify OUTSIDE the transaction -----------------------------------
+  // Classify outside the transaction
   // parseNlu is an HTTP round trip to ml-service. Doing it after `pool.connect()`
   // would hold a Supabase connection for the length of someone else's network,
   // which is how a chat feature takes down the booking API under load.
@@ -642,7 +639,7 @@ async function handleTurn({
     said, chipAction, chipArgs: args, settings, threadId: thread.id,
   });
 
-  // Is this turn an ANSWER to the question Scout asked last turn, rather than a new
+  // Is this turn an answer to the question Scout asked last turn, rather than a new
   // request? continuationOf owns that judgement; see its comment for why a bare
   // "kal" cannot be classified but can still be understood.
   const cont = continuationOf({ prior, said, decided });
@@ -656,8 +653,8 @@ async function handleTurn({
     || (!!intent && intent === prior.intent);
   const slots = mergeSlots(prior.slots, incoming, { keepDecisions });
 
-  // ---- the confirm gate ---------------------------------------------------
-  // An armed confirm block lives exactly ONE turn. Only these four inputs may fire
+  // The confirm gate
+  // An armed confirm block lives exactly one turn. Only these four inputs may fire
   // it: the Yes/No chips, or a whole-utterance affirm/deny from the frozen lexicon.
   // Anything else -- a new question, a correction, an unreadable message -- falls
   // through to the normal path, which clears `confirm` by not re-arming it. That is
@@ -665,11 +662,11 @@ async function handleTurn({
   let actionKey = intent;
   let confirm = null;
   const armed = prior.confirm && prior.confirm.action ? prior.confirm : null;
-  // MONEY IS GATED BY THE CHIP AND THE FROZEN LEXICON -- NEVER BY THE MODEL.
+  // Money is gated by the chip and the FROZEN LEXICON -- never by the MODEL.
   // model #4 labels "haan lekin 7 baje" affirm at 0.61, which is over its own
-  // threshold: read as a yes, it books the 6pm the user was CORRECTING. verdictOf
+  // threshold: read as a yes, it books the 6pm the user was correcting. verdictOf
   // refuses that sentence on purpose (test/assistant.test.js S2), so the gate asks
-  // WHERE the affirm came from, not just what it says.
+  // where the affirm came from, not merely what it says.
   const decisive = decided.via === 'chip' || decided.via === 'lexicon';
   if (armed && (chipAction === 'confirm' || (!chipAction && decisive && intent === 'affirm'))) {
     actionKey = 'confirm'; confirm = armed;
@@ -678,11 +675,11 @@ async function handleTurn({
     actionKey = 'cancel_confirm'; confirm = armed;
   } else if (armed && !chipAction && (intent === 'affirm' || intent === 'deny')) {
     // The model called it a yes/no and the lexicon did not, so the sentence carried
-    // MORE than a yes. That is a correction, and the useful answer is neither the
+    // more than a yes. That is a correction, and the useful answer is neither the
     // booking nor "I am not holding anything to confirm": it is the same errand,
     // re-run with what the user just changed. `slotId` was already dropped by
     // mergeSlots (affirm != book_venue, so keepDecisions is false) while venueId and
-    // date survived -- so "haan lekin 7 baje" reopens the SAME ground on the SAME
+    // date survived -- so "haan lekin 7 baje" reopens the same ground on the same
     // day at 7pm, and the confirm block dies unfired.
     actionKey = armed.action || prior.intent || intent;
   }
@@ -694,7 +691,7 @@ async function handleTurn({
   try {
     await client.query(TXN.begin);
 
-    // The user's own bubble. For a chip turn the client echoes the chip's LABEL as
+    // The user's own bubble. For a chip turn the client echoes the chip's label as
     // `text` so the transcript reads like a conversation; if it did not, the
     // capability label is a truthful stand-in. Persisting nothing would leave two
     // Scout messages in a row with no visible reason.
@@ -707,7 +704,7 @@ async function handleTurn({
     }
 
     if (!intent) {
-      // NOTHING to act on: the model abstained and no pending question caught it.
+      // Nothing to act on: the model abstained and no pending question caught it.
       // Before offering a menu, try the owner Q&A -- "is there parking?" is a real
       // question that no intent label covers, and the KB is where its answer lives.
       const topicHint = slots.venueId || prior.ctx.lastVenueId || null;
@@ -718,7 +715,7 @@ async function handleTurn({
           reason: decided.abstainReason,
           alternatives: decided.nlu ? decided.nlu.alternatives : [],
           name: settings.name,
-          // THIS turn's parse, not the merged slots: the chip must echo what the
+          // This turn's parse, not the merged slots: the chip must echo what the
           // user just typed. Merged slots would resurrect a search from six turns
           // ago on an unrelated unreadable message, which reads as Scout ignoring
           // the question it just admitted it could not read.
@@ -737,7 +734,7 @@ async function handleTurn({
           client, userId, slots, confirm, text: said, settings,
           channelId: thread.id, messageId: userMsgId,
           intent, confidence: decided.confidence,
-          // The PREVIOUS turn's subject. Read-only context: it lets a bare "haan"
+          // The previous turn's subject. Read-only context: it lets a bare "haan"
           // with nothing armed ask a specific question instead of a generic one.
           // No action may execute anything on the strength of it.
           lastIntent: prior.ctx.lastIntent || null,
@@ -746,12 +743,12 @@ async function handleTurn({
       }
     }
 
-    // ---- next state -------------------------------------------------------
-    // An action returns a PARTIAL patch, and the two halves read opposite ways on
+    // Next state
+    // An action returns a partial patch, and the two halves read opposite ways on
     // purpose:
     //   `intent`/`slots` -- absent means KEEP what this turn computed, because most
     //     actions have no opinion about them and re-stating them would be noise.
-    //   `pending`/`confirm` -- absent means CLEARED, because a question and a confirm
+    //   `pending`/`confirm` -- absent means cleared, because a question and a confirm
     //     block are one-turn things. An action that wants either must say so, and
     //     forgetting to is a bug that ends the errand rather than one that loops it.
     const patch = out && out.state ? out.state : {};
@@ -763,7 +760,7 @@ async function handleTurn({
       pending: 'pending' in patch ? (patch.pending || null) : null,
       confirm: 'confirm' in patch ? (patch.confirm || null) : null,
       ctx: {
-        // `lastVenueId` is what lets "is there parking?" three turns later know WHICH
+        // `lastVenueId` is what lets "is there parking?" three turns later know which
         // ground the question is about, so an owner Q&A hit can be venue-scoped.
         lastIntent: intent || prior.ctx.lastIntent || null,
         lastVenueId: nextSlots.venueId || prior.ctx.lastVenueId || null,
@@ -779,7 +776,7 @@ async function handleTurn({
 
     const turnId = await recordTurn(client, {
       userId, channelId: thread.id, inputMode: decided.inputMode,
-      // Length of what the CLASSIFIER was given, so a chip turn records none: there
+      // Length of what the classifier was given, so a chip turn records none: there
       // was no utterance to measure. The text itself is never stored here.
       textChars: decided.inputMode === 'text' && said ? said.length : null,
       intent: intent || null, confidence: decided.confidence,
@@ -806,7 +803,7 @@ async function handleTurn({
     };
   } catch (err) {
     await client.query(TXN.rollback).catch(() => {});
-    // The turn is GONE -- no messages, no state change, no booking. What must not be
+    // The turn is gone -- no messages, no state change, no booking. What must not be
     // lost is the fact that it failed, so one telemetry row goes in outside the
     // rolled-back transaction with answer_source NULL and action_ok false. Without it
     // a crashing action looks exactly like a quiet user in the metrics.
@@ -827,7 +824,7 @@ async function handleTurn({
       // and constraint names, so it travels in `error` for the server log only.
       message: 'Scout could not finish that message.',
       threadId: String(thread.id), turnId: null, messageId: null,
-      // A reply the route can still render, deliberately NOT persisted: the
+      // A reply the route can still render, deliberately not persisted: the
       // transaction is rolled back, so it must not appear again on reload.
       reply: menu('Something went wrong on my side and I did not save that message. Try again, or use a button below.',
         { name: settings.name }),
@@ -847,7 +844,7 @@ module.exports = {
   SLOT_KEYS,
   HISTORY_TURNS,
   // Pure, and therefore unit-testable without a database or ml-service: these are
-  // where the turn's decisions actually live, so this is where test/assistant.test.js
+  // where the turn's decisions live, so this is where test/assistant.test.js
   // proves that "haan lekin 7 baje" does not buy anything.
   AFFIRM,
   DENY,

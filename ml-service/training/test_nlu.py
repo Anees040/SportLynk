@@ -62,7 +62,7 @@ from app.core import entities, intent_spec, nlu_text  # noqa: E402
 
 #: Every date/time assertion in this file is relative to this instant, never to
 #: the wall clock. Friday, 2026-08-28, 15:00 Asia/Karachi -- chosen in entities.py
-#: because it is a WEEKDAY AFTERNOON: "kal" is an ordinary tomorrow, "is weekend"
+#: because it is a weekday afternoon: "kal" is an ordinary tomorrow, "is weekend"
 #: is still ahead, "shaam" has not passed yet, and "friday ko" is today, which is
 #: the one same-day weekday case that catches an off-by-one in the weekday rule.
 NOW = entities.FIXED_NOW
@@ -120,9 +120,7 @@ def parse(text: str, **kwargs):
     return nlu.parse(nlu.ParseRequest(text=text, **kwargs))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 1. Contracts -- the frozen specs and the artifact's agreement with them
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def test_nlu_text_self_check_passes():
@@ -200,9 +198,7 @@ def test_fallback_intent_is_a_real_class():
     assert nlu._fallback_label(entry, list(entry.estimator.classes_)) == nlu.FALLBACK_INTENT
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 2. Dates -- every form the corpus and the exam actually contain
-# ─────────────────────────────────────────────────────────────────────────────
+# 2. Dates -- every form the corpus and the exam contain
 
 
 def test_date_kal_is_tomorrow():
@@ -284,9 +280,7 @@ def test_date_follows_the_now_it_is_given():
     assert entities.extract("kal", now=other)["date"]["iso"] == "2026-12-26"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 3. Times -- where a Pakistani football booking breaks a naive clock parser
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def test_time_bare_baje_takes_the_evening_reading():
@@ -341,9 +335,7 @@ def test_time_does_not_read_a_date_offset_as_a_clock():
     assert slots["time"]["start"] == "19:00"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 4. Sports -- the lexicon is the platform's five, on purpose
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def test_sport_canonical_names():
@@ -383,9 +375,7 @@ def test_sport_format_phrases_are_not_a_sport():
     assert slots["sport"] is None and slots["time"] is None and slots["budget"] is None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 5. Areas -- a gazetteer of the cities SportLynk actually has venues in
-# ─────────────────────────────────────────────────────────────────────────────
+# 5. Areas -- a gazetteer of the cities SportLynk has venues in
 
 
 def test_area_sector_forms_normalise_to_one_token():
@@ -438,9 +428,7 @@ def test_area_city_comes_from_the_venue_catalogue():
     assert ext("f-9 park", "area")["city"] == "Islamabad"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 6. Budget -- money, and the digits that are not money
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def test_budget_ceiling_phrases():
@@ -481,9 +469,7 @@ def test_budget_ignores_digits_that_are_not_money():
         assert ext(text, "budget") is None, f"{text!r} produced a budget"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 7. Combined utterances -- four rules over one string, no collisions
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def test_all_five_slots_from_one_realistic_request():
@@ -547,9 +533,7 @@ def test_a_500_character_utterance_is_still_parsed():
     assert slots["date"] is not None and slots["area"]["area"] == "F-11"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 8. The classifier -- contract and behaviour, never accuracy
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def test_probabilities_are_a_distribution_over_every_declared_class():
@@ -665,9 +649,7 @@ def test_a_typo_is_not_treated_as_gibberish():
     assert got.entities["date"]["iso"] == "2026-08-29"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 9. The endpoint's own contract
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def test_parse_response_carries_the_full_contract_identity():
@@ -760,13 +742,11 @@ def test_a_warm_parse_stays_inside_the_fifty_millisecond_budget():
     assert measured[-1] < nlu.LATENCY_BUDGET_MS * 3, f"worst {measured[-1]:.1f}ms"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Standalone runner
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 # ── the v2 label contract: 8 intents were added, and a label the model never
-#    emits is dead code wearing a contract's clothes ──────────────────────────
+# Emits is dead code wearing a contract's clothes
 
 #: Derived, not typed: whatever `intent_spec` declares minus what the last v1
 #: artifact could emit. A typed list rots the moment the contract moves -- and it

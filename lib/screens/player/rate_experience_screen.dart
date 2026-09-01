@@ -26,7 +26,7 @@ import '../../widgets/trust_widgets.dart';
 /// ("already reviewed") on one doesn't sink the other, and a stars-only review (no
 /// text) is valid — it simply carries no sentiment. Nothing here re-checks who may
 /// review whom; the backend owns that (checked-in booking, completed match, captain
-/// role) and answers 400/403 which we surface verbatim.
+/// role) and answers 400/403, which this screen surfaces verbatim.
 class RateExperienceScreen extends StatefulWidget {
   final String bookingId;
   final String? venueName;
@@ -89,7 +89,7 @@ class _RateExperienceScreenState extends State<RateExperienceScreen> {
     final commentOrNull = comment.isEmpty ? null : comment;
 
     // Build the submission list primary-first. Only the primary carries the text,
-    // so only the primary produces a sentiment verdict — which is what we animate in.
+    // so only the primary produces a sentiment verdict — which is what animates in.
     final jobs = <({String type, int stars, String? text})>[];
     if (_showVenue && _venueStars > 0) {
       jobs.add((type: 'venue', stars: _venueStars, text: _primaryIsVenue ? commentOrNull : null));
@@ -170,7 +170,7 @@ class _RateExperienceScreenState extends State<RateExperienceScreen> {
     );
   }
 
-  // ── Header ───────────────────────────────────────────────────────────────
+  // Header
   Widget _header() {
     return Container(
       width: double.infinity,
@@ -246,7 +246,7 @@ class _RateExperienceScreenState extends State<RateExperienceScreen> {
     );
   }
 
-  // ── Form ─────────────────────────────────────────────────────────────────
+  // Form
   List<Widget> _form() {
     return [
       if (_showVenue)
@@ -383,7 +383,7 @@ class _RateExperienceScreenState extends State<RateExperienceScreen> {
         _ => 'Tap to rate',
       };
 
-  // ── Confirmation (the demo moment) ─────────────────────────────────────────
+  // Confirmation (the demo moment)
   Widget _confirmation() {
     final s = _sentiment;
     final hasVerdict = s != null && (s.scoredByModel || s.flagged || s.pending);

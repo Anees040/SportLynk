@@ -1,8 +1,7 @@
 /**
  * Tournaments API (S.7 Wave A) — SRS Module 6, FE-1 … FE-8.
  *
- * WHAT THIS FILE IS AND IS NOT
- * ----------------------------
+ * What this file is and is not
  * It is transport. Every rule about who may do what, every peso that moves and
  * every row that changes lives in `services/tournamentService.js`, which takes a
  * `client` and returns `{ok, status, code, message, data}`. This file reads the
@@ -11,15 +10,13 @@
  * drive the same tournament, and three copies of "may this team register?" would be
  * three chances to disagree about it.
  *
- * ROUTE ORDER IS LOAD-BEARING
- * ---------------------------
- * `/mine` and `/preview` are declared BEFORE `/:id`. Express matches in
+ * Route order is load-bearing
+ * `/mine` and `/preview` are declared before `/:id`. Express matches in
  * declaration order, so with `/:id` first a request for `/api/tournaments/mine`
  * would arrive at `detail` with `tournamentId = 'mine'` and 404 — a bug that looks
- * like a missing endpoint and is actually a sorting mistake.
+ * like a missing endpoint and is a sorting mistake.
  *
- * THE ROLE SPLIT
- * --------------
+ * The role split
  * Reads are open to any signed-in user, because a public tournament overview is
  * FE-8 and a player has to be able to browse before they enter. Writes divide in
  * two: `checkRole('owner')` gates creating, generating, approving, entering results
@@ -28,8 +25,7 @@
  * and again inside the service (`requireOwnedVenue`, `owner_id` comparisons), so a
  * player who obtains an owner token still cannot manage someone else's cup.
  *
- * WHY `/:id/generate` IS EXPOSED AT ALL
- * -------------------------------------
+ * Why `/:id/generate` is exposed at all
  * `jobs/tournamentJob.js` generates the bracket at the deadline unattended, so the
  * endpoint is not required for the flow to work. It exists because a demo cannot
  * wait for a wall clock, and because an owner whose field filled early should be
@@ -68,9 +64,7 @@ const guard = (fn) => async (req, res, next) => {
   try { await fn(req, res); } catch (e) { next(e); }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// READS  (any signed-in user)
-// ─────────────────────────────────────────────────────────────────────────────
+// Reads  (any signed-in user)
 
 /**
  * GET /api/tournaments — browse (FE-2).
@@ -116,9 +110,7 @@ router.get('/:id', guard(async (req, res) => {
   send(res, await svc.detailRead({ tournamentId: req.params.id, userId: req.user.id }));
 }));
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OWNER WRITES  (FE-1, FE-5, FE-6, FE-7)
-// ─────────────────────────────────────────────────────────────────────────────
+// Owner writes  (FE-1, FE-5, FE-6, FE-7)
 
 /** POST /api/tournaments — post a tournament at one of my own venues (FE-1). */
 router.post('/', checkRole('owner'), guard(async (req, res) => {
@@ -188,14 +180,12 @@ router.post('/:id/cancel', checkRole('owner'), guard(async (req, res) => {
   }));
 }));
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CAPTAIN WRITES  (FE-3)
-// ─────────────────────────────────────────────────────────────────────────────
+// Captain writes  (FE-3)
 
 /**
  * POST /api/tournaments/:id/register — enter a team and freeze the entry fee.
  *
- * The team comes from the body but the AUTHORITY does not: the service reads
+ * The team comes from the body but the authority does not: the service reads
  * `teams.captain_id` inside the locked transaction, so sending someone else's team
  * id is a 403 and not an entry.
  */

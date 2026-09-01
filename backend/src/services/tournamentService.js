@@ -1,8 +1,7 @@
 /**
  * tournamentService.js — the only file that writes a tournament row.
  *
- * WHAT THIS MODULE OWNS
- * ---------------------
+ * What this module owns
  * Every state change a tournament can undergo: it is created by a venue owner,
  * captains pay an entry fee into escrow, the deadline turns the field into a
  * seeded bracket standing on real venue slots, results settle fixture by fixture,
@@ -10,40 +9,38 @@
  * The routes validate shapes and the job supplies a clock; neither touches money.
  *
  * Every operation is `(client, args) -> { ok, status, code, message, data }` and
- * assumes it is ALREADY inside a transaction, exactly as bookingService does. The
+ * assumes it is already inside a transaction, exactly as bookingService does. The
  * `*Tx` wrappers at the bottom own BEGIN/COMMIT for callers that are not. A
  * failure returns `ok:false` with nothing undone, because the row locks belong to
  * the transaction and the caller's ROLLBACK is what releases them.
  *
- * THE MONEY MODEL, AND WHY IT IS A WATERFALL RATHER THAN A PERCENTAGE
- * ------------------------------------------------------------------
+ * The money MODEL, and why it is a waterfall rather than a percentage
  * A straight "owner takes 30%" split is economically wrong here, because the pool
- * is variable and the venue's cost is FIXED. Eight teams at PKR 2,000 is a 16,000
+ * is variable and the venue's cost is fixed. Eight teams at PKR 2,000 is a 16,000
  * pool, but a 7-fixture knockout consumes seven hours of inventory worth ~14,000
  * at the counter. A 30% commission would pay the owner 4,800 for hours they could
- * have sold for 14,000 — the tournament would LOSE them money, which inverts the
+ * have sold for 14,000 — the tournament would lose them money, which inverts the
  * entire point of the feature. So the venue's own inventory is recovered first:
  *
  *     pool       = entry_fee x teams_accepted
- *     venue_cost = SUM(slots.price) over the fixtures' allocated slots
+ *     venue_cost = sum(slots.price) over the fixtures' allocated slots
  *                  x (1 - venue_discount_percent)
  *     surplus    = pool - venue_cost
  *     prize      = surplus x prize_percent      (winner 70% / runner-up 30%)
  *     owner      = venue_cost + (surplus - prize)
  *
- * The owner is made whole on inventory BEFORE anyone else is paid, so a tournament
- * can never be worth less than selling the same hours. Teams pay ONE fee and never
+ * The owner is made whole on inventory before anyone else is paid, so a tournament
+ * can never be worth less than selling the same hours. Teams pay one fee and never
  * book or pay for a tournament slot — which is why fixtures reserve slots instead
  * of writing `bookings` rows. `utils/fixtures.splitPool` is that arithmetic, in
  * paisa, unit-tested with the database down; this file only moves what it returns.
  *
- * UNDERWATER GUARD. If the pool does not cover the venue cost, the prize is zero
- * and the owner takes the whole pool. Money is never taken FROM the owner, and the
+ * Underwater guard. If the pool does not cover the venue cost, the prize is zero
+ * and the owner takes the whole pool. Money is never taken from the owner, and the
  * notification says so plainly. Below `min_teams`, the tournament is cancelled and
  * every captain refunded instead — a two-team "cup" is not worth anyone's evening.
  *
- * THE LEDGER, IN FOUR EVENTS
- * --------------------------
+ * The ledger, in four events
  *   register            captain  balance -E, frozen +E        tournament_entry
  *   withdraw / reject   captain  frozen -E, balance +E        refund
  *   fixtures generated  captains frozen -E (all of them)      escrow_release
@@ -59,24 +56,22 @@
  * equals venue cost plus prize plus margin out, to the paisa — is one GROUP BY,
  * and check_tournaments.js asserts it rather than trusting the summary columns.
  *
- * TWO DOORS INTO ONE RESULT PATH
- * ------------------------------
+ * Two doors into one result path
  * A fixture can be settled two ways and they must not drift apart:
  *
- *   a. THE MATCH FLOW (S.2, unchanged). Captains submit scorelines, the organiser
+ *   a. The MATCH flow (S.2, unchanged). Captains submit scorelines, the organiser
  *      verifies, and `routes/matches.js` calls `advanceAfterMatch` inside the same
  *      transaction that applied ELO. ELO is applied by matches.js, not here — but
  *      with the K this module supplies through `matchContext`, so a final moves a
  *      rating harder than a friendly.
- *   b. THE ORGANISER (SRS FE-7). The owner types the score onto the fixture.
+ *   b. The organiser (SRS FE-7). The owner types the score onto the fixture.
  *      `settleFixture` writes the `matches` row itself, applies ELO with the same
  *      K, and then runs the same advance path.
  *
  * Both funnel through `applyFixtureResult`, and both are idempotent: the fixture's
  * status is the latch here, `matches.elo_applied` is the latch for the rating.
  *
- * WHAT THIS FILE DELIBERATELY DOES NOT DO
- * ---------------------------------------
+ * What this file deliberately does not do
  *   - it never writes a `bookings` row for a fixture. jobs/noShowJob.js sweeps
  *     bookings and would dock the trust score of every captain in the tournament
  *     for not scanning a QR code at a fixture nobody asked them to check into;
@@ -113,7 +108,7 @@ const STATUS = Object.freeze({
  * `registered` means "paid, awaiting the organiser's approval" and `accepted`
  * means "paid and in the field". A tournament with `requires_approval = false`
  * goes straight to `accepted`, which is why `discoveryService.listTournaments`
- * counts BOTH toward capacity: counting only one of them is how that function
+ * counts both toward capacity: counting only one of them is how that function
  * came to report 0 spots taken for every tournament before this wave.
  */
 const REG = Object.freeze({
@@ -145,7 +140,7 @@ function done(status, data, message = null) {
   return { ok: true, status, code: 'ok', message, data };
 }
 
-/** pg DATE → 'YYYY-MM-DD' without a timezone round-trip. */
+/** pg date → 'YYYY-MM-DD' without a timezone round-trip. */
 function dateStr(value) {
   if (value == null) return null;
   if (value instanceof Date) return value.toLocaleDateString('en-CA');
@@ -160,9 +155,7 @@ function iso(value) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// READING
-// ─────────────────────────────────────────────────────────────────────────────
+// Reading
 
 /**
  * One tournament as every screen wants it: the row, the venue it consumes, the
@@ -170,7 +163,7 @@ function iso(value) {
  *
  * `teams_holding` is the count that fills the field — `registered` plus
  * `accepted`, because both have paid — while `teams_accepted` is the count that
- * will actually be seeded. They differ only while an approval-gated tournament
+ * will be seeded. They differ only while an approval-gated tournament
  * has decisions outstanding, and the browse screen needs the first while
  * generation needs the second.
  */
@@ -203,7 +196,7 @@ const T_FROM = `
   LEFT JOIN teams rt ON rt.id = t.runner_up_team`;
 
 /**
- * Load one tournament. `forUpdate` locks `tournaments` ONLY — the LEFT JOINs and
+ * Load one tournament. `forUpdate` locks `tournaments` only — the LEFT JOINs and
  * the counting sub-selects make `FOR UPDATE` illegal on the joined form, and
  * locking a venue row because someone opened a tournament page would be wrong
  * anyway. Money paths therefore lock in two steps: this row, then each wallet.
@@ -272,13 +265,11 @@ async function captainOf(client, teamId) {
   return r.rows[0] || null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SHAPING — one reader per row type, so the API and the check script agree
-// ─────────────────────────────────────────────────────────────────────────────
+// Shaping — one reader per row type, so the API and the check script agree
 
 /**
  * The tournament as the app receives it. Money is `asNum`-ed here and nowhere
- * else, because pg hands back numeric(10,2) as a STRING and a single missed
+ * else, because pg hands back numeric(10,2) as a string and a single missed
  * coercion turns "2000" + "500" into "2000500" on a screen.
  */
 function shapeTournament(row) {
@@ -331,7 +322,7 @@ function shapeTournament(row) {
     runnerUpTeam: row.runner_up_team || null,
     runnerUpName: row.runner_up_name || null,
     // Zero until fixtures are generated; from then on these are the settled
-    // figures the ledger actually moved, not an estimate.
+    // figures the ledger moved, not an estimate.
     pool: asNum(row.pool_amount, 0),
     venueCost: asNum(row.venue_cost_amount, 0),
     prize: asNum(row.prize_amount, 0),
@@ -418,15 +409,13 @@ function shapeFixture(row) {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VALIDATION
-// ─────────────────────────────────────────────────────────────────────────────
+// Validation
 
 /**
  * Validate a create/preview payload against the format's own rules.
  *
  * Every rule here is also a database CHECK in 019. That duplication is on purpose:
- * the CHECK is the guarantee and this is the error MESSAGE. A constraint violation
+ * the CHECK is the guarantee and this is the error message. A constraint violation
  * surfaces as `23514 chk_tournaments_max_teams`, which tells an owner nothing; the
  * sentence "Knockout needs a power of two: 2, 4, 8, 16 or 32" tells them what to
  * type instead.
@@ -505,7 +494,7 @@ function validateDates(input) {
   const startRaw = input.startDate == null ? '' : String(input.startDate).trim();
   const startDate = /^\d{4}-\d{2}-\d{2}$/.test(startRaw) ? startRaw : null;
   if (startRaw && !startDate) errors.push('The start date must be YYYY-MM-DD');
-  // Fixtures are generated AT the deadline onto slots at or after it, so a start
+  // Fixtures are generated at the deadline onto slots at or after it, so a start
   // date before the deadline is a promise the scheduler cannot keep.
   if (startDate && deadline && !Number.isNaN(deadline.getTime())
       && startDate < deadline.toISOString().slice(0, 10)) {
@@ -539,9 +528,7 @@ async function requireOwnedVenue(client, { venueId, ownerId }) {
   return { venue };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PREVIEW — the economics quote, before the tournament exists (SRS FE-1)
-// ─────────────────────────────────────────────────────────────────────────────
+// Preview — the economics quote, before the tournament exists (SRS FE-1)
 
 /** A field of n placeholder teams, all equal, purely to count and place fixtures. */
 function pseudoField(n) {
@@ -551,14 +538,14 @@ function pseudoField(n) {
 }
 
 /**
- * preview — what this tournament would cost and earn, quoted from REAL slot prices.
+ * preview — what this tournament would cost and earn, quoted from real slot prices.
  *
  * This endpoint exists because the waterfall only protects the owner if the owner
  * can see it before committing. Without it an owner types "PKR 2,000, 8 teams",
  * the deadline passes, and they discover they have sold seven hours worth 14,000
  * for a 16,000 pool. So `preview` schedules the bracket against the venue's actual
  * free hours, sums their actual prices, and hands back both the breakdown at the
- * fee they typed and a RECOMMENDED fee that clears the venue cost at the minimum
+ * fee they typed and a recommended fee that clears the venue cost at the minimum
  * legal turnout.
  *
  * Two turnouts are scheduled, not one, because they cost different amounts: a
@@ -604,7 +591,7 @@ async function preview(client, input = {}) {
 
   // When the venue does not yet have enough free hours, the quote must still be
   // useful — an owner who has not opened their slots for next week needs to see
-  // the shape of the deal AND the reason it cannot be scheduled yet. So the cost
+  // the shape of the deal and the reason it cannot be scheduled yet. So the cost
   // falls back to list price x fixtures, clearly flagged as an estimate.
   const listPrice = asNum(venue.price_per_hour ?? venue.base_price, 0);
   const hoursFor = (teams) => fx.fixtureCount(v.format, teams);
@@ -625,7 +612,7 @@ async function preview(client, input = {}) {
     venueDiscountPercent: v.venueDiscountPercent, prizePercent: v.prizePercent,
     winnerPercent: v.winnerPercent, runnerupPercent: v.runnerupPercent,
   });
-  // Recommended from the WORST legal turnout, because that is the case a fee has
+  // Recommended from the worst legal turnout, because that is the case a fee has
   // to survive. A fee that only works with a full field is a fee that loses money
   // the first time six teams turn up instead of eight.
   const recommended = fx.recommendEntryFee({
@@ -673,21 +660,19 @@ async function preview(client, input = {}) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // CREATE (SRS FE-1)
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * create — an owner posts a tournament at one of their own venues.
  *
- * The prize split is COPIED onto the row from `global_settings.tournament` (or
+ * The prize split is copied onto the row from `global_settings.tournament` (or
  * from what the owner typed) rather than read live at payout time. That is the
  * single most important line in this function: a tournament already holding eight
  * captains' entry fees must not have its prize percentage changed underneath the
  * teams that paid into it, and an admin editing the global default must not
  * silently rewrite every open tournament's terms.
  *
- * Feasibility is CHECKED but not ENFORCED. If the venue has no free hours yet the
+ * Feasibility is checked but not enforced. If the venue has no free hours yet the
  * tournament is still created, with a warning, because opening next week's slots
  * is a thing an owner does after posting a cup — refusing here would force them to
  * do those two jobs in an order nobody would guess. The deadline job refuses to
@@ -755,9 +740,7 @@ async function create(client, input = {}) {
   }, probe.ok ? null : probe.message);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MONEY — three helpers, so a fee is charged, refunded and released in one place
-// ─────────────────────────────────────────────────────────────────────────────
+// Money — three helpers, so a fee is charged, refunded and released in one place
 
 /**
  * Move the entry fee from a captain's spendable balance into escrow.
@@ -815,14 +798,12 @@ async function refundEntry(client, { tournament, captainId, teamName, amount, re
   return { ok: true, after };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// REGISTER / WITHDRAW  (SRS FE-3, FE-4)
-// ─────────────────────────────────────────────────────────────────────────────
+// Register / withdraw  (SRS FE-3, FE-4)
 
 /**
  * register — a captain enters their team and pays the entry fee.
  *
- * Only the CAPTAIN may register, for the same reason only the captain may book: the
+ * Only the captain may register, for the same reason only the captain may book: the
  * fee comes out of one person's wallet, and a squad member spending their captain's
  * money is not a feature. FE-4's two automatic enforcements both live here — the
  * deadline and the participant cap — and both are re-checked under the tournament's
@@ -867,7 +848,7 @@ async function register(client, { userId, tournamentId, teamId } = {}) {
   }
 
   // The cap is counted under the lock, and counts both holding states: an
-  // approval-gated tournament with 8 pending teams is FULL, not empty.
+  // approval-gated tournament with 8 pending teams is full, not empty.
   const held = await client.query(
     `SELECT COUNT(*)::int AS n FROM tournament_teams
       WHERE tournament_id = $1 AND status = ANY($2::text[])`,
@@ -997,9 +978,7 @@ async function withdraw(client, { userId, tournamentId, teamId } = {}) {
   }, `Withdrawn — PKR ${round2(asNum(row.paid_amount, 0))} refunded`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ORGANISER TEAM MANAGEMENT (SRS FE-5)
-// ─────────────────────────────────────────────────────────────────────────────
+// Organiser TEAM management (SRS FE-5)
 
 /** The three things an organiser may do to an entry. */
 const DECISION = { APPROVE: 'approve', REJECT: 'reject', REMOVE: 'remove' };
@@ -1012,14 +991,14 @@ const DECISION = { APPROVE: 'approve', REJECT: 'reject', REMOVE: 'remove' };
  *
  *   approve  → the entry becomes `accepted`; the fee stays frozen (it is released
  *              to the organiser when the bracket is drawn, not before).
- *   reject   → the entry becomes `rejected` and the fee is refunded IN FULL. A
+ *   reject   → the entry becomes `rejected` and the fee is refunded in full. A
  *              team the organiser turned away must never be out of pocket, which
  *              is also why `register` refuses to let a rejected team pay again.
  *   remove   → identical money, different word and different notification. Used
  *              after an entry was already accepted.
  *
  * Both refusals are only possible while the tournament is still `open`. Once the
- * bracket exists a team is IN it, and removing a side from a drawn bracket would
+ * bracket exists a team is in it, and removing a side from a drawn bracket would
  * mean either a hole in round 1 or re-drawing a tournament people have already
  * travelled for; the honest answer is a walkover, which `walkover` provides.
  */
@@ -1110,9 +1089,7 @@ async function ownerDecision(client, {
   }, `${row.team_name} ${verb === DECISION.REJECT ? 'rejected' : 'removed'} — PKR ${refunded} refunded`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CANCEL — the only path that gives every rupee back
-// ─────────────────────────────────────────────────────────────────────────────
+// Cancel — the only path that gives every rupee back
 
 /**
  * refundEveryone — release every holding entry's fee and mark the entries.
@@ -1220,9 +1197,7 @@ async function cancel(client, {
   }, `Tournament cancelled — PKR ${total} refunded to ${teams} ${teams === 1 ? 'team' : 'teams'}`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GENERATION (SRS FE-6) — the one place a bracket comes into existence
-// ─────────────────────────────────────────────────────────────────────────────
+// Generation (SRS FE-6) — the one place a bracket comes into existence
 
 /**
  * generateFixtures — draw the bracket, reserve the ground, settle the money.
@@ -1235,27 +1210,27 @@ async function cancel(client, {
  *
  * Order matters and is not arbitrary:
  *
- *   1. LATCH.  `fixtures_generated_at IS NULL` under the tournament's row lock.
+ *   1. Latch.  `fixtures_generated_at IS NULL` under the tournament's row lock.
  *              The job and the organiser's button race by design; the loser gets
  *              `already_generated`, not a doubled bracket.
- *   2. FIELD.  Pending approvals are resolved (see below), then the accepted
+ *   2. Field.  Pending approvals are resolved (see below), then the accepted
  *              teams are counted. Below `min_teams` → cancel and refund everyone,
- *              which is the ONLY outcome where this function does not draw.
+ *              which is the only outcome where this function does not draw.
  *   3. DRAW.   `fx.seedTeams` then `fx.buildFixtures` — pure, DB-free, and the
  *              same functions `test/fixtures.test.js` proves with the DB down.
- *   4. PLACE.  `scheduler.schedule` puts them on real free hours. If the venue
- *              cannot host the whole bracket the function REFUSES and writes
+ *   4. Place.  `scheduler.schedule` puts them on real free hours. If the venue
+ *              cannot host the whole bracket the function refuses and writes
  *              nothing — a half-scheduled tournament would charge a pool against
  *              three hours of inventory while consuming seven.
- *   5. RESERVE.The chosen slots are re-locked and re-checked, then flipped to
+ *   5. Reserve.The chosen slots are re-locked and re-checked, then flipped to
  *              'blocked'. Between the candidate scan and here a player could have
  *              started a checkout, so the reservation is verified under a lock and
  *              the whole transaction fails if an hour has gone.
- *   6. MONEY.  Every captain's frozen fee is released, the pool is split by the
+ *   6. Money.  Every captain's frozen fee is released, the pool is split by the
  *              waterfall, and the owner receives their earning in `balance` while
  *              the prize sits in their `frozen` where a withdrawal cannot reach it.
  *
- * PENDING APPROVALS. An approval-gated tournament can reach its deadline with
+ * Pending approvals. An approval-gated tournament can reach its deadline with
  * entries the organiser never decided on. Before the deadline that is their
  * business and this function refuses (`pending_decisions`) so they can decide.
  * After it, silence is an answer: the outstanding entries are rejected and
@@ -1288,7 +1263,7 @@ async function generateFixtures(client, {
       'Registration is still open. The bracket is drawn automatically at the deadline, or now if the field fills up.');
   }
 
-  // ---- 2. the field ------------------------------------------------------
+  // 2. The field
   const pending = await loadRegistrations(client, t.id, { statuses: [REG.REGISTERED] });
   if (pending.length && !deadlinePassed) {
     return fail(409, 'pending_decisions',
@@ -1332,7 +1307,7 @@ async function generateFixtures(client, {
     };
   }
 
-  // ---- 3. the draw (pure) ------------------------------------------------
+  // 3. The draw (pure)
   const seeded = fx.seedTeams(field.map((r) => ({
     id: r.team_id, name: r.team_name, elo: r.elo, captainId: r.captain_id,
   })));
@@ -1341,7 +1316,7 @@ async function generateFixtures(client, {
     return fail(409, 'no_fixtures', 'That field cannot be drawn into a bracket');
   }
 
-  // ---- 4. the placement (model #1, or chronological) ---------------------
+  // 4. The placement (model #1, or chronological)
   const notBefore = deadlinePassed ? null : t.registration_deadline;
   const placed = await scheduler.schedule(client, {
     venueId: t.venue_id,
@@ -1361,7 +1336,7 @@ async function generateFixtures(client, {
     };
   }
 
-  // ---- 5. the reservation -----------------------------------------------
+  // 5. The reservation
   // Re-locked and re-checked. `candidateSlots` ran a moment ago without a lock,
   // so between the scan and here a player could have started a checkout on one of
   // the chosen hours. Verifying under the lock turns that race into a clean
@@ -1383,7 +1358,7 @@ async function generateFixtures(client, {
     [slotIds],
   );
 
-  // ---- the fixtures rows -------------------------------------------------
+  // The fixtures rows
   // `built.fixtures` already carries resolved byes (status 'walkover', the top
   // seed as winner, and that team pre-advanced into its round-2 node), so the
   // rows are inserted exactly as the pure builder produced them.
@@ -1410,8 +1385,8 @@ async function generateFixtures(client, {
     );
   }
 
-  // ---- 6. the money ------------------------------------------------------
-  // The pool is the sum of what was ACTUALLY frozen, not `entry_fee x teams`. An
+  // 6. The money
+  // The pool is the sum of what was frozen, not `entry_fee x teams`. An
   // owner who edits the fee after two teams have entered must not be paid on a
   // number nobody paid; releasing exactly what each captain holds is the only
   // version of this that leaves the ledger summing to zero.
@@ -1484,8 +1459,8 @@ async function generateFixtures(client, {
     }
   }
 
-  // ---- the row -----------------------------------------------------------
-  // `start_date` is corrected to the date the bracket actually landed on. The
+  // The row
+  // `start_date` is corrected to the date the bracket landed on. The
   // owner typed a guess before the venue's free hours were known; the fixtures
   // are the fact, and a browse screen showing a date no fixture is on is a lie
   // nobody would think to check.
@@ -1500,7 +1475,7 @@ async function generateFixtures(client, {
       split.pool, split.venueCost, split.prize, split.ownerEarning],
   );
 
-  // ---- notifications ----------------------------------------------------
+  // Notifications
   const rows = await loadFixtures(client, t.id);
   const firstFor = new Map();
   for (const f of rows) {
@@ -1566,7 +1541,7 @@ async function generateFixtures(client, {
     economics: split,
     rejectedPending: pending.length,
     // The provenance block, echoed verbatim from the scheduler: 'model' when the
-    // released demand model actually scored the candidate hours, 'chronological'
+    // released demand model scored the candidate hours, 'chronological'
     // when it could not, and `reason` saying which. This is the claim the demo
     // checks rather than asserts.
     meta: placed.meta,
@@ -1574,9 +1549,7 @@ async function generateFixtures(client, {
     + `${split.prize > 0 ? `, PKR ${split.prize} prize pool` : ', no prize (pool did not cover the venue)'}`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RESULTS (SRS FE-7) — two doors, one settle function
-// ─────────────────────────────────────────────────────────────────────────────
+// Results (SRS FE-7) — two doors, one settle function
 
 /** One fixture, with both teams, the slot, and the tournament's format context. */
 async function loadFixture(client, { tournamentId, fixtureId, matchId = null, forUpdate = false }) {
@@ -1609,7 +1582,7 @@ async function loadFixture(client, { tournamentId, fixtureId, matchId = null, fo
 }
 
 /**
- * Who advances from a drawn knockout tie: the HIGHER SEED, i.e. the lower seed
+ * Who advances from a drawn knockout tie: the higher SEED, i.e. the lower seed
  * number.
  *
  * This project has no penalty-shootout model and inventing one would be inventing
@@ -1633,10 +1606,10 @@ function drawWinner(fixture) {
 /** A score is a non-negative integer or it is not a score. */
 function readScore(value) {
   // The empty box is the trap. `Number(null)`, `Number('')`, `Number(false)` and
-  // `Number([])` are ALL 0, so an organiser who fills the home score and tabs past
+  // `Number([])` are all 0, so an organiser who fills the home score and tabs past
   // the away one used to record a real 2-0: a scoreline nobody entered, rated at
   // the round's K and advanced into the next node. Rejecting the empty forms
-  // BEFORE coercion is what makes the `bad_score` guard downstream mean anything.
+  // before coercion is what makes the `bad_score` guard downstream mean anything.
   if (value === null || value === undefined) return null;
   if (typeof value === 'boolean' || typeof value === 'object') return null;
   if (typeof value === 'string' && value.trim() === '') return null;
@@ -1669,7 +1642,7 @@ async function advanceWinner(client, { tournament, fixture, winner }) {
 /**
  * completeTournament — pay the podium and close the books.
  *
- * The prize has been sitting in the ORGANISER's frozen balance since generation,
+ * The prize has been sitting in the organiser's frozen balance since generation,
  * so paying it out is a release, not a new charge: owner `frozen -= prize`, then
  * `winnerShare` into the champion captain's balance and `runnerupShare` into the
  * runner-up's. The ledger therefore reads pool in → venue cost + margin + prize
@@ -1839,7 +1812,7 @@ async function completeTournament(client, { tournament, fixtures }) {
 }
 
 /**
- * applyFixtureResult — the ONE place a fixture stops being upcoming.
+ * applyFixtureResult — the one place a fixture stops being upcoming.
  *
  * Both doors into the result flow end here, which is the point: the organiser
  * typing a score (FE-7) and the S.2 captain-submits → owner-verifies flow must
@@ -1850,12 +1823,12 @@ async function completeTournament(client, { tournament, fixtures }) {
  *
  *   organiser door  → `applyElo: true`. This function writes the `matches` row and
  *                     applies the exchange itself, with K from `fx.kFactorFor`.
- *   match-flow door → `applyElo: false`. `routes/matches.js` has ALREADY applied
+ *   match-flow door → `applyElo: false`. `routes/matches.js` has already applied
  *                     the exchange inside the same transaction (its own
  *                     `matches.elo_applied` latch), so a second application here
  *                     would double-count the rating for one game.
  *
- * The latch for THIS function is `fixtures.status`: anything other than
+ * The latch for this function is `fixtures.status`: anything other than
  * `upcoming` returns `already_settled` and writes nothing.
  */
 async function applyFixtureResult(client, {
@@ -2022,7 +1995,7 @@ async function applyFixtureResult(client, {
  * standing at the ground with a whistle; they saw the game. So this is the primary
  * result door, and it still produces a real `matches` row — `booking_id IS NULL`,
  * `tournament_id` set, `verified_by` the organiser — so that the result appears in
- * both teams' match history, moves their ELO through the ONE ladder, and lands in
+ * both teams' match history, moves their ELO through the one ladder, and lands in
  * `elo_history` with the tournament K recorded against it. Nothing about a
  * tournament result is a special case downstream; only the door is different.
  */
@@ -2103,10 +2076,10 @@ async function settleFixture(client, {
  * walkover — a team does not turn up, or cannot continue.
  *
  * Recorded rather than scored: `status = 'walkover'`, a winner, no scoreline, and
- * NO rating movement, because K is 0 for a game nobody played. The slot stays
+ * no rating movement, because K is 0 for a game nobody played. The slot stays
  * blocked — the tournament reserved and paid for that hour at generation, and
  * un-reserving it would put `venue_cost_amount` out of step with the hours the
- * bracket actually consumed, which is the one number the ledger audit rests on.
+ * bracket consumed, which is the one number the ledger audit rests on.
  */
 async function walkover(client, {
   actorId, tournamentId, fixtureId, winnerTeamId = null, reason = null,
@@ -2149,8 +2122,8 @@ async function walkover(client, {
 /**
  * matchContext — what `routes/matches.js` needs to know about a tournament match.
  *
- * S.2 answers two questions from the booking: WHO may verify (the owner of the
- * venue the match is booked at) and WHAT K to rate it with (the global 32). A
+ * S.2 answers two questions from the booking: who may verify (the owner of the
+ * venue the match is booked at) and what K to rate it with (the global 32). A
  * tournament match has no booking, so both answers have to come from somewhere
  * else, and this is that somewhere:
  *
@@ -2207,7 +2180,7 @@ async function matchContext(client, matchId) {
 }
 
 /**
- * advanceAfterMatch — called by `routes/matches.js` INSIDE the verify transaction.
+ * advanceAfterMatch — called by `routes/matches.js` inside the verify transaction.
  *
  * By the time this runs, matches.js has locked the match, verified the organiser's
  * authority, applied the ELO exchange with the K this module supplied and set
@@ -2261,15 +2234,13 @@ async function advanceAfterMatch(client, matchId) {
   return { ...result, data: { ...result.data, advanced: true } };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// READS
-// ─────────────────────────────────────────────────────────────────────────────
+// Reads
 
 /**
  * viewerContext — the four questions every tournament screen asks about "me".
  *
  * A player's screen needs to know which of their teams is already in, which of
- * them COULD enter (right sport, they captain it, not already entered), and
+ * them could enter (right sport, they captain it, not already entered), and
  * whether the wallet covers the fee. Working that out client-side would mean
  * shipping the whole team list and the wallet balance to the phone and hoping the
  * two agree; deriving it here means the register button is enabled by the same
@@ -2327,10 +2298,10 @@ async function viewerContext(client, { tournament, userId, registrations }) {
 /**
  * economicsOf — the money block, in one of two modes, and it says which.
  *
- * Once fixtures exist the four amounts on the tournament row ARE the answer: they
+ * Once fixtures exist the four amounts on the tournament row are the answer: they
  * are what the ledger moved, so nothing is recomputed and `settled: true`. Before
  * that there is no venue cost yet — no slots have been chosen — so the block is a
- * PROJECTION at list price, flagged `settled: false`, and the owner's create screen
+ * projection at list price, flagged `settled: false`, and the owner's create screen
  * gets the real quote from `preview`, which schedules against actual slot prices.
  *
  * The distinction is the whole reason this is not one number: a projection that
@@ -2492,7 +2463,7 @@ async function detail(client, { tournamentId, userId = null } = {}) {
  * an owner from captaining a squad), and the phone has one "My tournaments" tab, so
  * splitting this into two endpoints would mean two round trips to draw one screen.
  *
- * `playing` follows TEAM MEMBERSHIP, not captaincy. Only a captain can enter a
+ * `playing` follows TEAM membership, not captaincy. Only a captain can enter a
  * tournament or be paid a prize, but every member plays in it and expects to find
  * it here; a squad member who could not see their own bracket would be a bug
  * reported as "the app forgot my tournament".
@@ -2548,7 +2519,7 @@ async function mine(client, { userId, limit = 40 } = {}) {
 }
 
 /**
- * browse — GET /api/tournaments. FE-2's filters, answered by ONE query.
+ * browse — GET /api/tournaments. FE-2's filters, answered by one query.
  *
  * The list itself is `discoveryService.listTournaments`, which Scout already calls,
  * extended rather than forked so the assistant and the browse screen can never
@@ -2601,13 +2572,12 @@ async function browse(client, {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TRANSACTIONS
+// Transactions
 //
 // Every function above takes a `client` and never writes BEGIN, COMMIT or
 // ROLLBACK, which is what lets `routes/matches.js` run `advanceAfterMatch` inside
 // its own verify transaction and the deadline job run `generateFixtures` inside
-// one it already holds. `runInTx` is the ONLY place in this module those three
+// one it already holds. `runInTx` is the only place in this module those three
 // words appear, copied from bookingService.js so the rule is the same everywhere:
 // a result with `ok: false` rolls back.
 //
@@ -2616,7 +2586,6 @@ async function browse(client, {
 // refund, a slot flipped to blocked — and rolling back on the refusal is what
 // keeps a tournament that could not be scheduled from being left half-drawn with
 // eight captains' money in the wrong place.
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function runInTx(fn) {
   const client = await pool.connect();

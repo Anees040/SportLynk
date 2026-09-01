@@ -8,10 +8,10 @@ import '../utils/deep_link.dart';
 
 /// The foreground half of push delivery.
 ///
-/// WHY THIS EXISTS INSTEAD OF flutter_local_notifications
+/// Why this exists instead of flutter_local_notifications
 /// On Android, FCM draws the tray banner itself when the app is backgrounded or
 /// killed -- `pushService` sends a `notification` block alongside the `data` block
-/// precisely so a killed app still buzzes. What FCM will NOT do is show anything
+/// precisely so a killed app still buzzes. What FCM will not do is show anything
 /// while the app is in the foreground: `onMessage` fires and no system notification
 /// appears. That single case is the only thing a local-notifications plugin would
 /// have added, and a system tray banner is the wrong artefact for it anyway -- the

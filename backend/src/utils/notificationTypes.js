@@ -2,12 +2,11 @@
  * The notification registry — one server-owned table of every alert this app can
  * send, and everything the client would otherwise have to guess about it.
  *
- * WHY A REGISTRY, AND WHY ON THE SERVER
- * -------------------------------------
+ * Why a registry, and why on the server
  * Before this file, `notify()` wrote a type string, a title and a body. Everything
  * else a feed needs — which category the row belongs to (so it can be filtered and
  * opted out of), whether it is worth waking a phone for, which icon it draws, and
- * above all WHERE TAPPING IT GOES — was nowhere. The client would have had to
+ * above all WHERE tapping it goes — was nowhere. The client would have had to
  * switch on the type string and rebuild the route itself, which means:
  *
  *   • two implementations of the same mapping, one in Dart and one in nobody's
@@ -22,8 +21,7 @@
  * and the client does exactly what the row tells it. Adding a notification type is
  * one entry in this table.
  *
- * THE BOOT ASSERTION
- * ------------------
+ * The boot assertion
  * `assertNotificationTypes()` runs at server start (server.js) and fails the boot
  * if any type emitted in the codebase is missing here — the same discipline as
  * `mlClient.assertNluLabels()` and `assistantActions.assertRoutable()`. A missing
@@ -31,9 +29,8 @@
  * to push on and a null deep link, which is precisely the "the notification came
  * but tapping it does nothing" failure this module exists to make impossible.
  *
- * DEEP LINKS ARE ROUTE NAMES THAT MUST EXIST IN lib/routes/app_routes.dart
- * ------------------------------------------------------------------------
- * `deepLink()` returns `{ route, args }` where `route` is a NAMED Flutter route.
+ * Deep links are route names that must exist in lib/routes/app_routes.dart
+ * `deepLink()` returns `{ route, args }` where `route` is a named Flutter route.
  * `check_notifications.js` asserts every route this file can emit is present in
  * the client's `routes:` map — lib/routes/app_routes.dart, where the table lives,
  * unioned with lib/main.dart, where it used to — by string match. That check is
@@ -45,8 +42,7 @@
  * assistant_question). Null is honest — the client renders the row as
  * non-tappable — and it is not the same thing as a route that 404s.
  *
- * PRIORITY IS A PUSH DECISION, NOT A FEELING
- * ------------------------------------------
+ * Priority is a push decision, not a feeling
  *   high    — wake the phone. Money moved, a slot is confirmed or lost, someone
  *             is waiting on a reply with a deadline.
  *   normal  — deliver, but it can wait for the next unlock.
@@ -58,7 +54,7 @@
  */
 
 // The nine feed categories, matching chk_notifications_category in migration 020
-// (which also allows 'assistant' — see the CATEGORIES note below).
+// (which also allows 'assistant' — see the categories note below).
 const CATEGORY = {
   BOOKING: 'booking',
   MATCH: 'match',
@@ -85,7 +81,7 @@ const MUTABLE_CATEGORIES = [
   CATEGORY.REVIEW,
 ];
 
-// ─── Deep-link helpers ───────────────────────────────────────────────────────
+// Deep-link helpers
 //
 // Each takes the notify() context — `{ bookingId, payload }` — and returns a
 // route + args, or null when the id it needs is not there. Returning null rather
@@ -106,7 +102,7 @@ const ownerBookingLink = ({ payload }) => ({
   args: payload?.bookingId ? { bookingId: payload.bookingId } : {},
 });
 
-// Match notifications open the match centre for the recipient's OWN team — the
+// Match notifications open the match centre for the recipient's own team — the
 // screen that lists their challenges, results awaiting submission and history.
 // teamId is on every payload mc.fanOut writes.
 const matchLink = ({ payload }) => (payload?.teamId
@@ -134,9 +130,9 @@ const chatLink = ({ payload }) => (payload?.channelId
   }
   : { route: '/chats', args: {} });
 
-// ─── Collapse groups ─────────────────────────────────────────────────────────
+// Collapse groups
 //
-// A group_key makes the database collapse repeats into ONE row (see
+// A group_key makes the database collapse repeats into one row (see
 // ux_notifications_group in migration 020): the second message from the same
 // person bumps group_count instead of adding a row. Only types that genuinely
 // repeat from the same source get one — three messages in a thread are one
@@ -159,7 +155,7 @@ const teamRequestGroup = {
 };
 
 /**
- * THE TABLE.
+ * The table.
  *
  * Every key is a `type` value written by a live notify() call site, plus the four
  * S.7 additions. `entity` is the polymorphic tap target recorded on the row
@@ -167,7 +163,7 @@ const teamRequestGroup = {
  * Material icon name the Flutter feed maps to an IconData.
  */
 const TYPES = {
-  // ─── Bookings ──────────────────────────────────────────────────────────────
+  // Bookings
   // High almost throughout: a booking is the thing the player paid for, and
   // "confirmed" / "rejected" / "you were marked a no-show" all change what they
   // are doing in the next few hours. The _owner mirrors are normal — the owner
@@ -204,14 +200,14 @@ const TYPES = {
     category: CATEGORY.BOOKING, priority: PRIORITY.NORMAL,
     icon: 'person_off', entity: 'booking', deepLink: ownerBookingLink,
   },
-  // Goes to the OWNER (bookingService credits them the penalty), so it links to
+  // Goes to the owner (bookingService credits them the penalty), so it links to
   // the owner's requests screen rather than the player's booking detail.
   booking_cancelled_late: {
     category: CATEGORY.BOOKING, priority: PRIORITY.NORMAL,
     icon: 'money_off', entity: 'booking', deepLink: ownerBookingLink,
   },
 
-  // ─── Matches ───────────────────────────────────────────────────────────────
+  // Matches
   // A challenge has a 48h deadline and a slot behind it; the whole point of
   // pushing it is that the other captain does not open the app on their own.
   match_challenge: {
@@ -234,7 +230,7 @@ const TYPES = {
     category: CATEGORY.MATCH, priority: PRIORITY.HIGH,
     icon: 'edit_note', entity: 'match', deepLink: matchLink,
   },
-  // The one match type addressed to an OWNER: two teams submitted the same score
+  // The one match type addressed to an owner: two teams submitted the same score
   // and the venue has to confirm it. Its home is the owner's verify screen.
   match_verify_pending: {
     category: CATEGORY.MATCH, priority: PRIORITY.NORMAL,
@@ -259,7 +255,7 @@ const TYPES = {
       : null),
   },
 
-  // ─── Tournaments ───────────────────────────────────────────────────────────
+  // Tournaments
   // Anything that moves money or a bracket is high. Registration receipts and
   // the organiser's own bookkeeping are normal.
   tournament_registered: {
@@ -322,7 +318,7 @@ const TYPES = {
     icon: 'workspace_premium', entity: 'tournament', deepLink: tournamentLink,
   },
 
-  // ─── Teams ─────────────────────────────────────────────────────────────────
+  // Teams
   // team_request repeats from different people at the same team, so it collapses:
   // a captain with an open team should see "4 players want to join", not four
   // rows that push four times.
@@ -340,7 +336,7 @@ const TYPES = {
     icon: 'military_tech', entity: 'team', deepLink: teamLink,
   },
 
-  // ─── Wallet ────────────────────────────────────────────────────────────────
+  // Wallet
   // "Requested" is low: the user just tapped the button, they know. "Paid out" is
   // high — money left the platform and reached their account, which is the one
   // wallet event worth a buzz.
@@ -357,8 +353,8 @@ const TYPES = {
     icon: 'undo', entity: 'withdrawal', deepLink: walletLink,
   },
 
-  // ─── Scout (the assistant) ─────────────────────────────────────────────────
-  // assistant_question goes to a VENUE OWNER: a player asked something Scout
+  // Scout (the assistant)
+  // assistant_question goes to a VENUE owner: a player asked something Scout
   // could not answer and it was escalated. There is no owner-side escalation
   // inbox in the Flutter app yet — the endpoints exist
   // (POST /api/assistant/escalations/:id/answer) and the screen does not — so the
@@ -377,7 +373,7 @@ const TYPES = {
     deepLink: () => ({ route: '/assistant', args: {} }),
   },
 
-  // ─── S.7 additions ─────────────────────────────────────────────────────────
+  // S.7 additions
   // A chat message notifies only when the recipient is offline or looking at a
   // different chat (routes/chat.js checks bus.isUserViewingChannel) — a phone
   // that is already showing the message must not also buzz about it.
@@ -392,7 +388,7 @@ const TYPES = {
     category: CATEGORY.MATCH, priority: PRIORITY.HIGH,
     icon: 'gavel', entity: 'match', deepLink: matchLink,
   },
-  // System, and deliberately NOT mutable — see MUTABLE_CATEGORIES. A suspended
+  // System, and deliberately not mutable — see MUTABLE_CATEGORIES. A suspended
   // user must be told why, and cannot have opted out of being told.
   account_suspended: {
     category: CATEGORY.SYSTEM, priority: PRIORITY.HIGH,
@@ -403,14 +399,14 @@ const TYPES = {
     icon: 'lock_open', entity: 'user', deepLink: () => null,
   },
   // POST /api/notifications/test writes this. Registered rather than left to the
-  // unregistered-type fallback for one reason: the demo lever must exercise the SAME
+  // unregistered-type fallback for one reason: the demo lever must exercise the same
   // path a real notification takes -- registry lookup, category, priority, outbox --
   // or a green test proves only that the fallback works.
   //
   // SYSTEM, so pushJob's suppressionReason() exempts it from muteAll, from the
   // per-category mutes and from quiet hours. That is what makes it a diagnostic: if
   // the test does not arrive, the answer is the pipe (no key, no device, dead token)
-  // and never a preference, so it cannot send you looking in the wrong place.
+  // and never a preference, so it cannot send anyone looking in the wrong place.
   // NORMAL priority because it is not urgent -- a heads-up banner for a self-test
   // would misrepresent what the tray is for.
   system_test: {
@@ -419,18 +415,16 @@ const TYPES = {
   },
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ACCESSORS
-// ═══════════════════════════════════════════════════════════════════════════
+// Accessors
 
 /**
- * The registry entry for a type, or a SAFE FALLBACK for one that is not
+ * The registry entry for a type, or a safe fallback for one that is not
  * registered.
  *
  * Never throws, and never returns undefined. `notify()` is called from inside
  * money transactions — a lookup miss must not be able to roll back a settled
  * booking over a missing icon. An unregistered type therefore lands as a plain
- * 'system' row with no deep link and no push priority, and the BOOT ASSERTION
+ * 'system' row with no deep link and no push priority, and the boot assertion
  * below is what stops that from reaching production in the first place.
  */
 function describe(type) {
@@ -461,7 +455,7 @@ function allTypes() {
  * which is the guard against a
  * notification whose tap goes nowhere.
  *
- * Routes are collected by CALLING each deepLink with a fully-populated fake
+ * Routes are collected by calling each deepLink with a fully-populated fake
  * context rather than by parsing the source, so a helper that quietly stops
  * returning a route shows up here as a missing entry.
  */
@@ -568,9 +562,7 @@ function entityFor(type, ctx) {
   return id ? { entityType: kind, entityId: id } : { entityType: null, entityId: null };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THE BOOT ASSERTION
-// ═══════════════════════════════════════════════════════════════════════════
+// The boot assertion
 
 /**
  * Fail the boot if a type this codebase emits is not registered here.

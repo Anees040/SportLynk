@@ -1,17 +1,15 @@
 /**
  * test/assistant.test.js — the parts of Scout that can be proved without a database.
  *
- * WHAT THIS FILE IS FOR
- * --------------------
- * Wave C's risk is not in the SQL; it is in the DECISIONS. A slot merge that keeps a
+ * What this file is for
+ * Wave C's risk is not in the SQL; it is in the decisions. A slot merge that keeps a
  * stale slotId puts a confirm card in front of the wrong hour, an affirmation lexicon
  * that says yes to "haan lekin 7 baje" spends the user's money on the wrong slot, and
  * a policy template with a typo'd placeholder tells a user they get a "{refund_pct}%"
  * refund. All three are pure functions, so all three are testable here — no Postgres,
  * no ml-service, no JWT, no network.
  *
- * WHERE THE OTHER HALF LIVES
- * -------------------------
+ * WHERE the other half lives
  * Anything that touches a row is in src/scripts/check_assistant.js, which runs against
  * the real database inside a transaction it rolls back. The split is deliberate and it
  * is the same one utils/elo has: `npm test` must stay runnable with the database down.
@@ -28,9 +26,7 @@ const discovery = require('../src/services/discoveryService');
 const escrow = require('../src/utils/escrow');
 const ml = require('../src/services/mlClient');
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 1. THE REGISTRY — every trained label has somewhere to go
-// ═══════════════════════════════════════════════════════════════════════════
+// 1. The registry — every trained label has somewhere to go
 
 test('assertRoutable: every intent label the model can emit has a handler', () => {
   const out = actions.assertRoutable();
@@ -40,7 +36,7 @@ test('assertRoutable: every intent label the model can emit has a handler', () =
   assert.equal(out.actions, out.labels + out.buttonOnly);
 });
 
-// The three tournament actions are executable but UNTRAINED, and that is the whole
+// The three tournament actions are executable but untrained, and that is the whole
 // point: model #4 v2 was released with 23 labels and S.7 does not retrain it, so the
 // classifier cannot start a tournament entry no matter what a user types. If a later
 // wave ever adds a label for one of these, this test is where it has to be argued.
@@ -82,11 +78,9 @@ test('the button-only actions are exactly the ones no classifier emits', () => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 2. THE AFFIRMATION LEXICON — the gate money passes through
-// ═══════════════════════════════════════════════════════════════════════════
+// 2. The affirmation LEXICON — the gate money passes through
 //
-// verdictOf is the ONLY thing that can arm a confirmed booking, and it is a frozen
+// verdictOf is the only thing that can arm a confirmed booking, and it is a frozen
 // word list rather than the classifier on purpose: a probability cannot be trusted
 // with "haan" when the alternative reading costs PKR 2,000. So it must say yes to a
 // whole yes, no to a whole no, and NULL to anything with cargo in it.
@@ -106,7 +100,7 @@ test('verdictOf: plain no in both languages', () => {
 });
 
 test('verdictOf: an affirmation with CARGO is not an affirmation', () => {
-  // The one that matters: "yes but 7pm" is a CORRECTION. Reading it as a yes books
+  // The one that matters: "yes but 7pm" is a correction. Reading it as a yes books
   // the 6pm already on the confirm card and the user watches their money go to the
   // wrong hour. Anything the lexicon does not recognise makes the whole thing null.
   for (const mixed of ['haan lekin 7 baje', 'yes but change the date', 'haan 2 ghante',
@@ -135,9 +129,7 @@ test('words(): punctuation and case are not part of a decision', () => {
   assert.equal(dialog.verdictOf('Nahi...'), 'deny');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // 3. SLOTS — what the conversation remembers, and what it must forget
-// ═══════════════════════════════════════════════════════════════════════════
 
 test('cleanSlots: unknown keys from a client are dropped, not stored', () => {
   const out = dialog.cleanSlots({ sport: 'cricket', venueId: 'abc', evil: 'DROP TABLE' });
@@ -195,9 +187,7 @@ test('mergeSlots: a change of subject forgets DECISIONS but keeps PREFERENCES', 
   assert.equal('bookingId' in out, false);
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // 4. ENTITIES → SLOTS — five shapes, none of them `.value`
-// ═══════════════════════════════════════════════════════════════════════════
 //
 // The Python extractor names each entity's payload after the evidence it carries, so
 // the obvious `.value` read would silently drop four of the five. This test is the
@@ -236,9 +226,7 @@ test('slotsFromEntities: nothing extracted means nothing filled', () => {
   assert.deepEqual(dialog.slotsFromEntities({ area: {} }), {});
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 5. THE STATE MACHINE — what the telemetry column records
-// ═══════════════════════════════════════════════════════════════════════════
+// 5. The state machine — what the telemetry column records
 
 test('fsmStateOf: the four states, and confirm outranks pending', () => {
   assert.equal(dialog.fsmStateOf(null), dialog.FSM.IDLE);
@@ -262,9 +250,7 @@ test('every PENDING_SLOT question names a real slot key', () => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 6. CONTINUATION — "kal" as an ANSWER, not a new request
-// ═══════════════════════════════════════════════════════════════════════════
+// 6. Continuation — "kal" as an answer, not a new request
 //
 // The hole this closes: Scout asks "Which day at Rawal?", the user types "kal", and no
 // intent model calls a bare adverb book_venue -- it abstains, correctly. Without
@@ -334,9 +320,7 @@ test('continuationOf: nothing pending, nothing to continue', () => {
   }), null, 'a pending slot with no intent behind it is not resumable');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 7. THE PAYLOAD — Flutter renders by type, so a typo must die here
-// ═══════════════════════════════════════════════════════════════════════════
+// 7. The payload — Flutter renders by type, so a typo must die here
 
 test('reply(): source is required and validated', () => {
   assert.throws(() => reply.reply('hi', {}), /source must be one of/);
@@ -433,12 +417,10 @@ test('guessChips(): never offers a gate, a greeting or the failure itself', () =
   assert.equal(out[0].action, 'wallet_balance');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 8. POLICY TEXT — the sentence is stored, the NUMBERS come from escrow.js
-// ═══════════════════════════════════════════════════════════════════════════
+// 8. POLICY text — the sentence is stored, the numbers come from escrow.js
 //
 // Golden rule 3: utils/escrow.js POLICY is the single source of truth for money. So a
-// policy answer is a TEMPLATE plus substitution, never a typed-out "20%". A placeholder
+// policy answer is a template plus substitution, never a typed-out "20%". A placeholder
 // nobody can fill is the failure mode this section exists to catch.
 
 test('every seeded fallback renders with no placeholder left behind', () => {
@@ -472,7 +454,7 @@ test('the rendered numbers ARE escrow POLICY, not copies of it', () => {
 
 test('an unknown placeholder is left visible rather than blanked', () => {
   // "you get a % refund" is a sentence a user would believe. "{refund_pctt}%" is one
-  // they would report, which is the outcome we want.
+  // they would report, which is the desired outcome.
   assert.equal(policyText.render('you get {refund_pctt}% back'), 'you get {refund_pctt}% back');
   assert.deepEqual(policyText.unfilled('{refund_pctt} and {refund_pct}'), ['refund_pctt']);
 });
@@ -523,18 +505,16 @@ test('policyTopicFor: a STALE topic slot cannot answer the wrong question', () =
   assert.equal(actions.policyTopicFor({}), 'refund_policy');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 9. DATES — two opposite corrections, both real bugs
-// ═══════════════════════════════════════════════════════════════════════════
+// 9. Dates — two opposite corrections, both real bugs
 //
-// node-postgres hands back a DATE column as a JS Date at LOCAL midnight, so
-// toISOString() on a machine west of PKT prints the day BEFORE -- and a booking
-// confirmation is the worst place to be off by one day. dateStr therefore SUBTRACTS
-// the local offset. A timestamptz is a real instant, so pktDay ADDS the PKT offset
+// node-postgres hands back a date column as a JS Date at local midnight, so
+// toISOString() on a machine west of PKT prints the day before -- and a booking
+// confirmation is the worst place to be off by one day. dateStr therefore subtracts
+// the local offset. A timestamptz is a real instant, so pktDay adds the PKT offset
 // instead. Getting these backwards is invisible until a demo runs at 9pm.
 
 test('dateStr(): a DATE column keeps its calendar day', () => {
-  // What pg gives you for a DATE of 2026-08-30, whatever the server's timezone is.
+  // What pg returns for a date of 2026-08-30, whatever the server's timezone is.
   const localMidnight = new Date(2026, 7, 30, 0, 0, 0);
   assert.equal(actions.dateStr(localMidnight), '2026-08-30');
   // And late in the evening, the case that breaks a naive toISOString() east of UTC.
@@ -588,11 +568,9 @@ test('money(): a price is grouped and prefixed, never a bare float', () => {
   assert.equal(actions.money(null), 'PKR 0', 'a missing price must not print "PKR null"');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 10. THE REFUND SENTENCE — "PKR 1,600 back (80%)" must be arithmetic
-// ═══════════════════════════════════════════════════════════════════════════
+// 10. The REFUND sentence — "PKR 1,600 back (80%)" must be arithmetic
 //
-// The wave spec asks the cancel flow to quote the refund BEFORE executing. Scout quotes
+// The wave spec asks the cancel flow to quote the refund before executing. Scout quotes
 // bookingService.previewCancellation, which derives its numbers from these two escrow
 // functions -- so the number in the question is the number in the ledger by
 // construction, not by two implementations agreeing.
@@ -627,9 +605,7 @@ test('isLateCancellation(): the window is the boundary, in PKT', () => {
     'an hour before the slot is a late cancellation');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 11. THREADS — history, new chat, rename, and the state that survives a reload
-// ═══════════════════════════════════════════════════════════════════════════
+// 11. Threads — history, new chat, rename, and the state that survives a reload
 
 test('readState(): an unknown version RESETS rather than being half-understood', () => {
   const fresh = threads.freshState();
@@ -679,9 +655,7 @@ test('decodeCursor(): a junk cursor is "no cursor", not a 400', () => {
   assert.equal(threads.decodeCursor(42), null);
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // 12. CARDS — every action card has buttons (the wave spec's hard rule)
-// ═══════════════════════════════════════════════════════════════════════════
 
 const VENUE_ROW = {
   id: 'v1', name: 'Rawal Cricket Ground', city: 'Islamabad', address: 'Sector G-9',
@@ -762,19 +736,17 @@ test('SCREENS: the deep-link map is a contract with Flutter, and `screen` surviv
   assert.equal(dialog.cleanSlots({ screen: 'wallet' }).screen, 'wallet');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 13. ABSTENTION RECOVERY — the parse survives, so offer it as a BUTTON
-// ═══════════════════════════════════════════════════════════════════════════
+// 13. Abstention recovery — the parse survives, so offer it as a button
 //
 // The entity extractor runs beside the classifier, not inside it, so a turn can
-// abstain on the INTENT while holding a flawless "football, Islamabad, tomorrow 6pm".
+// abstain on the intent while holding a flawless "football, Islamabad, tomorrow 6pm".
 // Wave E's measured case: "kal shaam football islamabad" parsed all four entities and
 // still scored find_venue 0.364 against a 0.45 floor. The corpus fix (eight verbless
 // keyword templates, retrained to intent-v2-20260828-2315) took that to 0.81, and this
 // is the belt to its braces for the abstentions that remain.
 //
 // The invariant these tests defend is WHERE the recovery happens: a chip carries its
-// own {action, args}, so tapping one re-enters decide() through the CHIP door. Nothing
+// own {action, args}, so tapping one re-enters decide() through the chip door. Nothing
 // here promotes a low score to an action -- the user does, with a tap.
 
 const ABSTAIN = {
@@ -799,7 +771,7 @@ test('slotSearchChip: a parsed sport and city become one routable button', () =>
 });
 
 test('slotSearchChip: date and time ALONE offer nothing — the abstention stands', () => {
-  // "kal shaam" is the utterance the model is RIGHT to abstain on: it names no sport
+  // "kal shaam" is the utterance the model is right to abstain on: it names no sport
   // and no place. A venue-search button here would be inventing the intent that the
   // abstention just declined to invent.
   assert.equal(dialog.slotSearchChip({ date: '2026-08-30', time: '18:00' }), null);
@@ -822,7 +794,7 @@ test('slotSearchChip: the label fits the chip cap, and the args keep what it dro
   });
   assert.ok(out.label.length <= 40, `40 is chip()'s own cap, got ${out.label.length}`);
   assert.equal(out.label.endsWith('Ag'), false, 'a label chopped mid-word reads like a bug');
-  // The label had no room for the time; the SEARCH must still use it.
+  // The label had no room for the time; the search must still use it.
   assert.equal(out.args.time, '18:00');
   assert.equal(out.args.date, '2026-08-30');
 });
@@ -834,7 +806,7 @@ test('abstainReply: the slot chip leads on all five reasons, including "we are d
     assert.equal(out.chips[0].action, 'find_venue', `${why} dropped the slot chip`);
     assert.equal(out.chips[0].label, slotChip.label);
     assert.ok(out.chips.length <= 6, `${why} exceeded the chip cap`);
-    // Never at the cost of the capability menu: ER2.6 wants the help card on ALL five.
+    // Never at the cost of the capability menu: ER2.6 wants the help card on all five.
     assert.ok(out.cards.some((c) => c.type === 'capabilities'), `${why} lost the menu`);
   }
 });

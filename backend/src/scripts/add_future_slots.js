@@ -1,36 +1,32 @@
 /**
  * add_future_slots.js — give every active venue bookable slots for the next N days.
  *
- * WHY THIS EXISTS
- * ---------------
+ * Why this exists
  * A venue with no future slot cannot be booked, so with zero future slots the
  * entire S1 acceptance suite is untestable: book → approve → QR check-in, both
  * cancel paths, the two-account slot lock, and the 1-minute auto-approve and
  * no-show tests all begin with "player books a slot".
  *
- * seed_venues.js can produce slots, but it DELETES the owner's venues, bookings
+ * seed_venues.js can produce slots, but it deletes the owner's venues, bookings
  * and ledger history first — fine for a from-scratch demo database, wrong when the
  * venues were built by hand and are worth keeping. This script is the additive
  * alternative: it never deletes anything and never touches wallets.
  *
- * IDEMPOTENT
- * ----------
+ * Idempotent
  * `slots` has no unique constraint on (venue_id, slot_date, start_time), so
  * re-running would otherwise double every slot. Each INSERT is guarded by a
- * NOT EXISTS on that triple, which means you can run this daily to keep a rolling
+ * NOT EXISTS on that triple, which means the script can run daily to keep a rolling
  * window and only the genuinely missing rows are created. Existing slots are never
  * modified — a booked or blocked slot stays exactly as it is.
  *
- * PKT, NOT UTC
- * ------------
- * `slot_date` is a DATE and `start_time` a TIME: wall-clock values in the venue's
+ * PKT, not UTC
+ * `slot_date` is a date and `start_time` a time: wall-clock values in the venue's
  * own timezone, which is Asia/Karachi. "Today" is therefore computed as
- * (NOW() AT TIME ZONE 'Asia/Karachi')::date, not CURRENT_DATE — the database runs
+ * (NOW() at time zone 'Asia/Karachi')::date, not CURRENT_DATE — the database runs
  * in UTC, so between midnight and 05:00 PKT those two are different days and the
  * first day of slots would land in the past.
  *
  * USAGE
- * -----
  *   node src/scripts/add_future_slots.js                  # 14 days, all active venues
  *   node src/scripts/add_future_slots.js --days 7
  *   node src/scripts/add_future_slots.js --venue <uuid>
@@ -163,7 +159,7 @@ async function main() {
   console.log('');
   console.log(`  ${DRY ? 'Would create' : 'Created'} ${createdTotal} slot(s); ${skippedTotal} already existed.`);
 
-  // Report the number that actually matters: what a player can book right now.
+  // Report the number that matters: what a player can book right now.
   // Mirrors the API's own filter (future dates, plus today only after now, PKT).
   const bookable = await pool.query(
     `SELECT COUNT(*)::int AS c

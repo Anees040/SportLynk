@@ -15,8 +15,8 @@ import '../services/pricing_service.dart';
 /// bar, an unmeasured chip does not get a number, and an unavailable forecast
 /// draws nothing rather than a row of zero-height bars that reads as "no demand".
 
-// ── Demand palette ───────────────────────────────────────────
-// Amber for high rather than red: high demand is GOOD news for an owner, and a red
+// Demand palette
+// Amber for high rather than red: high demand is good news for an owner, and a red
 // bar on their best hour would read as an alert. Green is the app's accent and
 // stays for the middle band; grey-blue marks the quiet hours worth discounting.
 const Color _kHigh = Color(0xFFF59E0B);
@@ -36,9 +36,7 @@ String demandWord(String? level) => switch (level) {
       _ => 'Unknown',
     };
 
-// ─────────────────────────────────────────────────────────────
-// AI PRICE CARD (FR4.17)
-// ─────────────────────────────────────────────────────────────
+// AI PRICE card (FR4.17)
 
 /// The dashboard's price card. Replaces the old static one, which showed
 /// `base × 1.12` under a hardcoded "92% CONFIDENCE" and an Accept button that only
@@ -102,7 +100,7 @@ class AiPriceCard extends StatelessWidget {
     );
   }
 
-  // ── States ─────────────────────────────────────────────────
+  // States
 
   Widget _skeleton() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -118,7 +116,7 @@ class AiPriceCard extends StatelessWidget {
         ],
       );
 
-  /// `null` here means the CALL failed, not that the model declined — so this
+  /// `null` here means the call failed, not that the model declined — so this
   /// offers a retry. A model that answered "no suggestion" comes back as a
   /// suggestion with `source: unavailable` and gets its own sentence below.
   Widget _unavailable(BuildContext context) => Row(children: [
@@ -149,7 +147,7 @@ class AiPriceCard extends StatelessWidget {
 
     return [
       // Price + delta against the venue's current list price. The delta is what an
-      // owner actually decides on — "PKR 2,600" means nothing without "up 30% from
+      // owner decides on — "PKR 2,600" means nothing without "up 30% from
       // your 2,000" beside it.
       Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
         Text(
@@ -326,7 +324,7 @@ class AiPriceCard extends StatelessWidget {
         Text(f.label,
             style: GoogleFonts.poppins(
                 fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-        // Only a MEASURED factor shows a number. The heuristic's single chip is a
+        // Only a measured factor shows a number. The heuristic's single chip is a
         // rule with no measured effect; printing "0 pts" beside it would present a
         // rule as a measurement of nothing.
         if (impact != null) ...[
@@ -339,9 +337,7 @@ class AiPriceCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// 72-HOUR DEMAND FORECAST (FR4.18)
-// ─────────────────────────────────────────────────────────────
+// 72-hour DEMAND forecast (FR4.18)
 
 /// The forecast section for the venue management screen: a 72-bar chart coloured by
 /// demand level, with PKT labels and a legend generated from the same thresholds the
@@ -442,7 +438,7 @@ class DemandForecastSection extends StatelessWidget {
     final points = f.points;
     final peak = f.peak;
 
-    // The y-axis is fixed to 0..1, NOT scaled to the series max. A probability chart
+    // The y-axis is fixed to 0..1, not scaled to the series max. A probability chart
     // whose axis moves with the data makes a dead week look exactly like a busy one —
     // the whole value of a calibrated model is that 0.45 means 0.45 everywhere.
     const maxY = 1.0;
@@ -482,7 +478,7 @@ class DemandForecastSection extends StatelessWidget {
             gridData: FlGridData(
               show: true,
               drawVerticalLine: false,
-              // Exactly three reference lines, and they are the SERVER's thresholds:
+              // Exactly three reference lines, and they are the server's thresholds:
               // the two that bucket the bars plus the base rate they are anchored on.
               // A gridline at an arbitrary 0.25 would invite the owner to read a
               // boundary that does not exist.
@@ -526,7 +522,7 @@ class DemandForecastSection extends StatelessWidget {
                     if (i < 0 || i >= points.length) return const SizedBox.shrink();
                     // 72 hour labels is unreadable on a phone, so only the first bar
                     // of each new day is labelled — which also draws the day
-                    // boundaries the owner is actually scanning for.
+                    // boundaries the owner is scanning for.
                     final isDayStart = i == 0 || points[i].slotDate != points[i - 1].slotDate;
                     if (!isDayStart) return const SizedBox.shrink();
                     return Padding(
@@ -594,7 +590,7 @@ class DemandForecastSection extends StatelessWidget {
     return 2;
   }
 
-  /// `Today` / `Tomorrow` / `Thu` — relative to the FIRST day in the series, not to
+  /// `Today` / `Tomorrow` / `Thu` — relative to the first day in the series, not to
   /// the device clock. A phone in a different timezone (or a demo laptop set to UTC)
   /// would otherwise label a PKT forecast against its own idea of today.
   String _dayWord(String slotDate, List<String> days) {

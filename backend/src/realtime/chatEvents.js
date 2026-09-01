@@ -1,14 +1,14 @@
 /**
- * Everything a connected socket is allowed to SEND us: opening a thread, typing,
+ * Everything a connected socket is allowed to send the server: opening a thread, typing,
  * and marking messages read. Registered once per connection by realtime/index.js.
  *
- * TWO RULES HOLD FOR EVERY HANDLER
+ * Two rules hold for every handler
  *   1. Flood budget first. `socket.data.allow()` is the per-socket token bucket;
  *      an event that overruns it is dropped silently. A client cannot buy more
  *      event loop by shouting.
- *   2. Membership is proven by the ROOM, not the payload. Typing and read only
+ *   2. Membership is proven by the room, not the payload. Typing and read only
  *      make sense once a socket has opened a channel via `channel:join`, and that
- *      handler is the ONE place that checks the database and calls socket.join().
+ *      handler is the one place that checks the database and calls socket.join().
  *      So the later handlers can trust `socket.rooms.has(c:<id>)` as proof of
  *      membership and skip a query per keystroke — the room can only have been
  *      entered by passing the check.
@@ -28,9 +28,9 @@ function registerChatEvents(io, socket) {
   const inChannel = (channelId) => socket.rooms.has(bus.channelRoom(channelId));
 
   /**
-   * Open a thread. The only DB-checked entry point: confirm the user is really a
-   * live member, then join the channel room and stamp read+delivered to now (a
-   * message you are looking at is, by definition, read). Broadcast the resulting
+   * Open a thread. The only DB-checked entry point: confirm the user is a live
+   * member, then join the channel room and stamp read+delivered to now (a
+   * message on screen is, by definition, read). Broadcast the resulting
    * receipt so a sender watching sees blue ticks immediately.
    */
   socket.on('channel:join', async (payload = {}) => {

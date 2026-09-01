@@ -18,12 +18,12 @@ MessageKind _kindFrom(dynamic raw) {
   }
 }
 
-/// The delivery state drawn beside one of MY messages:
+/// The delivery state drawn beside one of my messages:
 ///   sending  → clock (optimistic, not yet acknowledged by the server)
 ///   sent     → single grey tick (row exists on the server)
 ///   delivered→ double grey tick (every other member's device has it)
 ///   read     → double blue tick (every other member has opened the chat since)
-/// In a group these collapse across OTHER members: the weakest wins, so a
+/// In a group these collapse across other members: the weakest wins, so a
 /// message is only "read" once the last person has read it — exactly WhatsApp.
 enum TickState { sending, sent, delivered, read }
 

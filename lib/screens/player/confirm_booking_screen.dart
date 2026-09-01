@@ -29,7 +29,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   bool _walletLoaded = false;
 
   /// Policy (server is the source of truth — these constants are display only):
-  /// the FULL slot price is escrowed at booking; 20% of it is the at-risk
+  /// the full slot price is escrowed at booking; 20% of it is the at-risk
   /// deposit and the free-cancellation window is 24h before slot start.
   static const int _depositPercent = 20;
   static const int _cancellationWindowHours = 24;
@@ -154,7 +154,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // ── BOOKING SUMMARY ──────────────────────────────
+          // BOOKING summary
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(color: Colors.white,
@@ -192,7 +192,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           ),
           const SizedBox(height: 16),
 
-          // ── ESCROW BREAKDOWN ──────────────────────────────
+          // Escrow breakdown
           _section('Payment (held in escrow)', [
             _moneyRow('Slot price', 'PKR ${price.toStringAsFixed(0)}'),
             const SizedBox(height: 8),
@@ -218,7 +218,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           ]),
           const SizedBox(height: 16),
 
-          // ── PAYMENT METHOD ────────────────────────────────
+          // Payment method
           _section('Wallet Balance', [
             Row(children: [
               Container(width: 42, height: 42,
@@ -278,7 +278,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           ]),
           const SizedBox(height: 20),
 
-          // ── CANCELLATION POLICY ───────────────────────────
+          // Cancellation POLICY
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(color: const Color(0xFFFEF3C7),
@@ -332,9 +332,9 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   }
 }
 
-// ── BOOKING SUCCESS SCREEN ──────────────────────────────────
+// BOOKING success screen
 // Full-screen success page — shows reservation confirmed (pending owner approval)
-// QR code is revealed in booking history AFTER owner approves the booking
+// QR code is revealed in booking history after owner approves the booking
 class _BookingSuccessScreen extends StatelessWidget {
   final String bookingId;
   final String manualCode;

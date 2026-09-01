@@ -1,7 +1,7 @@
 /**
  * pushJob.js — the transactional outbox drain (S.7 Wave C).
  *
- * ─── WHY PUSH IS A JOB AND NOT A FUNCTION CALL ────────────────────────────────
+ * Why push is a job and not a function call
  * `notify()` is called from inside money transactions that are holding `FOR UPDATE`
  * locks on wallet rows: approving a booking releases escrow and writes the alert in
  * one transaction, on purpose, so a rolled-back refund can never leave a "you were
@@ -9,8 +9,8 @@
  * transaction would hold those wallet locks open across a network round trip to
  * Google — and a Firebase outage would become a booking outage.
  *
- * So the notification ROW IS THE OUTBOX. `sent_push = false` is a work item, this job
- * drains it a few seconds later, and the consequences are all the ones you want:
+ * So the notification row is the outbox. `sent_push = false` is a work item, this job
+ * drains it a few seconds later, and every consequence is the desired one:
  *
  *   · the 38 existing notify() call sites did not change at all;
  *   · the alert is atomic with the money that caused it;
@@ -23,19 +23,19 @@
  * locked phone and is the reason the tick is 4 seconds rather than 5 minutes like the
  * money sweeps.
  *
- * ─── THIS JOB ALSO OWNS THE LIVE IN-APP BADGE ─────────────────────────────────
+ * This job also owns the LIVE in-app badge
  * Every drained row emits `notification:new` to `u:<userId>`, whether or not a push
  * was sent, whether or not Firebase is configured at all. That is deliberate: the
- * bell badge, the feed and the tray then have ONE source of truth and one code path,
+ * bell badge, the feed and the tray then have one source of truth and one code path,
  * so a notification can never appear in the tray but not in the app. It also means
  * the entire feature is demonstrable with no Firebase key — everything works except
  * the tray banner.
  *
- * ─── WHY A TWO-PHASE CLAIM ────────────────────────────────────────────────────
- * Phase 1 claims a batch in ONE atomic statement (`push_attempts + 1` on rows chosen
+ * Why a two-phase claim
+ * Phase 1 claims a batch in one atomic statement (`push_attempts + 1` on rows chosen
  * with `FOR UPDATE SKIP LOCKED`) and commits. Phase 2 sends and stamps, outside any
  * transaction. Holding a lock across the FCM call would reintroduce exactly the
- * problem this job exists to solve, and bumping the attempt counter BEFORE the send
+ * problem this job exists to solve, and bumping the attempt counter before the send
  * is what makes a crash mid-send cost at most MAX_ATTEMPTS retries instead of
  * looping forever on a row that kills the process.
  *
@@ -50,7 +50,7 @@ const { POLICY } = require('../utils/escrow');
 
 /**
  * ~4 s, and never slower. POLICY.SWEEP_INTERVAL_MS is 5 minutes for the money sweeps
- * and is overridden down to seconds by SL_TEST_SWEEP_SECONDS; taking the MINIMUM of
+ * and is overridden down to seconds by SL_TEST_SWEEP_SECONDS; taking the minimum of
  * the two means the demo override speeds this job up like every other sweep, while
  * the 5-minute default never slows the tray down to something that reads as broken.
  */
@@ -78,18 +78,16 @@ const MAX_ATTEMPTS = 3;
 /** One sweep at a time: a slow fan-out must not overlap the next tick. */
 let _running = false;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PREFERENCES AND QUIET HOURS — ENFORCED HERE, SERVER-SIDE
-// ═══════════════════════════════════════════════════════════════════════════
+// Preferences and quiet hours — enforced here, server-side
 //
 // A preference the client honours is not a preference, it is a suggestion: the
 // server would still have sent the push, the phone would still have buzzed, and the
 // app would have hidden the row afterwards. Both checks therefore live in the job,
 // which is the last code that runs before Firebase is called.
 //
-// `users.notification_prefs` is `'{}'::jsonb` by default and an ABSENT key means ON.
+// `users.notification_prefs` is `'{}'::jsonb` by default and an absent key means on.
 // That way a user who has never opened the settings screen gets everything, and the
-// column only ever stores what they actually changed.
+// column only ever stores what they changed.
 //
 //   {
 //     "muteAll":    false,
@@ -97,12 +95,12 @@ let _running = false;
 //     "quietHours": { "enabled": true, "start": "22:00", "end": "07:00" }
 //   }
 //
-// WHAT A SUPPRESSED PUSH DOES *NOT* DO
-// It never suppresses the notification ROW. Muting chat means your phone stays quiet;
+// What a suppressed push does *not* do
+// It never suppresses the notification row. Muting chat keeps the device quiet;
 // it does not mean the message is deleted, and the badge still counts it. Conflating
 // "don't buzz me" with "don't tell me" is how apps lose messages.
 //
-// 'system' BYPASSES BOTH CHECKS
+// 'system' bypasses both checks
 // notificationTypes.js already declares 'system' unmutable (it is absent from
 // MUTABLE_CATEGORIES), and an account suspension is not something a user gets to
 // opt out of. Quiet hours are treated the same way for the same reason — the two
@@ -138,7 +136,7 @@ function parseHM(s, fallback) {
 /**
  * Is `when` inside the user's quiet window?
  *
- * The window WRAPS MIDNIGHT in the normal case (22:00 → 07:00), which a naive
+ * The window wraps midnight in the normal case (22:00 → 07:00), which a naive
  * `start <= t && t < end` gets exactly backwards — it would go quiet from 7am to
  * 10pm and buzz all night. Hence the two-branch comparison.
  */
@@ -165,15 +163,13 @@ function suppressionReason(row, prefs) {
   return null;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THE SWEEP
-// ═══════════════════════════════════════════════════════════════════════════
+// The sweep
 
 /**
  * Retire rows that are past MAX_AGE_MS or out of attempts, in one statement.
  *
  * This is what keeps `idx_notifications_outbox` bounded. The partial index only holds
- * `sent_push = false` rows, so closing a stale row REMOVES it from the index, and the
+ * `sent_push = false` rows, so closing a stale row removes it from the index, and the
  * scan below stays a handful of rows forever instead of growing without limit. The
  * reason is written into `push_error` rather than merely being dropped, because "it
  * was too old by the time the server came back" is a real answer to a real question.
@@ -249,7 +245,7 @@ async function stamp(runner, id, { error = null }) {
  * one outcome that would make this table lie.
  */
 async function drainOutbox(externalClient = null) {
-  // An EXTERNAL client is how check_notifications.js drives this inside its own
+  // An external client is how check_notifications.js drives this inside its own
   // transaction and rolls the whole thing back: every query below runs on the caller
   // connection, so a verification run can observe all four outcomes without stamping
   // a single row that survives it. The job itself always passes nothing and gets its
@@ -294,11 +290,11 @@ async function drainOutbox(externalClient = null) {
         error = 'expired before push';
         tally.expired++;
       } else if (muted) {
-        // BEFORE the `configured` check, on purpose. Both can be true at once, and
+        // Before the `configured` check, on purpose. Both can be true at once, and
         // the user's own setting is the more specific and more actionable answer to
         // "why didn't my phone buzz?" — "you muted booking alerts" is something they
         // can change; "the server has no Firebase key" is not. Checking it first is
-        // also what makes the rule OBSERVABLE while push ships dormant: with the
+        // also what makes the rule observable while push ships dormant: with the
         // order reversed every suppression would be recorded as 'push disabled', and
         // check_notifications.js could not prove preferences are enforced at all.
         error = muted;
@@ -326,7 +322,7 @@ async function drainOutbox(externalClient = null) {
 
       await stamp(client, row.id, { error });
 
-      // ALWAYS, and last. The in-app badge is not conditional on Firebase, on a
+      // Always, and last. The in-app badge is not conditional on Firebase, on a
       // preference or on a successful send — the row exists, so the bell must move.
       // Emitting after the stamp means a client that re-reads /summary on this event
       // cannot see a half-written row.

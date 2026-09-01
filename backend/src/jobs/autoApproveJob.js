@@ -2,10 +2,10 @@
  * Auto-decision sweep for pending booking requests (FR4.10)
  *
  * Every 5 minutes:
- *   • pending for more than 2h AND slot starts more than 2h from now
+ *   • pending for more than 2h and slot starts more than 2h from now
  *       → auto-confirm (owner stayed silent; escrow stays frozen, no money moves)
- *   • pending AND slot starts within 2h (or has already started)
- *       → auto-reject + FULL refund: player balance +P, frozen -P, slot freed
+ *   • pending and slot starts within 2h (or has already started)
+ *       → auto-reject + full refund: player balance +P, frozen -P, slot freed
  *
  * Both paths write a notification row for the player and the owner, and every
  * ledger write happens inside one transaction with FOR UPDATE on the booking
@@ -128,7 +128,7 @@ async function autoConfirm(bookingId) {
     });
 
     // S.7 Wave B -- confirm path #2. Identical call to routes/owner.js so the
-    // room and its opening sentence do not depend on WHO confirmed; the unique
+    // room and its opening sentence do not depend on who confirmed; the unique
     // (type, ref_id) index makes a race between the two an update, not a
     // duplicate room.
     const pill = await chat.openBookingRoom(client, {

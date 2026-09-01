@@ -1,35 +1,32 @@
 /**
  * discoveryService.js — the read queries Scout and the screens must agree on.
  *
- * WHY THIS FILE EXISTS
- * --------------------
+ * Why this file exists
  * FR8.15 again, but for reads rather than money. Scout answers `find_venue`,
  * `check_availability`, `venue_info`, `find_teams` and `tournament_list`, and if
  * it typed its own SQL for any of them it would quietly disagree with the app:
  *
- *   - the VERIFICATION GATE. GET /api/venues hides venues whose owner is not
+ *   - the verification gate. GET /api/venues hides venues whose owner is not
  *     approved (`op.verification_status = 'approved' OR IS NULL`). An assistant
  *     that skipped it would recommend grounds the browse screen refuses to show,
  *     and the first demo question would be "why can I not find it in the list?".
- *   - the CHECKOUT HOLD. A slot on hold keeps status='available' and only
- *     `locked_until` says otherwise, so "is 6pm free?" is a DERIVED answer. Two
+ *   - the checkout hold. A slot on hold keeps status='available' and only
+ *     `locked_until` says otherwise, so "is 6pm free?" is a derived answer. Two
  *     derivations means Scout offering a slot the booking route then refuses.
- *   - the PKT CLOCK. Today's slots are filtered against now+5h, and a venue page
+ *   - the PKT clock. Today's slots are filtered against now+5h, and a venue page
  *     that hides 4pm while Scout still offers it is a bug the committee can see.
  *
  * So those three rules live here once, and routes/venues.js is transport.
  *
- * WHAT IS *NOT* HERE
- * ------------------
+ * What is *not* here
  * Money and ranking. Booking goes through services/bookingService.js, player and
  * opponent suggestion through services/rosterService.js, venue ranking through
  * services/mlClient.js. This file only finds things.
  *
- * TOURNAMENTS HAVE NO ROUTE YET
- * -----------------------------
+ * Tournaments have no route yet
  * `listTournaments` is the first reader of the `tournaments` table (013). It is
  * written here rather than in the assistant so that when S.7 adds the tournament
- * screens they call THIS function instead of starting a second opinion about what
+ * screens they call this function instead of starting a second opinion about what
  * "open for registration" means.
  */
 const pool = require('../db/pool');
@@ -44,7 +41,7 @@ const VENUE_MAX = 100;
 
 /**
  * A checkout hold (routes/slotLock.js) is a `locked_until` in the future and
- * NOTHING else — `status` stays 'available' the whole time. Every question about
+ * nothing else — `status` stays 'available' the whole time. Every question about
  * whether a slot is free therefore has to say so in SQL, and this is that string.
  */
 const HOLD_IS_LIVE = '(s.locked_until IS NOT NULL AND s.locked_until > NOW())';
@@ -80,9 +77,7 @@ const num = (v, dflt = null) => {
 };
 const clampLimit = (v, dflt, max) => Math.max(1, Math.min(num(v, dflt) || dflt, max));
 
-// ==========================================================================
 // VENUES
-// ==========================================================================
 
 /**
  * searchVenues — GET /api/venues, and Scout's `find_venue`.
@@ -154,8 +149,8 @@ async function searchVenues(client, {
  * venueDetail — GET /api/venues/:id, and Scout's `venue_info` /
  * `check_availability`.
  *
- * The slot window is the rule worth protecting: a FUTURE date shows every slot,
- * TODAY shows only slots that have not started yet in PKT, and a PAST date shows
+ * The slot window is the rule worth protecting: a future date shows every slot,
+ * today shows only slots that have not started yet in PKT, and a past date shows
  * none at all rather than an error. Scout asks the same question the venue page
  * asks, so it gets the same three branches.
  */
@@ -199,7 +194,7 @@ async function venueDetail(client, { venueId, userId, date = null } = {}) {
  * freeSlots — the slot_picker card's rows, and the only list Scout is allowed to
  * offer as bookable.
  *
- * A slot qualifies when it is 'available', NOT on someone else's live hold, and
+ * A slot qualifies when it is 'available', not on someone else's live hold, and
  * still in the future in PKT. That is the same predicate createBooking re-checks
  * under a row lock, so the picker cannot show a chip the booking then refuses —
  * except in the genuine race, which bookingService answers with `slot_taken`.
@@ -240,21 +235,21 @@ async function freeSlots(client, {
   return { slots: rows, slotDate, past: false };
 }
 /**
- * slotById — the ONE slot a confirm card is allowed to quote a price for.
+ * slotById — the one slot a confirm card is allowed to quote a price for.
  *
  * The picker hands back an id, and between painting that card and the user saying
  * "haan" anything can happen to the row: another player books it, the owner blocks
  * it, someone starts a checkout hold on it, or the hour simply passes. So the
  * confirm step re-reads the slot through this function instead of trusting the
- * price it printed a minute ago, and `bookable` is the SAME three-part predicate
+ * price it printed a minute ago, and `bookable` is the same three-part predicate
  * freeSlots filters on — available, not on a FOREIGN hold, still ahead in PKT.
  *
- * It reports WHY a slot is unbookable rather than just refusing, because "that 6pm
+ * It reports why a slot is unbookable rather than just refusing, because "that 6pm
  * just got booked" is a far better sentence than "nothing free". The authority is
  * still bookingService.createBooking, which re-checks all of it under a row lock;
  * this is only the read that lets Scout ask a truthful question first.
  *
- * `slot_date` is cast in SQL. node-postgres hands a DATE column back as a JS Date
+ * `slot_date` is cast in SQL. node-postgres hands a date column back as a JS Date
  * in the server's timezone, and "2026-08-30" one hour west of PKT stringifies as
  * the 29th — which would put the wrong day on a confirmation the user is about to
  * pay for.
@@ -295,9 +290,7 @@ async function slotById(client, { slotId, userId = null } = {}) {
 }
 
 
-// ==========================================================================
-// TOURNAMENTS  (013: status open|active|completed|cancelled)
-// ==========================================================================
+// Tournaments  (013: status open|active|completed|cancelled)
 
 /**
  * listTournaments — Scout's `tournament_list` and `GET /api/tournaments` (FE-2).
@@ -308,11 +301,10 @@ async function slotById(client, { slotId, userId = null } = {}) {
  * something a caller works out afterwards, so `spotsLeft` and `isFull` cannot
  * disagree between the assistant and a screen.
  *
- * WHY `teams_in` COUNTS 'registered' AS WELL AS 'accepted'
- * ------------------------------------------------------
+ * Why `teams_in` counts 'registered' as well as 'accepted'
  * `tournament_teams.status` defaults to 'registered' (013) and only becomes
  * 'accepted' once the organiser approves — and on a tournament with
- * `requires_approval = false` that approval never happens, because payment IS the
+ * `requires_approval = false` that approval never happens, because payment is the
  * acceptance. Counting only 'accepted' therefore reported 0 of 8 spots taken for
  * every open tournament and would have let a ninth team pay into a full bracket.
  * A team whose entry fee is frozen pending approval is occupying a spot, so it is
@@ -371,9 +363,7 @@ async function listTournaments(client, {
   }));
 }
 
-// ==========================================================================
 // TEAMS
-// ==========================================================================
 
 /**
  * discoverTeams — GET /api/teams/discover, and Scout's `find_teams`.

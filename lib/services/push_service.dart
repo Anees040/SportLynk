@@ -10,8 +10,8 @@ import 'notification_service.dart';
 
 /// The top-level background handler.
 ///
-/// It MUST be a top-level (or static) function annotated `@pragma('vm:entry-point')`:
-/// a message arriving while the app is killed spins up a SEPARATE Dart isolate with no
+/// It must be a top-level (or static) function annotated `@pragma('vm:entry-point')`:
+/// a message arriving while the app is killed spins up a separate Dart isolate with no
 /// widget tree, no providers and no access to anything this app's `main()` set up, and
 /// the AOT compiler would otherwise tree-shake an entry point nothing calls.
 ///
@@ -30,14 +30,14 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// The client half of push: permission, the device token, and the four ways a
 /// notification can reach a running app.
 ///
-/// WHAT THIS DOES NOT DO
+/// What this does not do
 /// It does not decide whether to push, when to push, or whether a category is muted.
 /// All of that is server-side in `jobs/pushJob.js`, checked against
 /// `users.notification_prefs` and quiet hours before FCM is ever called -- because a
 /// preference the client honours is a suggestion, not a preference. This class
 /// registers a token and routes taps.
 ///
-/// SHIPPING DORMANT
+/// Shipping dormant
 /// The server no-ops cleanly with no `FIREBASE_SERVICE_ACCOUNT`, so nothing here ever
 /// receives a message on a dev machine. Everything else still works: the outbox is
 /// drained, `notification:new` is emitted, the badge moves and the banner shows,
@@ -60,13 +60,13 @@ class PushService {
   /// The FCM registration token for this install, once it is known.
   String? get deviceToken => _token;
 
-  /// True once permission was granted AND a token exists -- the two halves the user
+  /// True once permission was granted and a token exists -- the two halves the user
   /// can independently break, and the pair the prefs screen reports on.
   bool get isReady => _token != null;
 
   /// Wire the message streams once per process.
   ///
-  /// Called from `main()` BEFORE `runApp`, and specifically before any await that
+  /// Called from `main()` before `runApp`, and specifically before any await that
   /// could let the first frame render: `getInitialMessage()` must be read before
   /// something else consumes it, and the cold-start link has to be parked while there
   /// is still no navigator to push it through.
@@ -81,7 +81,7 @@ class PushService {
     try {
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-      // A tray tap on a KILLED app. Resolves before the first frame, so it is parked
+      // A tray tap on a killed app. Resolves before the first frame, so it is parked
       // rather than pushed -- `DeepLink.replayPending()` fires it once a home screen
       // is mounted and AuthProvider has resolved. Without this, the single most
       // impressive case in a demo (locked phone -> tap -> booking detail) silently
@@ -102,7 +102,7 @@ class PushService {
         });
       });
 
-      // A tray tap while the app was merely BACKGROUNDED -- the navigator exists, so
+      // A tray tap while the app was merely backgrounded -- the navigator exists, so
       // this one goes straight through.
       _onOpened = FirebaseMessaging.onMessageOpenedApp.listen((m) {
         if (!DeepLink.open(_linkOf(m))) {
@@ -114,9 +114,9 @@ class PushService {
     }
   }
 
-  // ── The `inApp` preference ────────────────────────────────────────────────
+  // The `inApp` preference
   //
-  // WHY THIS IS A SEPARATE SWITCH FROM `push`
+  // Why this is a separate switch from `push`
   // They are genuinely different wishes. `push` is "buzz my phone when I am not
   // looking" and is enforced in `jobs/pushJob.js` before FCM is called, so a muted
   // category never reaches this process at all. `inApp` is "do not cover my screen
@@ -124,7 +124,7 @@ class PushService {
   // which is exactly what `notificationFeed.js` says of it: honoured by the Flutter
   // side, for the foreground banner only.
   //
-  // It can never suppress the ROW or the BADGE. Muting is about interruption, not
+  // It can never suppress the row or the badge. Muting is about interruption, not
   // about hiding what happened, and a chat message that was silently dropped from
   // the feed because of a banner setting would be a lost message.
   Map<String, bool> _inApp = const <String, bool>{};
@@ -158,7 +158,7 @@ class PushService {
   ///
   /// FCM data payloads are string-to-string and cannot carry a nested object, so
   /// `pushService.strData` flattens the link into two keys: `route` as a plain string
-  /// and `args` JSON-encoded. It also DROPS empty values, so a route with no arguments
+  /// and `args` JSON-encoded. It also drops empty values, so a route with no arguments
   /// arrives with no `args` key at all rather than with `"{}"` -- which is why the
   /// fallback here is an empty map and not a null that `DeepLink.parse` would reject.
   static Map<String, dynamic>? _linkOf(RemoteMessage m) {
@@ -173,7 +173,7 @@ class PushService {
   /// same (session, device token) pair, so calling it from three home screens costs one
   /// request.
   ///
-  /// ANDROID 13 (API 33) NEEDS THIS CALL
+  /// Android 13 (API 33) needs this call
   /// `POST_NOTIFICATIONS` became a runtime permission in Android 13, and
   /// `requestPermission()` is what raises the system dialog. Skip it and the token
   /// registers, the server sends, FCM accepts, and nothing ever appears -- with no
@@ -230,7 +230,7 @@ class PushService {
     }
   }
 
-  /// Revoke THIS device on logout, not every device: the same account on a second
+  /// Revoke this device on logout, not every device: the same account on a second
   /// phone must keep receiving. `notification_service.revokeDevice` sends the token,
   /// and the route only clears the legacy `users.fcm_token` column when no token is
   /// given.

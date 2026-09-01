@@ -137,13 +137,11 @@ from sklearn.svm import LinearSVC  # noqa: E402
 
 from app.core import config, proba, text_norm  # noqa: E402
 
-# ---------------------------------------------------------------------------
 # Identity & hyperparameters
-# ---------------------------------------------------------------------------
 MODEL_KEY = "sentiment"
 
 #: How the model's family slug is spelled for each --branches choice. The slug is
-#: DERIVED from the run's actual configuration rather than hardcoded, and that is a
+#: derived from the run's actual configuration rather than hardcoded, and that is a
 #: correctness fix, not tidiness. It used to be the constant "char-linsvc-softmax",
 #: written when char-only was shipped; the first word+char release then published
 #: `sentiment-char-linsvc-softmax-...` as its modelVersion -- a string that says
@@ -163,11 +161,11 @@ LABELS: list[str] = list(text_norm.LABELS)  # ("negative","neutral","positive")
 
 WORD_NGRAM = (1, 2)
 # char_wb (2,6): 6-grams span Roman Urdu roots + affixes ("ghatiya", "phatti") and
-# English suffixes that (2,5) truncated. Adopted over (2,5) because it lifted EVERY
+# English suffixes that (2,5) truncated. Adopted over (2,5) because it lifted every
 # language cell and negative recall together (en .74->.76, mixed .79->.80, ru
 # .75->.78, neg-recall .647->.721) -- a consistent gain, not one noisy cell. (2,7)
 # scored +1pt higher on the exam but only in the small `mixed` cell while neg-recall
-# regressed, i.e. exam-set noise on a 200-row sample (CI +/-0.05), so it is NOT used.
+# regressed, i.e. exam-set noise on a 200-row sample (CI +/-0.05), so it is not used.
 CHAR_NGRAM = (2, 6)
 WORD_MAX_FEATURES = 50_000
 CHAR_MAX_FEATURES = 50_000
@@ -177,7 +175,7 @@ VAL_FRACTION = 0.20  # 80/20 stratified split
 
 #: The recorded C sweep for --branches both, as {C: (validation_acc, exam_acc)}.
 #:
-#: This is a RECORD OF A COMPLETED EXPERIMENT, not a live computation -- re-sweeping on
+#: This is a record of A COMPLETED experiment, not a live computation -- re-sweeping on
 #: every training run would multiply build time by eight for a number that only changes
 #: when the corpus or the feature space does. It is here rather than in a notebook
 #: because "how did you pick that hyperparameter" is the question this project has to
@@ -188,8 +186,8 @@ VAL_FRACTION = 0.20  # 80/20 stratified split
 #:     ./.venv/Scripts/python.exe training/train_sentiment.py \
 #:       --branches both --C $c --no-write --no-plot --boot 200; done
 #:
-#: SELECTION WAS ON VALIDATION, NOT THE EXAM. Validation peaks at C=0.1 with a clean
-#: interior maximum (it falls off on BOTH sides), which is the shape of a real
+#: Selection was on validation, not the EXAM. Validation peaks at C=0.1 with a clean
+#: interior maximum (it falls off on both sides), which is the shape of a real
 #: regularization optimum rather than noise. The exam column is shown only because it
 #: moved in the same direction -- it did not participate in the choice. Re-sweep after
 #: changing the corpus, --branches, or --upweight-authored; all three move the optimum.
@@ -204,20 +202,20 @@ C_SELECTION_SWEEP: dict[float, tuple[float, float]] = {
 }
 
 #: The C the sweep above selected, derived so the card cannot claim a justification
-#: for a value it did not actually test.
+#: for a value it did not test.
 C_SWEEP_WINNER: float = max(C_SELECTION_SWEEP, key=lambda c: C_SELECTION_SWEEP[c][0])
 
-# --- gate thresholds --------------------------------------------------------
+# Gate thresholds
 DOMAIN_GATE = 0.80             # wave acceptance: >= 80% on the untouched exam
 LEAKAGE_MAX_VAL_ACC = 0.995    # a near-perfect val score means the split leaked
 BASELINE_MIN_MARGIN = 0.10     # must beat majority baseline by >= 10 points
 
 DATA_DIR = config.DATA_DIR / "sentiment"
 LEXICON_PATH = config.DATA_DIR / "abuse_lexicon.txt"
-#: FR9.10 serving-side STRONG-NEGATIVE escalation, kept SEPARATE from abuse (abuse is
+#: FR9.10 serving-side strong-negative escalation, kept separate from abuse (abuse is
 #: the lexicon in toxicity.py; a clean angry review is negative, not toxic).
 #:
-#: MEASURED, NOT PICKED. It was 0.90 while char-only shipped, and 0.90 turned out to be
+#: Measured, not picked. It was 0.90 while char-only shipped, and 0.90 turned out to be
 #: an accident of that model's score scale rather than a property of "strong negativity".
 #: The estimator scores with softmax over UNCALIBRATED margins, and softmax sharpness
 #: depends on margin magnitude, which depends on C. Dropping C from 3.0 to 0.1 shrank
@@ -227,7 +225,7 @@ LEXICON_PATH = config.DATA_DIR / "abuse_lexicon.txt"
 #: failed. The gate passed, the smoke test passed (it asserts the threshold is a float,
 #: which it was), and the model card still described the feature as present.
 #:
-#: 0.70 is the LOOSEST threshold that still escalates only true negatives on the exam,
+#: 0.70 is the loosest threshold that still escalates only true negatives on the exam,
 #: measured by training/validate_neg_threshold.py:
 #:
 #:     thresh   escalated   precision   recall(of true neg)
@@ -239,11 +237,11 @@ LEXICON_PATH = config.DATA_DIR / "abuse_lexicon.txt"
 #: Precision is what this signal is judged on: it asks an owner to look NOW, so a false
 #: escalation spends attention that a true one then cannot get. Recall matters less
 #: because the ordinary `negative` label on the review already carries the sentiment.
-#: The 1.0000 is 18-for-18 on a 200-row exam, NOT a claim of perfect precision in
+#: The 1.0000 is 18-for-18 on a 200-row exam, not a claim of perfect precision in
 #: production -- the honest statement is that no escalation at this threshold was wrong
 #: on the exam, and that 0.70 was chosen as the loosest cut preserving that.
 #:
-#: RE-VALIDATE THIS WHENEVER C, --branches, OR THE CORPUS CHANGES. All three move the
+#: Re-validate this whenever C, --branches, or the corpus changes. All three move the
 #: margin scale and therefore the meaning of this number. The trainer now warns when
 #: too few exam rows can reach it, so an inert rule announces itself.
 NEG_PROB_THRESHOLD = 0.70
@@ -254,9 +252,7 @@ NEG_PROB_THRESHOLD = 0.70
 NEG_THRESHOLD_MIN_HITS = 5
 
 
-# ---------------------------------------------------------------------------
 # Console helpers (ASCII-only output; --quiet silences say(), never shout())
-# ---------------------------------------------------------------------------
 _QUIET = False
 
 
@@ -282,9 +278,7 @@ class Gate:
         return f"  [{mark}] {self.name:<24} {self.detail}"
 
 
-# ---------------------------------------------------------------------------
 # Small utilities
-# ---------------------------------------------------------------------------
 def sha256_of(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as fh:
@@ -357,9 +351,7 @@ def write_lockfile(path: Path) -> bool:
     return True
 
 
-# ---------------------------------------------------------------------------
 # Model construction
-# ---------------------------------------------------------------------------
 def build_pipeline(
     *,
     seed: int,
@@ -430,7 +422,7 @@ def build_pipeline(
 
     features = FeatureUnion(parts)
 
-    # ── choose the classifier + how it yields probabilities ─────────────────
+    # Choose the classifier + how it yields probabilities
     # The exam-measured winner is an UNCALIBRATED LinearSVC whose probabilities
     # come from softmax over decision_function (app/core/proba.SoftmaxSVC).
     # Sigmoid calibration cost ~4 accuracy points and half the negative recall
@@ -447,7 +439,7 @@ def build_pipeline(
         else:
             raise ValueError(f"unknown proba_kind {proba_kind!r}")
     elif clf_kind == "logreg":
-        # LogisticRegression gives NATIVE predict_proba, so it needs no calibration
+        # LogisticRegression gives native predict_proba, so it needs no calibration
         # wrapper -- no argmax distortion from Platt scaling. saga is the solver that
         # supports multiclass + high-dim sparse + sample_weight (liblinear dropped
         # multiclass in sklearn 1.9). proba_kind is irrelevant here.
@@ -461,9 +453,7 @@ def build_pipeline(
     return Pipeline([("features", features), ("clf", clf)])
 
 
-# ---------------------------------------------------------------------------
 # Evaluation
-# ---------------------------------------------------------------------------
 def evaluate(y_true: list[str], y_pred) -> dict:
     rep = classification_report(
         y_true, y_pred, labels=LABELS, output_dict=True, zero_division=0
@@ -558,9 +548,7 @@ def baselines(y_tr: list[str], y_ex: list[str]) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
 # Reporting
-# ---------------------------------------------------------------------------
 def print_metrics_table(title: str, m: dict) -> None:
     shout(f"\n{title}")
     shout(f"  accuracy   {m['accuracy']:.4f}")
@@ -616,7 +604,7 @@ def write_model_card(path: Path, record: dict) -> None:
     val = record["validation"]
 
     # How this run produced probabilities, in one phrase, so the prose below stays
-    # true to what actually ran (softmax-of-margin for the shipped model, calibrated
+    # true to what ran (softmax-of-margin for the shipped model, calibrated
     # or native for the comparison builds) rather than hard-coding "calibrated".
     prob_method = (record.get("classifier") or {}).get("probability", {}).get("method", "")
     prob_phrase = {
@@ -854,9 +842,7 @@ def write_model_card(path: Path, record: dict) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
 # main
-# ---------------------------------------------------------------------------
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Train the SportLynk sentiment classifier.")
     p.add_argument("--train", type=Path, default=DATA_DIR / "train.csv")
@@ -919,14 +905,14 @@ def main(argv: list[str] | None = None) -> int:
         shout(f"FAIL: exam not found at {args.exam}")
         return 1
 
-    # ---- gate 1: the frozen contract is internally consistent --------------
+    # Gate 1: the frozen contract is internally consistent
     try:
         receipts = text_norm.self_check()
         gate_contract = Gate("contract self-check", True, f"{len(receipts)} receipts OK")
     except AssertionError as exc:
         gate_contract = Gate("contract self-check", False, str(exc)[:70])
 
-    # ---- gate 2: corpus provenance -----------------------------------------
+    # Gate 2: corpus provenance
     train_meta = read_json(args.train.with_name("train.meta.json"))
     train_sha = sha256_of(args.train)
     corpus_fp = train_meta.get("norm_spec_fingerprint")
@@ -941,7 +927,7 @@ def main(argv: list[str] | None = None) -> int:
         f"fp {'match' if corpus_fp == text_norm.norm_spec_fingerprint() else 'MISMATCH'}",
     )
 
-    # ---- gate 3: exam provenance -------------------------------------------
+    # Gate 3: exam provenance
     exam_meta = read_json(args.exam.with_name("domain_test_meta.json"))
     exam_sha = sha256_of(args.exam)
     exam_fp = exam_meta.get("norm_spec_fingerprint")
@@ -957,7 +943,7 @@ def main(argv: list[str] | None = None) -> int:
         f"validated={bool(exam_meta.get('all_passed'))}",
     )
 
-    # ---- load data ---------------------------------------------------------
+    # Load data
     train_rows = load_rows(args.train)
     exam_rows = load_rows(args.exam)
     X = [r["text"] for r in train_rows]
@@ -982,7 +968,7 @@ def main(argv: list[str] | None = None) -> int:
         say(f"Domain upweight: authored rows x{args.upweight_authored:g} "
             f"({n_auth} rows -> effective weight {n_auth * args.upweight_authored:.0f})")
 
-    # ---- 80/20 split for the generalization estimate & leakage gate --------
+    # 80/20 split for the generalization estimate & leakage gate
     idx_all = list(range(len(train_rows)))
     tr_idx, val_idx = train_test_split(
         idx_all, test_size=VAL_FRACTION, stratify=y, random_state=args.seed
@@ -1004,7 +990,7 @@ def main(argv: list[str] | None = None) -> int:
     say("Running ablation (word-only / char-only / word+char) ...")
     ablation = run_ablation(X_tr, y_tr, X_ex, y_ex, args.seed, w_tr=w_tr)
 
-    # ---- fit the SHIPPED model on the full corpus --------------------------
+    # Fit the SHIPPED model on the full corpus
     # The exam is excluded from the corpus by the contamination gate, so refitting
     # on 100% never leaks the exam -- it just gives the shipped artifact more data.
     say("Fitting final model on the FULL corpus ...")
@@ -1018,15 +1004,15 @@ def main(argv: list[str] | None = None) -> int:
     dom_by_lang = per_language(exam_rows, y_ex, exam_pred)
     base = baselines(y_tr, y_ex)
 
-    # sanity: the shipped model must expose predict_proba. NOT calibrated -- these are
+    # sanity: the shipped model must expose predict_proba. Not calibrated -- these are
     # softmax'd margins, and the artifact says so; the gate only asserts the method
     # exists, because the router's classScores and the FR9.10 rule both depend on it.
     has_proba = hasattr(final_model, "predict_proba")
 
-    # Is the FR9.10 strong-negative rule actually reachable on this model's score
+    # Is the FR9.10 strong-negative rule reachable on this model's score
     # scale? softmax over UNCALIBRATED margins is only as sharp as the margins are
     # wide, so a threshold that fired usefully at one C can go inert at another
-    # WITHOUT anything failing -- the artifact still carries the number, the gate
+    # without anything failing -- the artifact still carries the number, the gate
     # still passes, the model card still describes the feature. This is the check
     # that makes that silent regression audible. Deliberately a warning and not a
     # gate: an inert escalation rule is a degraded feature, not a bad model, and
@@ -1051,7 +1037,7 @@ def main(argv: list[str] | None = None) -> int:
                 "will almost never fire."
             )
 
-    # ---- remaining gates ---------------------------------------------------
+    # Remaining gates
     val_acc = val_metrics["accuracy"]
     dom_acc = dom_metrics["accuracy"]
     best_baseline = max(base["predict_train_majority"]["accuracy"],
@@ -1071,7 +1057,7 @@ def main(argv: list[str] | None = None) -> int:
              gate_leak, gate_base, gate_domain]
     released = all(g.ok for g in gates)
 
-    # ---- error analysis (up to 20 misses) ----------------------------------
+    # Error analysis (up to 20 misses)
     errors = []
     for i, (r, p) in enumerate(zip(exam_rows, exam_pred)):
         if r["label"] != p:
@@ -1085,7 +1071,7 @@ def main(argv: list[str] | None = None) -> int:
         if len(errors) >= 20:
             break
 
-    # ---- assemble the metrics record ---------------------------------------
+    # Assemble the metrics record
     lexicon_terms = 0
     lexicon_sha = ""
     if LEXICON_PATH.is_file():
@@ -1114,7 +1100,7 @@ def main(argv: list[str] | None = None) -> int:
                 else {"method": "sigmoid_calibration", "cv": CALIB_CV, "calibrated": True}
             ),
         },
-        # Only the branches actually used. Recording both unconditionally would let a
+        # Only the branches used. Recording both unconditionally would let a
         # char-only run publish a word-branch spec it never fitted -- the same drift
         # that let modelVersion say "char" for a word+char model (see model_family).
         "features": {
@@ -1140,9 +1126,9 @@ def main(argv: list[str] | None = None) -> int:
             "terms": lexicon_terms,
             "sha256": lexicon_sha,
             "negativeProbabilityThreshold": NEG_PROB_THRESHOLD,
-            # How many exam rows the strong-negative rule would actually escalate at
+            # How many exam rows the strong-negative rule would escalate at
             # that threshold. Recorded because the threshold alone does not say
-            # whether the rule is live on THIS model's score scale -- see the
+            # whether the rule is live on this model's score scale -- see the
             # NEG_PROB_THRESHOLD comment for how 0.90 went inert at C=0.1.
             "examEscalations": neg_escalations,
             "examRows": len(X_ex),
@@ -1160,7 +1146,7 @@ def main(argv: list[str] | None = None) -> int:
         "gates": [{"name": g.name, "ok": g.ok, "detail": g.detail} for g in gates],
     }
 
-    # ---- write reports (ALWAYS -- a failed run stays auditable) ------------
+    # Write reports (always -- a failed run stays auditable)
     reports_dir = args.reports_dir
     models_dir = args.models_dir
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -1184,12 +1170,12 @@ def main(argv: list[str] | None = None) -> int:
             if not ok:
                 say("  (confusion-matrix PNG skipped -- matplotlib unavailable)")
 
-    # ---- write model artifacts ---------------------------------------------
+    # Write model artifacts
     payload = {
         "model": final_model,
         "modelKey": MODEL_KEY,
         "modelVersion": model_version,
-        # per-model contract fields: sentiment binds to the NORMALIZER, not features.py
+        # per-model contract fields: sentiment binds to the normalizer, not features.py
         "normSpecVersion": text_norm.NORM_SPEC_VERSION,
         "normSpecFingerprint": text_norm.norm_spec_fingerprint(),
         "labels": LABELS,
@@ -1220,7 +1206,7 @@ def main(argv: list[str] | None = None) -> int:
             import shutil
             shutil.copyfile(versioned, latest)
 
-    # ---- final report ------------------------------------------------------
+    # Final report
     print_metrics_table("VALIDATION (held-out 20% of corpus)", val_metrics)
     print_metrics_table("DOMAIN TEST (untouched exam of 200)", dom_metrics)
 
@@ -1234,7 +1220,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, acc in ablation.items():
         shout(f"  ablation {name:<10}: {acc:.4f}")
     # Said out loud because these numbers invite exactly the wrong conclusion. Each
-    # ablation is fitted at THIS RUN'S C, so the table conflates "which view helps"
+    # ablation is fitted at this run's C, so the table conflates "which view helps"
     # with "is C right for that view's feature count". At C=3.0 it ranked char_only
     # above word+char, which is why the word branch stayed off while negation errors
     # dominated the exam; at C=0.1 the ordering reverses. Neither is a config

@@ -14,15 +14,15 @@ import 'chat_thread_screen.dart';
 
 /// The inbox — every room this person is in, newest first, in three sections.
 ///
-/// WHY SECTIONS AND NOT ONE FLAT LIST
+/// Why SECTIONS and not one flat list
 /// A booking room, a match coordination room and a team room are read for
 /// different reasons: one is a transaction in progress, one is a fixture tonight,
 /// one is a group of friends. Sorting them together by recency buries the booking
-/// you are waiting on under team banter. The server still returns one recency-
+/// a player is waiting on under team banter. The server still returns one recency-
 /// ordered page — the grouping is presentational, and paging works on the page,
 /// not on a section.
 ///
-/// SCOUT IS NOT HERE. The assistant has its own screen and its own entry point;
+/// Scout is not here. The assistant has its own screen and its own entry point;
 /// the server excludes `type = 'assistant'` from this list, so there is nothing to
 /// filter out on this side.
 class ChatsScreen extends StatefulWidget {
@@ -76,7 +76,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     super.dispose();
   }
 
-  /// One page from the top. There is deliberately NO error line on this screen:
+  /// One page from the top. There is deliberately no error line on this screen:
   /// `ChatService.chats` answers an empty page for both "you have no rooms" and
   /// "the request did not land" (ApiClient never throws), and a screen that cannot
   /// tell those apart must not claim either. So the empty state states the two
@@ -98,7 +98,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   Future<void> _loadMore() async {
     if (_loadingMore || !_hasMore || _cursor == null) return;
     setState(() => _loadingMore = true);
-    // The cursor goes back VERBATIM: it is the server's own `sortAt`, keyed on the
+    // The cursor goes back verbatim: it is the server's own `sortAt`, keyed on the
     // expression the ORDER BY uses. One built here would skip or repeat a row
     // whenever a message lands mid-scroll.
     final page = await _chat.chats(_token, limit: 30, cursor: _cursor);
@@ -120,13 +120,13 @@ class _ChatsScreenState extends State<ChatsScreen> {
   }
 
   /// A message arrived somewhere. The socket already fans out to every member's
-  /// own room, so this fires for EVERY room this person is in — not just the one
+  /// own room, so this fires for every room this person is in — not just the one
   /// they have open — which is exactly what an inbox needs.
   ///
   /// The row is patched in place rather than re-fetched: a refresh per inbound
   /// message would be a request per message in a busy team chat, and it would
   /// scroll the list out from under a thumb. A message for a room that is not on
-  /// this page (a brand-new booking room, or one further down than we have paged)
+  /// this page (a brand-new booking room, or one further down than the loaded pages)
   /// is the one case that does need a reload.
   void _onLiveMessage(Map<String, dynamic> m) {
     final channelId = '${m['channel_id'] ?? m['channelId'] ?? ''}';
@@ -177,7 +177,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   /// and a section with nothing in it is not rendered at all (an empty "Matches"
   /// heading is furniture, not information).
   ///
-  /// Sorting happens HERE rather than in the model list, because a live message
+  /// Sorting happens here rather than in the model list, because a live message
   /// patches a row's `lastMessageAt` in place and the row must then rise inside
   /// its own section. `sortAt` is the server's tiebreaker for a room that has
   /// never had a message — the same COALESCE the ORDER BY uses.
@@ -328,7 +328,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
       );
 }
 
-/// A heading is a different KIND of row from a channel, so the flattened list is
+/// A heading is a different kind of row from a channel, so the flattened list is
 /// typed `Object` and each entry answers for itself in the builder. A sentinel
 /// index (`i == 0 ? header : items[i-1]`) breaks the moment a section is empty.
 class _SectionHead {
@@ -339,7 +339,7 @@ class _SectionHead {
 
 /// One inbox row.
 ///
-/// The unread state changes THREE things at once — the title weight, the preview
+/// The unread state changes three things at once — the title weight, the preview
 /// weight and the badge — because a single green dot is easy to miss on a list
 /// read at arm's length, and the same three moving together is what makes an
 /// unread row legible in a glance.
@@ -361,7 +361,7 @@ class _ChatRow extends StatelessWidget {
         ChatChannelType.unknown => Icons.chat_bubble_outline,
       };
 
-  /// Time on the row, at the precision a reader actually wants: the clock for
+  /// Time on the row, at the precision a reader wants: the clock for
   /// today, the weekday inside a week, the date beyond it. A year is added only
   /// once it is not this one — "12 Sept 2025" on every old row is noise.
   String _stamp(DateTime? at) {
@@ -383,7 +383,7 @@ class _ChatRow extends StatelessWidget {
     final isUnread = unread > 0;
     final img = channel.imageUrl;
     final hasImg = img != null && img.isNotEmpty;
-    // The context subtitle is the row's THIRD line and only earns the space when
+    // The context subtitle is the row's third line and only earns the space when
     // it is not already the preview — `previewLine` falls back to exactly this
     // string for a room with no messages, and printing it twice reads as a bug.
     final ctx = channel.context?.subtitle;

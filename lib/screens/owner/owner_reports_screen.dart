@@ -1,25 +1,25 @@
 // owner_reports_screen.dart — S.7 Wave D · D5 / FR4.16. The financial export.
 //
-// ONE SCREEN, TWO SCOPES. `platform: false` is the owner's own venues
+// One screen, two scopes. `platform: false` is the owner's own venues
 // (`GET /api/owner/reports/financial`); `platform: true` is every venue on the
 // platform with commission broken out per owner (`GET /api/admin/reports/platform`).
-// The two answers have the same shape — the server runs the SAME generator over a
+// The two answers have the same shape — the server runs the same generator over a
 // different WHERE — so a second screen would be a second place for the column list
 // to drift.
 //
-// THE TABLE'S COLUMNS ARE THE SERVER'S, IN THE SERVER'S ORDER. `columns` arrives
+// The table's columns are the server's, in the server's order. `columns` arrives
 // with the preview and says which cells are money; nothing here knows that a
 // financial row has nineteen fields. Adding a column to `reportService.COLUMNS`
 // changes this screen with no Flutter release, and the phone can never show a
 // header the file does not have.
 //
-// THE PREVIEW AND THE FILE ARE THE SAME WALK. `?format=json` is not a summary
+// The preview and the file are the same walk. `?format=json` is not a summary
 // endpoint — it is the CSV's own row loop collected into a list and capped at the
 // server's `JSON_ROW_CAP`. So the totals here are the totals in the file, for the
-// WHOLE range, while `rows` may be one page. `truncated` says that out loud rather
+// whole range, while `rows` may be one page. `truncated` says that out loud rather
 // than letting the owner assume the table is the export.
 //
-// WHY DOWNLOAD IS A SEPARATE ACTION FROM PREVIEW. The CSV is `text/csv` with a
+// Why download is a separate ACTION from preview. The CSV is `text/csv` with a
 // BOM and an attachment header; it does not go through `ApiClient` at all (see
 // `ReportService`). Previewing first means the owner has seen the totals before
 // they hand a file to their accountant — and a 0-row range is caught before a
@@ -53,7 +53,7 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
   final _svc = ReportService();
   final _api = ApiClient();
 
-  /// Mirrors `reportService.RANGE_MAX_DAYS`. It bounds the PICKER so the common
+  /// Mirrors `reportService.RANGE_MAX_DAYS`. It bounds the picker so the common
   /// mistake is impossible; the server refuses anything longer regardless, and its
   /// refusal is shown verbatim if one ever gets through.
   static const int _maxDays = 366;
@@ -83,7 +83,7 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _run());
   }
 
-  // ── Loading ───────────────────────────────────────────────────────────────
+  // Loading
   Future<void> _loadVenues() async {
     final token = _token;
     if (token == null) return;
@@ -166,9 +166,9 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
     _run();
   }
 
-  // ── Download / share ──────────────────────────────────────────────────────
+  // Download / share
   /// Download, then offer the share sheet. An empty range is refused here rather
-  /// than downloaded: a CSV containing nothing but a header row and a TOTAL of zero
+  /// than downloaded: a CSV containing nothing but a header row and a total of zero
   /// looks like a broken export, and saying "there is nothing in this range" is the
   /// truthful version.
   Future<void> _download({required bool thenShare}) async {
@@ -216,7 +216,7 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
     SnackbarUtil.showInfo(context, 'Not shared.');
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
+  // Build
   @override
   Widget build(BuildContext context) {
     final p = _preview;
@@ -301,7 +301,7 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
         ),
       );
 
-  // ── The range ─────────────────────────────────────────────────────────────
+  // The range
   Widget _rangeCard() {
     final now = DateTime.now();
     return _card(
@@ -438,7 +438,7 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
     );
   }
 
-  // ── Totals ────────────────────────────────────────────────────────────────
+  // Totals
   /// Every money column the server declared, in the server's order and under the
   /// server's labels — one hero number plus a grid.
   ///
@@ -446,7 +446,7 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
   /// they earned (`net`), the platform is asking what it took (`commission`). Both
   /// numbers are in both reports; only the emphasis moves.
   ///
-  /// `Price` and `Deposit At Risk` are the AGREEMENT — what the booking says — while
+  /// `Price` and `Deposit At Risk` are the agreement — what the booking says — while
   /// everything after them is the ledger. They are labelled as such because a report
   /// where "price" and "received" differ by a cancellation is correct, and an owner
   /// comparing the two columns deserves to know which is which.
@@ -541,7 +541,7 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
   /// commission is a ledger row on the owner's wallet rather than a column of a
   /// booking — so it can only be reported by bucketing the ledger, which the server
   /// does. `(no owner on record)` is a real bucket for a venue whose owner account
-  /// was deleted: without it the subtotals would not add up to the TOTAL row, and
+  /// was deleted: without it the subtotals would not add up to the total row, and
   /// subtotals that do not reconcile make the whole report unusable.
   Widget _byOwnerCard(ReportPreview p) {
     return _card(
@@ -603,8 +603,8 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
         ],
       );
 
-  // ── The rows ──────────────────────────────────────────────────────────────
-  /// The file's own shape, scrolled sideways — this is a PREVIEW of the CSV, so it
+  // The rows
+  /// The file's own shape, scrolled sideways — this is a preview of the CSV, so it
   /// shows the same columns in the same order rather than a phone-friendly summary
   /// that would make the owner guess what they are about to download.
   ///
@@ -714,7 +714,7 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
     );
   }
 
-  // ── Export bar ────────────────────────────────────────────────────────────
+  // Export bar
   Widget _exportBar(ReportPreview p) {
     final file = _file;
     return SafeArea(

@@ -1,23 +1,23 @@
 /**
- * notificationFeed.js — every READ and every state change on the notification feed.
+ * notificationFeed.js — every read and every state change on the notification feed.
  *
  * The reads live here rather than in the route file for the same reason chatList.js
  * does: `check_notifications.js` has to prove the feed, the badge and the collapse
  * behaviour without standing up an HTTP server, and a check script that re-implements
  * the query it is verifying proves nothing. One implementation, two callers.
  *
- * ─── WHAT "UNREAD" MEANS HERE ────────────────────────────────────────────────
+ * What "UNREAD" means here
  * `is_read = false AND dismissed_at IS NULL` — the exact predicate of
  * `idx_notifications_unread` and of `ux_notifications_group`, repeated in every
  * counter below. Not a stylistic choice: if the badge counted dismissed rows the
  * number would never reach zero, and if it disagreed with the collapse index by even
  * one term the badge and the feed would show different totals.
  *
- * Every count here is therefore an index-only scan of a PARTIAL index that holds
+ * Every count here is therefore an index-only scan of a partial index that holds
  * only the rows that matter. A user with four thousand read notifications has an
  * unread count that costs the same as a user with none.
  *
- * ─── DISMISS IS NOT DELETE, AND NOT READ ─────────────────────────────────────
+ * DISMISS is not DELETE, AND NOT READ
  * Three distinct states, because users use all three:
  *   unread      — in the feed, counted by the badge
  *   read        — in the feed, not counted
@@ -28,7 +28,7 @@
  * offered only as "clear read", and even that is bounded.
  *
  * A dismiss also leaves `ux_notifications_group`, which is deliberate: swiping away
- * "2 new messages" must let the third message start a FRESH row rather than silently
+ * "2 new messages" must let the third message start a fresh row rather than silently
  * bumping a counter nobody can see.
  */
 
@@ -114,14 +114,14 @@ function decodeCursor(cursor) {
 /**
  * One page of the feed, newest first.
  *
- * ─── WHY THE CURSOR IS A PAIR AND NOT A TIMESTAMP ────────────────────────────
+ * Why the cursor is a pair and not a timestamp
  * `cursor` is `"<createdAt ISO>~<id>"`, and the sort and the predicate are both on
- * the PAIR `(created_at, id)`. A timestamp alone is not a key here: one transaction
+ * the pair `(created_at, id)`. A timestamp alone is not a key here: one transaction
  * routinely writes several notifications -- a booking approval alerts the player and
  * the owner, generating a bracket alerts every captain -- and `created_at` defaults
  * to a per-statement clock that can still tie under load. Rows that tie are ordered
  * arbitrarily by Postgres, so with a `created_at < cursor` predicate a tie landing on
- * a page boundary DROPS every tied row after the first: notification 26 of 26 simply
+ * a page boundary drops every tied row after the first: notification 26 of 26 simply
  * never appears in the feed, and nothing anywhere reports an error. Row-wise
  * comparison on `(created_at, id)` makes the cursor a total order, so every row
  * appears on exactly one page.
@@ -129,7 +129,7 @@ function decodeCursor(cursor) {
  * Offset pagination would be worse still: a notification arriving mid-scroll shifts
  * every subsequent row by one and the reader sees a duplicate.
  *
- * Dismissed rows are excluded ALWAYS — including from the read tab. Dismissed means
+ * Dismissed rows are excluded always — including from the read tab. Dismissed means
  * the user removed it from their feed, and a "read" filter that resurrected it would
  * make the swipe look broken.
  */
@@ -155,7 +155,7 @@ async function listFeed(client, {
     [userId, cat, !!unreadOnly, at.at, at.id, lim + 1],
   );
 
-  // One row over the limit is fetched purely to answer hasMore without a COUNT.
+  // One row over the limit is fetched purely to answer hasMore without a count.
   const hasMore = rows.length > lim;
   const page = hasMore ? rows.slice(0, lim) : rows;
   const last = page[page.length - 1];
@@ -194,14 +194,12 @@ async function summary(client, userId) {
   return { unread, byCategory };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// STATE CHANGES
-// ═══════════════════════════════════════════════════════════════════════════
+// State changes
 //
 // Every one of these is scoped `AND user_id = $userId`. That is the authorisation:
 // an id belonging to somebody else matches no row and returns 0, which the route
-// turns into a 404 rather than a 403 — telling a caller "that notification exists but
-// is not yours" is more than they are entitled to know.
+// turns into a 404 rather than a 403 — telling a caller that a notification exists
+// but belongs to somebody else is more than they are entitled to know.
 
 /** Mark one row read. Idempotent; `read_at` is not overwritten on a second call. */
 async function markRead(client, userId, id) {
@@ -222,7 +220,7 @@ async function markRead(client, userId, id) {
 /**
  * Put one row back to unread.
  *
- * `group_count` is RESET to 1 and `group_key` is left in place, which needs saying:
+ * `group_count` is reset to 1 and `group_key` is left in place, which needs saying:
  * an unread row re-enters `ux_notifications_group`, so the next message in that
  * thread will bump this row again. Leaving the old count would make the row read
  * "4 new messages" when only one of them is genuinely new since the user looked.
@@ -267,7 +265,7 @@ async function dismiss(client, userId, id) {
 /**
  * "Clear read" — the only hard delete offered, and deliberately narrow.
  *
- * Unread rows are never touched (clearing something you have not seen is data loss
+ * Unread rows are never touched (clearing something the user has not seen is data loss
  * dressed as tidying), and rows younger than an hour are kept so that a tap on Clear
  * immediately after a batch arrives cannot erase what just came in. Dismissed rows go
  * too: the user has already removed them from view.
@@ -285,25 +283,23 @@ async function clearRead(client, userId, category = null) {
   return rowCount;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PREFERENCES
-// ═══════════════════════════════════════════════════════════════════════════
+// Preferences
 //
 // Stored as `users.notification_prefs jsonb DEFAULT '{}'` and read by pushJob before
 // every send. Two rules shape the whole design:
 //
-//   1. AN ABSENT KEY MEANS ON. A user who has never opened the settings screen has
+//   1. An absent key means on. A user who has never opened the settings screen has
 //      `{}` and receives everything, and the column only ever holds what they
-//      actually changed. The alternative — writing 9 categories × 2 channels of
+//      changed. The alternative — writing 9 categories × 2 channels of
 //      `true` at signup — means every future category defaults to off for existing
 //      users, silently, and nobody notices for a release or two.
 //
-//   2. THE SERVER NORMALISES ON READ. `getPrefs` always returns a complete object, so
+//   2. The server normalises on read. `getPrefs` always returns a complete object, so
 //      the settings screen renders a full form from one GET and never has to know
 //      what a default is. The client is a view of this, not a second opinion about it.
 //
 // `inApp` is honoured by the Flutter side for the foreground banner only — it can
-// never suppress the ROW or the badge. Muting is about interruption, not about
+// never suppress the row or the badge. Muting is about interruption, not about
 // hiding what happened.
 
 /** A complete, valid prefs object with nothing switched off. */
@@ -348,15 +344,15 @@ function normalisePrefs(stored) {
  * "22:00" → "22:00"; "25:99", "7:5" and "abc" → null.
  *
  * The range check matters as much as the shape one: a stored "25:99" is rejected by
- * pushJob's parser and falls back to 22:00, so quiet hours would still WORK — but the
+ * pushJob's parser and falls back to 22:00, so quiet hours would still work — but the
  * settings screen would render "25:99" back at the user as if it were their setting.
  * Re-emitted zero-padded so the stored form is canonical and two users who typed
  * "7:00" and "07:00" have byte-identical preferences.
  */
 function validHM(v) {
-  // 1-2 digits on BOTH sides. A time picker always sends HH:mm, but the settings
+  // 1-2 digits on both sides. A time picker always sends HH:mm, but the settings
   // screen is not the only caller of a JSON API, and "9:5" has exactly one sensible
-  // reading. Rejecting it would silently substitute the DEFAULT window instead, which
+  // reading. Rejecting it would silently substitute the default window instead, which
   // is the worst of the three outcomes: the user set a quiet window, was shown a
   // different one, and nothing reported an error. pushJob.parseHM accepts the same
   // shape -- the two must agree or a window that reads 09:05 on screen would be
@@ -385,7 +381,7 @@ async function getPrefs(client, userId) {
 /**
  * Write preferences.
  *
- * The incoming body is normalised through the SAME function used on read, so an
+ * The incoming body is normalised through the same function used on read, so an
  * unknown category, a string where a boolean belongs, or a malformed "25:99" cannot
  * be stored — they are dropped and the response shows the caller exactly what was
  * kept. Validating on the way in and on the way out with one function is what stops

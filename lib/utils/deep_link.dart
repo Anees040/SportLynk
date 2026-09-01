@@ -4,16 +4,16 @@ import 'package:flutter/material.dart';
 
 /// The one place a notification's `deepLink` becomes a screen.
 ///
-/// WHY THE ROUTE IS NOT DECIDED HERE
+/// Why the route is not decided here
 /// Every link arrives from the server as `{route, args}`, computed by
 /// `utils/notificationTypes.js`. This file navigates; it does not choose. That split
 /// is what makes `check_notifications.js` able to assert -- against `lib/main.dart`,
 /// at check time, in CI rather than on a user's phone -- that every route the
-/// registry can emit actually exists. A client that mapped `type` to a route itself
+/// registry can emit exists. A client that mapped `type` to a route itself
 /// would put that decision beyond the reach of any check on the server side, which
 /// is precisely how a notification whose tap does nothing ships unnoticed.
 ///
-/// WHY A NAVIGATOR KEY AND NOT A BuildContext
+/// Why a navigator key and not A BuildContext
 /// Three of the four entry points have no context to hand. `onMessageOpenedApp`
 /// fires from a platform channel, `getInitialMessage` resolves before the first
 /// frame, and the background isolate has no widget tree at all. A single global key
@@ -26,7 +26,7 @@ class DeepLink {
 
   /// A link that arrived before there was anywhere to send it.
   ///
-  /// The cold-start case is the whole reason this exists: a tray tap on a KILLED app
+  /// The cold-start case is the whole reason this exists: a tray tap on a killed app
   /// launches the process, and `getInitialMessage()` resolves while `AuthProvider` is
   /// still reading the token out of storage. Pushing then lands on the splash screen
   /// and is thrown away by the first `pushNamedAndRemoveUntil` the auth flow does.
@@ -84,7 +84,7 @@ class DeepLink {
     return {'route': route, 'args': _args(m['args'])};
   }
 
-  /// `args` arrives as a real map from the feed and the socket, and as a JSON STRING
+  /// `args` arrives as a real map from the feed and the socket, and as a JSON string
   /// from an FCM data block (see `pushService.strData`: data payloads are
   /// string-to-string, so the map is encoded on the way out). Anything else -- a
   /// missing key, a malformed string -- is an empty map, because a route that ignores
@@ -138,7 +138,7 @@ class DeepLink {
 
   /// Called from a home screen's first frame, after `AuthProvider` has resolved.
   ///
-  /// The pending link is cleared BEFORE the push, not after. A route that throws
+  /// The pending link is cleared before the push, not after. A route that throws
   /// while building would otherwise re-fire on the next home screen build and the app
   /// would be stuck bouncing off the same broken screen forever.
   static void replayPending() {

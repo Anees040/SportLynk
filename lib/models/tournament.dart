@@ -12,11 +12,11 @@ import 'team.dart' show asNum, Team;
 /// a locked transaction; a second copy of that arithmetic here would only give the two
 /// halves a way to disagree about who is in and what they are owed.
 ///
-/// Every numeric read goes through [asNum] because Postgres hands back DECIMAL
+/// Every numeric read goes through [asNum] because Postgres hands back decimal
 /// columns as strings: an entry fee arriving as `"2000.00"` would silently become
 /// null and render as a free tournament.
 ///
-/// The one thing this file DOES derive is presentation — `capacityFraction`,
+/// The one thing this file does derive is presentation — `capacityFraction`,
 /// `countdown`, `perPlayer` — because those are pixels, not policy.
 
 int _int(dynamic v, [int fallback = 0]) => asNum(v, fallback).round();
@@ -68,7 +68,7 @@ class FixtureStatus {
   static const String cancelled = 'cancelled';
 }
 
-/// An entry's five states. `registered` means the fee is HELD and the organiser has
+/// An entry's five states. `registered` means the fee is held and the organiser has
 /// not decided; `accepted` is the post-payment, in-the-field state. The wording in
 /// the UI must keep those apart — see [EntryStatus.label].
 class EntryStatus {
@@ -241,7 +241,7 @@ class Tournament {
   final int minTeams;
   final bool requiresApproval;
 
-  /// Entries that HOLD a place: registered + accepted. This is the number capacity
+  /// Entries that hold a place: registered + accepted. This is the number capacity
   /// is measured against, not `teamsAccepted` — a fee is frozen the moment a captain
   /// registers, so the spot is gone before the organiser approves it.
   final int teamsRegistered;
@@ -270,7 +270,7 @@ class Tournament {
   final String? runnerUpName;
 
   /// Zero until the bracket is drawn; from then on these are the settled figures the
-  /// ledger actually moved, not a projection. The projection lives in [Economics].
+  /// ledger moved, not a projection. The projection lives in [Economics].
   final double pool;
   final double venueCost;
   final double prize;
@@ -283,12 +283,12 @@ class Tournament {
   final String? cancelReason;
   final DateTime? createdAt;
 
-  // ── browse-only ─────────────────────────────────────────────
+  // Browse-only
   final int? secondsToDeadline;
   final bool? fullFlag;
   final String? organiserName;
 
-  // ── mine()-only ─────────────────────────────────────────────
+  // Mine()-only
   final MyEntry? myEntry;
 
   /// `mine().organising[]` carries the money block inline so the owner's list can
@@ -408,7 +408,7 @@ class Tournament {
     );
   }
 
-  // ── presentation, and only presentation ─────────────────────
+  // Presentation, and only presentation
 
   bool get isFull => fullFlag ?? (spotsLeft <= 0);
   bool get isOpen => status == TournamentStatus.open;
@@ -429,7 +429,7 @@ class Tournament {
 
   /// 0…1 for the capacity bar. Measured against holding entries, so the bar fills
   /// the instant a fee is frozen rather than when the organiser gets round to
-  /// approving — which is also when the spot actually became unavailable.
+  /// approving — which is also when the spot became unavailable.
   double get capacityFraction {
     if (maxTeams <= 0) return 0;
     final f = teamsRegistered / maxTeams;
@@ -601,10 +601,10 @@ class Fixture {
   bool get isSettled => isPlayed || isWalkover;
 
   /// A slot the draw is holding for a winner nobody has decided yet. Rendered as a
-  /// placeholder rather than skipped — the shape of the bracket IS the information.
+  /// placeholder rather than skipped — the shape of the bracket is the information.
   bool get isTbd => teamA == null && teamB == null && !isBye;
 
-  /// Both sides known, so it can actually be played or scored. A bye and a TBD are
+  /// Both sides known, so it can be played or scored. A bye and a TBD are
   /// both "not playable", for opposite reasons.
   bool get isPlayable => teamA != null && teamB != null;
 
@@ -615,7 +615,7 @@ class Fixture {
   bool get bWon => winner != null && winner == teamB;
 
   /// `18:00:00` on `2026-03-14` → "14 Mar · 6:00 PM". The time is the venue's wall
-  /// clock, not a timestamp, so it is formatted as-is — reusing the ONE formatter in
+  /// clock, not a timestamp, so it is formatted as-is — reusing the one formatter in
   /// [MatchBooking] rather than a second copy that could drift from it.
   String get when {
     final t = MatchBooking.prettyTime(startTime);
@@ -718,7 +718,7 @@ class Bracket {
   double get progress => total == 0 ? 0 : played / total;
 }
 
-/// One row of the table (SRS FE-7 — "refresh live standings"). Computed for BOTH
+/// One row of the table (SRS FE-7 — "refresh live standings"). Computed for both
 /// formats: a knockout has no league table, but it does have "who beat whom and how
 /// far did they get", and the same derivation answers that.
 class Standing {
@@ -774,7 +774,7 @@ class Standing {
 }
 
 /// One entered team, as `shapeRegistration`. Withdrawn and rejected rows reach only
-/// the organiser — the public list is who is actually in.
+/// the organiser — the public list is who holds a spot.
 class Registration {
   final String registrationId;
   final String teamId;
@@ -842,7 +842,7 @@ class Registration {
 
 /// The money waterfall, in one of two modes, and it says which.
 ///
-/// The venue's inventory cost is recovered FIRST and the prize comes out of what is
+/// The venue's inventory cost is recovered first and the prize comes out of what is
 /// left — not a percentage of the pool — because the venue cost is fixed while the
 /// pool is variable. A flat commission on a half-full tournament would pay an owner
 /// less than selling the same hours at the counter, which would invert the entire
@@ -855,7 +855,7 @@ class Registration {
 /// owner   = venueCost + (surplus - prize)
 /// ```
 ///
-/// [settled] `true` means fixtures exist and these ARE the figures the ledger moved.
+/// [settled] `true` means fixtures exist and these are the figures the ledger moved.
 /// `false` means no slots have been chosen yet, so it is a projection at list price
 /// — the owner's create screen gets the real quote from `POST /tournaments/preview`,
 /// which prices actual slots.
@@ -954,7 +954,7 @@ class Economics {
   bool get hasPrize => prize > 0;
 
   /// True when the pool did not cover the venue's hours. The prize is then zero and
-  /// the owner takes the whole pool — money is never taken FROM the owner — and the
+  /// the owner takes the whole pool — money is never taken from the owner — and the
   /// screen has to say so out loud rather than showing a silent "PKR 0 prize".
   bool get isUnderwater => underwater || (pool > 0 && prize <= 0);
 
@@ -972,7 +972,7 @@ class Economics {
         'selling these hours at ${money(retail)}$suffix';
   }
 
-  /// What a squad of [squad] actually pays each. The number a captain decides on.
+  /// What a squad of [squad] pays each. The number a captain decides on.
   double perPlayer(int squad) => squad <= 0 ? entryFee : entryFee / squad;
 }
 
@@ -1000,7 +1000,7 @@ class EligibleTeam {
       );
 }
 
-/// The "can I press this" block. Every flag here exists to avoid OFFERING an action
+/// The "can I press this" block. Every flag here exists to avoid offering an action
 /// the server would refuse — never to permit one. Authority is enforced server-side
 /// inside a locked transaction, so a stale `canRegister: true` costs a readable error
 /// message, not an unauthorised entry.
@@ -1161,7 +1161,7 @@ class TournamentDetail {
 
   bool get isEmpty => tournament == null;
 
-  /// The public list — who is actually in. Withdrawn and rejected rows reach only
+  /// The public list — who holds a spot. Withdrawn and rejected rows reach only
   /// the organiser, and showing them to everybody would misreport the field.
   List<Registration> get field => teams.where((t) => t.holdsASpot).toList();
 
@@ -1178,7 +1178,7 @@ class TournamentDetail {
 
 /// `GET /api/tournaments/mine` — both roles in one call, because a user can be an
 /// organiser and a player at the same time and the phone has one "My tournaments"
-/// tab. `playing` follows TEAM MEMBERSHIP, not captaincy: only a captain can enter
+/// tab. `playing` follows TEAM membership, not captaincy: only a captain can enter
 /// or be paid, but every member plays and expects to find it here.
 class MyTournaments {
   final List<Tournament> organising;
@@ -1265,7 +1265,7 @@ class ScheduleShortfall {
   String get line => 'Round $round needs $need hours, $available open';
 }
 
-/// One end of the preview: what happens at a FULL field (`capacity`) and at the
+/// One end of the preview: what happens at a full field (`capacity`) and at the
 /// worst legal turnout (`minimum`). Both are quoted, because a fee that only works
 /// with a full field is a fee that loses money the first time six teams turn up
 /// instead of eight.
@@ -1341,7 +1341,7 @@ class PreviewPlan {
   String get hoursLine => '$hoursNeeded hours needed · $hoursAvailable open';
 }
 
-/// The fee the create screen fills in for the owner, worked BACKWARDS from the
+/// The fee the create screen fills in for the owner, worked backwards from the
 /// margin they want rather than guessed:
 ///
 /// ```
@@ -1350,7 +1350,7 @@ class PreviewPlan {
 /// ```
 ///
 /// Divided by `minTeams`, not `maxTeams`: the fee has to survive the worst legal
-/// turnout, and a full field then simply earns more than the target.
+/// turnout, and a full field then earns more than the target.
 /// [achievable] is false when `prizePercent` is 100 — there is no margin to solve
 /// for, and the recommendation can only cover cost.
 class RecommendedFee {
@@ -1362,7 +1362,7 @@ class RecommendedFee {
   final bool achievable;
   final double roundedTo;
 
-  /// The breakdown AT that fee and the worst legal turnout — the floor of what the
+  /// The breakdown at that fee and the worst legal turnout — the floor of what the
   /// owner is agreeing to, not the best case.
   final Economics atMinTeams;
 
@@ -1391,11 +1391,11 @@ class RecommendedFee {
   static const RecommendedFee none = RecommendedFee();
 }
 
-/// Which scheduler actually ran, echoed verbatim from `tournamentScheduler`.
+/// Which scheduler ran, echoed verbatim from `tournamentScheduler`.
 ///
 /// `source: 'model'` only when the released demand model scored the candidate hours;
 /// anything else — ml-service down, breaker open, past the forecast horizon, no base
-/// price — is `'chronological'`, and [reason] says which. The demo CHECKS this stamp
+/// price — is `'chronological'`, and [reason] says which. The demo checks this stamp
 /// rather than asserting the AI ran.
 class SchedulingMeta {
   final String source;
@@ -1437,7 +1437,7 @@ class SchedulingMeta {
       : 'Placed in date order${reason == null ? '' : ' — $reason'}';
 }
 
-/// `POST /api/tournaments/preview` — the economics quote BEFORE the tournament
+/// `POST /api/tournaments/preview` — the economics quote before the tournament
 /// exists (SRS FE-1, done properly). This is the mechanism that stops an owner from
 /// guessing a fee that loses them money: it prices real slots at the real venue,
 /// quotes the full field and the worst legal turnout, and recommends a fee.
@@ -1502,6 +1502,6 @@ class TournamentPreview {
   }
 
   /// True when the full field would not fit but the minimum would: the tournament can
-  /// run, just not at the size the owner typed.
+  /// run, though not at the size the owner typed.
   bool get cappedByHours => minimum.schedulable && !capacity.schedulable;
 }

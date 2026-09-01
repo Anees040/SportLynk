@@ -88,7 +88,7 @@ class SoftmaxSVC(BaseEstimator, ClassifierMixin):
         self.random_state = random_state
         self.temperature = temperature
 
-    # ── training ───────────────────────────────────────────────────────────
+    # Training
     def fit(self, X, y, sample_weight=None) -> "SoftmaxSVC":
         if self.temperature <= 0:
             raise ValueError(f"temperature must be > 0, got {self.temperature!r}")
@@ -103,7 +103,7 @@ class SoftmaxSVC(BaseEstimator, ClassifierMixin):
         self.classes_ = self.svc_.classes_
         return self
 
-    # ── inference ──────────────────────────────────────────────────────────
+    # Inference
     def decision_function(self, X):
         return self.svc_.decision_function(X)
 
@@ -116,7 +116,7 @@ class SoftmaxSVC(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         scores = np.asarray(self.decision_function(X), dtype=float)
         # Binary LinearSVC returns a 1-D margin; lift it to the two-column form
-        # [-m, +m] so softmax yields the usual sigmoid pair. Multiclass (our case,
+        # [-m, +m] so softmax yields the usual sigmoid pair. Multiclass (the case here,
         # 3 labels) already comes back (n_samples, n_classes) one-vs-rest.
         if scores.ndim == 1:
             scores = np.column_stack([-scores, scores])

@@ -29,7 +29,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
   bool _loadingStats = true;
   bool _loadingList = true;
   int _openFlags = 0; // reviews awaiting moderation (not yet hidden)
-  // Open disputes, for the desk tile. There is no cheap COUNT for this: the queue
+  // Open disputes, for the desk tile. There is no cheap count for this: the queue
   // is a keyset page sorted by what is at stake, so one page is read and the tile
   // says "50+" rather than inventing a total the server never sent.
   int _openDisputes = 0;
@@ -143,7 +143,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     }
   }
 
-  // Moderation queue badge count. We count only reviews still awaiting a
+  // Moderation queue badge count. The count covers only reviews still awaiting a
   // decision (not yet hidden) — a review the admin already hid is "handled"
   // and should not keep the badge lit. Failure is silent: the badge simply
   // stays at its last value, never blocking the dashboard.
@@ -289,7 +289,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     );
   }
 
-  // ── DASHBOARD TAB ────────────────────────────────────────────
+  // Dashboard tab
   Widget _buildDashboard() {
     if (_loadingStats) {
       return const Center(child: CircularProgressIndicator(color: AppColors.accent));
@@ -379,7 +379,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
                   : '$_openFlags ${_openFlags == 1 ? 'review' : 'reviews'} awaiting moderation',
               _openModeration),
           const SizedBox(height: 8),
-          // -- S.7 Wave D -- the admin desk ------------------------------------
+          // S.7 Wave D -- the admin desk
           // Disputes first: a disputed match is frozen until someone rules on it, so
           // it is the only queue here where waiting costs the players something.
           _quickAction(Icons.gavel_rounded, 'Match Disputes',
@@ -499,7 +499,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
         ),
       );
 
-  // ── REGISTRATIONS LIST TAB ─────────────────────────────────
+  // Registrations list tab
   Widget _buildList(String status) {
     final list = status == 'approved'
         ? _approved

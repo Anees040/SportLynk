@@ -81,25 +81,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-# ---------------------------------------------------------------------------
 # Version. Stamped into bookings_meta.json alongside FEATURE_SPEC_VERSION so a
 # dataset can be traced to the calendar that produced it. Bump when any date
 # below changes, because the dataset is no longer byte-reproducible if it does.
-# ---------------------------------------------------------------------------
 CALENDAR_VERSION = "pk-calendar-v1"
 
-# ---------------------------------------------------------------------------
-# Fixed-date federal public holidays.                            [GAZETTED]
+# Fixed-date federal public holidays.                            [gazetted]
 #
 # Keyed (month, day). These do not move. Iqbal Day was dropped as a public
 # holiday for some years and reinstated in 2022; it is included because the
 # dataset window is 2025-2026.
 #
-# NOT included, and why: 1 January (widely observed, not a gazetted federal
+# Not included, and why: 1 January (widely observed, not a gazetted federal
 # holiday), 11 September (Quaid's death anniversary — a day of observance, banks
 # and offices largely stay open), and Christmas is folded into 25 December below
 # since it coincides with Quaid-e-Azam Day.
-# ---------------------------------------------------------------------------
 FIXED_HOLIDAYS: dict[tuple[int, int], str] = {
     (2, 5): "Kashmir Solidarity Day",
     (3, 23): "Pakistan Day",
@@ -109,67 +105,57 @@ FIXED_HOLIDAYS: dict[tuple[int, int], str] = {
     (12, 25): "Quaid-e-Azam Day / Christmas",
 }
 
-# ---------------------------------------------------------------------------
-# Ramadan windows, INCLUSIVE of both ends (first fast .. last fast).
+# Ramadan windows, inclusive of both ends (first fast .. last fast).
 #
-# Keyed by hijri year for traceability. Eid al-Fitr is the day AFTER the last
+# Keyed by hijri year for traceability. Eid al-Fitr is the day after the last
 # fast and is listed separately below, not inside the window — during Eid nobody
 # is fasting, and the demand shape is completely different, so folding them
 # together would smear two opposite effects into one flag.
 #
-#   1446 AH -> 2 Mar 2025 .. 30 Mar 2025    [OBSERVED]
-#   1447 AH -> 19 Feb 2026 .. 19 Mar 2026   [ESTIMATE] +/- 1 day
-#   1448 AH -> 8 Feb 2027 .. 9 Mar 2027     [ESTIMATE] +/- 2 days
-# ---------------------------------------------------------------------------
+#   1446 AH -> 2 Mar 2025 .. 30 Mar 2025    [observed]
+#   1447 AH -> 19 Feb 2026 .. 19 Mar 2026   [estimate] +/- 1 day
+#   1448 AH -> 8 Feb 2027 .. 9 Mar 2027     [estimate] +/- 2 days
 RAMADAN_WINDOWS: dict[int, tuple[date, date]] = {
     1446: (date(2025, 3, 2), date(2025, 3, 30)),
     1447: (date(2026, 2, 19), date(2026, 3, 19)),
     1448: (date(2027, 2, 8), date(2027, 3, 9)),
 }
 
-# ---------------------------------------------------------------------------
-# Eid al-Fitr, day 1. Pakistan gazettes THREE days.
-#   1446 -> 31 Mar 2025  [OBSERVED]
-#   1447 -> 20 Mar 2026  [ESTIMATE]
-#   1448 -> 10 Mar 2027  [ESTIMATE]
-# ---------------------------------------------------------------------------
+# Eid al-Fitr, day 1. Pakistan gazettes three days.
+#   1446 -> 31 Mar 2025  [observed]
+#   1447 -> 20 Mar 2026  [estimate]
+#   1448 -> 10 Mar 2027  [estimate]
 EID_AL_FITR: dict[int, date] = {
     1446: date(2025, 3, 31),
     1447: date(2026, 3, 20),
     1448: date(2027, 3, 10),
 }
 
-# ---------------------------------------------------------------------------
-# Eid al-Adha (10 Dhul-Hijjah), day 1. Pakistan gazettes THREE days.
-#   1446 -> 7 Jun 2025   [OBSERVED]
-#   1447 -> 27 May 2026  [ESTIMATE]
-#   1448 -> 17 May 2027  [ESTIMATE]
-# ---------------------------------------------------------------------------
+# Eid al-Adha (10 Dhul-Hijjah), day 1. Pakistan gazettes three days.
+#   1446 -> 7 Jun 2025   [observed]
+#   1447 -> 27 May 2026  [estimate]
+#   1448 -> 17 May 2027  [estimate]
 EID_AL_ADHA: dict[int, date] = {
     1446: date(2025, 6, 7),
     1447: date(2026, 5, 27),
     1448: date(2027, 5, 17),
 }
 
-# ---------------------------------------------------------------------------
-# Ashura — 9 AND 10 Muharram are both public holidays in Pakistan. Stored as
+# Ashura — 9 and 10 Muharram are both public holidays in Pakistan. Stored as
 # the 10th; the 9th is derived, so the pair can never drift apart.
-#   1447 -> 6 Jul 2025   [OBSERVED]
-#   1448 -> 26 Jun 2026  [ESTIMATE]
-#   1449 -> 15 Jun 2027  [ESTIMATE]
-# ---------------------------------------------------------------------------
+#   1447 -> 6 Jul 2025   [observed]
+#   1448 -> 26 Jun 2026  [estimate]
+#   1449 -> 15 Jun 2027  [estimate]
 ASHURA_10TH: dict[int, date] = {
     1447: date(2025, 7, 6),
     1448: date(2026, 6, 26),
     1449: date(2027, 6, 15),
 }
 
-# ---------------------------------------------------------------------------
 # Eid Milad-un-Nabi (12 Rabi al-Awwal). One gazetted day.
-#   1447 -> 5 Sep 2025   [OBSERVED]
-#   1448 -> 26 Aug 2026  [ESTIMATE]
-#   1449 -> 15 Aug 2027  [ESTIMATE]
-# ---------------------------------------------------------------------------
+#   1447 -> 5 Sep 2025   [observed]
+#   1448 -> 26 Aug 2026  [estimate]
+#   1449 -> 15 Aug 2027  [estimate]
 MILAD_UN_NABI: dict[int, date] = {
     1447: date(2025, 9, 5),
     1448: date(2026, 8, 26),
@@ -179,7 +165,6 @@ MILAD_UN_NABI: dict[int, date] = {
 # Eid runs three gazetted days: the day itself and the two after it.
 EID_HOLIDAY_DAYS = 3
 
-# ---------------------------------------------------------------------------
 # Ramadan clock anchors, Islamabad region, held constant per window.
 #
 # Islamabad sunset across the 1447 window (19 Feb - 19 Mar 2026) runs roughly
@@ -187,12 +172,11 @@ EID_HOLIDAY_DAYS = 3
 # iftar hour of 18 is within ~30 minutes throughout both, and the simulator's
 # unit is the whole hour, so a single constant is exact at this resolution.
 #
-# Fajr/sehri in the same windows runs roughly 05:40 -> 05:00 (it moves EARLIER
+# Fajr/sehri in the same windows runs roughly 05:40 -> 05:00 (it moves earlier
 # as the window advances). Hour 5 covers it.
 #
 # Taraweeh follows Isha; in Pakistan that customarily puts it around 20:30-22:00,
 # which is why the post-Taraweeh sports window opens at 22:00.
-# ---------------------------------------------------------------------------
 IFTAR_HOUR = 18
 SEHRI_HOUR = 5
 TARAWEEH_END_HOUR = 22
@@ -337,7 +321,6 @@ def build_calendar(start: date, days: int) -> dict[date, DayContext]:
     }
 
 
-# ---------------------------------------------------------------------------
 # Ramadan intraday phases.
 #
 # This is the part of the module that carries the most domain weight, so it is
@@ -353,15 +336,14 @@ def build_calendar(start: date, days: int) -> dict[date, DayContext]:
 #   18     iftar        Zero. This hour is not negotiable.
 #   19     post_iftar   Eating, Maghrib. Still very low.
 #   20-21  taraweeh     Prayers. Low, but not zero — some play before going.
-#   22-02  late_night   THE Ramadan window. Post-Taraweeh futsal and cricket
+#   22-02  late_night   the Ramadan window. Post-Taraweeh futsal and cricket
 #                       tournaments are a genuine national fixture, and demand
-#                       in these hours is HIGHER than a normal night, not lower.
+#                       in these hours is higher than a normal night, not lower.
 #
 # The seeded venues close at 22 or 23, so the dataset captures the leading edge
 # of the late-night surge (hour 22) rather than its peak. That is a property of
 # the venue population, not of this table, and it is exactly the kind of thing
 # the accept-criterion plot should make visible instead of hiding.
-# ---------------------------------------------------------------------------
 RAMADAN_PHASES = (
     "sehri",
     "fasting",
@@ -405,15 +387,13 @@ def phase_for(ctx: DayContext, hour: int) -> str:
     return ramadan_phase(hour) if ctx.is_ramadan else NOT_RAMADAN
 
 
-# ---------------------------------------------------------------------------
 # Self-description. `python -m app.core.pk_calendar 2025-08-01 365` prints every
 # non-ordinary day in a window.
 #
 # This exists because the dates above are the module's factual claims, and a
-# claim you cannot inspect in one command is a claim nobody checks. It is also
+# claim that cannot be inspected in one command is a claim nobody checks. It is also
 # the fastest way to answer "did the dataset window actually contain a Ramadan?"
 # without opening the CSV.
-# ---------------------------------------------------------------------------
 def _main(argv: list[str]) -> int:
     start = date.fromisoformat(argv[1]) if len(argv) > 1 else date(2025, 8, 1)
     days = int(argv[2]) if len(argv) > 2 else 365

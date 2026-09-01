@@ -87,7 +87,7 @@ class _OwnerVenueScreenState extends State<OwnerVenueScreen> {
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // ── ANALYTICS ────────────────────────────────
+            // Analytics
             Text('Analytics', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             const SizedBox(height: 10),
             Container(
@@ -160,7 +160,7 @@ class _OwnerVenueScreenState extends State<OwnerVenueScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── VENUE IMAGE GALLERY ───────────────────────
+            // VENUE image gallery
             Text('Venue Image Gallery', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             const SizedBox(height: 10),
             groundPhotos.isEmpty
@@ -204,7 +204,7 @@ class _OwnerVenueScreenState extends State<OwnerVenueScreen> {
                   ),
             const SizedBox(height: 20),
 
-            // ── VENUE DETAILS ─────────────────────────────
+            // VENUE details
             Text('Venue Details', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             const SizedBox(height: 10),
             Container(
@@ -245,7 +245,7 @@ class _OwnerVenueScreenState extends State<OwnerVenueScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── FINANCIALS ────────────────────────────────
+            // Financials
             Text('Financials', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             const SizedBox(height: 10),
             Container(

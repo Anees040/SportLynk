@@ -5,12 +5,12 @@ import '../../models/chat_channel.dart';
 
 /// FR8.10 — the suggested-reply chip row that sits above the composer.
 ///
-/// ADVISORY BY CONSTRUCTION: a tap calls [onPick], which fills the composer. This
+/// Advisory by construction: a tap calls [onPick], which fills the composer. This
 /// widget cannot send, and the endpoint behind it does not either — the send goes
 /// through the ordinary message path, so a mis-tap is a word in a text field
 /// rather than a message the other side has already read.
 ///
-/// THE BADGE IS EARNED, NOT DECORATIVE. The sparkle and the word "AI" appear only
+/// The badge is earned, not decorative. The sparkle and the word "AI" appear only
 /// when [QuickReplySet.fromModel] — i.e. the released 23-label classifier actually
 /// answered. When ml-service is down the same three sentences arrive from a keyword
 /// table and the row says "Suggested replies" with no sparkle, because claiming a

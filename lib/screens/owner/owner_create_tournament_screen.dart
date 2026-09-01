@@ -127,7 +127,7 @@ class _OwnerCreateTournamentScreenState
     }
   }
 
-  // ── The quote ──────────────────────────────────────────────
+  // The quote
 
   /// Re-quote after a short pause.
   ///
@@ -182,7 +182,7 @@ class _OwnerCreateTournamentScreenState
   ///
   /// Computed as `(venue cost + target margin) / min teams`, so it is the smallest fee
   /// that still clears the inventory cost at the *worst* turnout rather than the best —
-  /// which is the number an owner actually needs.
+  /// which is the number an owner needs.
   void _useRecommendedFee() {
     final rec = _preview?.recommended;
     if (rec == null || rec.entryFee <= 0) return;
@@ -232,7 +232,7 @@ class _OwnerCreateTournamentScreenState
     _quote();
   }
 
-  // ── Create ─────────────────────────────────────────────────
+  // Create
 
   String? _localBlocker() {
     if (_venueId == null || _venueId!.isEmpty) return 'Pick one of your venues';
@@ -395,7 +395,7 @@ class _OwnerCreateTournamentScreenState
     return ok == true;
   }
 
-  // ── Build ──────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {
@@ -557,7 +557,7 @@ class _OwnerCreateTournamentScreenState
     );
   }
 
-  // ── Fields ─────────────────────────────────────────────────
+  // Fields
 
   Widget _venuePicker() {
     return Padding(
@@ -1099,7 +1099,7 @@ class _OwnerCreateTournamentScreenState
     return '${_prettyDate(d)}, $h:$m ${d.hour < 12 ? 'AM' : 'PM'}';
   }
 
-  // ── The economics panel (the reason this screen exists) ─────
+  // The economics panel (the reason this screen exists)
 
   Widget _economicsPanel() {
     final p = _preview;

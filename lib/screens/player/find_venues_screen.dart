@@ -288,7 +288,7 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
         elevation: 0,
       ),
       body: Column(children: [
-        // ── SEARCH + FILTER ─────────────────────────────────
+        // Search + filter
         Container(
           color: AppColors.primary,
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -381,7 +381,7 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
           ]),
         ),
 
-        // ── RESULTS ─────────────────────────────────────────
+        // Results
         Expanded(
           child: _loading
             ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
@@ -467,7 +467,8 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
                       SliverList(
                         delegate: SliverChildBuilderDelegate(
                           (_, i) {
-                            // Skip the ones in AI recommended if possible, but for now just show all or offset
+                            // Not de-duplicated against the recommended rail above, so a venue can appear
+                            // in both. The rail is a ranking of a few; this list is coverage of everything.
                             final venue = _venues[i];
                             return Padding(
                               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),

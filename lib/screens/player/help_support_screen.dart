@@ -29,7 +29,7 @@ class HelpSupportScreen extends StatelessWidget {
               style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textSecondary)),
             const SizedBox(height: 24),
             
-            // ── CONTACT CARDS ──────────────────────
+            // Contact cards
             Row(
               children: [
                 Expanded(child: _contactCard(
@@ -51,7 +51,7 @@ class HelpSupportScreen extends StatelessWidget {
             ),
             const SizedBox(height: 32),
 
-            // ── FAQs ───────────────────────────────
+            // FAQs
             Text('Frequently Asked Questions', style: GoogleFonts.poppins(
               fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             const SizedBox(height: 12),

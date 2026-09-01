@@ -32,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SingleChildScrollView(
         child: Stack(
           children: [
-            // ─── Theme Color Header ───
+            // Theme Color Header
             Container(
               height: size.height * 0.35,
               width: double.infinity,
@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             
-            // ─── Back Button ───
+            // Back Button
             Positioned(
               top: MediaQuery.of(context).padding.top + 10,
               left: 16,
@@ -55,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
 
-            // ─── Main Content ───
+            // Main Content
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -63,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     SizedBox(height: size.height * 0.08), // Spacing from top
                     
-                    // ─── Welcome Text (over dark background) ───
+                    // Welcome Text (over dark background)
                     Text(
                       'Welcome Back!',
                       style: GoogleFonts.poppins(
@@ -83,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 40),
 
-                    // ─── Card with Logo Overlap ───
+                    // Card with Logo Overlap
                     Stack(
                       clipBehavior: Clip.none,
                       alignment: Alignment.topCenter,
@@ -225,7 +225,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 32),
 
-                    // ─── Sign Up ───
+                    // Sign Up
                     RichText(
                       text: TextSpan(
                         style: GoogleFonts.poppins(fontSize: 14),

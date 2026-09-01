@@ -90,12 +90,12 @@ STATUS_INCOMPATIBLE = "incompatible"
 STATUS_ERROR = "error"
 
 
-# ── per-model load contracts ──────────────────────────────────────────────────
+# Per-model load contracts
 #
 # The registry's reason for existing is to refuse a stale artifact rather than
 # serve a confidently-wrong one. But "stale" is model-specific: pricing skews if
-# the FEATURE SET drifts (core/features.py), sentiment skews if the frozen TEXT
-# NORMALIZER drifts (core/text_norm.py) — a model trained on `<num>`/`_neg` tokens
+# the feature set drifts (core/features.py), sentiment skews if the frozen text
+# normalizer drifts (core/text_norm.py) — a model trained on `<num>`/`_neg` tokens
 # fed text tokenised by a different normalizer predicts garbage with a confidence
 # score. So each known model pins itself, at load time, to the exact serving-side
 # component it must agree with. Expressed once, here, so both models get the same
@@ -201,8 +201,8 @@ def _intent_verify(payload: dict[str, Any]) -> str | None:
 
 
 #: The contract per known model. A key absent here (a stray *_latest.joblib from an
-#: experiment) is still loaded and reported, but without a spec check — we cannot
-#: verify a contract we do not know, and that fact is made explicit in its reason.
+#: experiment) is still loaded and reported, but without a spec check: an unknown
+#: contract cannot be verified, and that fact is made explicit in its reason.
 MODEL_CONTRACTS: dict[str, ModelContract] = {
     "pricing": ModelContract(
         spec_field="featureSpecVersion",
@@ -310,7 +310,7 @@ class ModelRegistry:
         self._lock = threading.Lock()
         self._cache: dict[str, LoadedModel] = {}
 
-    # ── loading ─────────────────────────────────────────────────────────────
+    # Loading
 
     def path_for(self, key: str) -> Path:
         return self._dir / f"{key}{LATEST_SUFFIX}"
@@ -391,12 +391,12 @@ class ModelRegistry:
 
         meta = {k: v for k, v in payload.items() if k != "model"}
 
-        # ── the compatibility contract: refuse a stale artifact, don't serve it ──
+        # The compatibility contract: refuse a stale artifact, don't serve it
         # Model-specific (see MODEL_CONTRACTS): pricing checks the feature spec +
         # column order against core/features.py; sentiment checks the normalizer
         # spec + fingerprint against core/text_norm.py. A key with no contract is a
-        # stray *_latest.joblib from an experiment — we cannot vouch for a contract
-        # we do not know, so it loads but is flagged, never silently trusted.
+        # stray *_latest.joblib from an experiment — an unknown contract cannot be
+        # vouched for, so it loads but is flagged, never silently trusted.
         trained_spec = meta.get(contract.spec_field) if contract else None
         if contract is not None:
             service_spec = contract.service_spec()
@@ -445,7 +445,7 @@ class ModelRegistry:
             key, path=path, status=STATUS_READY, estimator=estimator, meta=meta
         )
 
-    # ── reporting ───────────────────────────────────────────────────────────
+    # Reporting
 
     def inventory(self) -> list[dict[str, Any]]:
         """

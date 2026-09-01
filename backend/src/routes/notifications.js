@@ -1,25 +1,25 @@
 /**
  * routes/notifications.js — the feed the table never had (S.7 Wave C).
  *
- * Before this file, `notifications` was WRITE-ONLY: 38 call sites inserted into it
+ * Before this file, `notifications` was write-only: 38 call sites inserted into it
  * and nothing in the entire codebase ever read a row back. The bell on the player
  * home screen was a decorative `Icon` with no `onTap`. So this is not "add push to a
  * working notification system" — it is the read half of the system, and push is a
  * consequence of it.
  *
- * ─── DECLARATION ORDER IS LOAD-BEARING ────────────────────────────────────────
+ * Declaration order is load-bearing
  * Express matches in declaration order, so every literal path — /summary,
- * /preferences, /devices, /read-all, /test — is declared BEFORE /:id. Reversed, a
+ * /preferences, /devices, /read-all, /test — is declared before /:id. Reversed, a
  * GET /api/notifications/summary would arrive at the detail handler as id="summary"
  * and fail as an invalid uuid. Same trap tournaments.js documents for /mine.
  *
- * ─── AUTHORISATION IS THE WHERE CLAUSE ────────────────────────────────────────
+ * Authorisation is the WHERE clause
  * Every statement in notificationFeed.js carries `AND user_id = $userId`. There is no
  * separate ownership check to forget, and an id belonging to somebody else matches no
- * row — which surfaces as 404, not 403, because "that notification exists but is not
- * yours" tells a caller more than they are entitled to know.
+ * row — which surfaces as 404, not 403, because "that notification exists but
+ * belongs to somebody else" tells a caller more than they are entitled to know.
  *
- * ─── WHAT THIS FILE DOES NOT DO ───────────────────────────────────────────────
+ * What this file does not do
  * It never sends a push. Marking something read, dismissing it, changing a
  * preference — none of it touches Firebase. Delivery is the outbox's job
  * (jobs/pushJob.js), which is why a Firebase outage cannot make this endpoint slow.
@@ -42,9 +42,7 @@ const ok = (res, data) => res.json({ success: true, data });
 /** A uuid, or null. Guards every :id route from a 22P02 on a garbage path segment. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THE FEED
-// ═══════════════════════════════════════════════════════════════════════════
+// The feed
 
 /**
  * GET /api/notifications?limit&cursor&category&unreadOnly
@@ -68,7 +66,7 @@ router.get('/', async (req, res, next) => {
 /**
  * GET /api/notifications/summary — the badge and the filter-chip counts, one trip.
  *
- * `push` is included so the app can tell the user WHY their phone is quiet without a
+ * `push` is included so the app can tell the user why their phone is quiet without a
  * second endpoint: an unconfigured server, a denied OS permission and a muted
  * category are three different problems with three different fixes.
  */
@@ -79,9 +77,7 @@ router.get('/summary', async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PREFERENCES
-// ═══════════════════════════════════════════════════════════════════════════
+// Preferences
 
 /** GET /api/notifications/preferences — a complete form from one call. */
 router.get('/preferences', async (req, res, next) => {
@@ -94,8 +90,8 @@ router.get('/preferences', async (req, res, next) => {
  * PUT /api/notifications/preferences
  *
  * The body is normalised through the same function used on read, so an unknown
- * category or a malformed "25:99" is DROPPED rather than stored, and the response
- * echoes what was actually kept — the client can diff it against what it sent instead
+ * category or a malformed "25:99" is dropped rather than stored, and the response
+ * echoes what was kept — the client can diff it against what it sent instead
  * of assuming success. Enforcement is in pushJob, server-side: a preference the client
  * honours is a suggestion, not a preference.
  */
@@ -106,9 +102,7 @@ router.put('/preferences', async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DEVICES
-// ═══════════════════════════════════════════════════════════════════════════
+// Devices
 
 /**
  * POST /api/notifications/devices  { token, platform?, appVersion?, label? }
@@ -125,7 +119,8 @@ router.post('/devices', async (req, res, next) => {
   try {
     const token = (req.body && req.body.token ? String(req.body.token) : '').trim();
     // FCM tokens are ~160 chars; the bound is a sanity check, not a format check —
-    // guessing at their format is how you reject a token Google changed the shape of.
+    // guessing at their format is how a valid token gets rejected after Google
+    // changes its shape.
     if (!token || token.length < 20 || token.length > 4096) {
       return fail(res, 400, 'A valid FCM token is required');
     }
@@ -181,9 +176,7 @@ router.delete('/devices', async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// BULK STATE
-// ═══════════════════════════════════════════════════════════════════════════
+// Bulk state
 
 /** POST /api/notifications/read-all  { category? } — the "mark all read" button. */
 router.post('/read-all', async (req, res, next) => {
@@ -211,7 +204,7 @@ router.delete('/', async (req, res, next) => {
 /**
  * POST /api/notifications/test — the demo lever, and the answer to "is the key working?"
  *
- * TWO GUARDS, both necessary. It only ever sends to the CALLER (no userId is accepted
+ * Two guards, both necessary. It only ever sends to the caller (no userId is accepted
  * from the body, so it cannot be turned into a way to buzz another user's phone), and
  * it is disabled in production — a live endpoint that writes an arbitrary title and
  * body into somebody's notification tray is a spam vector, however well-intentioned.
@@ -257,9 +250,7 @@ router.get('/types', async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ONE ROW  —  declared LAST, after every literal path above
-// ═══════════════════════════════════════════════════════════════════════════
+// One row  —  declared last, after every literal path above
 
 /** PATCH /api/notifications/:id/read — idempotent; a second call is a no-op, not an error. */
 router.patch('/:id/read', async (req, res, next) => {
@@ -293,7 +284,7 @@ router.patch('/:id/unread', async (req, res, next) => {
  * `dismissed_at`, not a DELETE: the row is the only record that the user was ever
  * told, and "I never got a notification about that refund" is a support question this
  * table answers. It also leaves ux_notifications_group, so the next message in a
- * dismissed thread starts a FRESH row instead of silently bumping a hidden counter.
+ * dismissed thread starts a fresh row instead of silently bumping a hidden counter.
  */
 router.delete('/:id', async (req, res, next) => {
   try {

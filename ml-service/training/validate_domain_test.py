@@ -51,25 +51,25 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-# --- contract linkage -------------------------------------------------------
-# Import the SAME frozen normalizer the model trains and serves on. If this
+# Contract linkage
+# Import the same frozen normalizer the model trains and serves on. If this
 # import ever fails, the exam cannot be validated against the real contract and
-# we must stop -- there is no silent fallback.
+# the run must stop -- there is no silent fallback.
 ROOT = Path(__file__).resolve().parents[1]  # ml-service/
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from app.core import text_norm  # noqa: E402
 
-# --- paths ------------------------------------------------------------------
+# Paths
 EXAM_PATH = ROOT / "data" / "sentiment" / "domain_test_200.csv"
 META_PATH = ROOT / "data" / "sentiment" / "domain_test_meta.json"
 
-# --- pinned expectations ----------------------------------------------------
-# These are the AS-DESIGNED counts, verified by direct census of the committed
+# Pinned expectations
+# These are the as-designed counts, verified by direct census of the committed
 # file on 2026-08-26. They are intentionally hard-coded: this script's job is to
 # scream if the exam is ever edited, re-balanced, or truncated. Changing the
 # exam on purpose means updating these constants in the same commit -- which is
-# exactly the reviewable, deliberate act we want it to be.
+# exactly the reviewable, deliberate act it should be.
 EXPECTED_COLUMNS = ["id", "text", "label", "lang", "aspect", "phenomena", "notes"]
 EXPECTED_TOTAL = 200
 EXPECTED_LABELS = {"negative": 68, "neutral": 67, "positive": 65}
@@ -81,7 +81,7 @@ EXPECTED_GRID = {
 }
 ID_PATTERN = re.compile(r"^dt-\d{3,}$")
 
-# Phenomena we *require* the exam to exercise -- these are the hard cases the
+# Phenomena the exam is *required* to exercise -- these are the hard cases the
 # model is graded on. Counts are minimums (tags are semicolon-multi-valued).
 REQUIRED_PHENOMENA = {"negation": 10, "code_switch": 20}
 
@@ -90,7 +90,7 @@ NEAR_DUP_FAIL = 0.97   # >= this ~= an accidental copy -> hard failure
 NEAR_DUP_WARN = 0.85   # >= this -> reported, not fatal (curated look-alikes)
 
 
-# --- tiny check ledger ------------------------------------------------------
+# Tiny check ledger
 class Ledger:
     """Accumulates named checks; renders a table; decides pass/fail."""
 
@@ -150,7 +150,7 @@ def _read_rows(path: Path) -> list[dict[str, str]]:
 def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
     led = Ledger()
 
-    # ---- existence & parse -------------------------------------------------
+    # Existence & parse
     if not led.check("file_exists", exam_path.is_file(), str(exam_path)):
         print(led.render())
         print(f"\nFAILED: exam file not found at {exam_path}")
@@ -172,14 +172,14 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
     )
     led.check("row_count", len(rows) == EXPECTED_TOTAL, f"{len(rows)} (want {EXPECTED_TOTAL})")
 
-    # ---- ids ---------------------------------------------------------------
+    # Ids
     ids = [(r.get("id") or "").strip() for r in rows]
     bad_ids = [i for i in ids if not ID_PATTERN.match(i)]
     dup_ids = [i for i, c in collections.Counter(ids).items() if c > 1]
     led.check("ids_well_formed", not bad_ids, f"{len(bad_ids)} malformed" if bad_ids else "all match dt-NNN")
     led.check("ids_unique", not dup_ids, f"dups: {dup_ids[:5]}" if dup_ids else "all unique")
 
-    # ---- labels & langs ----------------------------------------------------
+    # Labels & langs
     label_counts = dict(collections.Counter((r.get("label") or "").strip() for r in rows))
     lang_counts = dict(collections.Counter((r.get("lang") or "").strip() for r in rows))
 
@@ -195,7 +195,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
     led.check("langs_known", not unknown_langs, f"unknown: {unknown_langs}" if unknown_langs else "subset of {ru,mixed,en}")
     led.check("lang_distribution", lang_counts == EXPECTED_LANGS, f"{lang_counts}")
 
-    # ---- the designed 3x3 grid --------------------------------------------
+    # The designed 3x3 grid
     grid = dict(collections.Counter(
         ((r.get("lang") or "").strip(), (r.get("label") or "").strip()) for r in rows
     ))
@@ -203,7 +203,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
     grid_detail = "9 cells as designed" if grid_ok else f"drift: {sorted((k, grid.get(k, 0)) for k in set(grid) | set(EXPECTED_GRID))}"
     led.check("lang_label_grid", grid_ok, grid_detail)
 
-    # ---- contract compatibility: every row survives normalization ----------
+    # Contract compatibility: every row survives normalization
     normalized: list[str] = []
     empty_after_norm: list[str] = []
     empty_raw: list[str] = []
@@ -222,7 +222,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
         f"normalize -> empty: {empty_after_norm[:5]}" if empty_after_norm else "no row destroyed by normalizer",
     )
 
-    # ---- exact duplicates (on normalized text) -----------------------------
+    # Exact duplicates (on normalized text)
     norm_counts = collections.Counter(t for t in normalized if t.strip())
     exact_dups = [(t, c) for t, c in norm_counts.items() if c > 1]
     led.check(
@@ -231,7 +231,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
         f"{len(exact_dups)} repeated texts" if exact_dups else "all distinct after normalize",
     )
 
-    # ---- near-duplicates (char-4-gram Jaccard, O(n^2) over 200 rows) -------
+    # Near-duplicates (char-4-gram Jaccard, O(n^2) over 200 rows)
     shings = [_shingles(t) for t in normalized]
     worst = 0.0
     worst_pair = ("", "")
@@ -253,7 +253,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
         f"max={worst:.3f} {worst_pair}" + (f"  FATAL:{fatal_pairs[:3]}" if fatal_pairs else f" ({len(warn_pairs)} soft warns)"),
     )
 
-    # ---- phenomena & aspect coverage --------------------------------------
+    # Phenomena & aspect coverage
     phen_counter: collections.Counter[str] = collections.Counter()
     for r in rows:
         for tag in (r.get("phenomena") or "").split(";"):
@@ -273,10 +273,10 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
     aspect_counter = dict(collections.Counter((r.get("aspect") or "").strip() for r in rows))
     led.check("aspect_coverage", len(aspect_counter) >= 8, f"{len(aspect_counter)} distinct aspects")
 
-    # ---- provenance --------------------------------------------------------
+    # Provenance
     digest = _sha256(exam_path)
 
-    # ---- report ------------------------------------------------------------
+    # Report
     if not quiet:
         print(f"Exam:        {exam_path}")
         print(f"Normalizer:  {text_norm.NORM_SPEC_VERSION} / {text_norm.norm_spec_fingerprint()}")

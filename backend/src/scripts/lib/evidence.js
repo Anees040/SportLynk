@@ -1,8 +1,7 @@
 /**
  * evidence.js — the receipt writer shared by the two Scout check scripts.
  *
- * WHY THIS EXISTS
- * ---------------
+ * Why this exists
  * `check_assistant.js` and `check_assistant_http.js` both print several hundred
  * assertions to a terminal and then exit. That is the right output for the person
  * running them and the wrong output for everyone else: a supervisor reading the
@@ -11,7 +10,7 @@
  *
  * So both scripts accept `--evidence` and, when given it, write what they just
  * proved into `doc/scout_evidence.md` — every assertion under its section, the
- * transcript of the real turns, and the provenance needed to REGENERATE the same
+ * transcript of the real turns, and the provenance needed to regenerate the same
  * document: the git commit, the model version the classifier was serving, the
  * spec fingerprints on both sides of the language boundary, and the one command
  * that produced it.
@@ -21,8 +20,7 @@
  * Running both gives the complete pack; running one gives an honestly partial one
  * that says so in its own header.
  *
- * WHAT IT DELIBERATELY DOES NOT RECORD
- * ------------------------------------
+ * What it deliberately does not record
  * No credentials, and not even the `apiKeyFingerprint` that `/health` publishes —
  * the fingerprint is safe by construction, but this file is committed and the key
  * behind it is still awaiting rotation, so there is no reason to put a hash of it
@@ -196,7 +194,7 @@ function render(rec, { title, subtitle, command, totals }) {
  * Upsert the block, idempotently.
  *
  * The markers are HTML comments, so they are invisible in a rendered view and
- * unambiguous to find. A block that is already there is REPLACED between its own
+ * unambiguous to find. A block that is already there is replaced between its own
  * markers; a new one is appended. The header is written only when the file does not
  * exist yet, so a hand-added note above the blocks would survive — though the file
  * says not to add one.

@@ -19,7 +19,7 @@ import '../../utils/snackbar_util.dart';
 import '../../widgets/reco_widgets.dart';
 import '../../widgets/team_stat_widgets.dart';
 
-/// The team's "Group info" — the WhatsApp screen you reach by tapping the chat
+/// The team's "Group info" — the WhatsApp screen reached by tapping the chat
 /// header. It is both a profile (logo, record, roster) and the admin console
 /// (invite links, join-request approval, roles, leave). What each viewer can do
 /// is decided by their own role, re-checked by the backend on every write:
@@ -194,7 +194,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
               .toList()
           : <Map<String, dynamic>>[];
 
-  // ── Writes ─────────────────────────────────────────────────
+  // Writes
   Future<void> _run(Future<Map<String, dynamic>> Function() action,
       {String? success}) async {
     if (_busy) return;
@@ -234,7 +234,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     }
   }
 
-  // ── Invite link ────────────────────────────────────────────
+  // Invite link
   /// Mint a single-use link. [note] is set only from the suggested-players rail,
   /// where it tags the link with the player's name so the invites list reads as
   /// "for that player"; the plain Invite button passes nothing. Same link either
@@ -314,7 +314,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     );
   }
 
-  // ── Edit team (captain) ────────────────────────────────────
+  // Edit team (captain)
   Future<void> _editTeam() async {
     final bioCtrl = TextEditingController(text: _team!.bio ?? '');
     final cityCtrl = TextEditingController(text: _team!.city ?? '');
@@ -459,7 +459,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     return url;
   }
 
-  // ── Build ──────────────────────────────────────────────────
+  // Build
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -511,7 +511,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                           onInvite: (p) => _createInvite('Suggested: ${p.name}'),
                         ),
                       ],
-                      // ── S2 Wave D ──────────────────────────────
+                      // S2 Wave D
                       // Placed below the admin console so a captain's actions stay
                       // where they were, and above Members because a visitor
                       // arriving from the leaderboard came for the record, not the
@@ -647,7 +647,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
         ),
       );
 
-  // ── S2 Wave D cards ────────────────────────────────────────
+  // S2 Wave D cards
 
   /// Last-5 form + 30-day activity — the two features S.5's recommender will read,
   /// shown here so they are visibly real rather than only present in JSON.
@@ -1025,7 +1025,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
         ),
       );
 
-  // ── Small pieces ───────────────────────────────────────────
+  // Small pieces
   Widget _sectionTitle(String text) => Padding(
         padding: const EdgeInsets.fromLTRB(2, 22, 2, 10),
         child: Text(text,

@@ -4,24 +4,24 @@
  * Every few minutes: find `challenge_sent` matches whose deadline has passed and
  * settle them as `expired`, with a chat pill in both teams' threads.
  *
- * WHY THIS JOB EXISTS AT ALL, GIVEN THE ROUTES ALREADY CHECK THE DEADLINE
+ * Why this job exists at all, given the routes already CHECK the deadline
  * PATCH /respond settles an expired challenge on contact, so a captain who taps
  * Accept two minutes late gets an honest answer instead of a match. But nobody is
  * obliged to tap anything, and an unanswered challenge is precisely the case
  * where no request will ever arrive. Left alone the row would sit in
  * `challenge_sent` forever, and because ux_matches_booking_live counts that
- * status, IT WOULD HOLD THE BOOKING — the challenger could not reuse their own
+ * status, it would hold the BOOKING — the challenger could not reuse their own
  * confirmed slot for a different opponent. The deadline has to be enforced by
  * something that runs whether or not anyone opens the app.
  *
- * WHY PER-ROW TRANSACTIONS RATHER THAN ONE BULK UPDATE
+ * Why per-row transactions rather than one bulk UPDATE
  * A single `UPDATE … WHERE challenge_expires_at < now()` would be one statement,
  * but each expiry also posts two chat pills and needs the member list to emit to.
  * Batching those into one transaction means one bad channel row takes down the
  * whole sweep, and a long transaction holds locks across every affected match.
  * Per row: a failure costs one expiry, which the next sweep retries.
  *
- * The candidate scan runs OUTSIDE any transaction and each row is then re-read
+ * The candidate scan runs outside any transaction and each row is then re-read
  * with FOR UPDATE — same discipline as noShowJob. Between the scan and the lock
  * the opponent may have accepted, so the status is re-checked under the lock and
  * a match that moved on is left alone. Without that re-check this job could
@@ -53,7 +53,7 @@ async function expireOne(matchId) {
 
     const m = await mc.lockMatch(client, matchId);
     // Re-check under the lock: accepted, rejected, or already swept by a previous
-    // overlapping run. All three mean this row is not ours to change.
+    // overlapping run. All three mean the row must be left as it is.
     if (!m || m.status !== mc.STATUS.CHALLENGE_SENT) {
       await client.query('ROLLBACK');
       return false;

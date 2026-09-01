@@ -19,9 +19,7 @@ import 'match_widgets.dart';
 /// Each sheet performs its own call and resolves `true` only on a confirmed
 /// success, so callers do nothing but `if (ok == true) reload()`.
 
-// ═══════════════════════════════════════════════════════════════
 //  Submit a result (ER2.1)
-// ═══════════════════════════════════════════════════════════════
 
 Future<bool?> showMatchResultSheet(
   BuildContext context, {
@@ -105,7 +103,7 @@ class _ResultSheetState extends State<_ResultSheet> {
 
     if (r['success'] == true) {
       final data = r['data'];
-      // The backend tells us whether this submission completed the pair and, if
+      // The backend reports whether this submission completed the pair and, if
       // so, whether the two agreed. Relaying its own words is the difference
       // between a captain knowing a dispute was opened and being surprised later.
       final status = data is Map ? '${data['status'] ?? ''}' : '';
@@ -341,9 +339,7 @@ class _ResultSheetState extends State<_ResultSheet> {
       );
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Flag a result (FR5.17)
-// ═══════════════════════════════════════════════════════════════
 
 Future<bool?> showMatchDisputeSheet(
   BuildContext context, {

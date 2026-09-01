@@ -1,30 +1,27 @@
 /**
- * routes/assistant.js — Scout's HTTP surface, and NOTHING else.
+ * routes/assistant.js — Scout's HTTP surface, and nothing else.
  *
- * WHY THIS FILE IS SO THIN
- * ------------------------
+ * Why this file is so thin
  * Every decision a turn needs is already owned somewhere else, and this file's job
  * is to not have an opinion:
  *
- *   services/dialogManager.js   what a turn MEANS   (state machine, lexicon, abstain)
- *   services/assistantActions.js what it DOES       (26 actions, money, SAVEPOINTs)
- *   services/assistantThreads.js the chat LIST      (create, rename, page, delete)
+ *   services/dialogManager.js   what a turn means   (state machine, lexicon, abstain)
+ *   services/assistantActions.js what it does       (26 actions, money, SAVEPOINTs)
+ *   services/assistantThreads.js the chat list      (create, rename, page, delete)
  *   services/assistantKb.js      the owner Q&A      (escalate, answer, KB CRUD)
- *   utils/assistantReply.js      the payload SHAPE  (text + chips + cards, 6 sources)
+ *   utils/assistantReply.js      the payload shape  (text + chips + cards, 6 sources)
  *
  * So a handler here does three things: read the JWT, call one function, map its
  * `{ok, status, code, message}` onto the `{success, data, message}` envelope every
  * Flutter screen in this app already parses. If a handler in this file ever grows a
  * business rule, it is in the wrong file — that is FR8.15 for the transport layer.
  *
- * THE CALLER IS THE JWT, ALWAYS
- * -----------------------------
+ * The caller is the JWT, always
  * `req.user.id` is the only user id that reaches a service. No handler reads a user
  * id from a body or a query, which is what stops "book for someone else" and "read
  * another player's chats" from being one forged field away.
  *
- * WHY /message TAKES EITHER text OR action
- * ---------------------------------------
+ * Why /message takes either text or action
  * The wave spec's "no free-text-only dead ends" means every Scout reply ships chips,
  * and a tapped chip posts `{action, args, text: <its label>}` instead of a sentence.
  * That is not a second endpoint: it is the same turn with `input_mode='chip'`, and
@@ -73,9 +70,7 @@ function threadIdOf(body = {}, query = {}) {
   return access.isUuid(id) ? id : null;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THE TURN
-// ═══════════════════════════════════════════════════════════════════════════
+// The turn
 
 /**
  * POST /api/assistant/message — the one endpoint the chat screen needs.
@@ -85,7 +80,7 @@ function threadIdOf(body = {}, query = {}) {
  *
  * A 500 still carries a `reply`, because a chat screen with an error toast and no
  * bubble looks broken in a way that a bubble saying "that did not save, try again"
- * does not. It is deliberately NOT persisted — the transaction rolled back, so it
+ * does not. It is deliberately not persisted — the transaction rolled back, so it
  * must not reappear when the thread is reloaded.
  */
 router.post('/message', async (req, res, next) => {
@@ -120,9 +115,7 @@ router.post('/message', async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THREADS — chat history, new chat, switch chat, rename, delete
-// ═══════════════════════════════════════════════════════════════════════════
+// Threads — chat history, new chat, switch chat, rename, delete
 //
 // These four are the "generic assistant" affordances the user asked for by name.
 // None of them is Scout-specific: a thread is a `chat_channels` row of type
@@ -209,8 +202,8 @@ router.patch('/threads/:id', async (req, res, next) => {
 /**
  * DELETE /threads/:id — gone, with its messages (ON DELETE CASCADE).
  *
- * The telemetry in `assistant_turns` survives deliberately: its channel_id is ON
- * DELETE SET NULL, so deleting a chat removes the CONVERSATION without erasing the
+ * The telemetry in `assistant_turns` survives deliberately: its channel_id is on
+ * DELETE SET NULL, so deleting a chat removes the conversation without erasing the
  * evidence that model #4 answered n turns at m% abstention. Nothing in that table
  * contains what anyone said.
  */
@@ -224,12 +217,10 @@ router.delete('/threads/:id', async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// FEEDBACK AND CAPABILITIES
-// ═══════════════════════════════════════════════════════════════════════════
+// Feedback and CAPABILITIES
 
 /**
- * POST /messages/:id/feedback — thumbs up/down on ONE Scout message.
+ * POST /messages/:id/feedback — thumbs up/down on one Scout message.
  *
  * This is the only SQL statement in this file, and it is here rather than in a
  * service because there is no rule to share: one row, keyed by (message, user), with
@@ -277,24 +268,21 @@ router.get('/capabilities', (req, res) => ok(res, {
   menu: menu(null, {}),
 }));
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE OWNER SIDE — "what is Scout telling players about my ground?"
-// ════════════════════════════════════════════════════════════════════════════
+// The owner side — "what is Scout telling players about my ground?"
 //
 // This half is what makes the assistant's learning loop legitimate rather than a
 // black box. A player asks something no query can answer, the owner answers it once,
 // and Scout serves that answer to everyone who asks again with `source: 'kb'`.
 //
-// THREE RULES HOLD ACROSS EVERY ENDPOINT BELOW
-// -------------------------------------------
-//   1. checkRole('owner') gates the surface, and ownership of the VENUE — resolved
+// Three rules hold across every endpoint below
+//   1. checkRole('owner') gates the surface, and ownership of the venue — resolved
 //      through venues.owner_id inside assistantKb, never from a client-supplied
 //      owner id — gates every individual row. An owner cannot read, answer or edit
 //      anything attached to somebody else's ground.
-//   2. Money and policy are OUT OF BOUNDS. assistantKb.BLOCKED_INTENTS keeps those
+//   2. Money and policy are out of bounds. assistantKb.BLOCKED_INTENTS keeps those
 //      questions out of the queue in the first place, so an owner can never redefine
 //      the refund rules by answering a question about them.
-//   3. Answering is TRANSACTIONAL. kb.answer() takes a row lock (FOR UPDATE OF e),
+//   3. Answering is transactional. kb.answer() takes a row lock (FOR UPDATE of e),
 //      writes the KB row, closes the escalation, posts into the player's own thread
 //      and notifies them — either all of that happens or none of it does, so a player
 //      is never notified about an answer that failed to save.
@@ -357,7 +345,7 @@ router.post('/owner/questions/:id/answer', owner, async (req, res, next) => {
 /**
  * POST /owner/questions/:id/decline  {reason?}
  *
- * Closes the item and TELLS the player, because silence is the worst outcome of an
+ * Closes the item and tells the player, because silence is the worst outcome of an
  * escalation: they asked, nobody answered, and Scout looks broken. No KB row is
  * written — a declined question must not teach Scout anything.
  */

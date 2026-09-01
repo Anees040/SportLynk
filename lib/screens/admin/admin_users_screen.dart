@@ -5,14 +5,14 @@
 // keyset on `(created_at, id)` — an admin suspending accounts while paging would
 // otherwise watch rows shift under their thumb.
 //
-// SUSPENSION IS NOT A FLAG, IT IS A CASCADE. `PATCH /users/:id/suspend` cancels
+// Suspension is not a flag, it is A CASCADE. `PATCH /users/:id/suspend` cancels
 // the user's upcoming bookings with refunds, expires their open challenges,
 // withdraws them from tournaments and — for an owner — deactivates their venues
 // and refunds the pending requests. That receipt comes back in the response, and
 // this screen shows it, because "suspended" without "and here is the money that
 // moved" is the version an admin cannot defend afterwards.
 //
-// Two things it deliberately does NOT decide: the server refuses a self-suspension
+// Two things it deliberately does not decide: the server refuses a self-suspension
 // and refuses to suspend another admin. Those buttons are hidden here as well, but
 // the refusal is the server's and its message is what gets shown.
 import 'dart:async';
@@ -208,7 +208,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
   }
 
-  /// Both filter rows use the SERVER's vocabulary (`player|owner|admin`, and
+  /// Both filter rows use the server's vocabulary (`player|owner|admin`, and
   /// `active|suspended|all`) so what the chip says and what the query sends cannot
   /// drift apart.
   Widget _filterBar() {
@@ -291,7 +291,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
   }
 
-  // ── One account ────────────────────────────────────────────────────────────
+  // One account
   Widget _card(AdminUserRow u) {
     final isMe = u.id == _myId;
     return InkWell(
@@ -399,7 +399,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
   }
 
-  // ── The account sheet ──────────────────────────────────────────────────────
+  // The account sheet
   void _openSheet(AdminUserRow u) {
     final isMe = u.id == _myId;
     final protected = isMe || u.role == 'admin';
@@ -531,7 +531,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
   }
 
-  // ── Suspend ────────────────────────────────────────────────────────────────
+  // Suspend
   /// A reason is mandatory (the server refuses without one) and the user is told
   /// it, so the sheet asks for it in the same words the player will read.
   Future<void> _suspendFlow(AdminUserRow u) async {
@@ -617,9 +617,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     await _afterWrite(res, showCascade: true);
   }
 
-  // ── Reinstate ──────────────────────────────────────────────────────────────
+  // Reinstate
   /// The note is optional here: reinstating takes nothing away, and the audit row
-  /// records who did it either way. Refunded bookings are NOT re-created — that is
+  /// records who did it either way. Refunded bookings are not re-created — that is
   /// said out loud, because an owner coming back will ask.
   Future<void> _reinstateFlow(AdminUserRow u) async {
     final note = TextEditingController();
@@ -710,7 +710,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     SnackbarUtil.showSuccess(context, message.isEmpty ? 'Done.' : message);
   }
 
-  /// The receipt. Everything the suspension actually moved, itemised — this is the
+  /// The receipt. Everything the suspension moved, itemised — this is the
   /// screen an admin screenshots when the owner phones to ask what happened.
   Future<void> _showCascade(SuspensionResult r, SuspensionCascade c) async {
     await showDialog<void>(

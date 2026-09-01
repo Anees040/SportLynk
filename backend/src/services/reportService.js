@@ -2,37 +2,37 @@
  * reportService.js — S.7 Wave D · FR4.16. The financial export, written once and
  * used by both the owner's report and the platform's.
  *
- * WHY THE MONEY COMES FROM THE LEDGER AND NOT FROM `bookings`
- * `bookings` holds what was AGREED (`total_amount`, `deposit_amount`); the
- * `transactions` rows hold what actually MOVED. Those two disagree in every
+ * Why the money comes from the ledger and not from `bookings`
+ * `bookings` holds what was agreed (`total_amount`, `deposit_amount`); the
+ * `transactions` rows hold what moved. Those two disagree in every
  * interesting case: a cancelled booking has a price and no earning, a no-show pays
  * the owner the deposit and nothing else, a checked-in booking pays the full escrow
- * minus whatever the commission percentage was ON THAT DAY. Recomputing from prices
+ * minus whatever the commission percentage was on that day. Recomputing from prices
  * would produce a report that looks right and does not reconcile with the wallet the
  * owner is looking at, which is worse than no report. So every money column here is
- * a SUM over `transactions` for that booking, and the only two columns taken from
+ * a sum over `transactions` for that booking, and the only two columns taken from
  * `bookings` are labelled as the agreement, not the outcome.
  *
- * THE FOUR SHAPES `utils/escrow.js` WRITES, read back:
- *   escrow_received      + on the OWNER's wallet   what the venue earned
- *                                                  (check-in release OR forfeited deposit)
- *   platform_commission  - on the OWNER's wallet   SportLynk's cut, taken at check-in
+ * The four shapes `utils/escrow.js` writes, read back:
+ *   escrow_received      + on the owner's wallet   what the venue earned
+ *                                                  (check-in release or forfeited deposit)
+ *   platform_commission  - on the owner's wallet   SportLynk's cut, taken at check-in
  *   no_show_penalty      - on the PLAYER's wallet  the deposit they lost
  *   refund               + on the PLAYER's wallet  what came back to them
  *
- * ONE FLAT TABLE, NOT SECTIONS. Tournament earnings are a `tournament_commission`
+ * One flat table, not SECTIONS. Tournament earnings are a `tournament_commission`
  * row against a tournament rather than a booking, so they could have been a second
  * block under a second header — but a CSV with two header rows cannot be opened as a
  * table by anything (Excel's own pivot included). Instead the first column says which
  * kind of row it is, and a tournament row leaves the booking-only cells empty. One
- * header, one TOTAL, still readable by a human.
+ * header, one total, still readable by a human.
  *
- * NO COURT COLUMN. The plan's row spec names one; this schema has no court
- * sub-entity (no `courts` table, no `bookings.court_id`) — a venue IS the bookable
+ * No court COLUMN. The plan's row spec names one; this schema has no court
+ * sub-entity (no `courts` table, no `bookings.court_id`) — a venue is the bookable
  * surface — so the slot window stands where a court would go rather than emitting a
  * column that is always empty.
  *
- * DATES. Bookings are ranged over `slot_date` (the day the game was played, which is
+ * Dates. Bookings are ranged over `slot_date` (the day the game was played, which is
  * the day an owner means by "August"), tournament rows over the commission
  * transaction's `created_at` (the day the money moved — a tournament has no single
  * slot date). Both bounds are inclusive and both are UTC, per the golden rule.
@@ -54,7 +54,7 @@ const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const PENDING_STATUSES = new Set(['pending', 'confirmed']);
 
 /**
- * Validate `?from&to&venueId&format`. Both dates are REQUIRED and the span is
+ * Validate `?from&to&venueId&format`. Both dates are required and the span is
  * capped: an unbounded export is a table scan of every booking the platform has
  * ever taken, served over a socket that will time out first. Refusing is kinder
  * than a truncated file the owner cannot tell is truncated.
@@ -98,11 +98,11 @@ function parseRange(query = {}) {
 /**
  * The column list, in file order. `money` cells are `csv.money` formatted (plain
  * two-place decimals — a thousands separator would become a new column); `total`
- * cells are summed into the TOTAL row; `platformOnly` appears only in the
+ * cells are summed into the total row; `platformOnly` appears only in the
  * all-venues export, where "which owner" is the whole point.
  *
- * `price` and `depositAtRisk` are the AGREEMENT (from `bookings`). Everything after
- * them is what the ledger says actually happened.
+ * `price` and `depositAtRisk` are the agreement (from `bookings`). Everything after
+ * them is what the ledger says happened.
  */
 const COLUMNS = [
   { key: 'kind', label: 'Type' },
@@ -126,7 +126,7 @@ const COLUMNS = [
   { key: 'settledAt', label: 'Settled At (UTC)' },
 ];
 
-/** The columns this scope actually emits. */
+/** The columns this scope emits. */
 function columnsFor(scope) {
   return scope === 'platform' ? COLUMNS : COLUMNS.filter((c) => !c.platformOnly);
 }
@@ -142,8 +142,8 @@ function newTotals() {
 /**
  * Bucket a row under its owner, for the platform report's per-owner subtotals.
  *
- * A row with NO owner on record still gets a bucket, under UNATTRIBUTED, because the
- * alternative is per-owner subtotals that do not add up to the TOTAL row -- and a
+ * A row with no owner on record still gets a bucket, under UNATTRIBUTED, because the
+ * alternative is per-owner subtotals that do not add up to the total row -- and a
  * financial report whose subtotals do not reconcile is one nobody can use. This is
  * not hypothetical: a venue whose owner account was deleted has no owner to bill.
  */
@@ -177,16 +177,16 @@ function addTotals(t, shaped) {
  * The LATERAL is deliberate: a booking has at most a handful of transactions, and
  * aggregating them per row keeps the report at one row per booking no matter how
  * many money events it produced. A GROUP BY over the join would have to list every
- * selected column and would still need the same CASE arms.
+ * selected column and would still need the same case arms.
  *
- * The CASE arms mirror `escrow.logTxn`'s four shapes exactly. `platform_commission`
- * and `no_show_penalty` are stored NEGATIVE (they are debits on the wallet they sit
+ * The case arms mirror `escrow.logTxn`'s four shapes exactly. `platform_commission`
+ * and `no_show_penalty` are stored negative (they are debits on the wallet they sit
  * on), so both are negated here to read as positive amounts in a report column.
  */
 async function bookingPage(db, { from, to, ownerId, venueId, after }) {
   const params = [from, to];
   const where = ['b.slot_date >= $1::date', 'b.slot_date <= $2::date'];
-  // `v.owner_id`, NOT `b.owner_id`. The booking's copy is stamped at create time and
+  // `v.owner_id`, not `b.owner_id`. The booking's copy is stamped at create time and
   // is NULL on every row written before that column existed (45 of 50 in this
   // database), so scoping by it would silently hide an owner's own older bookings
   // from their own report. `venues.owner_id` is the authority for whose venue it is.
@@ -367,8 +367,8 @@ function cellsFor(shaped, cols) {
 }
 
 /**
- * A summary row (TOTAL, or a per-owner subtotal). Only the totalled money cells are
- * filled; every other cell is left EMPTY rather than repeated, so a reader scanning
+ * A summary row (total, or a per-owner subtotal). Only the totalled money cells are
+ * filled; every other cell is left empty rather than repeated, so a reader scanning
  * the last rows cannot mistake a subtotal for another booking.
  */
 function summaryRow(cols, totals, label, ownerName) {

@@ -2,7 +2,7 @@
  * Teams API (S2 Wave A) — create, browse, roster, invites, join requests, roles.
  *
  * Every mutating handler follows the same transaction shape as routes/wallet.js:
- *   pool.connect() → BEGIN → work → COMMIT, and a `finally` that ALWAYS releases.
+ *   pool.connect() → BEGIN → work → COMMIT, and a `finally` that always releases.
  * The two rules that shape this file:
  *
  *   1. A `return` may never leave an open transaction behind. `finally` releases
@@ -16,7 +16,7 @@
  *      the body is never trusted and two writers cannot race the "≥1 captain"
  *      invariant (FR2.10).
  *
- * Side effects on a membership change are threefold and fire only AFTER COMMIT,
+ * Side effects on a membership change are threefold and fire only after COMMIT,
  * so a client that reacts to a socket event by re-fetching always sees the
  * committed row:
  *   • a grey system message in the team chat ("Ali added Sara")   → everyone
@@ -40,7 +40,7 @@ const bus = require('../realtime/bus');
 const router = express.Router();
 router.use(auth);
 
-// ─── Envelope helpers ───────────────────────────────────────────────────────
+// Envelope helpers
 const fail = (res, status, message) => res.status(status).json({ success: false, message });
 const ok = (res, data, message) => res.json({ success: true, data, ...(message ? { message } : {}) });
 
@@ -50,7 +50,7 @@ async function bail(client, res, status, message) {
   return fail(res, status, message);
 }
 
-/** Turn the two DB errors we expect into friendly envelopes; rethrow the rest. */
+/** Turn the two expected DB errors into friendly envelopes; rethrow the rest. */
 function friendlyDbError(e) {
   if (e.code === '23505') return { status: 409, message: 'A team with that name already exists for this sport.' };
   if (e.code === '22P02') return { status: 404, message: 'Not found.' }; // bad uuid slipped through
@@ -65,17 +65,15 @@ async function nameOf(client, userId) {
 }
 
 /**
- * Post a grey system message to the team channel AND remember to emit it after
- * commit. Returns the message id so the caller can flush emits post-COMMIT.
+ * Post a grey system message to the team channel, for emission after commit.
+ * Returns the message id so the caller can flush emits post-COMMIT.
  */
 async function announce(client, channelId, event, opts) {
   const { message } = await chat.postSystemMessage(client, channelId, buildSystemMessage(event, opts));
   return message.id;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // CREATE
-// ═══════════════════════════════════════════════════════════════════════════
 router.post('/', async (req, res, next) => {
   const name = access.validateTeamName(req.body.name);
   const sport = access.validateSport(req.body.sport);
@@ -128,9 +126,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// LISTS  (declared before /:id so the literal segments win the route match)
-// ═══════════════════════════════════════════════════════════════════════════
+// Lists  (declared before /:id so the literal segments win the route match)
 
 /** Teams the caller belongs to, newest first, each tagged with their role. */
 router.get('/mine', async (req, res, next) => {
@@ -154,18 +150,18 @@ router.get('/mine', async (req, res, next) => {
  *
  * Three things changed here in Wave D, and each one closed a real hole:
  *
- *   • RANKED ONLY. This used to list every public team ordered by elo, which put
+ *   • ranked only. This used to list every public team ordered by elo, which put
  *     brand-new teams on the board at the seed 1000 — the exact thing FR2.6 says
  *     never to display as a rating. utils/teamStats.js applies the same
  *     elo.isRanked() threshold the match screens use, so a fresh install now
- *     returns an EMPTY board, which is the honest answer.
+ *     returns an empty board, which is the honest answer.
  *   • ?city=. Free text, so it goes through normaliseCity() first.
- *   • MOVEMENT + is_mine. Rank change vs 7 days ago, and whether the viewer is a
+ *   • movement + is_mine. Rank change vs 7 days ago, and whether the viewer is a
  *     member. is_mine has to be computed server-side: the screen was inferring
  *     it from a `role` field this endpoint never sent, so the "YOU" highlight
  *     could never appear.
  *
- * Returns an OBJECT, not an array, because the screen needs the city chips in
+ * Returns an object, not an array, because the screen needs the city chips in
  * the same round trip and the chips must be derived from the same filtered data
  * (a chip that leads to an empty list reads as a broken feature). The Dart
  * caller was updated with it.
@@ -183,7 +179,7 @@ router.get('/rankings', async (req, res, next) => {
     const [teams, cities] = await Promise.all([
       stats.rankings(pool, { sport, city, viewerId: req.user.id, limit: req.query.limit }),
       // Unfiltered by city on purpose — the chip row must not collapse to the
-      // one chip you already picked.
+      // one chip already picked.
       stats.rankedCities(pool, { sport }),
     ]);
 
@@ -207,7 +203,7 @@ router.get('/rankings', async (req, res, next) => {
 /**
  * GET /api/teams/discover — public teams the caller is not already in.
  *
- * TRANSPORT ONLY since S.6 Wave C: the visibility rule and the
+ * Transport only since S.6 Wave C: the visibility rule and the
  * already-a-member exclusion live in services/discoveryService.js so Scout's
  * `find_teams` cannot offer a private squad or the user's own team (FR8.15).
  */
@@ -242,9 +238,7 @@ router.get('/invites/:token', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PROFILE
-// ═══════════════════════════════════════════════════════════════════════════
+// Profile
 router.get('/:id', async (req, res, next) => {
   if (!access.isUuid(req.params.id)) return fail(res, 404, 'Team not found.');
   try {
@@ -284,9 +278,7 @@ router.get('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// EDIT  (captain only)
-// ═══════════════════════════════════════════════════════════════════════════
+// Edit  (captain only)
 router.patch('/:id', async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -301,9 +293,9 @@ router.patch('/:id', async (req, res, next) => {
     const invalid = [bio, vis, logo, city].find((x) => !x.ok);
     if (invalid) return bail(client, res, 400, invalid.message);
 
-    // City is only written when the key is actually present. A bio-only patch
+    // City is only written when the key is present. A bio-only patch
     // must not wipe a city set earlier, but sending city:'' must still clear it —
-    // which is why this is a CASE and not the COALESCE the logo uses.
+    // which is why this is a case and not the COALESCE the logo uses.
     const citySent = req.body.city !== undefined;
 
     const { rows } = await client.query(
@@ -344,14 +336,12 @@ router.patch('/:id', async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SUGGESTED PLAYERS  (FR2.8, S.5 Wave B)
-// ═══════════════════════════════════════════════════════════════════════════
+// Suggested players  (FR2.8, S.5 Wave B)
 
 /**
  * GET /api/teams/:id/suggested-players — FR2.8, the roster screen's rail.
  *
- * TRANSPORT ONLY. Every rule this endpoint enforces — the admin-only gate, the
+ * Transport only. Every rule this endpoint enforces — the admin-only gate, the
  * candidate pool, the model call, the fallback ordering and the "unranked pairing
  * shows no percentage" rule — now lives in services/rosterService.js, because
  * Scout answers `find_players` and FR8.15 forbids a second copy of any of it.
@@ -377,9 +367,7 @@ router.get('/:id/suggested-players', async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// INVITES  (admin = captain or vice-captain)
-// ═══════════════════════════════════════════════════════════════════════════
+// Invites  (admin = captain or vice-captain)
 
 /** Mint a single-use invite. The RAW token is returned exactly once, never stored. */
 router.post('/:id/invites', async (req, res, next) => {
@@ -459,15 +447,13 @@ router.delete('/:id/invites/:iid', async (req, res, next) => {
   } finally { client.release(); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // JOIN via token
-// ═══════════════════════════════════════════════════════════════════════════
 router.post('/join/:token', async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const hash = crypto.createHash('sha256').update(String(req.params.token)).digest('hex');
-    // Alias every column we need — a bare `i.*, t.*` lets the team's `id`
+    // Alias every column the join needs — a bare `i.*, t.*` lets the team's `id`
     // overwrite the invite's `id`, which silently broke single-use before.
     const { rows } = await client.query(
       `SELECT i.id AS invite_id, i.created_by AS inviter_id,
@@ -541,9 +527,7 @@ router.post('/join/:token', async (req, res, next) => {
   } finally { client.release(); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// JOIN REQUESTS  (public teams)
-// ═══════════════════════════════════════════════════════════════════════════
+// JOIN requests  (public teams)
 router.post('/:id/join-request', async (req, res, next) => {
   if (!access.isUuid(req.params.id)) return fail(res, 404, 'Team not found.');
   const client = await pool.connect();
@@ -670,9 +654,7 @@ router.patch('/:id/requests/:rid', async (req, res, next) => {
   } finally { client.release(); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ROLES & REMOVAL  (captain only) — promote / demote / remove
-// ═══════════════════════════════════════════════════════════════════════════
+// Roles & removal  (captain only) — promote / demote / remove
 router.patch('/:id/members/:uid', async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -742,10 +724,10 @@ router.patch('/:id/members/:uid', async (req, res, next) => {
 });
 
 /**
- * Leave a team yourself. Any member can; the sole captain cannot (they would
+ * Self-removal from a team. Any member can; the sole captain cannot (they would
  * orphan the team) — they must hand over the captaincy or disband first. This is
  * the endpoint the acceptance test's "B leaves" exercises, kept separate from
- * the captain-only role route above so a plain member is actually allowed in.
+ * the captain-only role route above so a plain member is allowed in.
  */
 router.delete('/:id/members/me', async (req, res, next) => {
   const client = await pool.connect();

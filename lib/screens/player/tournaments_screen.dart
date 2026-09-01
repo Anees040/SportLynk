@@ -146,7 +146,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
     _load();
   }
 
-  // ── Build ──────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {
@@ -216,7 +216,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
     );
   }
 
-  // ── Browse ─────────────────────────────────────────────────
+  // Browse
 
   Widget _browseTab() {
     return Column(
@@ -352,7 +352,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
     _load();
   }
 
-  // ── Filters (SRS FE-2) ─────────────────────────────────────
+  // Filters (SRS FE-2)
 
   Widget _filterBar() {
     return Container(
@@ -520,7 +520,7 @@ class _TournamentsScreenState extends State<TournamentsScreen>
     );
   }
 
-  // ── My cups ────────────────────────────────────────────────
+  // My cups
 
   /// The two roles in one list, organiser first.
   ///

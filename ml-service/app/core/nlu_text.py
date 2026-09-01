@@ -66,11 +66,11 @@ import re
 import unicodedata
 from typing import Iterable, Sequence
 
-#: Bump when any table or regex below changes MEANING. The fingerprint catches the
+#: Bump when any table or regex below changes meaning. The fingerprint catches the
 #: edits that forget to.
 NLU_TEXT_SPEC_VERSION = "nlu-text-v1"
 
-# ── placeholders ──────────────────────────────────────────────────────────────
+# Placeholders
 #: Standalone digit runs of this length or more collapse to NUM_TOKEN.
 LONG_DIGITS = 3
 
@@ -88,7 +88,7 @@ PLACEHOLDERS: tuple[str, ...] = (NUM_TOKEN, QM_TOKEN, EXC_TOKEN, EMOJI_TOKEN, UR
 #: survive as single features instead of being split on their angle brackets.
 WORD_TOKEN_PATTERN = r"\S+"
 
-# ── regexes ───────────────────────────────────────────────────────────────────
+# Regexes
 _ZERO_WIDTH = re.compile(
     "[\u200b-\u200f\u2060\ufeff]"  # ZWSP..RLM, word joiner, BOM -- written as
 )                                     # escapes because the literals are invisible
@@ -97,21 +97,21 @@ _URL = re.compile(r"\b(?:https?://|www\.)\S+", re.IGNORECASE)
 #: real, `book` must not become `bok`, and doubling is a normal Roman Urdu
 #: lengthening device (`achha`).
 _ELONGATION = re.compile(r"(.)\1{2,}", re.UNICODE)
-#: A digit run that is NOT glued to a letter or a hyphen-letter pair. `F-11` and
+#: A digit run that is not glued to a letter or a hyphen-letter pair. `F-11` and
 #: `5v5` are left alone; a bare `3000` is not.
 _LONG_DIGITS = re.compile(rf"(?<![0-9A-Za-z-])[0-9]{{{LONG_DIGITS},}}(?![0-9A-Za-z])")
 _SPACE = re.compile(r"\s+")
 #: Kept out of the drop set below because each one changes how a sentence reads.
 _PUNCT_KEEP = {"?": QM_TOKEN, "!": EXC_TOKEN}
 
-# ── Roman Urdu spelling folds ────────────────────────────────────────────────
+# Roman Urdu spelling folds
 #
 # Roman Urdu is transliteration, so there is no correct spelling to be wrong
 # about: `nahi` / `nhi` / `nahin` / `nai` are one word typed by four people. Left
 # alone they are four features, each learned from a quarter of the rows that
 # should support it. Folded, the model sees one.
 #
-# THE RULE FOR ADDING TO THIS TABLE: only spellings of the SAME word. Never fold
+# The rule for adding to this table: only spellings of the same word. Never fold
 # two words that could carry different intents. `karna` (to do) and `karwana` (to
 # get done) stay apart; `cancel`/`kensal` fold, `cancel`/`refund` never do. When in
 # doubt, leave it out -- a missed variant costs a few features, a wrong fold
@@ -143,7 +143,7 @@ _FOLD_GROUPS: dict[str, tuple[str, ...]] = {
     "hai": ("hy", "h", "hai", "he", "hei"),
     "hoga": ("hoga", "hogi", "hoge", "hga"),
     "lena": ("lena", "lenaa", "lna"),
-    # time words -- folded to ONE Roman spelling, NOT to English. Turning `kal`
+    # time words -- folded to one Roman spelling, not to English. Turning `kal`
     # into a date is entities.py's job and it needs the raw text anyway.
     "aaj": ("aj", "aaj", "ajj"),
     "kal": ("kl", "kall", "kaal"),
@@ -188,14 +188,14 @@ _FOLD_GROUPS: dict[str, tuple[str, ...]] = {
     "thanks": ("thanx", "thnx", "thankyou", "thnks", "tnx"),
 }
 
-#: DIFFERENT words, identical evidence for intent. Kept apart from _FOLD_GROUPS
+#: Different words, identical evidence for intent. Kept apart from _FOLD_GROUPS
 #: because the rule there is "spellings of the same word", and these are not that
 #: -- "soccer" and "football" are two languages agreeing, and folding them is a
 #: modelling choice rather than a spelling repair. Worth making anyway: the corpus
 #: is bilingual by design, so the alternative is learning "show me a soccer pitch"
 #: and "football ground dikhao" as unrelated evidence for one intent.
 #:
-#: SPORT NAMES ARE NOT NORMALISED AWAY HERE. `futsal` does not fold to `football`
+#: Sport names are not normalised away here. `futsal` does not fold to `football`
 #: even though a careless reader might call them the same game: the entity
 #: extractor has to tell them apart to filter a catalogue, and a classifier that
 #: never saw the difference cannot help it.
@@ -231,7 +231,7 @@ FOLD: dict[str, str] = {
     for variant in (canon, *variants)
 }
 
-#: Multi-word variants, folded BEFORE tokenisation because no per-token rule can
+#: Multi-word variants, folded before tokenisation because no per-token rule can
 #: see across the space. Deliberately tiny: each entry is a phrase whose parts
 #: would otherwise fold to something misleading on their own.
 PHRASE_FOLD: tuple[tuple[str, str], ...] = (
@@ -251,7 +251,7 @@ PHRASE_FOLD: tuple[tuple[str, str], ...] = (
 )
 
 
-# ── the normaliser ────────────────────────────────────────────────────────────
+# The normaliser
 def fold_token(token: str) -> str:
     """One token through the spelling folds, then the synonym map.
 
@@ -346,7 +346,7 @@ def content_tokens(text: str) -> list[str]:
     return [t for t in tokens(text) if t not in PLACEHOLDERS]
 
 
-# ── the fingerprint ───────────────────────────────────────────────────────────
+# The fingerprint
 def nlu_text_fingerprint() -> str:
     """sha256 (16 hex chars) over every table and regex that changes the output.
 
@@ -396,7 +396,7 @@ def describe() -> dict[str, object]:
     }
 
 
-# ── self-check ────────────────────────────────────────────────────────────────
+# Self-check
 #: (raw, expected) pairs. Pinned, so a fold added tomorrow that changes one of
 #: these fails loudly here instead of quietly in the next training run.
 _CASES: tuple[tuple[str, str], ...] = (

@@ -36,26 +36,26 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
   bool _loading = true;
   static String get _base => ApiConstants.baseUrl;
 
-  // ── Match results awaiting this owner's verification (ER2.2) ──
+  // Match results awaiting this owner's verification (ER2.2)
   // Kept out of /owner/dashboard on purpose: a failure fetching matches must not
-  // be able to blank the revenue and bookings the owner actually opened the app for.
+  // be able to blank the revenue and bookings the owner opened the app for.
   final _matchService = MatchService();
   List<MatchModel> _toVerify = const [];
   StreamSubscription? _matchSub;
 
-  // ── AI price suggestion (FR4.17) ──────────────────────────
-  // Loaded on its own, AFTER the dashboard, because the venue id it needs comes out
+  // AI price suggestion (FR4.17)
+  // Loaded on its own, after the dashboard, because the venue id it needs comes out
   // of the dashboard payload and because a slow or dead ml-service must never delay
   // the revenue figures. `_priceLoading` starts false: there is nothing to load
-  // until we know which venue.
+  // until the venue is known.
   final _pricingService = PricingService();
   PriceSuggestion? _price;
   bool _priceLoading = false;
   String? _priceVenueId;
 
-  // ── Chat (S.7 Wave B) ─────────────────────────────────────
+  // Chat (S.7 Wave B)
   // An owner's inbox is mostly booking rooms — the player asking whether the floodlights
-  // work, half an hour before they arrive. That is a message you cannot afford to miss,
+  // work, half an hour before they arrive. That is a message an owner cannot afford to miss,
   // which is why the count is live rather than fetched when the inbox opens.
   final ChatService _chat = ChatService();
   int _chatUnread = 0;
@@ -84,7 +84,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
     super.dispose();
   }
 
-  /// The badge is RE-READ on activity rather than counted up here: the server is what
+  /// The badge is re-read on activity rather than counted up here: the server is what
   /// decides what counts (muted rooms out, my own messages out), and a second copy of
   /// that rule on the client is how a badge starts disagreeing with the list it opens.
   /// The debounce keeps a busy room from turning into a request per message.
@@ -136,7 +136,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
   }
 
   /// Opens the slot picker. Returns only after the sheet closes, so the card and the
-  /// dashboard both refresh against the prices that were actually written — the
+  /// dashboard both refresh against the prices that were written — the
   /// server drops its cached suggestion for this venue on a successful apply, so the
   /// re-fetch is guaranteed to be recomputed rather than served stale.
   Future<void> _openApply() async {
@@ -282,7 +282,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         slivers: [
-          // ── APP BAR ──────────────────────────────────────
+          // App bar
           SliverAppBar(
             pinned: true,
             backgroundColor: AppColors.primary,
@@ -300,7 +300,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
             ]),
             // The avatar that used to sit here was a second route to a tab that is
             // already in the bottom bar. The two icons that replace it are the only
-            // things on this screen you cannot reach any other way.
+            // things on this screen that are unreachable any other way.
             actions: [
               HeaderIconButton(
                 icon: Icons.chat_bubble_outline,
@@ -316,7 +316,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
             ],
           ),
 
-          // ── STATS ROW ────────────────────────────────────
+          // STATS row
           SliverToBoxAdapter(
             child: Container(
               color: AppColors.primary,
@@ -353,13 +353,13 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
             ),
           ),
 
-          // ── MATCH RESULTS TO VERIFY (ER2.2) ──────────────
+          // MATCH results to verify (ER2.2)
           // Only rendered when the queue is non-empty: it is a task, not a
           // statistic, so an empty version of it would be noise every other day.
           if (_toVerify.isNotEmpty)
             SliverToBoxAdapter(child: _verifyCard()),
 
-          // ── QUICK ACTIONS ─────────────────────────────────
+          // Quick ACTIONS
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -413,7 +413,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
                 ]),
                 const SizedBox(height: 12),
                 // S.7 Wave D / FR4.16. Full width on purpose: the wallet card above
-                // says what the balance IS, and this is the only place that says where
+                // says what the balance is, and this is the only place that says where
                 // it came from -- every booking, its commission and its refunds, for a
                 // date range, as a CSV that opens in Excel.
                 Row(children: [
@@ -427,10 +427,10 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
             ),
           ),
 
-          // ── AI PRICE SUGGESTION (FR4.17) ─────────────────
+          // AI PRICE suggestion (FR4.17)
           // Real model output, not `base × 1.12`. The card decides for itself what it
           // is allowed to claim from the payload's `source`, and Apply is the only
-          // path from a suggestion to a price a player will actually be charged.
+          // path from a suggestion to a price a player will be charged.
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -448,7 +448,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
             ),
           ),
 
-          // ── WALLET CARD ──────────────────────────────────
+          // WALLET card
           SliverToBoxAdapter(
             child: GestureDetector(
               onTap: () => Navigator.pushNamed(context, '/owner-wallet'),
@@ -536,7 +536,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
             ),
           ),
 
-          // ── NEXT BOOKINGS HEADER ─────────────────────────
+          // Next bookings HEADER
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
@@ -556,7 +556,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
             ),
           ),
 
-          // ── BOOKINGS LIST ────────────────────────────────
+          // Bookings list
           upcoming.isEmpty
               ? SliverToBoxAdapter(
                   child: Padding(

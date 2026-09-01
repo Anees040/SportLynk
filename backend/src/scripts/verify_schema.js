@@ -1,45 +1,40 @@
 /**
  * verify_schema.js — prove the database has every object the code expects.
  *
- * WHY THIS EXISTS
- * ---------------
+ * Why this exists
  * There is no migration-tracking table in this project: migrations are applied by
  * hand-run runner scripts (run_migration_0XX.js), and nothing records that they
  * ran. So "is my database up to date?" cannot be answered by reading a version
  * number — it can only be answered by checking whether the objects each migration
- * creates are actually present.
+ * creates are present.
  *
- * That is what this script does. It is READ-ONLY: it creates nothing, changes
+ * That is what this script does. It is read-only: it creates nothing, changes
  * nothing, and is safe to run against the demo database at any time.
  *
- * THERE IS ONLY ONE DATABASE
- * --------------------------
+ * There is only one database
  * Supabase is it, for development and for the demo (see doc/claude.md). There is
  * no separate local Postgres to keep in sync, so a passing run here means the one
  * database every environment uses is current. The script prints the host it
  * checked, with credentials masked, so a run against the wrong URL is obvious
  * rather than silent — .env has historically carried a stale localhost line.
  *
- * WHAT IT CHECKS
- * --------------
+ * What it checks
  * Per migration: tables, named indexes, named constraints, and the specific
  * columns the application code reads. Named indexes and constraints are the
  * highest-signal evidence — `chk_matches_status` existing means 016 ran, and its
  * name is unique database-wide, so no table pairing is needed to look it up.
  *
  * Columns are listed explicitly rather than derived from the .sql files, because
- * the point is to check what the CODE depends on. A column a migration adds but
+ * the point is to check what the code depends on. A column a migration adds but
  * nothing reads is not worth failing a deploy over; a column routes/matches.js
  * selects on every request is.
  *
- * EXIT CODE
- * ---------
+ * Exit code
  * 0 when everything expected is present, 1 when anything is missing — so it can
  * gate a deploy or a demo. Missing objects are printed with the migration that
- * creates them, which is the file you then need to run.
+ * creates them, which is the file to run next.
  *
  * USAGE
- * -----
  *   node src/scripts/verify_schema.js
  *   node src/scripts/verify_schema.js --verbose   # list every passing object too
  */
@@ -61,7 +56,7 @@ const EXPECTED = [
     tables: ['team_invites', 'team_join_requests', 'matches', 'match_results',
       'disputes', 'elo_history', 'tournaments', 'tournament_teams', 'fixtures',
       'chat_channels', 'chat_messages', 'global_settings'],
-    // idx_chat_channels_ref is NOT listed: 013 creates it and 015 line 242 drops
+    // idx_chat_channels_ref is not listed: 013 creates it and 015 line 242 drops
     // it, replacing it with the unique partial ux_chat_channels_type_ref. Its
     // absence on an up-to-date database is correct, so expecting it would make
     // this script report a false failure forever.
@@ -119,10 +114,10 @@ const EXPECTED = [
   {
     migration: '016_matches_elo.sql',
     tables: [],
-    // ux_elo_history_team_match is NOT listed: 022 supersedes it (the key gained
+    // ux_elo_history_team_match is not listed: 022 supersedes it (the key gained
     // `reason`, so a dispute ruling can record its reversal and its re-ruling).
     // The successor is censused under 022 below, and listing the retired name here
-    // would report a MISS on a database that is correctly up to date.
+    // would report a miss on a database that is correctly up to date.
     indexes: ['ux_matches_booking_live',
       'ux_disputes_match_team', 'idx_matches_expiry', 'idx_matches_awaiting_owner',
       'idx_disputes_raised_by', 'idx_teams_elo_frozen'],
@@ -146,7 +141,7 @@ const EXPECTED = [
     tables: [],
     // The four tournament indexes 013 already made (idx_tournaments_status,
     // idx_tournaments_venue, idx_tournament_teams_team, idx_fixtures_tournament)
-    // are listed under 013 above and deliberately NOT repeated here — 019 does
+    // are listed under 013 above and deliberately not repeated here — 019 does
     // not create them, and CREATE INDEX IF NOT EXISTS matches on the name, so a
     // second entry over different columns would have silently no-opped.
     indexes: ['uq_fixtures_slot_id', 'idx_fixtures_match', 'idx_fixtures_sched',
@@ -165,7 +160,7 @@ const EXPECTED = [
       'chk_fixtures_status', 'chk_fixtures_coords', 'chk_fixtures_distinct_teams',
       'chk_fixtures_bye', 'chk_fixtures_scores', 'chk_teams_tournament_counters',
       'chk_matches_one_context', 'uq_fixtures_slot'],
-    // The columns the application code actually reads or writes. The four money
+    // The columns the application code reads or writes. The four money
     // columns on tournaments are the stored waterfall (pool = venue_cost + prize
     // + owner margin), fixtures.slot_id is the slot reservation that replaces a
     // bookings row, and the teams counters are the tournament record shown on the
@@ -201,8 +196,8 @@ const EXPECTED = [
     tables: ['user_devices', 'admin_audit'],
     // ux_notifications_group is the load-bearing one: notify() collapses with
     // ON CONFLICT (user_id, group_key) WHERE group_key IS NOT NULL AND
-    // is_read = false AND dismissed_at IS NULL, and Postgres can only infer a
-    // PARTIAL unique index when the index predicate is implied by that WHERE.
+    // is_read = false and dismissed_at IS NULL, and Postgres can only infer a
+    // partial unique index when the index predicate is implied by that WHERE.
     // If this index is missing or its predicate drifts, every grouped
     // notification raises 42P10 *inside a money transaction* — so its absence
     // must fail here rather than at 2am in a booking.
@@ -252,7 +247,7 @@ const EXPECTED = [
     // admin correction writes (admin_reversal, admin_ruling); 016's UNIQUE
     // (team_id, match_id) forbade the second row either label needs, so the
     // overturn branch of a dispute ruling died on a 23505 mid-transaction. The
-    // successor adds reason to the key: a second VERIFICATION still collides, a
+    // successor adds reason to the key: a second verification still collides, a
     // correction's reversal+ruling pair does not. If this index is absent, ruling
     // an already-rated match fails and nothing else shows why.
     indexes: ['ux_elo_history_team_match_reason'],

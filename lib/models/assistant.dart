@@ -6,8 +6,7 @@
 /// card type or a `source` value is added there, it is added here, and the two
 /// lists are meant to be diffable by eye.
 ///
-/// WHY THE CARD PAYLOADS ARE NOT TWELVE `fromJson` CLASSES
-/// ------------------------------------------------------
+/// Why the card payloads are not twelve `fromJson` classes
 /// Four of the twelve cards drive money or state — `venue`, `slot_picker`,
 /// `confirm`, `booking` — and those get real typed models, because a mis-read
 /// `deposit` or a dropped `slotId` is a wrong charge, not a cosmetic bug. The
@@ -613,7 +612,7 @@ class ScoutReply {
 
 /// The result of one `POST /message`.
 ///
-/// [ok] is false when the turn failed, and a failed turn STILL carries a
+/// [ok] is false when the turn failed, and a failed turn still carries a
 /// renderable [reply] — the backend rolls the transaction back and hands over a
 /// menu. The UI therefore draws a real bubble on failure rather than a toast that
 /// leaves the conversation looking like nothing happened.
@@ -807,7 +806,7 @@ class ScoutThread {
       );
 }
 
-/// One page of history, oldest-first, plus the cursor for the page BEFORE it.
+/// One page of history, oldest-first, plus the cursor for the page before it.
 ///
 /// [cursor] is an opaque message id, not a timestamp: two messages in the same
 /// turn share a `created_at` down to the microsecond, so paging by time can drop

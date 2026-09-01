@@ -13,11 +13,11 @@ import '../models/review.dart';
 class ReviewService {
   final ApiClient _api = ApiClient();
 
-  // ── Writes (raw envelope) ──────────────────────────────────────────────────
+  // Writes (raw envelope)
 
   /// Submit one review. `reviewType` is `'venue'` or `'opponent'`; for an opponent
-  /// review the backend DERIVES the reviewed captain from the booking, so we never
-  /// send a target id. `text` is omitted entirely when blank (a stars-only review
+  /// review the backend derives the reviewed captain from the booking, so the client
+  /// never sends a target id. `text` is omitted entirely when blank (a stars-only review
   /// is valid and simply won't carry a sentiment verdict).
   ///
   /// Returns the raw envelope. On 201 `data.sentiment` holds the live verdict; the
@@ -67,7 +67,7 @@ class ReviewService {
     );
   }
 
-  // ── Reads (typed) ──────────────────────────────────────────────────────────
+  // Reads (typed)
 
   /// One page of a venue's reviews plus the venue-wide aggregates. Returns
   /// [VenueReviews.empty] on any failure so the UI shows an empty state, not a crash.

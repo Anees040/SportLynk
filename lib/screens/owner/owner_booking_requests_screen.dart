@@ -204,7 +204,7 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
 
   /// Open the booking's room from the owner's side.
   ///
-  /// No channel id is resolved first, and that is deliberate: this is a LIST, and
+  /// No channel id is resolved first, and that is deliberate: this is a list, and
   /// resolving one id per card would be a request per row on every tab switch. The
   /// thread screen resolves the booking itself on open and says so plainly when
   /// there is no room — which is the only case this can be wrong about, a booking
@@ -243,7 +243,7 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
       ),
       child: Column(children: [
-        // ── HEADER ────────────────────────────────────────
+        // HEADER
         Padding(
           padding: const EdgeInsets.all(14),
           child: Row(children: [
@@ -287,7 +287,7 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
           ]),
         ),
 
-        // ── AUTO-APPROVE NOTICE (pending only) ─────────────
+        // Auto-approve notice (pending only)
         if (isPending)
           Container(
             margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -306,7 +306,7 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
             ]),
           ),
 
-        // ── BOOKING DETAILS ────────────────────────────────
+        // BOOKING details
         Container(
           margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
           padding: const EdgeInsets.all(12),
@@ -333,7 +333,7 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
           ]),
         ),
 
-        // ── ACTIONS ────────────────────────────────────────
+        // ACTIONS
         if (isPending)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),

@@ -252,14 +252,14 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void logout() {
-    // Revoke THIS phone's push token before the session token is thrown away --
+    // Revoke this phone's push token before the session token is thrown away --
     // `DELETE /notifications/devices` needs it to authenticate, and after this
     // method there is nothing left to send. Fire and forget: a logout must not wait
     // on the network, and the server also revokes on its own the first time FCM
     // reports the token dead.
     //
     // Why it matters that it happens at all: `user_devices.fcm_token` is UNIQUE on
-    // the TOKEN, so the row MOVES to whoever registers it next. On a shared or
+    // the TOKEN, so the row moves to whoever registers it next. On a shared or
     // handed-over phone, a token left registered keeps delivering the previous
     // user's notifications until someone else logs in -- a privacy leak, not a
     // bookkeeping detail.

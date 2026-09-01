@@ -186,7 +186,7 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
               ],
             ),
           ),
-        // ── CALENDAR WIDGET ──────────────────────────────
+        // Calendar widget
         Container(
           color: Colors.white,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
@@ -229,7 +229,7 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
         ),
         const Divider(height: 1, color: AppColors.border),
 
-        // ── SELECTED DATE HEADER ────────────────────────
+        // Selected date HEADER
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -248,7 +248,7 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
           ]),
         ),
 
-        // ── SLOTS LIST ──────────────────────────────────
+        // SLOTS list
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator(color: AppColors.accent))

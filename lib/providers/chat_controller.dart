@@ -6,7 +6,7 @@ import '../models/chat_message.dart';
 import '../services/chat_service.dart';
 import '../services/realtime_service.dart';
 
-/// Owns the live state of ONE open chat. Instantiated locally by ChatThreadScreen
+/// Owns the live state of one open chat. Instantiated locally by ChatThreadScreen
 /// (not a global provider) and disposed with it, so nothing leaks between chats.
 ///
 /// It fuses three sources into one coherent timeline:
@@ -15,8 +15,8 @@ import '../services/realtime_service.dart';
 ///     — all the same event; the client upserts by id)
 ///   • `receipt` / `typing` / `presence` events, which drive ticks and subtitles
 ///
-/// TICKS ARE COMPUTED, NOT STORED. For each of my messages the state is the
-/// weakest across every OTHER member: read only once the last person has read,
+/// Ticks are computed, not stored. For each of my messages the state is the
+/// weakest across every other member: read only once the last person has read,
 /// delivered only once the last device has it. That is what makes a group's blue
 /// tick mean "everyone", exactly like WhatsApp.
 class ChatController extends ChangeNotifier {
@@ -56,7 +56,7 @@ class ChatController extends ChangeNotifier {
   String? _error;
   int _sendCounter = 0;
 
-  // ── Public view ────────────────────────────────────────────
+  // Public view
   List<ChatMessage> get messages => _ordered;
   List<ChatMember> get members => _members.values.toList();
   bool get loading => _loading;
@@ -87,7 +87,7 @@ class ChatController extends ChangeNotifier {
     return online > 0 ? '$base · $online online' : base;
   }
 
-  // ── Init & teardown ────────────────────────────────────────
+  // Init & teardown
   Future<void> _init() async {
     _rt.ensureConnected(token);
     _subs.add(_rt.messages.listen(_onMessage));
@@ -148,7 +148,7 @@ class ChatController extends ChangeNotifier {
     super.dispose();
   }
 
-  // ── Sending ────────────────────────────────────────────────
+  // Sending
   String _newClientId() =>
       '${DateTime.now().microsecondsSinceEpoch}-${myUserId.hashCode}-${_sendCounter++}';
 
@@ -171,7 +171,7 @@ class ChatController extends ChangeNotifier {
     _reconcile(clientId, r);
   }
 
-  /// Called by the screen AFTER it has uploaded the picked image to Cloudinary.
+  /// Called by the screen after it has uploaded the picked image to Cloudinary.
   Future<void> sendImage({
     required String mediaUrl,
     String? mediaMime,
@@ -245,7 +245,7 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  // ── Reactions & delete ─────────────────────────────────────
+  // Reactions & delete
   Future<void> toggleReaction(String messageId, String emoji) async {
     final m = _byId[messageId];
     if (m == null || m.pending) return;
@@ -289,7 +289,7 @@ class ChatController extends ChangeNotifier {
     return _members[myUserId]?.isAdmin ?? false;
   }
 
-  // ── Live event handlers ────────────────────────────────────
+  // Live event handlers
   void _onMessage(Map<String, dynamic> data) {
     if ('${data['channel_id']}' != channelId) return;
     final m = ChatMessage.fromJson(data);
@@ -363,7 +363,7 @@ class ChatController extends ChangeNotifier {
     _markRead();
   }
 
-  // ── Tick computation ───────────────────────────────────────
+  // Tick computation
   TickState tickFor(ChatMessage m) {
     if (m.failed) return TickState.sending; // bubble draws its own error affordance
     if (m.pending) return TickState.sending;
@@ -383,7 +383,7 @@ class ChatController extends ChangeNotifier {
     return TickState.sent;
   }
 
-  // ── Read marking ───────────────────────────────────────────
+  // Read marking
   void _markRead() {
     if (_connected) {
       _rt.markRead(channelId);
@@ -396,10 +396,10 @@ class ChatController extends ChangeNotifier {
   void markReadNow() => _markRead();
 
   /// Announce (or clear) my typing state to the room. The composer decides the
-  /// cadence; we simply forward — a no-op when the socket is down.
+  /// cadence; this method forwards it — a no-op when the socket is down.
   void sendTyping(bool typing) => _rt.sendTyping(channelId, typing);
 
-  // ── Helpers ────────────────────────────────────────────────
+  // Helpers
   void _bump(Map<String, DateTime> map, String key, DateTime v) {
     final cur = map[key];
     if (cur == null || cur.isBefore(v)) map[key] = v;

@@ -137,7 +137,7 @@ class ScoutSourcePill extends StatelessWidget {
 
 /// A match percentage from a ranker.
 ///
-/// Draws NOTHING when [pct] is null. That is the whole point: a null means no
+/// Draws nothing when [pct] is null. That is the whole point: a null means no
 /// model scored this row, and "0% match" would be a confident claim about a
 /// calculation that never ran.
 class ScoutMatchBadge extends StatelessWidget {

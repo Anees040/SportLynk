@@ -7,7 +7,7 @@ class ApiConstants {
   ///
   /// ```
   /// flutter run                                                    # emulator
-  /// flutter run  --dart-define=API_BASE_URL=http://192.170.0.110:3000/api   # phone on your Wi-Fi
+  /// flutter run  --dart-define=API_BASE_URL=http://192.170.0.110:3000/api   # phone on the same Wi-Fi
   /// flutter build apk --release --dart-define=API_BASE_URL=https://<app>.onrender.com/api   # anywhere
   /// ```
   ///
@@ -60,7 +60,7 @@ class ApiConstants {
   /// reads this to know which slots exist before it offers to reprice any of them.
   static const String ownerSlots = '/owner/slots';
 
-  // ── Realtime (Socket.IO) ────────────────────────────────────
+  // Realtime (Socket.IO)
   /// The Socket.IO origin. The server mounts engine.io at the ROOT (`/socket.io`),
   /// not under `/api`, so the socket must connect to the bare origin — [baseUrl]
   /// with its trailing `/api` stripped. Getting this wrong is the classic "chat
@@ -70,7 +70,7 @@ class ApiConstants {
     return b.endsWith('/api') ? b.substring(0, b.length - 4) : b;
   }
 
-  // ── Teams (S2) ──────────────────────────────────────────────
+  // Teams (S2)
   static const String teams = '/teams';
   static const String myTeams = '/teams/mine';
   static const String teamRankings = '/teams/rankings';
@@ -87,7 +87,7 @@ class ApiConstants {
   static String leaveTeam(String id) => '/teams/$id/members/me';
   static String teamSuggestedPlayers(String id) => '/teams/$id/suggested-players';
 
-  // ── Chat (S2) ───────────────────────────────────────────────
+  // Chat (S2)
   static String chatForTeam(String teamId) => '/chat/team/$teamId';
   static String chatMessages(String channelId) => '/chat/$channelId/messages';
   static String chatRead(String channelId) => '/chat/$channelId/read';
@@ -95,9 +95,9 @@ class ApiConstants {
   static String chatReactions(String channelId, String messageId) => '/chat/$channelId/messages/$messageId/reactions';
   static String chatMessage(String channelId, String messageId) => '/chat/$channelId/messages/$messageId';
 
-  // ── Chat: the inbox and the other two channel types (S.7 Wave B) ──
+  // Chat: the inbox and the other two channel types (S.7 Wave B)
   /// The inbox itself. `type` filters to one of booking/captain/team; `cursor` is
-  /// the previous page's `sortAt`, passed back VERBATIM — it is keyed on the same
+  /// the previous page's `sortAt`, passed back verbatim — it is keyed on the same
   /// expression the server sorts by, so building one client-side would page wrong.
   static const String chats = '/chat';
   static const String chatUnreadCount = '/chat/unread-count';
@@ -106,9 +106,9 @@ class ApiConstants {
   static String chatMute(String channelId) => '/chat/$channelId/mute';
   static String chatQuickReplies(String channelId) => '/chat/$channelId/quick-replies';
 
-  // -- Notifications (S.7 Wave C) ------------------------------
-  /// The feed. `cursor` is the previous page's `nextCursor`, passed back VERBATIM:
-  /// it is a `"<createdAt>~<id>"` PAIR, not a timestamp, because one transaction
+  // Notifications (S.7 Wave C)
+  /// The feed. `cursor` is the previous page's `nextCursor`, passed back verbatim:
+  /// it is a `"<createdAt>~<id>"` pair, not a timestamp, because one transaction
   /// routinely writes several notifications (a booking approval alerts the player
   /// and the owner) and a timestamp-only cursor silently drops every tied row
   /// after the first at a page boundary. The client must never build or parse it.
@@ -122,7 +122,7 @@ class ApiConstants {
   static String notificationUnread(String id) => '/notifications/$id/unread';
   static String notification(String id) => '/notifications/$id';
 
-  // ── Matches (S2 Wave C) ─────────────────────────────────────
+  // Matches (S2 Wave C)
   /// The match list is `?team_id=` (snake) because it mirrors the SQL column,
   /// while the pairing reads take `teamId`/`challengerTeam` — the backend is the
   /// authority on each name, so they are spelled out here once rather than
@@ -139,7 +139,7 @@ class ApiConstants {
   static String matchVerify(String id) => '/matches/$id/verify';
   static String matchDispute(String id) => '/matches/$id/dispute';
 
-  // ── Reviews & Trust 2.0 (S.4 Wave D) ────────────────────────
+  // Reviews & Trust 2.0 (S.4 Wave D)
   /// Reviews mount at the bare `/api` root (not under a `/reviews` collection for
   /// the reads): the write is `POST /api/reviews`, but a venue's reviews hang off
   /// the venue and a user's off the user, mirroring the routes in `reviews.js`.
@@ -148,15 +148,15 @@ class ApiConstants {
   static String userReviews(String userId) => '/users/$userId/reviews';
   static String flagReview(String reviewId) => '/reviews/$reviewId/flag';
 
-  // ── Admin moderation (S.4 Wave D) ───────────────────────────
+  // Admin moderation (S.4 Wave D)
   /// Under `/api/admin`, behind `checkRole('admin')`. The queue is every review
-  /// needing an eye (reported OR model-escalated OR already hidden); the PATCH
+  /// needing an eye (reported or model-escalated or already hidden); the PATCH
   /// takes `{action: 'hide'|'restore'|'dismiss'}`.
   static const String adminFlaggedReviews = '/admin/reviews/flagged';
   static String adminModerateReview(String reviewId) => '/admin/reviews/$reviewId';
 
-  // ── Scout, the assistant (S.6 Wave D) ───────────────────────
-  /// Every player-facing turn goes through the ONE `POST /message`: typed text
+  // Scout, the assistant (S.6 Wave D)
+  /// Every player-facing turn goes through the one `POST /message`: typed text
   /// and a tapped chip are the same request, distinguished only by whether the
   /// body carries `action`. That is deliberate — a chip must not need a second
   /// endpoint, because the whole point of a chip is to reach a capability the
@@ -170,8 +170,8 @@ class ApiConstants {
   static String assistantFeedback(String messageId) =>
       '/assistant/messages/$messageId/feedback';
 
-  // ── Tournaments (S.7 Wave A) ────────────────────────────────
-  /// Module 6. `/mine` and `/preview` are declared BEFORE `/:id` on the server, so
+  // Tournaments (S.7 Wave A)
+  /// Module 6. `/mine` and `/preview` are declared before `/:id` on the server, so
   /// they are real endpoints and not a tournament whose id happens to be "mine" —
   /// spelled out here in the same order for anyone comparing the two files.
   ///
@@ -192,13 +192,13 @@ class ApiConstants {
   static String tournamentFixtureWalkover(String id, String fixtureId) =>
       '/tournaments/$id/fixtures/$fixtureId/walkover';
 
-  // -- Admin: disputes, users, settings (S.7 Wave D) -----------
-  /// All of these sit under `/api/admin`, which mounts ONE
+  // Admin: disputes, users, settings (S.7 Wave D)
+  /// All of these sit under `/api/admin`, which mounts one
   /// `auth + checkRole('admin')` above every sub-router -- so there is no
   /// per-path authorisation to remember here, and a new admin path cannot ship
   /// without a gate. See the header of `backend/src/routes/admin.js`.
   ///
-  /// Both list cursors (`adminDisputes`, `adminUsers`) are OPAQUE and must be
+  /// Both list cursors (`adminDisputes`, `adminUsers`) are opaque and must be
   /// passed back verbatim. The dispute cursor is a
   /// `"<severityElo>~<createdAt>~<id>"` triple because the queue is sorted by
   /// what is at stake and only then by age; the user cursor is
@@ -211,12 +211,12 @@ class ApiConstants {
   static const String adminSettings = '/admin/settings';
   static const String adminSettingsReset = '/admin/settings/reset';
 
-  // -- Financial export (S.7 Wave D / FR4.16) ------------------
-  /// One generator, two scopes. `?from&to` are REQUIRED `YYYY-MM-DD` and the span
+  // Financial export (S.7 Wave D / FR4.16)
+  /// One generator, two scopes. `?from&to` are required `YYYY-MM-DD` and the span
   /// is capped server-side at 366 days; `?format=json` previews the same walk the
   /// CSV streams, so the screen's totals cannot disagree with the file.
   ///
-  /// The CSV is NOT fetched through [ApiClient] -- it answers `text/csv`, not the
+  /// The CSV is not fetched through [ApiClient] -- it answers `text/csv`, not the
   /// `{success, ...}` envelope every other route uses. See `ReportService`.
   static const String ownerFinancialReport = '/owner/reports/financial';
   static const String adminPlatformReport = '/admin/reports/platform';

@@ -1,47 +1,47 @@
 /**
- * Reviews API (S.4 Wave C) — the first code that ever WRITES the reviews table.
+ * Reviews API (S.4 Wave C) — the first code that ever writes the reviews table.
  *
- * FOUR ENDPOINTS, ONE FEATURE FILE
+ * Four ENDPOINTS, one feature file
  *   POST /api/reviews                 leave a venue or opponent review        (FR9.1)
  *   GET  /api/venues/:id/reviews      a venue's reviews + rating/sentiment    (FR9.x)
- *   GET  /api/users/:id/reviews       reviews a user RECEIVED + trust ledger  (ER2.5)
+ *   GET  /api/users/:id/reviews       reviews a user received + trust ledger  (ER2.5)
  *   POST /api/reviews/:id/flag        report a review to moderation           (FR9.9)
  *
  * The two GETs are addressed under /api/venues and /api/users, not /api/reviews,
  * so this router is mounted at the bare `/api` root (see server.js) and every
  * handler declares `auth` explicitly rather than the file using `router.use(auth)`.
- * A router-level guard at `/api` would run on EVERY /api request that fell through
+ * A router-level guard at `/api` would run on every /api request that fell through
  * to this mount — including /api/auth/login — and 401 it. Per-route auth keeps the
  * guard on exactly the four paths below, and matches routes/bookings.js's style.
  *
- * TWO REVIEW SHAPES, DECIDED IN THE PLAN
+ * Two REVIEW shapes, decided in the PLAN
  *   venue:    reviewer = the booker, gated on booking.status = 'checked_in' (they
- *             actually turned up). Target is the venue; reviewed_user_id is NULL.
- *   opponent: CAPTAIN-TO-CAPTAIN. Only a role='captain' member of one of the match's
- *             two teams may file it, and the target reviewed_user_id is DERIVED as
+ *             turned up). Target is the venue; reviewed_user_id is NULL.
+ *   opponent: captain-to-captain. Only a role='captain' member of one of the match's
+ *             two teams may file it, and the target reviewed_user_id is derived as
  *             the opposing team's representative captain — never taken from the body.
  *             A match has ~11 players a side but reviews.reviewed_user_id is one user,
  *             and the captain is the team's single representative (utils/trustScore).
  *
- * WHY SENTIMENT IS SCORED BEFORE THE TRANSACTION OPENS
+ * Why sentiment is scored before the transaction opens
  *   Scoring a review's text is a ≤2s network call to the ml-service. Making it while
  *   holding a `FOR UPDATE` lock on the booking row would pin that lock for the whole
- *   round-trip. So the flow is: authorise + derive the target with an UNLOCKED read
- *   (which also means an unauthorised request never reaches the ml-service), THEN
- *   score, THEN open the transaction, re-resolve under the lock, and insert. If the
+ *   round-trip. So the flow is: authorise + derive the target with an unlocked read
+ *   (which also means an unauthorised request never reaches the ml-service), then
+ *   score, then open the transaction, re-resolve under the lock, and insert. If the
  *   model is unavailable the review still saves with sentiment_label NULL — the
  *   honest "not scored yet" state — and jobs/sentimentBackfillJob.js fills it in
  *   later. Nothing here invents a label; that is mlClient's no-heuristic contract.
  *
- * WHY reviews.flagged IS A UNION
- *   `flagged` means "a human should look at this", for EITHER reason: the sentiment
+ * Why reviews.flagged is A UNION
+ *   `flagged` means "a human should look at this", for either reason: the sentiment
  *   model escalated it (needsReview — abuse or strongly negative) at creation, or a
  *   participant reported it via /flag. The review_flags table records the manual
  *   reports specifically (who/why, an admin queue mirroring `disputes`); an
  *   auto-escalation sets `flagged` without a review_flags row. See migration 017.
  *
- * ENVELOPE + ERRORS follow routes/matches.js exactly: { success, message } / { success,
- * data }, friendlyDbError keyed on the constraint NAME, and never a raw SQL string on
+ * Envelope + errors follow routes/matches.js exactly: { success, message } / { success,
+ * data }, friendlyDbError keyed on the constraint name, and never a raw SQL string on
  * the wire (golden rule 5).
  */
 
@@ -53,7 +53,7 @@ const { recomputeTrust, representativeCaptain } = require('../utils/trustScore')
 
 const router = express.Router();
 
-// ─── Envelope helpers (same shape as routes/matches.js) ─────────────────────
+// Envelope helpers (same shape as routes/matches.js)
 const fail = (res, status, message) => res.status(status).json({ success: false, message });
 const ok = (res, data, message) => res.json({ success: true, data, ...(message ? { message } : {}) });
 
@@ -65,7 +65,7 @@ async function bail(client, res, status, message) {
 
 /**
  * DB errors this flow can legitimately produce, turned into friendly envelopes.
- * Keyed on the constraint NAME: two different unique violations reach here and
+ * Keyed on the constraint name: two different unique violations reach here and
  * "already exists" answers neither well. Anything unrecognised returns null and
  * goes to next(e) → a generic 500, never a raw SQL string (golden rule 5).
  */
@@ -86,7 +86,7 @@ function friendlyDbError(e) {
   return null;
 }
 
-// ─── Small parsers / normalisers ────────────────────────────────────────────
+// Small parsers / normalisers
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuid = (v) => String(v ?? '').trim().toLowerCase();
@@ -97,7 +97,7 @@ const num = (v) => (v === null || v === undefined ? null : Number(v));
 
 const REVIEW_TYPES = ['venue', 'opponent'];
 
-/** Longest review body we accept. Comfortably under the ml-service's 4,000-char cap. */
+/** Longest review body the API accepts. Comfortably under the ml-service's 4,000-char cap. */
 const REVIEW_TEXT_MAX = 2000;
 /** A flag reason is a short note for a moderator, not an essay. */
 const FLAG_REASON_MAX = 500;
@@ -160,7 +160,7 @@ async function nameOf(db, userId) {
 }
 
 /**
- * Authorise the caller for this review and DERIVE its target, using whichever pg
+ * Authorise the caller for this review and derive its target, using whichever pg
  * runner is passed (pool for the unlocked pre-flight, the txn client — with
  * lock:true — for the authoritative re-check). One function so the pre-flight and
  * the in-transaction check can never drift apart.
@@ -243,9 +243,7 @@ async function resolveReviewContext(db, { bookingId, reviewType, callerId, lock 
   return { ok: true, booking, match, reviewedUserId, venueId: null };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // POST /api/reviews — leave a venue or opponent review
-// ═══════════════════════════════════════════════════════════════════════════
 
 router.post('/reviews', auth, async (req, res, next) => {
   const bookingId = uuid(req.body.booking_id ?? req.body.bookingId);
@@ -264,12 +262,12 @@ router.post('/reviews', auth, async (req, res, next) => {
   if (!parsedText.ok) return fail(res, 400, parsedText.message);
   const text = parsedText.value;
 
-  // 1) Authorise + derive target with an UNLOCKED read. An unauthorised request
+  // 1) Authorise + derive target with an unlocked read. An unauthorised request
   //    returns here and never reaches the ml-service.
   const pre = await resolveReviewContext(pool, { bookingId, reviewType, callerId });
   if (!pre.ok) return fail(res, pre.status, pre.message);
 
-  // 2) Score sentiment BEFORE the transaction — no lock is held during the ≤2s call.
+  // 2) Score sentiment before the transaction — no lock is held during the ≤2s call.
   //    Unavailable → nulls stored; the backfill job fills them in later.
   const sentiment = text ? await ml.analyzeSentiment(text) : null;
   const label = sentiment && sentiment.available ? sentiment.label : null;
@@ -316,7 +314,7 @@ router.post('/reviews', auth, async (req, res, next) => {
 
     if (reviewType === 'venue') {
       // Refresh the denormalised aggregate the listings already read (player.js,
-      // venues.js). Averaged over VISIBLE venue reviews only, so a hidden review
+      // venues.js). Averaged over visible venue reviews only, so a hidden review
       // stops counting the moment it is hidden.
       await client.query(
         `UPDATE venues
@@ -370,9 +368,7 @@ router.post('/reviews', auth, async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // GET /api/venues/:id/reviews — a venue's visible reviews + aggregates
-// ═══════════════════════════════════════════════════════════════════════════
 
 router.get('/venues/:id/reviews', auth, async (req, res, next) => {
   try {
@@ -384,7 +380,7 @@ router.get('/venues/:id/reviews', auth, async (req, res, next) => {
 
     const { page, limit, offset } = pageParams(req.query);
 
-    // Aggregates over ALL visible venue reviews (not just this page). The sentiment
+    // Aggregates over all visible venue reviews (not just this page). The sentiment
     // distribution counts canonical labels only — a NULL (unscored) label is not a
     // fourth bucket, it is simply absent from all three. The per-star counts feed the
     // ratings histogram; they are venue-wide for the same reason the average is —
@@ -454,9 +450,7 @@ router.get('/venues/:id/reviews', auth, async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// GET /api/users/:id/reviews — reviews a user RECEIVED + their trust ledger
-// ═══════════════════════════════════════════════════════════════════════════
+// GET /api/users/:id/reviews — reviews a user received + their trust ledger
 
 router.get('/users/:id/reviews', auth, async (req, res, next) => {
   try {
@@ -527,9 +521,7 @@ router.get('/users/:id/reviews', auth, async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // POST /api/reviews/:id/flag — report a review to moderation (FR9.9)
-// ═══════════════════════════════════════════════════════════════════════════
 
 router.post('/reviews/:id/flag', auth, async (req, res, next) => {
   const reviewId = uuid(req.params.id);

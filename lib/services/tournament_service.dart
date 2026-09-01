@@ -10,7 +10,7 @@ import 'api_service.dart';
 /// sentence.
 ///
 /// That split matters more here than anywhere else in the app, because this API's
-/// failures are RULES and not faults. "Knockout needs a power of two: 2, 4, 8, 16 or
+/// failures are rules and not faults. "Knockout needs a power of two: 2, 4, 8, 16 or
 /// 32", "the last spot went while you were deciding", "you are PKR 1,200 short",
 /// "round 2 needs 4 hours and the venue has 3" are all sentences somebody has to read
 /// verbatim to know what to do next; a generic "Something went wrong" would leave an
@@ -19,12 +19,12 @@ import 'api_service.dart';
 /// Nothing here decides authority or money. Owner-only, captain-only, before the
 /// deadline, enough balance, the whole entry-fee waterfall — all of it is enforced
 /// server-side inside a locked transaction. The flags these methods surface
-/// (`canRegister`, `canGenerate`) exist to avoid OFFERING an action that would be
+/// (`canRegister`, `canGenerate`) exist to avoid offering an action that would be
 /// refused, never to permit one.
 class TournamentService {
   final ApiClient _api = ApiClient();
 
-  // ── Reads ──────────────────────────────────────────────────
+  // Reads
 
   /// SRS FE-2 — browse open tournaments, filtered by sport, city and start date.
   ///
@@ -91,7 +91,7 @@ class TournamentService {
     return MyTournaments.fromJson(Map<String, dynamic>.from(r['data'] as Map));
   }
 
-  // ── Owner: the economics quote (SRS FE-1) ──────────────────
+  // Owner: the economics quote (SRS FE-1)
 
   /// `POST /tournaments/preview` — what this tournament would earn, before it exists.
   ///
@@ -100,7 +100,7 @@ class TournamentService {
   /// and a dozen fields in a query string would be worse than POSTing a read.
   ///
   /// This is the endpoint that stops an owner guessing a fee that loses them money: it
-  /// prices the REAL slots the fixtures would take, quotes both a full field and the
+  /// prices the real slots the fixtures would take, quotes both a full field and the
   /// worst legal turnout, and recommends a fee that survives the latter.
   Future<Map<String, dynamic>> previewRaw(
     String token, {
@@ -191,7 +191,7 @@ class TournamentService {
     return TournamentPreview.fromJson(Map<String, dynamic>.from(r['data'] as Map));
   }
 
-  // ── Owner: create and run (FE-1, FE-5, FE-6, FE-7) ─────────
+  // Owner: create and run (FE-1, FE-5, FE-6, FE-7)
 
   /// `POST /tournaments` — post a tournament at one of my own venues.
   ///
@@ -300,7 +300,7 @@ class TournamentService {
         token: token,
       );
 
-  /// A team did not turn up. Deliberately NOT a 3-0: a walkover means no game was
+  /// A team did not turn up. Deliberately not a 3-0: a walkover means no game was
   /// played, so the fixture's K-factor is 0 and nobody's rating moves. Recording it as
   /// a scoreline would hand the other side free rating points for a match that never
   /// happened.
@@ -332,11 +332,11 @@ class TournamentService {
         token: token,
       );
 
-  // ── Captain: entry and withdrawal (SRS FE-3) ───────────────
+  // Captain: entry and withdrawal (SRS FE-3)
 
   /// `POST /tournaments/:id/register` — enter a team and freeze the entry fee.
   ///
-  /// The team comes from the body but the AUTHORITY does not: the service reads
+  /// The team comes from the body but the authority does not: the service reads
   /// `teams.captain_id` inside the locked transaction, so sending somebody else's team
   /// id is a 403 and not an entry. The fee moves `balance -> frozen`, which is why the
   /// UI puts a confirmation in front of this and prints the response verbatim — "you

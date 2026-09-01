@@ -1,14 +1,14 @@
 /**
  * chatList.js — the reads behind the chat list (S.7 Wave B).
  *
- * WHY THESE ARE NOT INLINE IN routes/chat.js
- * Every function here takes a `client`, exactly like bookingService's CORE
+ * Why these are not inline in routes/chat.js
+ * Every function here takes a `client`, exactly like bookingService's core
  * functions do. The routes pass `pool`; check_chat.js passes its own open
  * transaction and rolls it back. That is what makes it possible to verify the
- * REAL query against real rows without leaving any behind — a check script that
+ * real query against real rows without leaving any behind — a check script that
  * re-implements the query proves the copy, not the endpoint.
  *
- * WHY `context` IS COMPUTED SERVER-SIDE
+ * Why `context` is computed server-side
  * A row reading "Shalimar Cricket Academy" is a name; a row reading
  * "Confirmed · Sat 5 Sep, 6:00 pm" is a reason to tap. The subtitle depends on
  * the booking's current status or the match's scoreline, both of which live in
@@ -16,7 +16,7 @@
  * extra indexed read per channel TYPE (never per row) and saves the client N
  * round trips plus a second copy of the status vocabulary.
  *
- * ASSISTANT CHANNELS ARE EXCLUDED EVERYWHERE IN THIS FILE. Scout has its own
+ * ASSISTANT channels are excluded everywhere in this file. Scout has its own
  * screen and its own entry point; listing it here would put a robot at the top
  * of a human inbox.
  */
@@ -29,7 +29,7 @@ function humanStatus(s) {
 /**
  * 2026-09-05 + '18:00:00' -> 'Sat 5 Sep, 6:00 pm'.
  *
- * bookings.slot_date/start_time are PKT WALL CLOCK, not instants, so they are
+ * bookings.slot_date/start_time are PKT wall clock, not instants, so they are
  * formatted as written and never passed through a timezone conversion — the same
  * rule bookingService.localDateStr follows for the same reason.
  */
@@ -38,7 +38,7 @@ function slotLabel(slotDate, startTime) {
   const parts = d.split('-');
   if (parts.length !== 3) return d;
   const dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-  // Three dash-separated parts is not the same as three NUMBERS: 'not-a-date' splits
+  // Three dash-separated parts is not the same as three numbers: 'not-a-date' splits
   // cleanly and then formats as the literal string "Invalid Date", which would reach
   // a chat row as its subtitle. A subtitle is decoration and must degrade to the raw
   // value rather than to a word the user will read as a fault in their booking.
@@ -74,7 +74,7 @@ async function contextFor(client, rows, userId) {
       [byType.booking],
     );
     for (const b of q.rows) {
-      // The COUNTERPARTY, not "the venue": the owner reading this list needs the
+      // The counterparty, not "the venue": the owner reading this list needs the
       // player's name, and the player needs the venue's. One row, two titles.
       const iAmPlayer = String(b.player_id) === String(userId);
       out.set(String(b.id), {
@@ -105,7 +105,7 @@ async function contextFor(client, rows, userId) {
       [byType.captain, userId],
     );
     for (const m of q.rows) {
-      // "Falcons vs Titans" always reads with MY team first. The row is written
+      // "Falcons vs Titans" always reads with my team first. The row is written
       // per viewer even though the room is shared, because a list is read alone.
       const mine = m.on_challenger ? m.challenger_name : m.opponent_name;
       const theirs = m.on_challenger ? m.opponent_name : m.challenger_name;
@@ -150,9 +150,9 @@ async function contextFor(client, rows, userId) {
 // is the same column POST /:channelId/read moves, so the number the badge shows
 // is the number opening the thread clears.
 //
-// System messages COUNT (a "booking cancelled" pill is news); tombstones do not
-// (a deleted message must not leave a permanent +1 nobody can clear); and your
-// own messages never do.
+// System messages count (a "booking cancelled" pill is news); tombstones do not
+// (a deleted message must not leave a permanent +1 nobody can clear); and the
+// reader's own messages never do.
 const UNREAD_SQL = `(SELECT count(*) FROM chat_messages x
     WHERE x.channel_id = c.id
       AND x.deleted_at IS NULL
@@ -200,7 +200,7 @@ async function listChats(client, { userId, limit = 30, cursor = null, type = nul
       refId: r.ref_id,
       // The channel's stored title wins when it has one (a team rename is synced
       // into it); the context title is the fallback, and it is what booking and
-      // captain rooms actually display.
+      // captain rooms display.
       title: r.title || (c && c.title) || 'Chat',
       imageUrl: r.image_url || (c && c.imageUrl) || null,
       lastMessageAt: r.last_message_at,
@@ -222,7 +222,7 @@ async function listChats(client, { userId, limit = 30, cursor = null, type = nul
 /**
  * The header badge, in one round trip.
  *
- * MUTED ROOMS ARE EXCLUDED. A badge that counts a conversation the user
+ * MUTED rooms are excluded. A badge that counts a conversation the user
  * explicitly silenced is why people turn badges off altogether; the room still
  * shows its own count in the list, where it is information rather than a nag.
  */
@@ -251,7 +251,7 @@ async function unreadCounts(client, userId) {
 }
 
 /**
- * Resolve a channel id from the thing it is ABOUT, membership-gated.
+ * Resolve a channel id from the thing it is about, membership-gated.
  *
  * Gating on membership rather than on "is this your booking?" is deliberate: the
  * room's members ARE the booking's participants, so one rule covers both and
@@ -271,8 +271,8 @@ async function channelForRef(client, { type, refId, userId }) {
 /**
  * Mute or unmute one room for one member. `until` is null to clear.
  *
- * A TIMESTAMP, NOT A BOOLEAN, and that is the point: "mute for 8 hours" is what
- * people actually want from a booking room the night before a match, and it
+ * A timestamp, not a boolean, and that is the point: "mute for 8 hours" is what
+ * people want from a booking room the night before a match, and it
  * expires by itself so nobody discovers three weeks later that they silenced
  * their own team. `muted_until` has existed since migration 013 and nothing has
  * ever written it.

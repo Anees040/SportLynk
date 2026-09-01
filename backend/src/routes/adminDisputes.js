@@ -2,13 +2,13 @@
  * adminDisputes.js — S.7 Wave D · FR10.6 / FR10.7. The dispute queue, the case
  * file, and the ruling.
  *
- * MOUNTING
- * Mounted INTO `routes/admin.js`, after its single
+ * Mounting
+ * Mounted into `routes/admin.js`, after its single
  * `router.use(auth, checkRole('admin'))` — the same reason as `adminUsers.js`:
  * one place in the codebase decides who is an admin, and a new admin surface must
  * not be able to forget to ask. Paths here are relative to `/api/admin`.
  *
- * WHY THE RULING IS A SERVICE CALL AND THIS FILE IS THIN
+ * Why the RULING is a service call and this file is thin
  * A ruling reverses a rating exchange, re-rates two teams, closes both sides'
  * disputes, unfreezes what the freeze was waiting on, advances a bracket and
  * writes an audit row — and either all of that is true or none of it is. So the
@@ -16,9 +16,9 @@
  * read end to end, and this file owns only what a route should own: `BEGIN`, the
  * HTTP shape, and `emitAfterCommit` once the transaction is durable.
  *
- * WHY THE CASE FILE IS A POOL READ AND NOT A TRANSACTION
+ * Why the case file is a pool read and not a transaction
  * An admin reads a case file for minutes. Holding a transaction open for that is
- * how you get an idle-in-transaction session sitting on rows the players are
+ * how an idle-in-transaction session ends up sitting on rows the players are
  * trying to use.
  */
 const express = require('express');
@@ -80,12 +80,12 @@ router.get('/disputes/:id', async (req, res, next) => {
  *   { action: 'rule_challenger'|'rule_opponent'|'rule_draw'|'rule_custom'|'dismiss',
  *     scoreChallenger?, scoreOpponent?, note }
  *
- * ONE transaction, through the same path as the owner's
+ * One transaction, through the same path as the owner's
  * `POST /api/matches/:id/verify`: lock the match, rate inside the transaction,
  * stamp `elo_applied`, advance the bracket, then fan out. `note` is required — the
  * teams are told what it says, so a ruling with no explanation is not a ruling.
  *
- * AFTER commit, and only after, `mc.emitAfterCommit` pushes the chat pills and the
+ * After commit, and only after, `mc.emitAfterCommit` pushes the chat pills and the
  * `match:update` frames. Emitting inside the transaction would tell both apps to
  * re-fetch a match that is not committed yet, and they would read the old one.
  */
@@ -136,9 +136,9 @@ router.patch('/disputes/:id', async (req, res, next) => {
 
 /**
  * The one sentence an admin reads after ruling. It says out loud the two things
- * they cannot see from the row: whether any rating actually moved, and whether the
+ * they cannot see from the row: whether any rating moved, and whether the
  * bracket followed. `already_settled` means this fixture's winner had already
- * advanced — the rating is corrected, the bracket is NOT rewritten, and pretending
+ * advanced — the rating is corrected, the bracket is not rewritten, and pretending
  * otherwise is how a tournament ends up with a final nobody can explain.
  */
 function messageFor(out) {

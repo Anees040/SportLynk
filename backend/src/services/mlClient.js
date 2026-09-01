@@ -1,21 +1,19 @@
 /**
  * mlClient.js — the backend's only door to the Python ML service.
  *
- * WHY THIS FILE IS ALLOWED TO EXIST AT ALL
- * ----------------------------------------
+ * Why this file is allowed to exist at all
  * SportLynk gained a third process in S.3 (ml-service/, FastAPI + scikit-learn).
  * A third process is a third thing that can be down, and the owner dashboard is
  * not allowed to break because a Python service on port 8000 is not running —
  * which, in development, is most of the time.
  *
- * So this module has one job: make the ml-service OPTIONAL. Every caller gets a
+ * So this module has one job: make the ml-service optional. Every caller gets a
  * usable answer, and every answer says truthfully where it came from. Nothing in
  * here throws. Nothing in here leaks a message from the network layer to a client.
  * That is ER2.6's graceful-degradation requirement expressed as code rather than
  * as a paragraph.
  *
- * WHY `source` IS ON EVERY RESPONSE
- * ---------------------------------
+ * Why `source` is on every response
  * `source: 'model'` means a trained scikit-learn model produced this number.
  * `source: 'heuristic'` means the ml-service could not be reached (or has no model
  * yet) and a hard-coded business rule produced it instead.
@@ -30,18 +28,16 @@
  * The corollary, which is the reason ml-service has no fallback of its own: if the
  * Python service quietly answered `base * 1.15` when it had no model, every
  * response would arrive labelled `source: 'model'` and the label would be a lie.
- * The rule therefore lives HERE, on the far side of a failed call, where its use is
+ * The rule therefore lives here, on the far side of a failed call, where its use is
  * unambiguous. Same principle as utils/matchPreview.js's PREVIEW_LABEL.
  *
- * WHY confidence AND demand ARE null ON THE HEURISTIC PATH
- * -------------------------------------------------------
+ * Why confidence and demand are null on the heuristic path
  * A hard-coded 15% uplift has no confidence. Emitting `confidence: 0.5` so the UI
  * always has something to render would be inventing a statistic, and it would be
  * indistinguishable on screen from a real one. Null is the honest value, and the
  * dashboard hides the confidence chip when it is null.
  *
- * WHY `fetch` AND NOT axios
- * -------------------------
+ * Why `fetch` and not axios
  * The wave text said axios. Node here is v22 (`engines: >=20`), where global
  * `fetch` and `AbortSignal.timeout()` are stable and give the exact 2-second
  * timeout the wave asks for. scripts/run_match_flow_check.js already uses `fetch`,
@@ -49,25 +45,23 @@
  * surface for zero functional gain. The contract the wave specified — 2s timeout,
  * ML_* env vars, heuristic fallback, a `source` field — is implemented exactly.
  *
- * GUARDRAILS APPLY TO BOTH PATHS
- * ------------------------------
+ * Guardrails apply to both paths
  * A model must never be able to suggest PKR 47 or PKR 190,000 to a real venue
  * owner. Every suggestion, model or heuristic, is clamped into
  * [base x 0.70, base x 1.50] and rounded to the nearest PKR 50, and `clamped: true`
  * says when the raw suggestion was outside. The band is not arbitrary: it is the
- * same PRICE_RATIO_MIN/MAX the model is TRAINED on, so a suggestion is always
+ * same PRICE_RATIO_MIN/max the model is trained on, so a suggestion is always
  * interpolation inside the trained range rather than extrapolation beyond it.
  *
- * CIRCUIT BREAKER
- * ---------------
+ * Circuit breaker
  * Without one, every owner-dashboard load pays the full 2s timeout while the
  * ml-service is off. Three consecutive failures open the breaker for 30s, during
- * which calls go straight to the heuristic. Logging happens on state TRANSITIONS
+ * which calls go straight to the heuristic. Logging happens on state transitions
  * only, in the spirit of utils/globalSettings.js's warnOnce — one line when it
  * opens, one when it recovers, not one per request.
  */
 
-// ─── Configuration ────────────────────────────────────────────
+// Configuration
 // Read at call time, not at module load, so tests and scripts can set the env
 // vars after requiring this module — and so a service started before .env was
 // finished picks up the change on restart rather than caching an empty string.
@@ -78,15 +72,15 @@ const DEFAULT_TIMEOUT_MS = 2000;
 /**
  * Evening peak window, inclusive, in PKT hours.
  *
- * DUPLICATED from ml-service/app/core/features.py, which is the SOURCE OF TRUTH.
+ * Duplicated from ml-service/app/core/features.py, which is the SOURCE of truth.
  * Node cannot import a Python module, so these two numbers necessarily exist
  * twice. Silent drift between two definitions of "peak" is the obvious future bug:
  * the model would value one set of hours and the fallback a different set, and
  * nobody would notice because both paths keep returning plausible numbers.
  *
  * That is why the ml-service exposes GET /features/spec and why
- * scripts/check_ml_service.js ASSERTS these constants match it. If you change them
- * here, change features.py in the same commit — the check will fail otherwise.
+ * scripts/check_ml_service.js asserts these constants match it. A change here needs
+ * the matching change to features.py in the same commit, or that check fails.
  */
 const PEAK_START_HOUR = 18;
 const PEAK_END_HOUR = 22;
@@ -104,7 +98,7 @@ const HEURISTIC_PEAK_MULTIPLIER = 1.15;
 /**
  * Guardrail band, as a multiple of the venue's own price_per_hour.
  *
- * Same values as PRICE_RATIO_MIN/MAX in features.py — deliberately, so the clamp
+ * Same values as PRICE_RATIO_MIN/max in features.py — deliberately, so the clamp
  * band and the trained band are identical and a clamped suggestion is never an
  * extrapolation. Also asserted against /features/spec by check_ml_service.js.
  */
@@ -127,19 +121,19 @@ const BREAKER_COOLDOWN_MS = 30_000;
 /**
  * Demand-level thresholds for the forecast chart's colours.
  *
- * These live HERE, not in the ml-service, on purpose. "Is 0.41 a high-demand hour"
+ * These live here, not in the ml-service, on purpose. "Is 0.41 a high-demand hour"
  * is a presentation question, not a modelling one — the model's job ends at
  * P(book) = 0.41, and turning that into a colour is a product decision that must
  * apply identically to whatever path produced the number. Keeping it on the Node
  * side means one threshold table, one chart legend, and no chance of the ML service
  * and the dashboard disagreeing about what "high" means.
  *
- * ANCHORED ON A MEASURED NUMBER, not on taste. `DEMAND_BASE_RATE` is the training
+ * Anchored on a measured number, not on taste. `DEMAND_BASE_RATE` is the training
  * set's unconditional booking rate (`baseRate` in reports/pricing_metrics.json,
  * 0.280109 for the current artifact) — i.e. the probability of a slot booking when
- * you know nothing about it. So "high" means clearly above what an average slot
- * does, and "low" means clearly below, which is the comparison an owner is actually
- * making when they look at the chart. A fixed 0.33/0.66 split would be arbitrary,
+ * nothing is known about it. So "high" means clearly above what an average slot
+ * does, and "low" means clearly below, which is the comparison an owner makes when
+ * they look at the chart. A fixed 0.33/0.66 split would be arbitrary,
  * and scaling to each series' own max would be worse: a dead week would render
  * exactly like a busy one and the colour would carry no information at all.
  *
@@ -162,7 +156,7 @@ const DEMAND_LOW = 'low';
  */
 function demandLevel(probability) {
   // `typeof` first, because Number(null) is 0 and Number('') is 0 — both finite, both
-  // would bucket an ABSENT probability as `low` and paint a green bar on the chart
+  // would bucket an absent probability as `low` and paint a green bar on the chart
   // for an hour nothing is known about. Only a real number gets a colour.
   if (typeof probability !== "number" || !Number.isFinite(probability)) return null;
   const p = probability;
@@ -199,7 +193,7 @@ const SOURCE_UNAVAILABLE = 'unavailable';
 /**
  * The three sentiment classes, in the ml-service's canonical order (text_norm.LABELS,
  * alphabetical). Exported so routes, the backfill job and the verification script
- * validate a label against ONE list rather than three hand-typed string literals that
+ * validate a label against one list rather than three hand-typed string literals that
  * could drift from what `/sentiment/spec` publishes.
  */
 const SENTIMENT_LABELS = ['negative', 'neutral', 'positive'];
@@ -226,7 +220,7 @@ function isConfigured() {
   return Boolean(baseUrl() && apiKey());
 }
 
-// ─── One-shot logging ─────────────────────────────────────────
+// One-shot logging
 // Copied in spirit from utils/globalSettings.js: "one log line per bad key, not
 // one per request". A misconfigured ML_SERVICE_URL would otherwise print on every
 // single dashboard load and bury everything else in the terminal.
@@ -238,7 +232,7 @@ function warnOnce(key, message) {
   console.warn(`[mlClient] ${message}`);
 }
 
-// ─── Circuit breaker ──────────────────────────────────────────
+// Circuit breaker
 
 const breaker = { failures: 0, openUntil: 0, wasOpen: false };
 
@@ -293,7 +287,7 @@ function breakerState() {
   };
 }
 
-// ─── Transport ────────────────────────────────────────────────
+// Transport
 
 /**
  * One HTTP call to ml-service. Resolves to { ok, status, body, error } — never
@@ -320,7 +314,7 @@ async function call(path, { method = 'POST', payload = null } = {}) {
       method,
       headers: {
         'Content-Type': 'application/json',
-        // The shared secret. NEVER logged, here or anywhere else.
+        // The shared secret. Never logged, here or anywhere else.
         'X-API-Key': apiKey(),
       },
       body: payload === null ? undefined : JSON.stringify(payload),
@@ -360,7 +354,7 @@ async function call(path, { method = 'POST', payload = null } = {}) {
   }
 }
 
-// ─── Guardrails ───────────────────────────────────────────────
+// Guardrails
 
 function roundToStep(value, step) {
   return Math.round(value / step) * step;
@@ -373,7 +367,7 @@ function roundToStep(value, step) {
  * Order matters: clamp, round, then re-clamp onto the 50-grid. Rounding a boundary
  * value can push it a few rupees back outside the band (base 1,010 -> min 707 ->
  * rounds to 700), and a guardrail that is violated by its own rounding step is not
- * a guardrail. The re-clamp moves to the nearest multiple of 50 that is INSIDE the
+ * a guardrail. The re-clamp moves to the nearest multiple of 50 that is inside the
  * band.
  */
 function applyGuardrails(rawPrice, basePrice) {
@@ -444,7 +438,7 @@ function heuristicPrice(basePrice, startTime) {
       reason:
         `ML service unavailable; peak-hour rule applied ` +
         `(${PEAK_START_HOUR}:00–${PEAK_END_HOUR}:59, +${Math.round((HEURISTIC_PEAK_MULTIPLIER - 1) * 100)}%)`,
-      // One chip, no impact number. The rule KNOWS this is a peak hour — that part
+      // One chip, no impact number. The rule knows this is a peak hour — that part
       // is true and worth showing — but it has not measured anything, so `impact`
       // stays null and the UI renders the label without a magnitude. See
       // priceResponse().
@@ -459,7 +453,7 @@ function heuristicPrice(basePrice, startTime) {
 }
 
 /**
- * THE one response shape, built here for both paths.
+ * The one response shape, built here for both paths.
  *
  * A single builder rather than two literals: the UI must not need a branch, and
  * two hand-written object literals would eventually disagree about a field name.
@@ -467,7 +461,7 @@ function heuristicPrice(basePrice, startTime) {
  * header comment.
  *
  * `topFactors` carries an `impact` of `null` on the heuristic path. That is the same
- * honesty rule as `confidence: null`: the model path's impacts are MEASURED (a
+ * honesty rule as `confidence: null`: the model path's impacts are measured (a
  * counterfactual re-prediction per factor, see ml-service/app/routers/pricing.py),
  * while the heuristic can only assert "this is a peak hour" from a hardcoded rule.
  * A number there would be indistinguishable on screen from a measured one, so there
@@ -531,10 +525,10 @@ function normaliseFactors(raw) {
     .filter(Boolean);
 }
 
-// ─── Public API ───────────────────────────────────────────────
+// Public API
 
 /**
- * Suggest a price for one slot. ALWAYS resolves to a usable suggestion.
+ * Suggest a price for one slot. Always resolves to a usable suggestion.
  *
  * ctx: { basePrice, slotDate, startTime, sport, city, venueRating?, venueId?, asOf? }
  *
@@ -627,9 +621,9 @@ async function suggestPrice(ctx = {}) {
     source: SOURCE_MODEL,
     basePrice,
     rawPrice: raw,
-    // Only pass a number through if it really is one. `Number(undefined)` is NaN,
+    // Only pass a number through if it is one. `Number(undefined)` is NaN,
     // and NaN serialises to null in JSON — which would look identical to the
-    // honest null of the heuristic path while actually being a bug.
+    // honest null of the heuristic path while being a bug.
     confidence: Number.isFinite(confidence) ? confidence : null,
     demand: Number.isFinite(demand) ? demand : null,
     reason: data.reason || null,
@@ -657,7 +651,7 @@ async function suggestPrice(ctx = {}) {
  * both computed here so the 72 bars are stamped and bucketed by one piece of code
  * rather than by Dart. See pktTimestamp() and demandLevel().
  *
- * THERE IS NO HEURISTIC FALLBACK HERE, and that is the important part of this
+ * There is no heuristic fallback here, and that is the important part of this
  * function. A peak-hour price rule is a defensible business rule that venue owners
  * already use. A 72-point probability curve is not: any non-model version of it
  * would be numbers this file invented, drawn as a chart, indistinguishable on
@@ -717,7 +711,7 @@ async function forecastDemand(ctx = {}) {
     return unavailable('Demand forecast unavailable — model returned no points');
   }
 
-  // A point that cannot be stamped or has no readable probability is DROPPED, not
+  // A point that cannot be stamped or has no readable probability is dropped, not
   // passed through with a null. fl_chart plots a bar per entry, and a bar with no
   // height at an unknown time is a hole in the chart that reads as zero demand.
   const shaped = points
@@ -742,7 +736,7 @@ async function forecastDemand(ctx = {}) {
   return {
     source: SOURCE_MODEL,
     available: true,
-    // The COUNT OF POINTS SERVED, not the hours requested. They differ whenever the
+    // The count of POINTS served, not the hours requested. They differ whenever the
     // venue's operating window drops hours (72 asked, 48 served for an 08:00–23:00
     // venue), and the chart's axis must describe what it is drawing.
     hours: shaped.length,
@@ -753,7 +747,7 @@ async function forecastDemand(ctx = {}) {
   };
 }
 
-// ─── Sentiment (model #2) ─────────────────────────────────────
+// Sentiment (model #2)
 //
 // Same no-heuristic posture as forecastDemand, and for the same reason: there is
 // no defensible rule-of-thumb that turns "worst turf in the city" into a polarity
@@ -761,10 +755,10 @@ async function forecastDemand(ctx = {}) {
 // null label rather than inventing one. A caller stores NULL, which is the truthful
 // "not scored yet" state — reviews.sentiment_label is nullable precisely for this.
 //
-// ONE contract difference from the price/demand paths, and it is deliberate: a 4xx
-// does NOT count against the circuit breaker. The sentiment endpoint answers 422
+// One contract difference from the price/demand paths, and it is deliberate: a 4xx
+// does not count against the circuit breaker. The sentiment endpoint answers 422
 // `unusable_text` for a review that normalises to no evidence (punctuation, numbers,
-// separators only). That is a fact about ONE review, not a service outage — the very
+// separators only). That is a fact about one review, not a service outage — the very
 // next review may score cleanly. Tripping the breaker on it would let a handful of
 // "..." reviews open the circuit and stop scoring for everyone. So only 5xx /
 // network / timeout — genuine service failures — call recordFailure(); a 4xx returns
@@ -774,7 +768,7 @@ async function forecastDemand(ctx = {}) {
 /**
  * Build the public sentiment shape from the ml-service's bare response body.
  *
- * Defensive like normaliseFactors: `reviews.sentiment_label` has a NOT-in-set value
+ * Defensive like normaliseFactors: `reviews.sentiment_label` has a not-in-set value
  * stored nowhere downstream can interpret it, so a body whose label is not one of the
  * three canonical classes, or whose score is not a finite number in [-1,1], is treated
  * as no result rather than written through. In practice the Python response_model
@@ -794,7 +788,7 @@ function sentimentResult(data, reviewId) {
     label,
     score,
     confidence: Number.isFinite(confidence) ? confidence : null,
-    // needsReview is the moderation union (abuse OR strong-negative); it maps 1:1 to
+    // needsReview is the moderation union (abuse or strong-negative); it maps 1:1 to
     // reviews.flagged. The finer-grained signals ride along for logging and for a
     // moderation UI, but the route only needs `flagged`.
     flagged: data.needsReview === true,
@@ -828,7 +822,7 @@ function sentimentUnavailable(reason, clientError = false) {
 }
 
 /**
- * Score one review's text. ALWAYS resolves (never throws), like every function here.
+ * Score one review's text. Always resolves (never throws), like every function here.
  *
  * Returns:
  *   { source, available, clientError, reviewId, label, score, confidence, flagged,
@@ -872,8 +866,8 @@ async function analyzeSentiment(text, { reviewId = null } = {}) {
   recordSuccess();
   const parsed = sentimentResult(res.body || {}, reviewId);
   if (!parsed) {
-    // A 200 whose body we cannot use. The service responded, so this does not count
-    // against the breaker; the row simply stays unscored for now.
+    // A 200 whose body cannot be used. The service responded, so this does not count
+    // against the breaker; the row stays unscored for now.
     warnOnce('sentiment-malformed', 'ml-service returned 200 with no usable sentiment label');
     return sentimentUnavailable('Sentiment analysis returned an unusable result');
   }
@@ -885,11 +879,11 @@ async function analyzeSentiment(text, { reviewId = null } = {}) {
  * page. `items`: [{ text, reviewId }].
  *
  * Returns { source, available, clientError, count, results:[…per-item shape…], reason }.
- * The ml-service batch is ALL-OR-NOTHING on validation (one unusable row 422s the
+ * The ml-service batch is all-or-nothing on validation (one unusable row 422s the
  * whole batch), so `available:false` with `clientError:true` is the signal to fall
  * back to per-row scoring — that is how the caller isolates which single row is the
  * unscoreable one. A 5xx/network failure returns `clientError:false`: the service is
- * down, per-row would fail identically, so the caller should just wait for the next
+ * down, per-row would fail identically, so the caller should wait for the next
  * sweep.
  */
 async function analyzeSentimentBatch(items = []) {
@@ -951,9 +945,9 @@ async function analyzeSentimentBatch(items = []) {
 /**
  * ml-service /health, for diagnostics and check_ml_service.js.
  *
- * Deliberately does NOT consult the circuit breaker: "is the service up" must stay
+ * Deliberately does not consult the circuit breaker: "is the service up" must stay
  * answerable while the breaker is open, otherwise the breaker hides the very thing
- * you opened the health check to find out. It does not record failures either, for
+ * the health check exists to report. It does not record failures either, for
  * the same reason — a diagnostic probe should not be able to trip the production
  * path.
  */
@@ -969,7 +963,7 @@ async function health() {
 }
 
 /**
- * The feature contract as the PYTHON side defines it.
+ * The feature contract as the Python side defines it.
  *
  * Exists so check_ml_service.js can assert that PEAK_START_HOUR, PEAK_END_HOUR and
  * the price-ratio band in this file still match features.py. Those numbers are
@@ -983,7 +977,7 @@ async function featureSpec() {
 }
 
 /**
- * The sentiment contract as the PYTHON side defines it (text_norm.spec()).
+ * The sentiment contract as the Python side defines it (text_norm.spec()).
  *
  * The sibling of featureSpec(), and it exists for the same reason: SENTIMENT_LABELS
  * in this file is a copy of text_norm.LABELS that Node cannot import, so
@@ -1009,9 +1003,9 @@ async function recommendVenues(userId, { limit = 20 } = {}) {
   return { source: SOURCE_MODEL, available: true, items: Array.isArray(data.items) ? data.items : [], profile: data.profile || null, label: data.label || 'For you', modelVersion: data.modelVersion || null, reason: null };
 }
 
-// ─── Player & opponent ranking (S.5 Wave B) ───────────────────
+// Player & opponent ranking (S.5 Wave B)
 //
-// These two call `core/reco_rank.py`, which is a DETERMINISTIC WEIGHTED SCORER and
+// These two call `core/reco_rank.py`, which is a deterministic weighted scorer and
 // not a trained model — the wave states the weights literally, so there is nothing
 // to fit. Hence a third `source` value: `'ranked'`. Calling it `'model'` would put
 // an "AI" badge over a weighted mean on a screen a real captain reads, and calling
@@ -1022,8 +1016,8 @@ async function recommendVenues(userId, { limit = 20 } = {}) {
 //   'heuristic'   — ml-service unreachable; the caller's own fallback ordered it
 //   'unavailable' — nothing to show (used only where a fallback makes no sense)
 //
-// A 4xx does NOT trip the breaker, for the same reason it does not on the sentiment
-// path: a 422 means THIS payload was malformed, which the next request may not be.
+// A 4xx does not trip the breaker, for the same reason it does not on the sentiment
+// path: a 422 means this payload was malformed, which the next request may not be.
 //
 // The candidate pool travels in the request body. ml-service has no database
 // connection, so it cannot look up who is on a roster or which teams are public —
@@ -1039,7 +1033,7 @@ const SOURCE_RANKED = 'ranked';
  *           rankSpecVersion, rankSpecFingerprint, reason } and never throws.
  *
  * `available:false` is the caller's cue to fall back to its own deterministic
- * ordering (v1's |ELO gap| sort for opponents) — NOT to hide the feature. Every
+ * ordering (v1's |ELO gap| sort for opponents) — not to hide the feature. Every
  * item's percentages stay absent on that path rather than being invented, which is
  * the same rule as `confidence: null` on the heuristic price path.
  */
@@ -1058,7 +1052,7 @@ async function rankViaMl(path, { teamId, team = {}, candidates = [], limit = 20 
 
   const list = Array.isArray(candidates) ? candidates : [];
   if (!teamId) return unavailable('No team to rank for');
-  // An EMPTY POOL IS AN ANSWER, not an outage: there is genuinely nobody to
+  // An empty pool is an answer, not an outage: there is genuinely nobody to
   // suggest. Answering it here saves a round-trip per empty roster and keeps the
   // caller from reading "unavailable" as "the service is down".
   if (!list.length) {
@@ -1119,11 +1113,11 @@ async function recommendOpponents(ctx = {}) {
 }
 
 /**
- * The ranking contract as the PYTHON side defines it (reco_rank.spec()).
+ * The ranking contract as the Python side defines it (reco_rank.spec()).
  *
  * The sibling of featureSpec()/sentimentSpec(), for the same reason: utils/elo.js's
  * COMP_GAP_CAP is 400 and so is reco_rank.ELO_GAP_CAP, Node cannot import Python,
- * and check_ml_service.js has to be able to ASSERT they still agree rather than
+ * and check_ml_service.js has to be able to assert they still agree rather than
  * trust a comment. If they drift, the app draws a "well matched" band around a row
  * whose percentage disagrees.
  */
@@ -1133,28 +1127,26 @@ async function rankSpec() {
   return { reachable: true, error: null, status: res.status, data: res.body };
 }
 
-// ─── Assistant NLU (model #4) ─────────────────────────────────
+// Assistant NLU (model #4)
 /**
  * The one Node-side door to the trained intent classifier + rule entity extractor.
  *
- * WHY THE LABEL LIST IS NOT HARD-CODED HERE
- * -----------------------------------------
+ * Why the label list is not hard-coded here
  * Every other model in this file has a stable output shape; the assistant's does
  * not. `intent_spec.py` is a living artifact — it went from 15 labels
- * (assistant-intents-v1) to 23 (v2) inside one wave — and the RELEASED joblib can
+ * (assistant-intents-v1) to 23 (v2) inside one wave — and the released joblib can
  * lag the module that describes it, so at any moment `/nlu/spec` may advertise
  * labels `/nlu/parse` cannot yet emit. A copy of the label list in Node would be
  * wrong for one of those two states.
  *
  * So the routing table lives in services/assistantActions.js keyed by label, it is
- * built for the SUPERSET, and `assertNluLabels()` compares it to the live spec at
+ * built for the superset, and `assertNluLabels()` compares it to the live spec at
  * boot. An unknown label is then a printed mismatch instead of a silent no-op
  * branch — the failure mode that a hard-coded list produces and hides.
  *
- * WHY THERE IS NO KEYWORD FALLBACK
- * --------------------------------
+ * Why there is no keyword fallback
  * When ml-service is down, `suggestPrice()` falls back to a business rule because
- * a price is still a price. An INTENT is not: a hand-written keyword matcher would
+ * a price is still a price. An intent is not: a hand-written keyword matcher would
  * be a second, untrained, unmeasured classifier answering under the same UI, and
  * "the model understood you" would become a lie in exactly the case the committee
  * will test. The honest degradation is to abstain and let the dialog manager show
@@ -1233,7 +1225,7 @@ function nluUnavailable(reason, abstainReason, { status = 0 } = {}) {
  * @param {string} text            the user's message, exactly as typed
  * @param {object} [opts]
  * @param {string} [opts.sessionId] opaque conversation id, for correlation only
- * @param {string} [opts.now]       ISO instant, ONLY for tests pinning "kal"
+ * @param {string} [opts.now]       ISO instant, only for tests pinning "kal"
  */
 async function parseNlu(text, { sessionId = null, now = null } = {}) {
   const raw = typeof text === 'string' ? text.trim() : '';
@@ -1296,7 +1288,7 @@ async function parseNlu(text, { sessionId = null, now = null } = {}) {
     intentSpecVersion: b.intentSpecVersion || null,
     entitySpecVersion: b.entitySpecVersion || null,
     nluTextSpecVersion: b.nluTextSpecVersion || null,
-    // The server's own wall clock, plus ours including the network.
+    // The server's own wall clock, plus the client's including the network.
     elapsedMs: Number.isFinite(Number(b.elapsedMs)) ? Number(b.elapsedMs) : null,
     roundTripMs: res.elapsed ?? null,
     status: res.status,
@@ -1305,7 +1297,7 @@ async function parseNlu(text, { sessionId = null, now = null } = {}) {
 }
 
 /**
- * The NLU contract as the PYTHON side defines it — the sibling of sentimentSpec().
+ * The NLU contract as the Python side defines it — the sibling of sentimentSpec().
  *
  * Deliberately does not 503 when no artifact is loaded, so this is also the way to
  * ask "is the label list I route on still the label list that exists?" against a
@@ -1325,9 +1317,9 @@ function corpusVersion(data) {
 
 /**
  * Boot-time contract check: does the routing table cover the labels the service
- * can actually produce?
+ * can produce?
  *
- * Two directions, and they are NOT equally serious:
+ * Two directions, and they are not equally serious:
  *
  *   unroutable  a label in the spec that Node has no branch for. A user utterance
  *               classified into it would fall through to the capability menu with

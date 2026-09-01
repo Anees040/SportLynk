@@ -1,12 +1,12 @@
 /// Team + roster models for S2.
 ///
-/// Postgres returns DECIMAL/BIGINT columns as *strings* over JSON, so every
+/// Postgres returns decimal/BIGINT columns as *strings* over JSON, so every
 /// numeric field is parsed through [asNum] rather than a raw cast — a plain
 /// `as num` on "1000" throws. This is the one rule that keeps the whole teams
 /// layer from crashing on perfectly valid backend responses.
 library;
 
-/// Coerce anything the API hands us into a number: real numbers pass through,
+/// Coerce anything the API returns into a number: real numbers pass through,
 /// numeric strings ("1240", "12") are parsed, everything else falls back.
 num asNum(dynamic value, [num fallback = 0]) {
   if (value is num) return value;

@@ -61,8 +61,8 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-# --- contract linkage -------------------------------------------------------
-# Import the SAME frozen spec the corpus builder and the model will use. If this
+# Contract linkage
+# Import the same frozen spec the corpus builder and the model will use. If this
 # import fails the exam cannot be checked against the real contract, and there is
 # no silent fallback: the run stops.
 ROOT = Path(__file__).resolve().parents[1]  # ml-service/
@@ -70,25 +70,25 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from app.core import intent_spec as isp  # noqa: E402
 
-# --- paths ------------------------------------------------------------------
+# Paths
 EXAM_PATH = ROOT / "data" / "assistant" / "assistant_test.csv"
 META_PATH = ROOT / "data" / "assistant" / "assistant_test_meta.json"
 AUTHORED_PATH = ROOT / "data" / "assistant" / "authored_intents.csv"
 
-# --- pinned expectations ----------------------------------------------------
+# Pinned expectations
 # Hard-coded on purpose. The census below was verified against the committed file
 # on 2026-08-24; this script's job is to scream if the exam is ever edited,
 # re-balanced or truncated. Changing the exam deliberately means changing these
-# constants in the same commit -- exactly the reviewable act we want it to be.
+# constants in the same commit -- exactly the reviewable act it should be.
 #
-# The grid is NOT restated here: it comes from intent_spec (EXAM_ROWS_PER_INTENT
+# The grid is not restated here: it comes from intent_spec (EXAM_ROWS_PER_INTENT
 # and EXAM_LANG_QUOTA), because the design of the exam is part of the frozen
 # contract, and a second copy of a number is a second thing to keep in sync.
 EXPECTED_COLUMNS = ["id", "text", "intent", "lang", "phenomena", "notes"]
 EXPECTED_TOTAL = isp.EXAM_ROWS_PER_INTENT * len(isp.INTENTS)  # 10 x 15 = 150
 ID_PATTERN = re.compile(r"^at-\d{3,}$")
 
-# Phenomena the exam MUST exercise, as minimums (tags are multi-valued, so these
+# Phenomena the exam must exercise, as minimums (tags are multi-valued, so these
 # are row counts carrying the tag). These are the hard cases the classifier is
 # graded on, not a description of what happens to be in the file: every number
 # here sits comfortably below the actual count, so an edit that thins out the
@@ -106,7 +106,7 @@ MIN_BOUNDARY_PER_INTENT = 1      # every class must have at least one hard row
 NEAR_DUP_AUTHORED = isp.NEAR_DUP_CONTAM  # 0.80: training row restates an exam row
 
 
-# --- tiny check ledger ------------------------------------------------------
+# Tiny check ledger
 class Ledger:
     """Accumulates named checks; renders a table; decides pass/fail."""
 
@@ -153,7 +153,7 @@ def _tags(row: dict[str, str]) -> list[str]:
 def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
     led = Ledger()
 
-    # ---- existence & parse -------------------------------------------------
+    # Existence & parse
     if not led.check("file_exists", exam_path.is_file(), str(exam_path)):
         print(led.render())
         print(f"\nFAILED: exam file not found at {exam_path}")
@@ -172,7 +172,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
     led.check("row_count", len(rows) == EXPECTED_TOTAL,
               f"{len(rows)} (want {EXPECTED_TOTAL})")
 
-    # ---- ids ---------------------------------------------------------------
+    # Ids
     ids = [(r.get("id") or "").strip() for r in rows]
     bad_ids = [i for i in ids if not ID_PATTERN.match(i)]
     dup_ids = [i for i, c in collections.Counter(ids).items() if c > 1]
@@ -181,7 +181,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
     led.check("ids_unique", not dup_ids,
               f"dups: {dup_ids[:5]}" if dup_ids else f"{ids[0]}..{ids[-1]}, all unique")
 
-    # ---- intents: in the contract, all present, evenly weighted ------------
+    # Intents: in the contract, all present, evenly weighted
     intent_counts = dict(collections.Counter((r.get("intent") or "").strip() for r in rows))
     unknown = sorted(set(intent_counts) - set(isp.INTENTS))
     led.check("intents_in_contract", not unknown,
@@ -194,7 +194,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
               f"off quota: {off_quota}" if off_quota
               else f"{isp.EXAM_ROWS_PER_INTENT} rows for each of {len(isp.INTENTS)} intents")
 
-    # ---- languages and the designed 15 x 3 grid ----------------------------
+    # Languages and the designed 15 x 3 grid
     lang_counts = dict(collections.Counter((r.get("lang") or "").strip() for r in rows))
     unknown_langs = sorted(set(lang_counts) - set(isp.LANGS))
     led.check("langs_in_contract", not unknown_langs,
@@ -216,8 +216,8 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
               else f"{len(isp.INTENTS)}x{len(isp.LANGS)} cells at "
                    + ", ".join(f"{lang} {n}" for lang, n in isp.EXAM_LANG_QUOTA.items()))
 
-    # ---- contract compatibility: the frozen judge, row by row --------------
-    # text_problems() is the JUDGE for hand-written rows (tidy() is the repairer
+    # Contract compatibility: the frozen judge, row by row
+    # text_problems() is the judge for hand-written rows (tidy() is the repairer
     # for generated ones, and is deliberately not used here -- an exam row must be
     # correct as written, not quietly rewritten into correctness).
     problems: list[str] = []
@@ -235,7 +235,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
               f"{min(lengths)}..{max(lengths)} chars, mean {sum(lengths) / len(lengths):.1f} "
               f"(bounds [{isp.MIN_TEXT_CHARS},{isp.MAX_TEXT_CHARS}])")
 
-    # ---- phenomena ---------------------------------------------------------
+    # Phenomena
     phen_counter: collections.Counter[str] = collections.Counter()
     unknown_tags: set[str] = set()
     for row in rows:
@@ -270,7 +270,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
                    f"(min {min(boundary_per_intent.values())}, "
                    f"max {max(boundary_per_intent.values())})")
 
-    # ---- exact duplicates, and the worse case: one text, two labels --------
+    # Exact duplicates, and the worse case: one text, two labels
     keys = [isp.dedup_key(r.get("text") or "") for r in rows]
     by_key: dict[str, list[int]] = {}
     for index, key in enumerate(keys):
@@ -288,7 +288,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
               f"{len(contradictions)} text(s) under two intents: {list(contradictions.items())[:2]}"
               if contradictions else "no utterance is graded against two intents")
 
-    # ---- near-duplicates inside the exam (O(n^2) over 150 rows) ------------
+    # Near-duplicates inside the exam (O(n^2) over 150 rows)
     # Curated look-alikes are the point of a boundary row, so the soft threshold
     # only reports. Only a near-copy (>= NEAR_DUP_FATAL) is fatal: it would give
     # one phrasing two votes in the confusion matrix.
@@ -311,7 +311,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
               else f"max={worst:.3f} {worst_pair[0]}~{worst_pair[1]} ({worst_pair[2]}), "
                    f"{len(warn_pairs)} soft warn(s) >= {isp.NEAR_DUP_WARN}")
 
-    # ---- disjoint from the hand-written TRAINING rows -----------------------
+    # Disjoint from the hand-written training rows
     # gen_intents.py already drops any corpus row that restates an exam row, so the
     # corpus is safe either way. This check is here because certifying the
     # instrument is this script's job: the likeliest leak is an author copying a
@@ -336,7 +336,7 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
         led.check("disjoint_from_authored", True,
                   f"{AUTHORED_PATH.name} not present -- nothing to compare")
 
-    # ---- every row says why it is in the exam ------------------------------
+    # Every row says why it is in the exam
     # `notes` is not decoration: an exam row whose purpose nobody wrote down is a
     # row nobody can defend when the model gets it wrong.
     undocumented = [i for i, r in zip(ids, rows) if not (r.get("notes") or "").strip()]
@@ -344,10 +344,10 @@ def validate(exam_path: Path, meta_path: Path, write: bool, quiet: bool) -> int:
               f"{len(undocumented)} without notes: {undocumented[:5]}" if undocumented
               else "every row records what it is testing")
 
-    # ---- provenance --------------------------------------------------------
+    # Provenance
     digest = _sha256(exam_path)
 
-    # ---- report ------------------------------------------------------------
+    # Report
     if not quiet:
         print(f"Exam:        {exam_path}")
         print(f"Labels:      {isp.INTENT_SPEC_VERSION} / {isp.intent_spec_fingerprint()}")

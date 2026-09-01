@@ -1,26 +1,26 @@
 /**
  * S.7 Wave A — tournament demo seed.
  *
- * THE PROBLEM IT SOLVES
+ * The problem it solves
  * The tournament module has one beat that cannot be demonstrated from a cold
  * database: the deadline arrives, and eight paid-up teams are drawn onto real venue
  * hours by a job nobody pressed. Reaching that beat by hand means registering eight
  * players, creating eight teams, funding eight wallets and then waiting for a
  * deadline that was set days out — twenty minutes of tapping before the interesting
  * two seconds. This writes the whole board in one command and sets the deadline two
- * minutes out, so the job does the interesting part while you watch the log.
+ * minutes out, so the job does the interesting part while the log is still open.
  *
- * WHAT IT LEAVES BEHIND (it COMMITS — this is a demo seed, not a check)
+ * What it leaves behind (it commits — this is a demo seed, not a check)
  *   • 8 captains with funded wallets, 8 teams on descending ELO (1720 … 1350) so the
  *     bracket's seeding is legible: seed 1 must meet seed 8.
- *   • One knockout tournament at a venue you already own, entry fee QUOTED BY
+ *   • One knockout tournament at a venue already owned, entry fee quoted by
  *     `POST /api/tournaments/preview` rather than picked out of the air, with all
- *     eight teams registered and their fees really held in escrow.
+ *     eight teams registered and their fees genuinely held in escrow.
  *   • A registration deadline `--deadline` seconds out (default 120). Nothing else:
  *     no fixtures, no blocked slots, no bracket. Those are the job's to write, and
  *     watching it write them is the point.
  *
- * WHY THE DEADLINE IS MOVED AFTER REGISTRATION, NOT AT CREATION
+ * Why the deadline is moved after registration, not at creation
  * `register` refuses once the deadline has passed — correctly. Creating the cup with
  * a two-minute deadline would race the eight registrations against it and the last
  * captains would be turned away with `deadline_passed`. So the cup is created with a
@@ -29,7 +29,7 @@
  * is being demonstrated, not bypassed — every rupee still moves through
  * `tournamentService.register`.
  *
- * THE JOB HAS TO BE RUNNING, AND ITS SWEEP IS 5 MINUTES BY DEFAULT
+ * The job has to be running, and its sweep is 5 minutes by default
  * `tournamentJob` sweeps on `POLICY.SWEEP_INTERVAL_MS`, which is 5 minutes unless
  * `SL_TEST_SWEEP_SECONDS` says otherwise. A two-minute deadline with a five-minute
  * sweep means up to five minutes of staring at a log. Start the server as:
@@ -39,13 +39,13 @@
  * …or skip the wait entirely with `--generate`, which draws the bracket through the
  * organiser's own endpoint path instead of the job's.
  *
- * IT CHOOSES A VENUE, IT NEVER CREATES ONE
+ * It chooses a venue, it never creates one
  * The whole economic argument is denominated in `slots.price`, so the venue must be
  * real, priced, owned, and carry enough genuinely free hours for a 7-fixture bracket
  * spread over enough days. Same predicate the check script uses. If nothing
  * qualifies it says so and stops rather than inventing inventory.
  *
- * IDEMPOTENT. Captains are keyed on a stable email prefix, teams on a marker in
+ * Idempotent. Captains are keyed on a stable email prefix, teams on a marker in
  * `teams.bio`, the cup on its name. Re-running tops wallets up, fills any missing
  * entry, and leaves everything else alone.
  *
@@ -67,9 +67,7 @@ const settings = require('./src/utils/globalSettings');
 const { round2, asNum } = require('./src/utils/escrow');
 const bcrypt = require('bcrypt');
 
-// ─────────────────────────────────────────────────────────────────────────────
 // The board
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** Stable marker, written into `teams.bio`, so --undo finds its own teams. */
 const MARK = 'SEED_TOURNAMENT_DEMO';
@@ -119,14 +117,12 @@ function when(value) {
   return Number.isNaN(d.getTime()) ? String(value) : d.toISOString().slice(0, 16).replace('T', ' ');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Prerequisites — the venue, which is chosen and never created
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * The same predicate `check_tournaments.js` uses, for the same reasons: a real price
  * (the economics are denominated in `slots.price`), an owner (only owners may post a
- * cup), a sport teams actually play, and enough free hours over enough days that a
+ * cup), a sport teams play, and enough free hours over enough days that a
  * three-round bracket with a gap between rounds can be placed.
  *
  * The floor is FIXTURES + slack rather than exactly FIXTURES, because the round gap
@@ -170,9 +166,7 @@ async function findCup(client) {
   return rows[0] ? T.loadTournament(client, rows[0].id) : null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // The cast — eight captains, eight squads, eight funded wallets
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Idempotent on three keys: the captain's email, the team's (name, sport) — which
@@ -183,7 +177,7 @@ async function findCup(client) {
  * are already sitting in `frozen_balance`, and resetting `balance` would mint money
  * the ledger has no row for, which is precisely what `--verify` exists to catch.
  *
- * A team whose name is taken by somebody who is NOT this seeder stops the run. The
+ * A team whose name is taken by somebody who is not this seeder stops the run. The
  * alternative — adopting it — would put a real squad in a demo cup and then delete
  * them on `--undo`, and no amount of convenience is worth that.
  */
@@ -259,7 +253,7 @@ async function ensureCast(client, { sport, city, fund, passwordHash, resetRating
     });
   }
   // The seed is not the order of SQUADS — it is whatever `seedTeams` makes of the
-  // ratings that are actually in the table, which is the same function (and the same
+  // ratings that are in the table, which is the same function (and the same
   // name/id tie-break) `generateFixtures` will run at the deadline. Deriving it here
   // rather than asserting it means the printed seeding cannot drift from the drawn one.
   const seeds = new Map(fx.seedTeams(
@@ -269,11 +263,9 @@ async function ensureCast(client, { sport, city, fund, passwordHash, resetRating
   return { cast, madeUsers, madeTeams, resetElo };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Seed
-// ─────────────────────────────────────────────────────────────────────────────
 
-/** Every rupee still moves through the service. Only the CLOCK is written directly. */
+/** Every rupee still moves through the service. Only the clock is written directly. */
 async function registerAll(client, cup, cast) {
   let entered = 0;
   let already = 0;
@@ -309,7 +301,7 @@ async function seed() {
     log(`${venue.free_hours} free priced hours over ${venue.free_days} days · `
       + `${pkr(venue.cheapest)}–${pkr(venue.dearest)} an hour (typically ${pkr(hourly)})`);
 
-    // ---- the quote: the fee is asked for, not invented -----------------------
+    // The quote: the fee is asked for, not invented
     const quote = await T.preview(client, {
       ownerId: venue.owner_id, venueId: venue.id, name: CUP_NAME,
       format: fx.FORMATS.KNOCKOUT, maxTeams: TEAMS, minTeams: policy.minTeams, entryFee: 0,
@@ -342,9 +334,9 @@ async function seed() {
       log(`⚠ ${quote.data.capacity.message} — the cup is still created, but the bracket cannot be drawn yet.`);
     }
 
-    // ---- the cast ----------------------------------------------------------
-    // The cup is looked up BEFORE the wallets are funded, because on a re-run it is
-    // the cup's STORED fee that registration will charge — not today's quote. Fund
+    // The cast
+    // The cup is looked up before the wallets are funded, because on a re-run it is
+    // the cup's stored fee that registration will charge — not today's quote. Fund
     // against the quote and a cup created last week at a higher fee would turn its
     // own captains away with `insufficient_funds`.
     let cup = await findCup(client);
@@ -365,7 +357,7 @@ async function seed() {
       + `… ${EMAIL_PREFIX}${TEAMS}@sportlynk.test, password "${PASSWORD}"`);
     cast.forEach((c) => log(`  seed ${c.seed}  ${pad(c.teamName, 22)} ${pad(c.captain, 16)} ELO ${c.elo}`));
 
-    // ---- the cup -----------------------------------------------------------
+    // The cup
     if (cup && (cup.status !== T.STATUS.OPEN || cup.fixtures_generated_at)) {
       await client.query('COMMIT');
       section('Already in flight');
@@ -418,7 +410,7 @@ async function seed() {
       + `${cup.teams_holding} captains' frozen balances`);
     log(`deadline moved to ${when(moved[0].registration_deadline)}  (${seconds}s from now)`);
 
-    // ---- optionally draw it here, instead of waiting for the job -------------
+    // Optionally draw it here, instead of waiting for the job
     let drawn = null;
     if (has('--generate')) {
       drawn = await T.generateFixtures(client, {
@@ -464,9 +456,7 @@ async function seed() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Printing
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** The bracket as the demo will describe it: round, slot, price, scoreline. */
 function printFixtures(fixtures) {
@@ -488,16 +478,14 @@ function printFixtures(fixtures) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Play — settle every unplayed fixture through the organiser's own door
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Deterministic scores, with one deliberate upset.
  *
  * The favourite winning every tie would make the final champion identical to seed 1,
  * and a bracket that always agrees with the seeding proves nothing about whether the
- * bracket follows RESULTS. So the first fixture of round 1 goes to the underdog, and
+ * bracket follows results. So the first fixture of round 1 goes to the underdog, and
  * everything after that goes to the higher ELO by a goal. The upset then has to
  * propagate: if advancement were seed-driven rather than result-driven, round 2 would
  * contain the wrong team and `--verify` would show it.
@@ -566,11 +554,9 @@ async function play() {
   await printPodium(pool, cup.id);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Verify — every number below is READ BACK from the database, not remembered
-// ─────────────────────────────────────────────────────────────────────────────
+// Verify — every number below is read back from the database, not remembered
 
-/** Who won, who came second, and what each was actually paid. */
+/** Who won, who came second, and what each was paid. */
 async function printPodium(client, tournamentId) {
   const { rows } = await client.query(
     `SELECT t.status, t.prize_amount, t.winner_percent, t.runnerup_percent,
@@ -632,7 +618,7 @@ async function verify() {
     ));
   }
 
-  // ---- the money, read from the tournament row and the ledger ---------------
+  // The money, read from the tournament row and the ledger
   const e = d.economics;
   section(e.settled ? 'The economics (settled — these rupees moved)' : 'The economics (projected)');
   log(`pool        ${pkr(e.pool)}  = ${pkr(e.entryFee)} x ${e.teams} teams`);
@@ -644,7 +630,7 @@ async function verify() {
 
   // The claim the plan makes in words, checked against rows: what the reserved
   // hours would have fetched at their own listed prices, against what the owner
-  // was actually paid for them.
+  // was paid for them.
   const { rows: hours } = await pool.query(
     `SELECT COUNT(*)::int AS n, COALESCE(SUM(s.price), 0)::numeric AS retail,
             COALESCE(round(AVG(s.price), 2), 0)::numeric AS avg_taken,
@@ -668,7 +654,7 @@ async function verify() {
       : '· the scheduler took dearer-than-average hours (a peak final, or a thin week of inventory)');
   }
 
-  // ---- the ledger: three identities, each read from `transactions` -----------
+  // The ledger: three identities, each read from `transactions`
   const { rows: led } = await pool.query(
     `SELECT type::text AS type, COUNT(*)::int AS n, COALESCE(SUM(amount), 0)::numeric AS total,
             COALESCE(SUM(amount) FILTER (WHERE user_id = $2), 0)::numeric AS owner_total
@@ -698,7 +684,7 @@ async function verify() {
     log(`· ${pkr(e.prize)} is still frozen in the owner's wallet, waiting on the final`);
   }
 
-  // ---- the wallets ---------------------------------------------------------
+  // The wallets
   const { rows: wallets } = await pool.query(
     `SELECT u.name, u.email, w.balance, w.frozen_balance,
             (w.balance + w.frozen_balance)::numeric AS total
@@ -734,17 +720,15 @@ async function verify() {
   console.log('');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Undo — remove exactly what seed() created, in FK-safe order
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Order matters twice over here.
  *
- * `matches.tournament_id` and `transactions.tournament_id` are both ON DELETE SET
- * NULL, so the match ids and the ledger rows have to be COLLECTED and deleted
- * BEFORE the tournament row goes — afterwards they are orphans nothing can find.
- * And the reserved slots must be handed back BEFORE the fixtures are deleted, for
+ * `matches.tournament_id` and `transactions.tournament_id` are both on DELETE SET
+ * NULL, so the match ids and the ledger rows have to be collected and deleted
+ * before the tournament row goes — afterwards they are orphans nothing can find.
+ * And the reserved slots must be handed back before the fixtures are deleted, for
  * the same reason: `fixtures.slot_id` is the only record of which hours were taken,
  * and a cascade would erase the evidence while leaving the slots blocked forever.
  *
@@ -860,7 +844,6 @@ async function undo() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 
 (async () => {
   try {

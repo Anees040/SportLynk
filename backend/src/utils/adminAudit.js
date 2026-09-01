@@ -1,15 +1,15 @@
 /**
  * One row behind every administrative write.
  *
- * WHY THIS EXISTS
+ * Why this exists
  * "Who changed this, and what did it look like before?" is the first question
  * anybody asks of an admin panel — a viva panel included. Suspending an account,
  * ruling on a dispute and moving the commission percentage are all irreversible
- * from the user's side, so each one leaves a row here with the BEFORE and AFTER
+ * from the user's side, so each one leaves a row here with the before and after
  * state as jsonb. `admin_audit.admin_id` is `ON DELETE SET NULL` (migration 020
  * §7) on purpose: removing an admin must not erase what they did.
  *
- * WHY IT CAN NEVER FAIL THE OPERATION IT RECORDS
+ * Why it can never FAIL the operation it records
  * Same discipline as `utils/notify.js`, and for the same reason: this runs inside
  * transactions that move money and apply Elo. A missing table, a column added in
  * a later migration, an oversized jsonb — none of those may roll back a dispute
@@ -53,7 +53,7 @@ function asJson(v) {
 }
 
 /**
- * Record one admin action. MUST be called with the same `client` as the
+ * Record one admin action. Must be called with the same `client` as the
  * operation it describes, so the row is atomic with it.
  *
  * @param client     the pg client inside the operation's transaction

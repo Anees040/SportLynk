@@ -3,8 +3,8 @@ const crypto = require('crypto');
 const pool = require('../db/pool');
 const router = express.Router();
 
-// This export streams EVERY player's full booking history, so it gets its own
-// dedicated secret — deliberately NOT ML_API_KEY. doc/claude.md records ML_API_KEY's
+// This export streams every player's full booking history, so it gets its own
+// dedicated secret — deliberately not ML_API_KEY. doc/claude.md records ML_API_KEY's
 // dev value as pasted in cleartext and pending rotation before S.7; reusing it here
 // would widen that known-exposed key's blast radius into read access to all bookings.
 // Keep them separate.
@@ -12,7 +12,7 @@ const MIN_KEY_LEN = 16;
 
 function exportKey(req, res, next) {
   const expected = (process.env.RECO_EXPORT_API_KEY || '').trim();
-  // FAIL CLOSED. An unset or too-short key DISABLES the endpoint (503) rather than
+  // FAIL closed. An unset or too-short key disables the endpoint (503) rather than
   // leaving it open — it must never fail open. 503, not 401, because "the server
   // isn't configured for this" is the honest reason, distinct from "you sent a bad key".
   if (expected.length < MIN_KEY_LEN) {
@@ -21,7 +21,7 @@ function exportKey(req, res, next) {
   const supplied = req.get('X-Reco-Export-Key') || '';
   const a = Buffer.from(expected, 'utf8');
   const b = Buffer.from(supplied, 'utf8');
-  // Missing and wrong are the SAME 401 with the same body — distinguishing them would
+  // Missing and wrong are the same 401 with the same body — distinguishing them would
   // confirm to a caller that a key exists. Length-guard first: timingSafeEqual throws
   // on unequal-length buffers, and that throw would itself be a length oracle.
   const ok = a.length === b.length && crypto.timingSafeEqual(a, b);

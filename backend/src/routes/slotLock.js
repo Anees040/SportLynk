@@ -9,10 +9,10 @@ const checkRole = require('../middleware/roleMiddleware');
  *
  * A lock is a short hold one player takes on a free slot while they walk
  * through checkout, so two players cannot spend two minutes each filling in the
- * same booking. It is NOT a slot_status value:
+ * same booking. It is not a slot_status value:
  *
  *   `slots.status` stays 'available' for the whole hold — only `locked_until`
- *   and `locked_by` change. That makes expiry LAZY: a lock whose `locked_until`
+ *   and `locked_by` change. That makes expiry lazy: a lock whose `locked_until`
  *   has passed reads as free everywhere, so no sweep job is needed and a client
  *   that dies mid-checkout can never strand a slot.
  *
@@ -25,7 +25,7 @@ const LOCK_TTL_MINUTES = 5;
 const HOLD_IS_LIVE = `(locked_until IS NOT NULL AND locked_until > NOW())`;
 
 // POST /api/slots/:id/lock — hold a free slot for LOCK_TTL_MINUTES.
-// Re-tapping a slot you already hold refreshes the hold; a slot held by
+// Re-tapping a slot the caller already holds refreshes the hold; a slot held by
 // somebody else is a 409.
 router.post('/:id/lock', authMiddleware, checkRole('player'), async (req, res, next) => {
   const client = await pool.connect();
@@ -101,7 +101,7 @@ router.post('/:id/lock', authMiddleware, checkRole('player'), async (req, res, n
   }
 });
 
-// DELETE /api/slots/:id/lock — release your own hold.
+// DELETE /api/slots/:id/lock — release the caller's own hold.
 // Best-effort by design: the client fires this while walking away from
 // checkout, so "there was nothing to release" is a success, not an error.
 router.delete('/:id/lock', authMiddleware, checkRole('player'), async (req, res, next) => {

@@ -6,7 +6,7 @@
  * allocator and never of the environment.
  *
  * The properties worth defending, in the order they are tested:
- *   - a fixture is placed on a REAL venue hour, once, and no hour is used twice;
+ *   - a fixture is placed on a real venue hour, once, and no hour is used twice;
  *   - rounds are ordered in time, so nobody plays a semi-final before their
  *     quarter-final (the calendar rule and the clock rule, separately);
  *   - byes cost the tournament nothing, because nobody turns up to one;
@@ -14,7 +14,7 @@
  *     final takes the busiest hour of its date on purpose;
  *   - with no model, the schedule is plainly chronological — the fallback the
  *     documentation and `meta.scheduling.source` both promise;
- *   - a venue without enough free hours gets a refusal and NOT a half-built
+ *   - a venue without enough free hours gets a refusal and not a half-built
  *     bracket, because a half-built bracket mis-prices the whole tournament.
  */
 const test = require('node:test');
@@ -75,7 +75,7 @@ test('1 · dates and times survive both spellings pg hands back', () => {
   assert.equal(sch.dateKey('2026-03-01') - sch.dateKey('2026-02-28'), 1, 'no leap day in 2026');
   assert.equal(sch.dateKey('2024-03-01') - sch.dateKey('2024-02-28'), 2, 'leap day in 2024');
 
-  // node-postgres returns a DATE as a Date at LOCAL midnight. Reading it with
+  // node-postgres returns a date as a Date at local midnight. Reading it with
   // toISOString() reports the previous day west of PKT, which is the bug
   // dateString exists to avoid, so it must read the local components.
   const local = new Date(2026, 8, 1, 0, 0, 0);
@@ -230,7 +230,7 @@ test('7 · an 8-team bracket lands on 7 real hours, each used once', () => {
     assert.ok(Number.isFinite(a.price) && a.price > 0, 'a price, as a number');
     assert.ok(slots.some((s) => s.id === a.slotId), 'the slot came from the pool');
   }
-  // The stored economics are the sum of the hours actually taken, which is what
+  // The stored economics are the sum of the hours taken, which is what
   // makes tournaments.venue_cost_amount auditable against the slots table.
   const total = r.assignments.reduce((t, a) => t + a.price, 0);
   assert.equal(r.slotTotal, total);
@@ -342,7 +342,7 @@ test('12 · the model takes the dead hours, the final buys the busiest one', () 
   assert.deepEqual(chrono.rounds.map((m) => m.pick), ['early', 'early', 'early']);
 
   // The precise claim, which is the one the check script will assert on a real
-  // tournament: every round BUT the final costs no more than a chronological
+  // tournament: every round but the final costs no more than a chronological
   // schedule would, and the final deliberately takes the busiest hour instead.
   const beforeFinal = (r) => r.rounds.slice(0, -1).reduce((t, m) => t + m.total, 0);
   assert.ok(beforeFinal(model) <= beforeFinal(chrono),
@@ -449,7 +449,7 @@ test('15 · a round-robin matchday puts no team on the pitch twice in a day', ()
 test('16 · fixtures read back out of the table allocate the same way', () => {
   const { slots, demand } = pool();
   const { built } = bracket(5);
-  // What the table gives back: snake_case, DECIMAL-ish strings, a uuid per row,
+  // What the table gives back: snake_case, decimal-ish strings, a uuid per row,
   // and the byes already resolved as walkovers.
   const rows = built.fixtures.map((f, i) => ({
     id: `f${i + 1}`,
@@ -502,7 +502,7 @@ test('18 · the empty and degenerate cases answer instead of throwing', () => {
   assert.equal(sch.allocate({ slots }).slotTotal, 0);
   assert.equal(sch.allocate({ fixtures: [], slots }).firstAt, null);
 
-  // A two-team tournament is one fixture, and that fixture IS the final, so it
+  // A two-team tournament is one fixture, and that fixture is the final, so it
   // takes the best hour of the earliest date it may be played on.
   const { built } = bracket(2);
   const r = sch.allocate({ fixtures: built.fixtures, slots, demand, notBefore: '2026-09-01' });
@@ -527,7 +527,7 @@ test('18 · the empty and degenerate cases answer instead of throwing', () => {
 test('19 · the schedule feeds the economics, and the owner is never underwater', () => {
   // This is the whole chain a service will run, with no database in it: seed the
   // teams, build the bracket, allocate real hours, then price the tournament from
-  // the hours actually taken rather than from an estimate.
+  // the hours taken rather than from an estimate.
   const { slots, demand } = pool();
   const { built } = bracket(8);
   const r = sch.allocate({ fixtures: built.fixtures, slots, demand, notBefore: '2026-09-01' });

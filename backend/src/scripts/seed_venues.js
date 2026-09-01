@@ -1,4 +1,4 @@
-// Uses the app's own pool — do NOT build a second one here.
+// Uses the app's own pool — do not build a second one here.
 //
 // This script used to create its own Pool from DB_USER/DB_HOST/DB_NAME, which
 // defaulted to a local `postgres@localhost/sportlynk` with SSL off, and loaded
@@ -224,8 +224,8 @@ async function seed() {
 
     console.log(`Using owner ID: ${ownerId}`);
 
-    // ── Destructive pre-flight ────────────────────────────────────────────────
-    // The four DELETEs below wipe this owner's venues, slots, bookings AND the
+    // Destructive pre-flight
+    // The four DELETEs below wipe this owner's venues, slots, bookings and the
     // transaction rows attached to those bookings — i.e. real ledger history, on
     // the live database. Show exactly what is about to go, then give a human five
     // seconds to hit Ctrl-C. This is cheap insurance against pasting the command
@@ -271,7 +271,7 @@ async function seed() {
       console.log("");
     }
 
-    // ── Unwind escrow BEFORE deleting the bookings that hold it ───────────────
+    // Unwind escrow before deleting the bookings that hold it
     // This is the fix for a real bug. The DELETEs below remove booking rows, but
     // the escrow those bookings were holding lives in wallets.frozen_balance — a
     // different table this script never touched. So every past run left frozen
@@ -280,13 +280,13 @@ async function seed() {
     // GET /api/wallet/frozen reported a permanent non-zero `delta`.
     //
     // Releasing it back to spendable balance first keeps the invariant
-    // (frozen_balance == SUM of security_deposit over pending/confirmed bookings)
+    // (frozen_balance == sum of security_deposit over pending/confirmed bookings)
     // true on both sides of the delete. security_deposit is the authority on what
-    // is actually in escrow — see routes/bookings.js.
+    // is in escrow — see routes/bookings.js.
     //
     // A `refund` ledger row is written per player, because money moving into
     // spendable balance without a ledger entry is exactly the kind of silent gap
-    // this whole script caused. The row is written BEFORE the transactions DELETE
+    // this whole script caused. The row is written before the transactions DELETE
     // below, so scope it to booking_id IS NULL work — these rows carry no
     // booking_id precisely so the delete cannot take them with it.
     const holders = await client.query(
@@ -332,7 +332,7 @@ async function seed() {
       console.log("");
     }
 
-    // Only delete venues (and cascade slots/bookings) — NOT users or wallets
+    // Only delete venues (and cascade slots/bookings) — not users or wallets
     await client.query("DELETE FROM transactions WHERE booking_id IN (SELECT id FROM bookings WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1))", [ownerId]);
     await client.query("DELETE FROM bookings WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1)", [ownerId]);
     await client.query("DELETE FROM slots WHERE venue_id IN (SELECT id FROM venues WHERE owner_id = $1)", [ownerId]);

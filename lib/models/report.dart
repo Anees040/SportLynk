@@ -1,7 +1,7 @@
 /// report.dart — S.7 Wave D · FR4.16. The financial export, as the preview screen
 /// reads it (`?format=json` on the same two routes that stream the CSV).
 ///
-/// THE COLUMNS COME FROM THE SERVER, AND SO DOES THEIR ORDER.
+/// The COLUMNS come from the server, and so does their order.
 /// `reportService.COLUMNS` is the single definition of what a row contains, which
 /// columns are money, and which appear only in the platform scope. The preview
 /// renders whatever that list says, in that order, so the table on the phone and
@@ -10,7 +10,7 @@
 /// truth for the shape of a financial document, which is the last place to keep
 /// one.
 ///
-/// A ROW IS A MAP, DELIBERATELY. Every cell is addressed by the column key the
+/// A row is A MAP, deliberately. Every cell is addressed by the column key the
 /// server sent, so a row model with nineteen named fields cannot fall out of step
 /// with the header. Only the two facts the UI genuinely branches on — is this a
 /// booking or a tournament payout, and what is its reference — are lifted out.
@@ -34,7 +34,7 @@ List<Map<String, dynamic>> _rows(dynamic v) => (v as List? ?? const [])
     .toList();
 
 /// One column of the export. `money` decides alignment and formatting on the
-/// phone and is the same flag that decides which cells are summed into TOTAL.
+/// phone and is the same flag that decides which cells are summed into total.
 class ReportColumn {
   final String key;
   final String label;
@@ -90,7 +90,7 @@ String pkr(double v) {
   return '${neg ? '-' : ''}PKR $body';
 }
 
-/// The TOTAL row, and each per-owner subtotal in the platform scope. Keyed the
+/// The total row, and each per-owner subtotal in the platform scope. Keyed the
 /// same way a row is, plus the three counts.
 class ReportTotals {
   final Map<String, dynamic> values;
@@ -112,7 +112,7 @@ class ReportTotals {
 }
 
 /// A per-owner subtotal from the platform report. This is where "commission earned
-/// per owner" (FR4.16) actually lives, because commission is a ledger row on the
+/// per owner" (FR4.16) lives, because commission is a ledger row on the
 /// owner's wallet rather than a column of the booking.
 class OwnerSubtotal {
   final String? ownerId;
@@ -130,7 +130,7 @@ class OwnerSubtotal {
 
 /// `GET …/reports/financial?format=json` — the same walk the CSV streams, capped
 /// at the server's `JSON_ROW_CAP`. `truncated` says so out loud: the totals are
-/// always for the WHOLE range, only `rows` is a page, and the screen must not
+/// always for the whole range, only `rows` is a page, and the screen must not
 /// imply otherwise.
 class ReportPreview {
   final String from;

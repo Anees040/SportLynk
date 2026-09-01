@@ -1,13 +1,12 @@
 /**
- * bookingService.js — the ONE implementation of "book a slot" and "cancel a
+ * bookingService.js — the one implementation of "book a slot" and "cancel a
  * booking", callable from a route or from Scout.
  *
- * WHY THIS FILE EXISTS
- * --------------------
+ * Why this file exists
  * FR8.15: no business rule may be duplicated. Until this extraction, every rule
  * that decides whether a booking may happen — the slot row lock, the checkout
  * hold, the wallet balance floor, the escrow split, the 24-hour cancellation
- * window, the ledger rows, the owner notification — lived INSIDE two Express
+ * window, the ledger rows, the owner notification — lived inside two Express
  * handlers in routes/bookings.js, interleaved with `res.status(...).json(...)`.
  *
  * The assistant has to create real bookings. There were exactly three ways to do
@@ -23,13 +22,12 @@
  *      chat message in one transaction.
  *   3. Extract the rules into a function both callers invoke. This file.
  *
- * WHAT CHANGED, AND WHAT DELIBERATELY DID NOT
- * -------------------------------------------
+ * What changed, and what deliberately did not
  * The SQL, the order of operations, the lock order, the rounding, the ledger
- * types, the notification and the messages are all MOVED, not rewritten. A
+ * types, the notification and the messages are all moved, not rewritten. A
  * refactor of money code that also improves the money code cannot be reviewed:
  * every difference has to be explained, so there are none to explain. The one
- * structural change is that these functions RETURN their outcome
+ * structural change is that these functions return their outcome
  *
  *     { ok, status, code, message, data }
  *
@@ -42,17 +40,16 @@
  * `code === 'slot_taken'`, not on the wording of a message that a copy edit
  * could change.
  *
- * TRANSACTION OWNERSHIP
- * ---------------------
- * The core functions take a `client` that is ALREADY inside a transaction and
+ * Transaction ownership
+ * The core functions take a `client` that is already inside a transaction and
  * never BEGIN, COMMIT or ROLLBACK. That is what lets a caller do more work
  * atomically with the booking. Each has a `*Tx` wrapper that owns the whole
  * transaction for callers who just want the operation; both the route and Scout
  * use the wrappers today.
  *
- * previewCancellation() is the one genuinely NEW function, and it is new because
+ * previewCancellation() is the one genuinely new function, and it is new because
  * the assistant needs something the REST API never did: the refund arithmetic
- * WITHOUT performing the cancellation, so a user can be asked "PKR 1,600 comes
+ * without performing the cancellation, so a user can be asked "PKR 1,600 comes
  * back (80%) — confirm?" and still say no. It computes the split with the same
  * penaltySplit() the executing path uses, so the number quoted in the question
  * is the number the ledger will move.
@@ -89,9 +86,7 @@ function localDateStr(value) {
   return value instanceof Date ? value.toLocaleDateString('en-CA') : value;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // CREATE
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Create a booking. Ledger: player balance -P, player frozen +P, status pending
@@ -107,7 +102,7 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
     return fail(400, 'missing_args', 'slotId and venueId required');
   }
 
-  // 1. Lock the slot row atomically — the row lock is what actually settles
+  // 1. Lock the slot row atomically — the row lock is what settles
   //    simultaneous bookings; the checkout hold below is only a courtesy so two
   //    players don't both fill in the same form (SRS ER1.5).
   const slotRes = await client.query(
@@ -135,7 +130,7 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
 
   // S.7 Wave D. A sport an admin has switched off must stop taking money, not just
   // disappear from a dropdown -- a deep link, a stale app or a saved slot id all
-  // reach this line without ever seeing the UI. Checked AFTER the slot lock so the
+  // reach this line without ever seeing the UI. Checked after the slot lock so the
   // message can name the sport, and it fails OPEN (`isSportEnabled` returns true for
   // anything it cannot resolve) so a settings outage cannot close the whole venue.
   if (slot.venue_sport && !(await settings.isSportEnabled(slot.venue_sport, { client }))) {
@@ -143,14 +138,14 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
       `${slot.venue_sport} bookings are paused on SportLynk right now.`);
   }
 
-  // Escrow = FULL slot price. Deposit = the admin-configured percent of it, read
-  // INSIDE this transaction and stamped onto the row below.
+  // Escrow = full slot price. Deposit = the admin-configured percent of it, read
+  // inside this transaction and stamped onto the row below.
   //
-  // WHY THE VALUE IS ALSO PUSHED INTO `POLICY`
+  // Why the value is also pushed into `POLICY`
   // ~30 places describe the policy in synchronous copy ("20% is at risk") off
   // `POLICY.DEPOSIT_PERCENT`. Syncing it here means the sentence a player read on
   // the quote screen and the amount this row holds are the same number even in a
-  // process that booted before the admin changed it. What is HELD is this column;
+  // process that booted before the admin changed it. What is held is this column;
   // every refund reads `bookings.deposit_amount`, so a later change cannot rewrite
   // a deal a player already agreed to.
   const depositPct = await settings.deposit({ client });
@@ -221,12 +216,10 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
   return done(201, { ...booking.rows[0], venue_name: slot.venue_name });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CANCEL — preview, then execute
-// ─────────────────────────────────────────────────────────────────────────────
+// Cancel — preview, then execute
 
 /**
- * The refund arithmetic for one booking, WITHOUT cancelling it. New in S.6 Wave C.
+ * The refund arithmetic for one booking, without cancelling it. New in S.6 Wave C.
  *
  * Deliberately a plain read: no FOR UPDATE. A preview must not hold a row lock
  * while a human decides, and the executing path re-reads under a lock anyway, so
@@ -303,7 +296,7 @@ async function cancelBooking(client, { userId, bookingId }) {
     return fail(400, 'not_cancellable', 'Cannot cancel this booking');
   }
 
-  // security_deposit holds what is ACTUALLY in escrow for this booking;
+  // security_deposit holds what is in escrow for this booking;
   // deposit_amount is the 20% at-risk slice.
   const escrow = round2(booking.security_deposit);
   const deposit = round2(booking.deposit_amount);
@@ -384,7 +377,7 @@ async function cancelBooking(client, { userId, bookingId }) {
     ? `Booking cancelled within ${POLICY.CANCELLATION_WINDOW_HOURS} hours — PKR ${refund} refunded, PKR ${penalty} deposit forfeited to the venue.`
     : `Booking cancelled — PKR ${refund} refunded to your wallet.`;
 
-  // S.7 Wave B -- close the room's story. The thread is NOT deleted: the owner
+  // S.7 Wave B -- close the room's story. The thread is not deleted: the owner
   // and the player may still need to argue about the refund, and a conversation
   // that vanishes the moment it gets inconvenient is the one thing a venue owner
   // will never trust. A booking cancelled while still pending never had a room,
@@ -412,15 +405,13 @@ async function cancelBooking(client, { userId, bookingId }) {
   return result;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// READS — shared so Scout's answers and the REST list can never disagree
-// ─────────────────────────────────────────────────────────────────────────────
+// Reads — shared so Scout's answers and the REST list can never disagree
 
 /**
  * Bookings this user could cancel right now, soonest slot first.
  *
- * Scout asks "which one?" with these as cards, so the order is by WHEN THE SLOT
- * IS, not when it was created (GET /my orders by created_at, which is right for a
+ * Scout asks "which one?" with these as cards, so the order is by when the slot
+ * is, not when it was created (GET /my orders by created_at, which is right for a
  * history list and wrong for "pick the one you want to cancel").
  */
 async function listCancellable(client, { userId, limit = 5 }) {
@@ -465,9 +456,7 @@ async function listMyBookings(client, { userId, status = null, limit = 50 }) {
   return rows.map((r) => ({ ...r, slot_date: localDateStr(r.slot_date) }));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TRANSACTION WRAPPERS
-// ─────────────────────────────────────────────────────────────────────────────
+// Transaction wrappers
 //
 // `runInTx` is the only place BEGIN/COMMIT/ROLLBACK is written for these two
 // operations. A failed operation (`ok:false`) rolls back exactly like a thrown
@@ -483,7 +472,7 @@ async function runInTx(fn) {
     const result = await fn(client);
     if (result && result.ok) await client.query('COMMIT');
     else await client.query('ROLLBACK');
-    // AFTER the commit, never before: a socket frame that arrives mid-transaction
+    // After the commit, never before: a socket frame that arrives mid-transaction
     // makes the app re-read a row it still cannot see. Only emitted on the commit
     // branch -- a rolled-back cancellation has no pill to announce.
     if (result && result.ok && result.chatPill) {
@@ -501,9 +490,7 @@ async function runInTx(fn) {
 const createBookingTx = (input) => runInTx((c) => createBooking(c, input));
 const cancelBookingTx = (input) => runInTx((c) => cancelBooking(c, input));
 
-// ─────────────────────────────────────────────────────────────────────────────
 // REJECT (owner-side, and the admin suspension cascade)
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Why this is here and not in the route any more.
@@ -512,7 +499,7 @@ const cancelBookingTx = (input) => runInTx((c) => cancelBooking(c, input));
  * whose owner has just been suspended — otherwise players keep paying into a dead
  * venue and their money stays frozen. That is the same money movement the owner's
  * own "reject" button performs, and having two copies of a refund is the exact
- * failure mode this file's header exists to prevent. So the body was MOVED here
+ * failure mode this file's header exists to prevent. So the body was moved here
  * from `routes/owner.js` verbatim: same SELECT, same lock, same ledger type, same
  * rounding, same notification type. Only the reason wording branches.
  *

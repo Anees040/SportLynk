@@ -85,9 +85,7 @@ from .core import config, reco_features, reco_rank
 from .core.registry import registry
 from .routers import nlu, pricing, reco, sentiment
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Startup guards — these run at IMPORT time, before uvicorn binds a port
-# ─────────────────────────────────────────────────────────────────────────────
+# Startup guards — these run at import time, before uvicorn binds a port
 #
 # Deliberately at import rather than in the lifespan handler. A misconfigured
 # service must never reach the point of accepting a connection: a process that is
@@ -165,21 +163,21 @@ async def lifespan(app: FastAPI):
         log.warning("no model is loaded — /predict/* will answer 503 model_not_loaded")
         log.warning("the Node backend will fall back to its heuristic (source='heuristic')")
 
-    # Best-effort warm-up. Each warm() takes the SAME lazy path a real request would
+    # Best-effort warm-up. Each warm() takes the same lazy path a real request would
     # (registry.get() loads and caches the model on first use) and runs one full
     # prediction, so the first real caller doesn't pay the ~1.9s cold cost — loading
     # the joblib, the first predict_proba through an untouched sklearn Pipeline, the
     # first pandas frame — that trips the Node client's 2s ceiling and degrades a
-    # dashboard served by a service that is actually up.
+    # dashboard served by a service that is up.
     #
     # Non-fatal by construction, and deliberately so: warm() already swallows its own
     # errors and returns a status string, and this try/except is a second belt. A
     # warm-up must never be the reason the service won't start — that would defeat the
-    # lazy-load contract above, under which a corrupt artifact 503s ONE endpoint rather
+    # lazy-load contract above, under which a corrupt artifact 503s one endpoint rather
     # than blocking boot. A model that fails to warm here still serves its own honest
     # 503 on the endpoint; everything else stays up.
     # `nlu` is last and is the expensive one: it pays dateparser's language-data
-    # load, measured at 8.3 SECONDS on the first parse (see routers/nlu.warm). That
+    # load, measured at 8.3 seconds on the first parse (see routers/nlu.warm). That
     # cost is real either way — the only choice is whether boot pays it or the first
     # user of the assistant does, and a 50ms endpoint that answers in 8s once looks
     # exactly like a hung service to whoever is demoing it.
@@ -210,9 +208,7 @@ app = FastAPI(
 # shipped to a client — which is the thing this design is arranged to prevent.
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Error envelope
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def envelope(message: str, *, code: str | None = None, **extra: Any) -> dict[str, Any]:
@@ -286,9 +282,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # API-key middleware
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 @app.middleware("http")
@@ -333,9 +327,7 @@ async def api_key_middleware(
     return await call_next(request)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Health
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 @app.get("/health", summary="Service and model inventory (public)")
@@ -398,10 +390,8 @@ app.include_router(reco.router)
 app.include_router(nlu.router)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 404
-# ─────────────────────────────────────────────────────────────────────────────
-# Registered LAST so it cannot shadow a real route. FastAPI's own 404 body is
+# Registered last so it cannot shadow a real route. FastAPI's own 404 body is
 # `{"detail": "Not Found"}`; the HTTPException handler above already rewrites that
 # into the house envelope, so no extra catch-all route is needed here — noted
 # because its absence looks like an omission next to backend/src/server.js, which

@@ -240,7 +240,7 @@ class _WithdrawSheetState extends State<WithdrawSheet> {
     );
   }
 
-  // ── One withdrawal already in flight ──────────────────────────────────────
+  // One withdrawal already in flight
   List<Widget> _pendingView() {
     final w = _pending!;
     final amount = asNum(w['amount']);
@@ -368,7 +368,7 @@ class _WithdrawSheetState extends State<WithdrawSheet> {
     ];
   }
 
-  // ── No pending withdrawal: the request form ───────────────────────────────
+  // No pending withdrawal: the request form
   List<Widget> _formView() {
     final canAfford = widget.available >= _minAmount;
 
@@ -410,7 +410,7 @@ class _WithdrawSheetState extends State<WithdrawSheet> {
           ),
         ),
         const SizedBox(height: 6),
-        // "All" is the button people actually want, and typing the exact balance
+        // "All" is the button people want, and typing the exact balance
         // by hand is the easiest way to land on an off-by-one rejection.
         Align(
           alignment: Alignment.centerRight,
@@ -535,7 +535,7 @@ class _WithdrawSheetState extends State<WithdrawSheet> {
     ];
   }
 
-  // ── small shared pieces ───────────────────────────────────────────────────
+  // Small shared pieces
 
   Widget _label(String text) => Padding(
     padding: const EdgeInsets.only(bottom: 6),

@@ -1,11 +1,10 @@
 /**
  * assistantKb.js — the part of Scout that learns.
  *
- * THE LOOP
- * --------
+ * The loop
  *   1. A player asks something about a ground that no query can answer
  *      ("does G-11 have floodlights?", "is there parking for 20 cars?").
- *   2. Scout does not guess. It escalates to THAT venue's owner and says so.
+ *   2. Scout does not guess. It escalates to that venue's owner and says so.
  *   3. The owner answers in their dashboard. The answer becomes an
  *      assistant_kb row, status 'published'.
  *   4. The next player who asks a paraphrase gets it instantly, labelled
@@ -15,14 +14,13 @@
  * the schema, and it is the honest way: the knowledge comes from the person who
  * owns the ground, and the label on the answer says so.
  *
- * THREE SAFETY RULES, EACH ENFORCED IN THE DATABASE
- * ------------------------------------------------
- * a. OWNER-APPROVED. A row is only served at status 'published'. An escalation
+ * Three safety rules, each enforced in the database
+ * a. Owner-approved. A row is only served at status 'published'. An escalation
  *    the owner never answered serves nothing.
- * b. PER-VENUE ISOLATED. chk_assistant_kb_venue forces scope='venue' rows to
+ * b. Per-venue isolation. chk_assistant_kb_venue forces scope='venue' rows to
  *    carry a venue_id, and every read filters on it. A fact about one ground can
  *    never be served for another.
- * c. NEVER MONEY OR POLICY. chk_assistant_kb_intent rejects rows tagged
+ * c. Never money or POLICY. chk_assistant_kb_intent rejects rows tagged
  *    wallet_balance, refund_policy, cancel_booking, book_venue or topup_help.
  *    Those answers come from the live database and from escrow.js POLICY, and no
  *    owner-written sentence is allowed to become the platform's refund rule.
@@ -65,7 +63,7 @@ function contentTokens(text) {
 
 let trgmAvailable = null;
 /**
- * Is pg_trgm usable on THIS database? Migration 018 creates it inside an
+ * Is pg_trgm usable on this database? Migration 018 creates it inside an
  * exception-swallowing block, because a managed Postgres role may not be allowed
  * to, so its presence is a runtime fact rather than a guarantee. Checked once and
  * cached: the answer cannot change while the process is running.
@@ -86,7 +84,7 @@ async function hasTrgm(client) {
 /**
  * Find a published answer for `question`.
  *
- * Scope: rows for THIS venue plus global rows. A venue row wins ties, because a
+ * Scope: rows for this venue plus global rows. A venue row wins ties, because a
  * fact about the ground the user is asking about beats a platform-wide how-to.
  *
  * Two matchers, one meaning. With pg_trgm the database ranks by similarity, which
@@ -123,7 +121,7 @@ async function search(client, { question, venueId = null, limit = 3 } = {}) {
     };
   }
 
-  // ── Fallback: content-token overlap, computed in Node ─────────────────────
+  // Fallback: content-token overlap, computed in Node
   const tokens = contentTokens(question);
   if (!tokens.length) return { hit: false, row: null, similarity: 0, matcher: 'overlap', candidates: [] };
 
@@ -262,15 +260,13 @@ async function listOwnerQuestions(client, { ownerId, status = 'open', limit = 50
   return rows;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE OWNER ANSWERS — where the learning actually happens
-// ════════════════════════════════════════════════════════════════════════════
+// The owner answers — where the learning happens
 
 /**
  * An owner answers an escalated question. This one function closes the loop:
  *
  *   1. authorise — the caller must own the VENUE the question was asked about;
- *   2. remember  — write a PUBLISHED assistant_kb row, so the next player who
+ *   2. remember  — write a published assistant_kb row, so the next player who
  *                  asks the same thing gets the answer instantly, from `kb`;
  *   3. resolve   — mark the escalation answered, pointing at that row;
  *   4. deliver   — post the answer into the asking player's own Scout thread as
@@ -338,7 +334,7 @@ async function answer(client, {
     [esc.id, text, kbRow.id, ownerId],
   );
 
-  // ── DELIVER ───────────────────────────────────────────────────────────────
+  // Deliver
   // Best-effort: the answer is already recorded and published, so a thread that
   // the player deleted in the meantime must not roll back the owner's work.
   let delivered = false;
@@ -418,11 +414,9 @@ async function decline(client, { escalationId, ownerId, reason = null } = {}) {
     message: 'Question closed.' };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// OWNER KB CRUD — "what Scout says about my ground"
-// ════════════════════════════════════════════════════════════════════════════
+// Owner KB CRUD — "what Scout says about my ground"
 //
-// An owner must be able to SEE and EDIT what Scout is telling players on their
+// An owner must be able to see and edit what Scout is telling players on their
 // behalf. Without that, "Scout remembered your answer" is a black box the owner
 // cannot audit, and one badly-worded answer is served forever.
 //
@@ -460,8 +454,8 @@ async function upsertKb(client, {
   intent = null, status = null,
 } = {}) {
   const runner = client || pool;
-  // An EDIT is partial: any field left out keeps its stored value, so "fix the
-  // wording of the answer" does not require re-sending the question. A NEW row
+  // An edit is partial: any field left out keeps its stored value, so "fix the
+  // wording of the answer" does not require re-sending the question. A new row
   // still needs both halves — a KB entry with no question can never be matched.
   // An empty string counts as "not sent" rather than "blank it": there is no
   // legitimate reason to erase half of a published answer, and a silent blank
@@ -480,7 +474,7 @@ async function upsertKb(client, {
       message: 'Question max 300 characters, answer max 2000.' };
   }
   // `status` NULL means "do not change it". An edit that only fixes a typo in a
-  // DRAFT answer must not publish it as a side effect, and the old default of
+  // draft answer must not publish it as a side effect, and the old default of
   // 'published' did exactly that.
   if (status != null && !['draft', 'published', 'rejected', 'archived'].includes(status)) {
     return { ok: false, code: 'bad_status', status: 400, message: 'Unknown status.' };
@@ -559,7 +553,7 @@ async function deleteKb(client, { ownerId, id } = {}) {
 
 /**
  * Counters for the owner dashboard and for the wave report: how much has Scout
- * actually learned, and how much of it is being used.
+ * learned, and how much of it is being used.
  */
 async function stats(client, { ownerId = null } = {}) {
   const runner = client || pool;

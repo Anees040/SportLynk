@@ -37,7 +37,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
     // Both calls at once instead of one after the other, and through ApiClient
     // so a hung request times out. The old version caught every failure and
     // left `_wallet` null, which renders as "PKR 0" — an owner seeing zero
-    // after a network hiccup has no way to tell that from actually losing money.
+    // after a network hiccup has no way to tell that from losing money.
     final results = await Future.wait([
       _api.get('/wallet/me', token: token),
       _api.get('/wallet/transactions', token: token, queryParams: {'limit': '5'}),
@@ -59,7 +59,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
     });
   }
 
-  /// Owners are the ones who actually accumulate money — the escrow moves 100%
+  /// Owners are the ones who accumulate money — the escrow moves 100%
   /// of the booking to them at check-in — so the withdraw button here matters
   /// more than the player one. The endpoint and the sheet are role-agnostic, so
   /// this is the same flow, not a second implementation.
@@ -124,7 +124,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                     ])),
                   const SizedBox(height: 12),
                 ],
-                // ── BALANCE CARD ───────────────────────────
+                // Balance card
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
@@ -186,7 +186,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // ── ACTIONS ────────────────────────────────
+                // ACTIONS
                 Row(children: [
                   Expanded(child: ElevatedButton.icon(
                     icon: const Icon(Icons.north_east, size: 18),
@@ -203,7 +203,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                 ]),
                 const SizedBox(height: 24),
 
-                // ── RECENT TRANSACTIONS ────────────────────
+                // Recent transactions
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                   Text('Recent Transactions', style: GoogleFonts.poppins(
                     fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),

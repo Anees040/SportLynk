@@ -15,7 +15,7 @@ class WelcomeScreen extends StatelessWidget {
       backgroundColor: AppColors.primary,
       body: Column(
         children: [
-          // ─── Top 55 % dark section ───
+          // Top 55 % dark section
           Expanded(
             flex: 55,
             child: Container(
@@ -89,7 +89,7 @@ class WelcomeScreen extends StatelessWidget {
             ),
           ),
 
-          // ─── Bottom 45 % white sheet ───
+          // Bottom 45 % white sheet
           Expanded(
             flex: 45,
             child: Container(

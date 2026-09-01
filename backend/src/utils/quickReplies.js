@@ -2,35 +2,35 @@
  * quickReplies.js — FR8.10, AI quick replies (S.7 Wave B).
  *
  * A venue owner answers the same six questions all day. This reads the message
- * the OTHER side just sent, classifies it with model #4 — the released 23-label
+ * the other side just sent, classifies it with model #4 — the released 23-label
  * intent classifier, unchanged, no new labels, nothing retrained — and hands back
  * three replies that can be sent with one tap.
  *
- * ADVISORY ONLY, AND THAT IS A HARD RULE. A suggestion is text placed in the
+ * Advisory only, and that is a hard rule. A suggestion is text placed in the
  * composer; the human still presses send, and the send goes through the ordinary
  * POST /:channelId/messages path with the same validation, the same flood limit
  * and the same idempotency key. Nothing here can put words in somebody's mouth,
  * which is the whole difference between a helpful chip and a bot that lies to a
  * customer on the owner's behalf.
  *
- * WHY THE REPLIES ARE A TABLE AND NOT GENERATED
+ * Why the replies are A TABLE AND NOT GENERATED
  * A generated sentence can invent a price, a slot or a refund policy. These
- * cannot: the only variable parts are `{venue}` and `{price}`, both READ from the
+ * cannot: the only variable parts are `{venue}` and `{price}`, both read from the
  * booking row this channel already points at. The trained model does the part a
  * model is good at — understanding a Roman-Urdu question — and none of the part
  * it would get wrong.
  *
- * WHY THIS IS A UTIL AND NOT INLINE IN routes/chat.js
+ * Why this is a utility module and not inline in routes/chat.js
  * `suggestFor` takes a `client`, so check_chat.js can drive the real classifier
  * over rows inside its own transaction and roll them back. Same discipline as
- * chatList.js and bookingService's CORE functions.
+ * chatList.js and bookingService's core functions.
  */
 
 const mlClient = require('../services/mlClient');
 const access = require('./teamAccess');
 
 /**
- * intent → three replies, per audience. Keys are REAL labels from the frozen
+ * intent → three replies, per audience. Keys are real labels from the frozen
  * 23-label spec (ml-service/app/core/intent_spec.py) — an intent the model
  * cannot emit is a branch that can never run, so there are none here.
  */
@@ -132,7 +132,7 @@ const GENERIC = {
  * The down-path. When ml-service is unreachable the endpoint must still be
  * useful, so a tiny keyword table stands in — the same discipline every other
  * model call in this codebase follows (mlClient never throws; callers degrade).
- * Deliberately small: it covers the words that actually appear in a booking
+ * Deliberately small: it covers the words that appear in a booking
  * chat, and anything it misses gets the generic set, which is still three
  * sendable sentences.
  */
@@ -158,7 +158,7 @@ function lexiconIntent(text) {
 }
 
 /**
- * WHO AM I IN THIS ROOM decides the wording — not the app role alone. A captain
+ * Who AM I in this room decides the wording — not the app role alone. A captain
  * room is its own audience whatever the two people do elsewhere in the app; in a
  * booking room the venue owner and the player need opposite halves of the same
  * conversation. A team room shares the captain set: the questions asked there
@@ -170,11 +170,11 @@ function audienceFor({ channelType, userRole }) {
 }
 
 /**
- * Which text are we suggesting a reply TO.
+ * Which text the suggestion is a reply to.
  *
  * `messageId` is the normal path: the client passes the last message it rendered
  * from the other side and never has to re-send its text, so the suggestion is
- * always computed from the row the server actually has. `text` exists for the
+ * always computed from the row the server has. `text` exists for the
  * composer-side case ("what could I say to this?") and for the check script.
  */
 async function resolveSourceText(client, { channel, userId, text, messageId }) {
@@ -187,7 +187,7 @@ async function resolveSourceText(client, { channel, userId, text, messageId }) {
       [messageId, channel.id],
     );
     if (!rows[0]) return { error: { status: 404, message: 'That message is not in this chat.' } };
-    // Suggesting a reply to your OWN message is a bug, not a feature.
+    // Suggesting a reply to the caller's own message is a bug, not a feature.
     if (String(rows[0].sender_id) === String(userId)) {
       return { error: { status: 400, message: 'Quick replies are for a message from the other side.' } };
     }
@@ -201,7 +201,7 @@ async function resolveSourceText(client, { channel, userId, text, messageId }) {
 
 /**
  * The two facts a canned reply is allowed to contain, read from the booking this
- * room points at. Both are READ, never guessed; a room that is not a booking room
+ * room points at. Both are read, never guessed; a room that is not a booking room
  * gets nulls and the placeholders degrade to 'the venue' / 'the listed rate'.
  */
 async function bookingFacts(client, channel) {
@@ -212,7 +212,7 @@ async function bookingFacts(client, channel) {
     [channel.ref_id],
   );
   if (!rows[0]) return { venue: null, price: null };
-  // base_price is numeric -> a STRING out of pg. Number() first, per the money rule.
+  // base_price is numeric -> a string out of pg. Number() first, per the money rule.
   return {
     venue: rows[0].name || null,
     price: rows[0].base_price === null ? null : Number(rows[0].base_price),

@@ -9,41 +9,41 @@
  *      low-rated venue < high-rated"
  *
  * `check_ml_service.js` proves the wiring (60 checks: envelope, auth, guardrails,
- * fallback, timezone). It deliberately does NOT prove this, because these are model
+ * fallback, timezone). It deliberately does not prove this, because these are model
  * claims, and a passing wiring test with a nonsense model is exactly the failure this
  * project cannot afford in a viva. So this script exists to make those claims
  * falsifiable, run them against the LIVE serving path, and write the result to
  * `ml-service/reports/price_sanity.json` as part of the evidence pack.
  *
- * WHY IT GOES THROUGH mlClient RATHER THAN CURLING THE PYTHON DIRECTLY
+ * Why it goes through mlClient rather than curling the Python directly
  * The number the committee will see is the number on the owner's card, and that number
  * has been through `applyGuardrails` and the rounding step. Probing FastAPI directly
  * would test a number nobody is ever shown. So this calls `mlClient.suggestPrice` — the
  * exact function `GET /api/owner/venues/:id/pricing` calls.
  *
- * WHY IT REFUSES TO RUN ON THE HEURISTIC
+ * Why it refuses to run on the heuristic
  * The heuristic multiplies peak hours by a constant. It would pass "Friday 8pm >
- * Tuesday 3am" perfectly while telling us nothing about the model. A green tick earned
+ * Tuesday 3am" perfectly while proving nothing about the model. A green tick earned
  * by the fallback is worse than a red one, so `source: 'heuristic'` is a hard failure
  * here — the one place in this codebase where the fallback is not an acceptable answer.
  *
- * TWO CLASSES OF CHECK, AND WHY THE SPLIT IS NOT AN EXCUSE
- *   [REQUIRE]  Directional claims the model must never invert. These gate the exit code.
- *   [OBSERVE]  Measured quantities recorded WITHOUT a pass/fail, because the honest
+ * Two classes of CHECK, and why the split is not an excuse
+ *   [require]  Directional claims the model must never invert. These gate the exit code.
+ *   [observe]  Measured quantities recorded without a pass/fail, because the honest
  *              reading is "this effect is smaller than the model's resolution". Printing
  *              them unjudged is the point: a 0.002 swing in P(book) on a model with
  *              Brier 0.168 is noise, and dressing noise as a passing test is the kind of
  *              thing that collapses under one question.
  *
- * THE FINDING THIS SCRIPT WAS WRITTEN TO EXPOSE
+ * The finding this script was written to expose
  * "low-rated < high-rated" is true, but only where the policy band leaves room for it.
- * At Friday 20:00 both a 4.8-star and a 2.0-star venue return the SAME price, because
+ * At Friday 20:00 both a 4.8-star and a 2.0-star venue return the same price, because
  * both are pinned to the +30% policy cap; the rating signal is real (P(book) 0.638 vs
  * 0.596) but the cap binds first and the suggestion cannot express it. That is a safety
  * feature working as designed — an owner is never shown a 3x price — and it is far more
  * defensible stated plainly than discovered by an examiner.
  *
- * And the corollary, which is easier to get wrong: the one hour where the prices ARE
+ * And the corollary, which is easier to get wrong: the one hour where the prices are
  * strictly ordered (03:00) is the hour where the ordering means least. Its P(book) gap
  * runs the other way, by 0.002. Off-peak the revenue curve is nearly flat across the
  * band, so a wobble that small moves the argmax by a whole grid step. The honest summary
@@ -52,7 +52,7 @@
  *
  * Usage:  node src/scripts/check_price_sanity.js          (from D:\sportlynk\backend)
  *         node src/scripts/check_price_sanity.js --no-write
- * Requires uvicorn on ML_SERVICE_URL. Exit 0 = every [REQUIRE] held.
+ * Requires uvicorn on ML_SERVICE_URL. Exit 0 = every [require] held.
  */
 
 const path = require('path');
@@ -66,7 +66,7 @@ const REPORT_PATH = path.join(
   __dirname, '..', '..', '..', 'ml-service', 'reports', 'price_sanity.json',
 );
 
-// A single venue profile, held constant across every scenario so that the ONLY thing
+// A single venue profile, held constant across every scenario so that the only thing
 // varying between two rows of a comparison is the thing being tested. Same sport, same
 // city, same base price — otherwise a price difference proves nothing.
 const BASE = { basePrice: 2000, sport: 'Futsal', city: 'Lahore' };
@@ -205,7 +205,7 @@ async function main() {
   );
   // The line above is the easiest number in this file to misread, so the disagreement is
   // called out rather than left for a reader to notice. A scenario where the 4.8-star
-  // venue is priced HIGHER while the model gives it a LOWER P(book) is not evidence that
+  // venue is priced higher while the model gives it a lower P(book) is not evidence that
   // rating drives price there — it is a flat revenue curve. Off-peak the curve is nearly
   // level across the band, so a 0.002 wobble in P is enough to move the argmax by one
   // grid step (PKR 100), and 0.002 on a model with Brier 0.168 carries no information.
@@ -233,9 +233,9 @@ async function main() {
 
   // ── 3. the shape of the day. One pair proves nothing; a demand curve is falsifiable.
   //
-  // MEASURED FROM THE FORECAST, NOT FROM suggestPrice — and the distinction is the whole
-  // reason this block is written the way it is. `suggestPrice.demand` is P(book) AT THE
-  // SUGGESTED PRICE, and the suggested price is different at every hour (0.75x at 03:00,
+  // Measured from the forecast, not from suggestPrice — and the distinction is the whole
+  // reason this block is written the way it is. `suggestPrice.demand` is P(book) at the
+  // suggested PRICE, and the suggested price is different at every hour (0.75x at 03:00,
   // 1.30x at 20:00). Reading those numbers as a demand curve compares eight different
   // prices and calls the result a clock effect. The first version of this script did
   // exactly that and reported a fake dip at 19:00.
@@ -312,7 +312,7 @@ async function main() {
       'same would be useless to an owner',
   );
 
-  // ── 4. the guardrail. The model may want anything; the owner must never SEE anything.
+  // ── 4. the guardrail. The model may want anything; the owner must never see anything.
   console.log('');
   console.log('CLAIM 4 — no suggestion escapes the policy band');
   const all = [friPeak, tueDead, ...ratingRows.flatMap((r) => [r.hi, r.lo])];

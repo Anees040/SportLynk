@@ -64,7 +64,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 csv.field_size_limit(10_000_000)  # RUSA has multi-KB runaway-quote rows
 
-# --- paths ------------------------------------------------------------------
+# Paths
 DATA = ROOT / "data" / "sentiment"
 RUSA_PATH = DATA / "Roman Urdu DataSet.csv"
 TWEETEVAL_DIR = DATA / "raw" / "tweeteval"
@@ -90,7 +90,7 @@ TWEETEVAL_MAP = {"0": "negative", "1": "neutral", "2": "positive"}
 NEAR_DUP_CONTAM = 0.80  # authored row this close to an exam row (Jaccard) is dropped
 
 
-# --- helpers ----------------------------------------------------------------
+# Helpers
 def _norm_key(text: str) -> str:
     """Dedup / contamination key: the frozen-normalizer output, whitespace-folded."""
     return " ".join(text_norm.normalize_text(text).split())
@@ -140,7 +140,7 @@ def _sha256_file(path: Path) -> str:
     return _sha256_bytes(path.read_bytes()) if path.is_file() else ""
 
 
-# --- source adapters --------------------------------------------------------
+# Source adapters
 class LoadReport:
     def __init__(self, source: str) -> None:
         self.source = source
@@ -274,7 +274,7 @@ def load_all_authored(paths: list[Path]) -> tuple[list[dict], LoadReport]:
     return out, rep
 
 
-# --- statistics -------------------------------------------------------------
+# Statistics
 def chi_square(table: dict[tuple[str, str], int], rows: list[str], cols: list[str]) -> dict:
     """Pearson chi-square + Cramer's V for an r x c contingency table.
 
@@ -321,7 +321,7 @@ def tvd_by_source(records: list[dict]) -> dict[str, float]:
     return out
 
 
-# --- build ------------------------------------------------------------------
+# Build
 def build(args: argparse.Namespace) -> int:
     print("Assembling sentiment corpus from real sources")
     print(f"Normalizer: {text_norm.NORM_SPEC_VERSION} / {text_norm.norm_spec_fingerprint()}\n")
@@ -345,7 +345,7 @@ def build(args: argparse.Namespace) -> int:
     if not records:
         raise SystemExit("No usable rows from any source. Is 'Roman Urdu DataSet.csv' present?")
 
-    # ---- exact dedup on normalized key ------------------------------------
+    # Exact dedup on normalized key
     seen_keys: set[str] = set()
     deduped: list[dict] = []
     dup_dropped = 0
@@ -362,7 +362,7 @@ def build(args: argparse.Namespace) -> int:
         r["_key"] = key
         deduped.append(r)
 
-    # ---- contamination gate vs the exam -----------------------------------
+    # Contamination gate vs the exam
     if not EXAM_PATH.is_file():
         raise SystemExit(f"Exam not found at {EXAM_PATH}; cannot run contamination gate.")
     with EXAM_PATH.open("r", encoding="utf-8-sig", newline="") as fh:
@@ -398,7 +398,7 @@ def build(args: argparse.Namespace) -> int:
     if not clean:
         raise SystemExit("Every row was dropped by dedup/contamination gates -- nothing to write.")
 
-    # ---- census & statistics ----------------------------------------------
+    # Census & statistics
     label_counts = Counter(r["label"] for r in clean)
     lang_counts = Counter(r["lang"] for r in clean)
     source_counts = Counter(r["source"] for r in clean)
@@ -411,7 +411,7 @@ def build(args: argparse.Namespace) -> int:
     chi_lang = chi_square(lang_label, langs_present, list(LABELS))
     tvd = tvd_by_source(clean)
 
-    # ---- write corpus (RAW text) ------------------------------------------
+    # Write corpus (RAW text)
     OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     with OUT_CSV.open("w", encoding="utf-8", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=["text", "label", "lang", "source"])
@@ -470,7 +470,7 @@ def build(args: argparse.Namespace) -> int:
     }
     OUT_META.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    # ---- report ------------------------------------------------------------
+    # Report
     print("\nCorpus assembled:")
     print(f"  rows written : {len(clean)}")
     print(f"  labels       : {dict(label_counts)}")
@@ -486,7 +486,7 @@ def build(args: argparse.Namespace) -> int:
     print(f"\nWrote {OUT_CSV.relative_to(ROOT)} and {OUT_META.relative_to(ROOT)}")
 
     # A gentle, non-fatal signal: a strong lang->label link means the model could
-    # cheat on language. We warn rather than block; the trainer's ablation is the
+    # cheat on language. The check warns rather than blocks; the trainer's ablation is the
     # real proof, and RUSA's natural label skew makes some association expected.
     if chi_lang["cramers_v"] >= 0.5:
         print(f"\n  WARNING: lang~label Cramer's V = {chi_lang['cramers_v']} is high. "

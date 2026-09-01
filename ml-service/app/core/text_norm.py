@@ -96,9 +96,7 @@ import re
 import unicodedata
 from typing import Iterable, Sequence
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 1. Contract identity
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: Bump this whenever any table, regex or step order below changes.
 #: Stamped into the joblib payload as ``normSpecVersion`` and re-checked at
@@ -110,7 +108,7 @@ NORM_SPEC_VERSION: str = "sentiment-norm-v1"
 #: Alphabetical on purpose: this is also scikit-learn's own default ordering for
 #: string classes, so ``model.classes_`` lines up with this tuple without any
 #: remapping. The spellings match the CHECK constraint in
-#: ``backend/migrations/013_*.sql`` -- NOT the ``pos/neu/neg`` shorthand used in
+#: ``backend/migrations/013_*.sql`` -- not the ``pos/neu/neg`` shorthand used in
 #: the sprint-plan prose.
 LABELS: tuple[str, str, str] = ("negative", "neutral", "positive")
 
@@ -133,7 +131,7 @@ NEG_MAX_WALK: int = 5
 #: Suffix appended to a negated token in the word stream.
 NEG_SUFFIX: str = "_neg"
 
-#: ``token_pattern`` that MUST be handed to the word-branch ``TfidfVectorizer``.
+#: ``token_pattern`` that must be handed to the word-branch ``TfidfVectorizer``.
 #: scikit-learn's default (``(?u)\b\w\w+\b``) silently discards the angle
 #: brackets, which would collapse the placeholder ``<num>`` and a reviewer
 #: typing the word "num" into the same feature -- defeating the forgery guard in
@@ -143,9 +141,7 @@ NEG_SUFFIX: str = "_neg"
 WORD_TOKEN_PATTERN: str = r"\S+"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 2. Placeholder vocabulary
-# ─────────────────────────────────────────────────────────────────────────────
 
 URL_TOKEN = "<url>"
 EMAIL_TOKEN = "<email>"
@@ -181,13 +177,11 @@ PLACEHOLDERS: tuple[str, ...] = (
 )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 3. Compiled patterns
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: Control characters, zero-width joiners, bidi overrides, variation selectors,
 #: emoji skin-tone modifiers and combining enclosing marks (keycap sequences).
-#: Tab / newline / carriage-return are deliberately NOT here -- they are clause
+#: Tab / newline / carriage-return are deliberately not here -- they are clause
 #: boundaries and are handled by ``_RE_SEP``.
 #: The last range is "Combining Diacritical Marks for Symbols", which contains
 #: nothing from any Arabic block, so Urdu text is untouched by it.
@@ -230,15 +224,15 @@ _QUOTE_MAP = {
 }
 _QUOTE_TABLE = str.maketrans(_QUOTE_MAP)
 
-#: Contractions are expanded BEFORE punctuation is stripped, because afterwards
+#: Contractions are expanded before punctuation is stripped, because afterwards
 #: "don't" and "dont" are indistinguishable from "do" + "nt".
 #:
-#: The apostrophe is optional ONLY for the ``n't`` family, where the
-#: apostrophe-less spelling is ubiquitous and near-unambiguous. It is REQUIRED
+#: The apostrophe is optional only for the ``n't`` family, where the
+#: apostrophe-less spelling is ubiquitous and near-unambiguous. It is required
 #: for ``'ll`` / ``'d`` / ``'ve`` / ``'re`` / ``'s``, because making it optional
 #: there rewrites ordinary English: ``well -> we will``, ``ill -> i will``,
 #: ``shed -> she would``, ``hell -> he will``. "well maintained ground" is a
-#: sentence this corpus actually contains.
+#: sentence this corpus contains.
 #:
 #: Known and accepted cost: "cant" (insincere talk) and "wont" (accustomed) are
 #: real English words read here as can't / won't. In venue reviews that trade is
@@ -266,9 +260,9 @@ _CONTRACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
 
 _RE_URL = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
 _RE_EMAIL = re.compile(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", re.IGNORECASE)
-#: Bounded to ONE token on purpose. guard_placeholders strips '_' first, so a
+#: Bounded to one token on purpose. guard_placeholders strips '_' first, so a
 #: handle like "@sportlynk_pk" arrives here as "@sportlynk pk"; this matches
-#: "@sportlynk" and leaves a harmless "pk". Do NOT append a "(?: \w+)*" group to
+#: "@sportlynk" and leaves a harmless "pk". Do not append a "(?: \w+)*" group to
 #: swallow that "pk" -- it is greedy and eats the entire review after any
 #: mid-sentence @mention ("@owner responded fast" -> "<user>").
 _RE_MENTION = re.compile(r"@[a-z0-9_.]{2,}", re.IGNORECASE)
@@ -289,7 +283,7 @@ _RE_MONEY = re.compile(
 _RE_NUM = re.compile(r"\d+(?:[.,]\d+)?")
 
 #: Cap runs of the same punctuation mark at two, so "!!!!!" contributes two
-#: intensity tokens instead of five. Runs are capped BEFORE substitution because
+#: intensity tokens instead of five. Runs are capped before substitution because
 #: ``<exc> <exc> <exc>`` is not a character run and would sail past ``_RE_RUN``.
 _RE_PUNCT_RUN = re.compile(r"([!?.,])\1+")
 
@@ -306,7 +300,7 @@ _RE_RUN = re.compile(r"(\w)\1{2,}")
 
 _RE_WS = re.compile(r"\s+")
 
-#: Arabic / Urdu script blocks. Presence means we are outside the training
+#: Arabic / Urdu script blocks. Presence means the input is outside the training
 #: distribution -- the corpus is Roman Urdu and English only.
 _RE_URDU = re.compile(
     "["
@@ -318,9 +312,9 @@ _RE_URDU = re.compile(
     "]"
 )
 
-#: The emoji planes we recognise. Anything matched here but absent from
-#: ``EMOJI_POLARITY`` becomes ``<emo>`` -- "an emoji we have not assigned a
-#: polarity to", which is itself a usable feature. Folding every emoji into one
+#: The emoji planes recognised here. Anything matched but absent from
+#: ``EMOJI_POLARITY`` becomes ``<emo>`` -- "an emoji with no assigned polarity",
+#: which is itself a usable feature. Folding every emoji into one
 #: token would make a heart-eyes face and a rage face identical evidence, which
 #: is what the first attempt at this module did.
 _RE_EMOJI = re.compile(
@@ -332,9 +326,7 @@ _RE_EMOJI = re.compile(
 )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 4. Emoji polarity
-# ─────────────────────────────────────────────────────────────────────────────
 
 _EMOJI_GROUPS: tuple[tuple[str, str], ...] = (
     (
@@ -378,11 +370,9 @@ EMOJI_POLARITY: dict[str, str] = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 5. Spelling variants
-# ─────────────────────────────────────────────────────────────────────────────
 #
-# Whole-token folding only, applied AFTER run collapsing -- so every key must
+# Whole-token folding only, applied after run collapsing -- so every key must
 # already be collapse-stable (no run of 3+). ``self_check()`` proves that, plus
 # key length, lowercase, no key->key chains, and value idempotency.
 #
@@ -391,12 +381,12 @@ EMOJI_POLARITY: dict[str, str] = {
 # and lets the checker catch a variant listed under two canonicals.
 #
 # Entries ending in a doubled character (``bohatt``, ``achaa``, ``nicee``) are
-# COLLAPSE RESIDUE keys, not typos: ``bohatttt`` -> ``bohatt`` -> ``bohat``.
+# collapse residue keys, not typos: ``bohatttt`` -> ``bohatt`` -> ``bohat``.
 # Deleting them silently breaks elongation handling, which is the single most
 # common orthographic feature of Roman Urdu reviews.
 
 _VARIANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    # ── Roman Urdu polarity core ──────────────────────────────────────────
+    # Roman Urdu polarity core
     ("acha", ("achha", "accha", "acchi", "achi", "achhi", "achay", "achey",
               "ache", "achaa", "aacha", "axa", "axha")),
     ("bura", ("buraa", "boora", "buraah")),
@@ -453,7 +443,7 @@ _VARIANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("saaf", ("saf", "saff")),
     ("safai", ("safaai", "safayi", "saphai")),
     ("sahulat", ("sahoolat", "suhulat", "sahulath")),
-    # ── Venue / booking domain nouns ──────────────────────────────────────
+    # Venue / booking domain nouns
     ("ground", ("grownd", "graound", "gournd", "grond", "graund")),
     ("maidan", ("medan", "maidaan", "mydan")),
     ("turf", ("truf", "turff")),
@@ -475,7 +465,7 @@ _VARIANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("time", ("taim", "tym", "tyme", "taime")),
     ("experience", ("experiance", "expirience", "experince", "expereince",
                     "experiense")),
-    # ── English shorthand and common misspellings ─────────────────────────
+    # English shorthand and common misspellings
     ("good", ("gud", "guud", "goodd")),
     ("bad", ("badd",)),
     ("best", ("bst", "bestt", "besst")),
@@ -512,7 +502,7 @@ VARIANTS: dict[str, str] = {
     for variant in variants
 }
 
-#: Tokens someone WILL eventually try to add to ``VARIANTS``, with the reason
+#: Tokens someone will eventually try to add to ``VARIANTS``, with the reason
 #: they must not be. Kept as executable data (and asserted disjoint from
 #: ``VARIANTS``) rather than prose, so the argument survives the next edit.
 DELIBERATE_EXCLUSIONS: dict[str, str] = {
@@ -536,13 +526,11 @@ DELIBERATE_EXCLUSIONS: dict[str, str] = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 6. Negation scope
-# ─────────────────────────────────────────────────────────────────────────────
 
-#: Negators that scope LEFT first, then fall back to the right if nothing was
+#: Negators that scope left first, then fall back to the right if nothing was
 #: markable on the left. Roman Urdu is verb-final: "acha nahi tha" is
-#: good-not-was, so the negated word PRECEDES the negator. The right-hand
+#: good-not-was, so the negated word precedes the negator. The right-hand
 #: fallback covers a sentence-initial "nahi" and the postpositional /
 #: prepositional ambiguity of "bina": both "parking ke bina" and "bina parking"
 #: occur, and the fallback resolves them without a second rule.
@@ -551,7 +539,7 @@ NEG_SCOPE_LEFT: frozenset[str] = frozenset({
     "bina", "baghair", "bagair",
 })
 
-#: Negators that scope RIGHT only -- English word order, plus the Urdu
+#: Negators that scope right only -- English word order, plus the Urdu
 #: prohibitive particles "na" and "mat" which precede what they negate.
 #: Known limitation: the clause-final tag-question "na" ("acha tha na") also
 #: lands here. In practice it is clause-final, so the rightward walk immediately
@@ -582,7 +570,7 @@ NEG_SKIP: frozenset[str] = frozenset({
     "was", "were", "been", "be", "am", "get", "got",
 })
 
-#: Hard boundaries. Scope stops BEFORE these, and they are never marked.
+#: Hard boundaries. Scope stops before these, and they are never marked.
 #: Coordinators and subordinators start a new polarity clause -- "not bad for
 #: the rate" must not spill ``_neg`` onto "rate".
 NEG_STOP: frozenset[str] = frozenset({
@@ -596,9 +584,7 @@ NEG_STOP: frozenset[str] = frozenset({
 })
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 7. Pipeline description
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: (name, description) in execution order. The names go into the fingerprint, so
 #: reordering or renaming a step invalidates every existing artifact -- which is
@@ -628,9 +614,7 @@ PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
 )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 8. Normalisation
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _emoji_sub(match: re.Match[str]) -> str:
@@ -660,7 +644,7 @@ def normalize_text(value: object) -> str:
     text = text.translate(_QUOTE_TABLE)
     # 4. lower
     text = text.lower()
-    # 5. guard_placeholders -- MUST precede every placeholder insertion below
+    # 5. guard_placeholders -- must precede every placeholder insertion below
     if "<" in text or ">" in text or "_" in text:
         text = text.replace("<", " ").replace(">", " ").replace("_", " ")
     # 6. contractions
@@ -709,9 +693,7 @@ def tokenize(text: str) -> list[str]:
     return text.split()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 9. Negation marking
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _scope(tokens: Sequence[str], out: list[str], index: int, step: int) -> int:
@@ -772,11 +754,9 @@ def mark_negation(tokens: Sequence[str]) -> list[str]:
     return out
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 10. Pipeline entry points
-# ─────────────────────────────────────────────────────────────────────────────
 #
-# These two MUST stay module-level functions. ``FunctionTransformer`` pickles its
+# These two must stay module-level functions. ``FunctionTransformer`` pickles its
 # callable by reference, so a lambda or a closure makes the artifact unloadable
 # and a bound method makes it depend on an instance that is not in the payload.
 #
@@ -812,9 +792,7 @@ def has_urdu_script(text: object) -> bool:
     return bool(_RE_URDU.search(text if isinstance(text, str) else str(text)))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 11. Contract identity helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def norm_spec_fingerprint() -> str:
@@ -905,9 +883,7 @@ def spec() -> dict[str, object]:
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 12. Self-check
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: Placeholder-free samples used for the idempotency proof. Drawn from the shape
 #: of real corpus rows, including the two exam sentences the first model got
@@ -942,7 +918,7 @@ _NORMALIZE_CASES: tuple[tuple[str, str], ...] = (
     ("theek tha, phir gaye", "theek tha <sep> phir gaye"),
     ("dont go there", "do not go there"),
     ("wasn't good", "was not good"),
-    # Curly apostrophe: what a phone keyboard actually inserts.
+    # Curly apostrophe: what a phone keyboard inserts.
     ("didn’t like it", "did not like it"),
     # 'well' must survive: an optional apostrophe on 'll would make this
     # "we will maintained".
@@ -984,7 +960,7 @@ def self_check() -> list[tuple[str, str]]:
     """
     receipts: list[tuple[str, str]] = []
 
-    # ── labels ────────────────────────────────────────────────────────────
+    # Labels
     assert LABELS == tuple(sorted(LABELS)), (
         f"LABELS must be alphabetical so it matches sklearn's own class "
         f"ordering; got {LABELS}"
@@ -996,7 +972,7 @@ def self_check() -> list[tuple[str, str]]:
         "labels", f"{len(LABELS)} labels, alphabetical: {', '.join(LABELS)}"
     ))
 
-    # ── placeholders ──────────────────────────────────────────────────────
+    # Placeholders
     assert len(set(PLACEHOLDERS)) == len(PLACEHOLDERS), "duplicate placeholder"
     for placeholder in PLACEHOLDERS:
         assert placeholder.startswith("<") and placeholder.endswith(">"), (
@@ -1015,7 +991,7 @@ def self_check() -> list[tuple[str, str]]:
         f"underscore-free",
     ))
 
-    # ── variant table structure ───────────────────────────────────────────
+    # Variant table structure
     declared = sum(len(variants) for _, variants in _VARIANT_GROUPS)
     assert declared == len(VARIANTS), (
         f"{declared - len(VARIANTS)} variant(s) are listed under more than one "
@@ -1059,7 +1035,7 @@ def self_check() -> list[tuple[str, str]]:
         f"all collapse-stable, chain-free and idempotent",
     ))
 
-    # ── deliberate exclusions ─────────────────────────────────────────────
+    # Deliberate exclusions
     overlap = set(DELIBERATE_EXCLUSIONS) & set(VARIANTS)
     assert not overlap, (
         f"{sorted(overlap)} are documented as deliberately excluded but are "
@@ -1073,7 +1049,7 @@ def self_check() -> list[tuple[str, str]]:
         f"VARIANTS, each with a reason",
     ))
 
-    # ── emoji table ───────────────────────────────────────────────────────
+    # Emoji table
     seen: dict[str, str] = {}
     for chars, token in _EMOJI_GROUPS:
         for char in chars:
@@ -1092,7 +1068,7 @@ def self_check() -> list[tuple[str, str]]:
         f"recognised ranges, none assigned twice",
     ))
 
-    # ── negator sets ──────────────────────────────────────────────────────
+    # Negator sets
     both = NEG_SCOPE_LEFT & NEG_SCOPE_RIGHT
     assert not both, f"{sorted(both)} appear in both negator direction sets"
     negators = NEG_SCOPE_LEFT | NEG_SCOPE_RIGHT
@@ -1122,7 +1098,7 @@ def self_check() -> list[tuple[str, str]]:
         f"sets disjoint and normaliser-stable",
     ))
 
-    # ── normalisation cases ───────────────────────────────────────────────
+    # Normalisation cases
     for raw, expected in _NORMALIZE_CASES:
         actual = normalize_text(raw)
         assert actual == expected, (
@@ -1138,7 +1114,7 @@ def self_check() -> list[tuple[str, str]]:
         f"returns str",
     ))
 
-    # ── forgery guard ─────────────────────────────────────────────────────
+    # Forgery guard
     for placeholder in PLACEHOLDERS:
         forged = normalize_text(f"ground {placeholder} tha")
         assert placeholder not in forged.split(), (
@@ -1154,7 +1130,7 @@ def self_check() -> list[tuple[str, str]]:
         f"reviewer; no '_' survives normalisation",
     ))
 
-    # ── idempotency, and its documented exception ─────────────────────────
+    # Idempotency, and its documented exception
     for sample in _IDEMPOTENT_SAMPLES:
         once = normalize_text(sample)
         assert "<" not in once, (
@@ -1175,7 +1151,7 @@ def self_check() -> list[tuple[str, str]]:
         f"placeholder degradation on re-entry is pinned",
     ))
 
-    # ── negation cases ────────────────────────────────────────────────────
+    # Negation cases
     for raw, expected in _NEGATION_CASES:
         actual = prep_word([raw])[0]
         assert actual == expected, (
@@ -1195,7 +1171,7 @@ def self_check() -> list[tuple[str, str]]:
         f"directions; idempotent; char branch stays unmarked",
     ))
 
-    # ── script handling ───────────────────────────────────────────────────
+    # Script handling
     urdu = "اچھا"  # "acha", in Urdu script
     assert has_urdu_script(urdu), "has_urdu_script missed Arabic-block text"
     assert not has_urdu_script("acha"), "has_urdu_script fired on Roman text"
@@ -1209,7 +1185,7 @@ def self_check() -> list[tuple[str, str]]:
         "misdetected",
     ))
 
-    # ── fingerprint ───────────────────────────────────────────────────────
+    # Fingerprint
     fingerprint = norm_spec_fingerprint()
     assert len(fingerprint) == 16 and all(
         char in "0123456789abcdef" for char in fingerprint
@@ -1223,9 +1199,7 @@ def self_check() -> list[tuple[str, str]]:
     return receipts
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 13. CLI
-# ─────────────────────────────────────────────────────────────────────────────
 #
 # ASCII output only. A long training run that prints its summary through a
 # cp1252 console dies at the last line, which is the most expensive possible

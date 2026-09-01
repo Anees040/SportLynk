@@ -9,7 +9,7 @@
  *
  * Every sweep:
  *   1. Take up to BATCH reviews that have text but no sentiment yet, oldest first.
- *   2. Score them in ONE batch call. The ml-service batch is all-or-nothing on
+ *   2. Score them in one batch call. The ml-service batch is all-or-nothing on
  *      validation — a single unusable row 422s the whole batch — so:
  *        • batch available            → UPDATE each scored row.
  *        • batch 422 (clientError)    → fall back to per-row scoring to isolate the
@@ -23,7 +23,7 @@
  *      permanently-unscoreable row would come back every sweep forever and wedge
  *      the queue behind it.
  *
- * Review text is NEVER logged here — only ids and counts — matching the ml-service's
+ * Review text is never logged here — only ids and counts — matching the ml-service's
  * own discipline.
  */
 

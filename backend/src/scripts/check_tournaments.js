@@ -5,46 +5,42 @@
  * Usage:  node src/scripts/check_tournaments.js            (ml-service optional)
  *         node src/scripts/check_tournaments.js --evidence (writes doc/tournament_evidence.md)
  *
- * WHY THIS SCRIPT EXISTS
- * ----------------------
- * test/fixtures.test.js and test/fixtureSchedule.test.js prove the DECISIONS with
+ * Why this script exists
+ * test/fixtures.test.js and test/fixtureSchedule.test.js prove the decisions with
  * the database down: the bracket shape, the byes, the seeding, the waterfall
  * arithmetic, the K table, the slot ranking. None of that touches a row, which is
  * the point. But a bracket the pure functions draw perfectly and the ledger records
  * wrongly is still a broken feature, and the one claim this wave rests on —
  * "the owner is never worse off than selling the same hours" — is a claim about
- * MONEY IN WALLETS, not about a pure function's return value.
+ * money in wallets, not about a pure function's return value.
  *
  * So this script drives the real service against the real schema: real venue slots
  * reserved, real entry fees frozen and released, a real bracket played out to a
- * champion, and then it reads the WALLETS and the LEDGER back and asserts the
+ * champion, and then it reads the wallets and the ledger back and asserts the
  * arithmetic to the paisa.
  *
- * NOTHING SURVIVES IT
- * -------------------
+ * Nothing survives it
  * Every service function takes a caller-owned `client` and writes no BEGIN of its
  * own — that is what lets routes/matches.js compose them, and it is what lets this
- * script hold ONE transaction open across three whole tournaments and ROLLBACK at
+ * script hold one transaction open across three whole tournaments and ROLLBACK at
  * the end. The committee's database is left exactly as it was found: no tournament,
  * no fixture, no blocked slot, no wallet movement, no notification.
  *
- * WHY IT CREATES ITS CAST INSTEAD OF CHOOSING IT
- * ----------------------------------------------
+ * Why it creates its CAST instead of choosing it
  * check_assistant.js chooses its cast from the seeded data, because a booking needs
- * one player and one venue and the seed has hundreds. A tournament needs EIGHT
+ * one player and one venue and the seed has hundreds. A tournament needs eight
  * captains of eight same-sport teams with funded wallets, and asserting the money
- * needs their opening balances known. Choosing eight would make most runs a SKIP.
- * So the venue, its owner and its free hours are CHOSEN (the demo runs on those
- * rows, so the checks must too), and the eight captains and teams are CREATED
+ * needs their opening balances known. Choosing eight would make most runs a skip.
+ * So the venue, its owner and its free hours are chosen (the demo runs on those
+ * rows, so the checks must too), and the eight captains and teams are created
  * inside the transaction that throws them away. Rows created here are prefixed
  * `zzcheck-` so that a failed run interrupted before its ROLLBACK is trivially
  * identifiable — and `--verify-clean` re-checks that none exist.
  *
- * WHAT A FAILURE MEANS
- * --------------------
+ * What a failure means
  *   ✗  a rule broke. The line names it.
  *   ~  the seeded data could not supply the case (no venue with enough free hours
- *      ahead). Reported as a SKIP, not a pass — a check that never ran is not a
+ *      ahead). Reported as a skip, not a pass — a check that never ran is not a
  *      check that passed, and the PASS line counts them separately.
  */
 const pool = require('../db/pool');
@@ -129,7 +125,7 @@ function money(got, want, label) {
   return check(Math.abs(g - w) < 0.005, label, `got ${g}, want ${w}`);
 }
 
-/** A refusal: the call failed, with THIS code, and for the stated reason. */
+/** A refusal: the call failed, with this code, and for the stated reason. */
 function refused(result, code, label) {
   const got = result && result.ok === false ? result.code : `ok:${result && result.ok}`;
   return check(result && result.ok === false && result.code === code, label,
@@ -143,7 +139,7 @@ function worked(result, label) {
 }
 
 /**
- * Run something that MIGHT fail without poisoning the outer transaction.
+ * Run something that might fail without poisoning the outer transaction.
  *
  * Postgres aborts the whole transaction on any error, so one bad query would turn
  * every later check into "current transaction is aborted" and hide the real result.
@@ -185,15 +181,13 @@ async function snapshot(client) {
   return out;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE CAST
-// ════════════════════════════════════════════════════════════════════════════
+// The CAST
 
 /**
  * The venue: chosen, never created. It needs a real price (the whole economic
  * argument is denominated in `slots.price`), an owner, and enough genuinely free
  * hours spread over enough days that a three-round bracket with a day between
- * rounds can actually be placed. The four tournaments this script draws brackets for
+ * rounds can be placed. The four tournaments this script draws brackets for
  * consume 7 + 4 + 6 + 3 = 20 hours between them, and each `generate` blocks the hours
  * it took, so the scan has to find comfortably more than that.
  *
@@ -231,12 +225,12 @@ async function pickVenue(client) {
  * The captains and their teams: created, then thrown away with the transaction.
  *
  * `tag` exists because the run needs three casts, not one: the twelve same-sport
- * captains who play, one captain of a team in the OTHER sport (so `sport_mismatch`
+ * captains who play, one captain of a team in the other sport (so `sport_mismatch`
  * is provable), and one whose wallet is empty (so `insufficient_funds` is). Without
  * a tag the second call would collide with the first on `users.email`.
  *
  * Each captain is funded to exactly `fund`, so every later assertion about their
- * wallet is an assertion about a KNOWN opening balance rather than a delta against
+ * wallet is an assertion about a known opening balance rather than a delta against
  * whatever the seed happened to leave. ELO is set descending so the seeding check
  * has an unambiguous expected order — `seedTeams` sorts on ELO, and eight teams all
  * on 1000 would make "seed 1 plays seed 8" untestable.
@@ -259,7 +253,7 @@ async function makeCast(client, {
     );
     const captainId = u[0].id;
     const { rows: t } = await client.query(
-      // $5 AND $6 both carry `elo`, on purpose. `teams.elo` is integer and the
+      // $5 and $6 both carry `elo`, on purpose. `teams.elo` is integer and the
       // legacy `teams.elo_rating` is numeric(8,2); one placeholder feeding both
       // makes Postgres deduce two conflicting types for one parameter and the
       // INSERT dies with 42P08. Two placeholders let each column infer its own
@@ -286,12 +280,12 @@ async function makeCast(client, {
 }
 
 /**
- * An entry fee that clears THIS venue's real prices, with room to spare.
+ * An entry fee that clears this venue's real prices, with room to spare.
  *
  * A fixed fee would make the later cups assert the wrong thing on a differently
  * priced venue: five teams at PKR 1,500 is PKR 7,500 of pool against four hours,
  * which on a venue charging 2,000 is a healthy cup and on one charging 3,000 is
- * UNDERWATER. Underwater is a state the module handles correctly and Block 2 already
+ * underwater. Underwater is a state the module handles correctly and Block 2 already
  * asserts through `preview`; it is not the state Blocks 7-9 were written to examine.
  * Deriving the fee from `slots.price` keeps each block testing its own claim, and
  * keeps the numbers in the evidence pack recognisable as this venue's.
@@ -313,9 +307,7 @@ async function expireDeadline(client, tournamentId) {
   );
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 1 — CONFIGURATION (SRS FE-1): what may not be created
-// ════════════════════════════════════════════════════════════════════════════
+// Block 1 — configuration (SRS FE-1): what may not be created
 
 /**
  * The refusals that cost nothing to prove and everything to get wrong. A knockout
@@ -368,7 +360,7 @@ async function blockConfig(client, ctx) {
   check(T.validateDates({ registrationDeadline: soon }).ok,
     'a future deadline with no start date is accepted');
 
-  // The one refusal that needs the database: the venue has to be YOURS.
+  // The one refusal that needs the database: the venue has to belong to the caller.
   const foreign = await client.query(
     `SELECT id FROM venues WHERE owner_id IS NOT NULL AND owner_id <> $1 AND is_active LIMIT 1`,
     [ctx.venue.owner_id],
@@ -390,18 +382,16 @@ async function blockConfig(client, ctx) {
   refused(ghost.out, 'venue_not_found', 'a tournament at a venue that does not exist is refused');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 2 — THE ECONOMICS QUOTE (the argument, made checkable)
-// ════════════════════════════════════════════════════════════════════════════
+// Block 2 — the economics quote (the argument, made checkable)
 
 /**
- * The claim this wave is built on is that a tournament pays an owner MORE than
+ * The claim this wave is built on is that a tournament pays an owner more than
  * selling the same hours, and that teams pay one fee for several matches. Both
  * halves are arithmetic over `slots.price`, and `preview` is where the owner sees
  * it before committing. So this block asserts the quote itself: that the
- * recommended fee clears the venue cost at the MINIMUM turnout (the case that
+ * recommended fee clears the venue cost at the minimum turnout (the case that
  * would otherwise bankrupt the cup), that the waterfall closes to the paisa, and
- * that round-robin's n(n-1)/2 really is quoted as the four-times-costlier thing
+ * that round-robin's n(n-1)/2 is quoted as the four-times-costlier thing
  * it is, rather than discovered at the deadline.
  */
 async function blockEconomics(client, ctx) {
@@ -432,7 +422,7 @@ async function blockEconomics(client, ctx) {
   check(asNum(p.capacity.slotTotal, 0) > asNum(p.minimum.slotTotal, 0),
     'seven hours cost more than three — the quote scales with the field, not the fee');
 
-  // --- the recommended fee: the mechanism that stops an owner underpricing ----
+  // The recommended fee: the mechanism that stops an owner underpricing
   const rec = p.recommended;
   check(rec && asNum(rec.entryFee, 0) > 0, 'a recommended entry fee is quoted',
     JSON.stringify(rec && rec.entryFee));
@@ -448,7 +438,7 @@ async function blockEconomics(client, ctx) {
     'and the owner still earns at least what selling those same hours would have paid',
     `earning ${atMin.ownerEarning} vs retail ${atMin.retailValue}`);
 
-  // --- the waterfall closes, to the paisa -------------------------------------
+  // The waterfall closes, to the paisa
   for (const [label, split] of [['at capacity', p.economics.atCapacity],
     ['at the minimum', p.economics.atMinimum], ['at the recommended fee', atMin]]) {
     money(split.pool, round2(asNum(split.venueCost, 0) + asNum(split.prize, 0) + asNum(split.margin, 0)),
@@ -460,7 +450,7 @@ async function blockEconomics(client, ctx) {
     check(split.identityOk === true, `${label}: the split reports its own identity as exact`);
   }
 
-  // --- round-robin really is the four-times-costlier thing --------------------
+  // Round-robin is quoted as the four-times-costlier format
   const rr = await probe(client, () => T.preview(client, {
     ownerId: ctx.venue.owner_id, venueId: ctx.venue.id,
     name: 'Preview League', format: 'round_robin', maxTeams: 6, minTeams: 4,
@@ -478,9 +468,7 @@ async function blockEconomics(client, ctx) {
   return p;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 3 — REGISTRATION, THE MONEY DOOR (FE-3, FE-4, FE-5)
-// ════════════════════════════════════════════════════════════════════════════
+// Block 3 — registration, the money door (FE-3, FE-4, FE-5)
 
 /** The ledger rows this run wrote for one user, newest first. */
 async function txnsOf(client, userId, { type = null, tournamentId = null } = {}) {
@@ -498,7 +486,7 @@ async function txnsOf(client, userId, { type = null, tournamentId = null } = {})
 
 /**
  * One entry fee, followed end to end: the balance falls, the frozen balance rises
- * by the same amount, the wallet TOTAL does not move (nothing has been spent yet —
+ * by the same amount, the wallet total does not move (nothing has been spent yet —
  * it is held), and a `tournament_entry` row records it against the tournament.
  *
  * The total-unchanged assertion is the one that matters. A fee that left the
@@ -529,7 +517,7 @@ async function blockRegistration(client, ctx, t) {
     money(entry.balance_after, after.balance, 'and the balance it recorded matches the wallet');
   }
 
-  // --- the refusals -----------------------------------------------------------
+  // The refusals
   refused(
     (await probe(client, () => T.register(client, {
       userId: one.captainId, tournamentId: t.id, teamId: one.teamId,
@@ -557,7 +545,7 @@ async function blockRegistration(client, ctx, t) {
   const brokeWallet = await walletOf(client, ctx.broke.captainId);
   money(brokeWallet.frozen, 0, 'the refused captain has nothing frozen');
 
-  // --- withdraw gives every rupee back ----------------------------------------
+  // Withdraw gives every rupee back
   const w = await probe(client, () => T.withdraw(client, {
     userId: one.captainId, tournamentId: t.id, teamId: one.teamId,
   }));
@@ -574,7 +562,7 @@ async function blockRegistration(client, ctx, t) {
   }));
   worked(again.out, 'and the team may enter again after withdrawing');
 
-  // --- fill the field, then prove the cap and the removal both hold ------------
+  // Fill the field, then prove the cap and the removal both hold
   for (let i = 1; i <= 7; i += 1) {
     const c = cast[i];
     const r = await probe(client, () => T.register(client, {
@@ -593,7 +581,7 @@ async function blockRegistration(client, ctx, t) {
     'full', 'a ninth team is refused — the participant cap is enforced (FE-4)',
   );
 
-  // FE-5: removal is a refund AND a freed spot, which is why it is tested as one
+  // FE-5: removal is a refund and a freed spot, which is why it is tested as one
   // thing. A removal that took the money and left the field full would be worse
   // than a refusal.
   const removed = cast[7];
@@ -621,9 +609,7 @@ async function blockRegistration(client, ctx, t) {
   return true;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 4 — THE DEADLINE (FE-4): too few teams means everyone is paid back
-// ════════════════════════════════════════════════════════════════════════════
+// Block 4 — the deadline (FE-4): too few teams means everyone is paid back
 
 /**
  * The rule that makes a tournament safe to enter: if the field does not reach
@@ -685,21 +671,19 @@ async function blockUnderMinimum(client, ctx) {
   eq(fixtures[0].n, 0, 'no fixture was written for the cancelled tournament');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 5 — GENERATION (FE-6): the bracket, the ground, and the money
-// ════════════════════════════════════════════════════════════════════════════
+// Block 5 — generation (FE-6): the bracket, the ground, and the money
 
 /**
  * The transaction the module is built around, asserted in four parts:
  *
  *   the DRAW      — 8 teams, 3 rounds, 7 fixtures, seeded 1-v-8 by ELO;
- *   the GROUND    — seven distinct real slots, every one of them now 'blocked',
+ *   the ground    — seven distinct real slots, every one of them now 'blocked',
  *                   and no slot used twice (uq_fixtures_slot_id is the guarantee,
  *                   this is the proof it holds in practice);
- *   the MONEY     — every captain's frozen fee released, the owner's balance up by
+ *   the money     — every captain's frozen fee released, the owner's balance up by
  *                   `venue_cost + margin`, the prize frozen where a withdrawal
  *                   cannot reach it, and the waterfall closing to the paisa;
- *   the PROVENANCE— `meta.scheduling.source` is 'model' or 'chronological' and says
+ *   the provenance— `meta.scheduling.source` is 'model' or 'chronological' and says
  *                   which, so the demo proves the model ran instead of asserting it.
  */
 async function blockGenerate(client, ctx, t) {
@@ -735,7 +719,7 @@ async function blockGenerate(client, ctx, t) {
   const d = g.out.data;
   ctx.generated = d;
 
-  // --- the draw ---------------------------------------------------------------
+  // The draw
   eq(d.teams, 8, 'eight teams are in the field');
   eq(d.bracket.rounds, 3, 'an 8-team knockout is 3 rounds');
   eq(d.bracket.size, 8, 'the bracket size is 8 — no padding was needed');
@@ -761,7 +745,7 @@ async function blockGenerate(client, ctx, t) {
     labels.join(' | '));
   check(labels.some((l) => /semi/i.test(l)), 'and the round before it is labelled Semi-final');
 
-  // --- the ground -------------------------------------------------------------
+  // The ground
   const { rows: placed } = await client.query(
     `SELECT f.id, f.slot_id, f.scheduled_at, f.round, s.status::text AS slot_status,
             to_char(s.slot_date, 'YYYY-MM-DD') AS slot_date, s.start_time, s.price
@@ -781,7 +765,7 @@ async function blockGenerate(client, ctx, t) {
   eq(noBooking[0].n, 0,
     'NOT ONE booking row was written — a fixture reserves, it does not book (no double charge, no no-show sweep)');
 
-  // --- the money --------------------------------------------------------------
+  // The money
   const split = d.economics;
   money(split.pool, fee * 8, 'the pool is eight entry fees');
   money(split.venueCost, placed.reduce((sum, r) => sum + asNum(r.price, 0), 0),
@@ -829,7 +813,7 @@ async function blockGenerate(client, ctx, t) {
   money(round2((ownerAfter.balance - ownerBefore.balance) + (ownerAfter.frozen - ownerBefore.frozen)),
     split.pool, 'THE WHOLE POOL is now with the owner — nothing has evaporated');
 
-  // --- the stored amounts, so no auditor has to re-derive them -----------------
+  // The stored amounts, so no auditor has to re-derive them
   const row = await T.loadTournament(client, t.id);
   ctx.tRow = row;
   eq(row.status, 'active', 'the tournament is now active');
@@ -840,7 +824,7 @@ async function blockGenerate(client, ctx, t) {
   money(row.prize_amount, split.prize, 'prize_amount is stored');
   money(row.owner_earning_amount, split.ownerEarning, 'owner_earning_amount is stored');
 
-  // --- the provenance ---------------------------------------------------------
+  // The provenance
   const sch = d.meta && d.meta.scheduling;
   check(sch && [scheduler.SOURCE.MODEL, scheduler.SOURCE.CHRONOLOGICAL].includes(sch.source),
     'the schedule is stamped with its provenance', sch ? sch.source : 'no meta.scheduling');
@@ -859,7 +843,7 @@ async function blockGenerate(client, ctx, t) {
 
   // The final should be the round the model liked most and the early rounds the
   // hours it liked least — that is the whole point of asking a booking-probability
-  // model the inverse question. Only assertable when the model actually answered.
+  // model the inverse question. Only assertable when the model answered.
   if (sch && sch.source === scheduler.SOURCE.MODEL) {
     const final = sch.picks.find((x) => x.round === 3);
     const early = sch.picks.find((x) => x.round === 1);
@@ -874,7 +858,7 @@ async function blockGenerate(client, ctx, t) {
     skip('the final takes a busier hour than round 1', 'ml-service unavailable, chronological fallback');
   }
 
-  // --- the unblock guard: the owner cannot free an hour a fixture stands on ----
+  // The unblock guard: the owner cannot free an hour a fixture stands on
   const { rows: guard } = await client.query(
     `SELECT f.id FROM fixtures f JOIN tournaments t2 ON t2.id = f.tournament_id
       WHERE f.slot_id = $1 AND f.status <> 'cancelled' LIMIT 1`, [placed[0].slot_id]);
@@ -883,9 +867,7 @@ async function blockGenerate(client, ctx, t) {
   return d;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 6 — RESULTS, K, ADVANCEMENT AND THE PODIUM (FE-7)
-// ════════════════════════════════════════════════════════════════════════════
+// Block 6 — results, K, advancement and the podium (FE-7)
 
 /** The bracket as it stands, keyed by round then position. */
 async function bracketNow(client, tournamentId) {
@@ -937,7 +919,7 @@ async function settleAndAssert(client, ctx, t, fixture, { scoreA, scoreB, expect
   eq(String(data.winner), expectWinner, `${label}: the right team won`);
   eq(data.draw, scoreA === scoreB, `${label}: the draw flag matches the scoreline`);
 
-  // K is READ from elo_history, not taken from the response, because the claim
+  // K is read from elo_history, not taken from the response, because the claim
   // being made is about the stored rating trail an examiner would query.
   const rows = await eloRowsFor(client, data.matchId);
   eq(rows.length, 2, `${label}: two rating rows, one per team`);
@@ -974,7 +956,7 @@ async function block6(client, ctx) {
   const r1 = board.filter((f) => f.round === 1).sort((a, b) => a.position - b.position);
   if (r1.length !== 4) return skip(`round 1 has ${r1.length} fixtures, expected 4`);
 
-  // ── Refusals first, on a live bracket, before any of it is played ──────────
+  // Refusals first, on a live bracket, before any of it is played
   const byCaptain = await probe(client, () => T.settleFixture(client, {
     actorId: ctx.field[0].userId, tournamentId: t.id, fixtureId: r1[0].id, scoreA: 3, scoreB: 0,
   }));
@@ -989,7 +971,7 @@ async function block6(client, ctx) {
   }));
   refused(noScore.out, 'bad_score', 'a half-entered scoreline is refused');
 
-  // ── Round 1: a win, a draw, a rout and a walkover ──────────────────────────
+  // Round 1: a win, a draw, a rout and a walkover
   // Four different endings on purpose, because each one exercises a different
   // rule: the ordinary case, the knockout tie-break, and the game nobody played.
   const win1 = await settleAndAssert(client, ctx, t, r1[0],
@@ -1016,7 +998,7 @@ async function block6(client, ctx) {
   await settleAndAssert(client, ctx, t, r1[2],
     { scoreA: 3, scoreB: 0, expectK: ctx.policy.kEarly, label: 'R1 · a 3-0' });
 
-  // The walkover. THE CLAIM: no game was played, so no rating moves and no
+  // The walkover. The claim: no game was played, so no rating moves and no
   // counter moves — the only things that change are the bracket and the record
   // that it happened.
   const wo = r1[3];
@@ -1052,7 +1034,7 @@ async function block6(client, ctx) {
     eq(hist[0].n, 0, 'R1 · NO elo_history row exists for a walkover');
   }
 
-  // ── Round 2: the semi-finals, rated harder ─────────────────────────────────
+  // Round 2: the semi-finals, rated harder
   const semis = (await bracketNow(client, t.id))
     .filter((f) => f.round === 2).sort((a, b) => a.position - b.position);
   eq(semis.length, 2, 'R2 · both semi-finals exist');
@@ -1067,7 +1049,7 @@ async function block6(client, ctx) {
     });
   }
 
-  // ── The final: K at its highest, and the podium paid ───────────────────────
+  // The final: K at its highest, and the podium paid
   const finals = (await bracketNow(client, t.id)).filter((f) => f.round === 3);
   eq(finals.length, 1, 'F · one final');
   const fin = finals[0];
@@ -1092,7 +1074,7 @@ async function block6(client, ctx) {
   eq(String(podium.winnerTeam), String(fin.teamA), 'F · the champion is the team that won it');
   eq(String(podium.runnerUpTeam), String(fin.teamB), 'F · and the beaten finalist is runner-up');
 
-  // THE PODIUM. The prize came out of the OWNER'S FROZEN balance — where
+  // The podium. The prize came out of the owner's FROZEN balance — where
   // generation put it — and landed in two captains' spendable balances. Nothing
   // was minted: the owner's frozen falls by exactly what the two of them gained.
   const winnerShare = round2(asNum(podium.winnerShare, 0));
@@ -1139,7 +1121,7 @@ async function block6(client, ctx) {
   eq(champRecord.played, 3, 'F · the champion is recorded as having played all three rounds');
 
   // Every counter, derived from the bracket rather than from my expectation of it:
-  // a team's `tournament_played` must equal the number of PLAYED fixtures it
+  // a team's `tournament_played` must equal the number of `played` fixtures it
   // appeared in — which is also the cleanest possible proof that the walkover
   // moved nobody's record, since it appears in the bracket but not in this count.
   const wholeBracket = await bracketNow(client, t.id);
@@ -1167,7 +1149,7 @@ async function block6(client, ctx) {
     'F · every tournament record matches the played fixtures exactly — the walkover counts for nobody',
     countersDetail.join(' | '));
 
-  // K really did rise with the stakes. Read back from the trail, per round, so the
+  // K rose with the stakes. Read back from the trail, per round, so the
   // claim "a final moves a rating ~75% harder than a friendly" is checkable.
   const { rows: ks } = await client.query(
     `SELECT f.round, MIN(eh.k_factor)::numeric AS k
@@ -1207,15 +1189,13 @@ async function block6(client, ctx) {
   eq(reAdvance.out && reAdvance.out.data.advanced, false, 'and it reports that it advanced nothing');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 7 — A FIELD THAT IS NOT A POWER OF TWO: BYES
-// ════════════════════════════════════════════════════════════════════════════
+// Block 7 — A field that is not a power of two: byes
 
 /**
  * `max_teams` must be a power of two, but the count at the deadline is whatever
- * actually turned up. Five teams is therefore the ordinary case, not the exotic
+ * turned up. Five teams is therefore the ordinary case, not the exotic
  * one, and the bracket has to absorb it: pad to eight, give the three spare places
- * to the TOP seeds, and resolve those three immediately so round two has real teams
+ * to the top seeds, and resolve those three immediately so round two has real teams
  * standing in it.
  *
  * The claim being proved is that a bye is bookkeeping, not a match. It consumes no
@@ -1227,7 +1207,7 @@ async function block7(client, ctx) {
   section('7 · A FIVE-TEAM FIELD: PADDING, BYES AND WHO GETS THEM');
   const five = ctx.cast.slice(0, 5);
   // These five have already played the eight-team cup, so "a bye moved nothing" is
-  // a claim about a DELTA. Snapshot first, compare after.
+  // a claim about a delta. Snapshot first, compare after.
   const recordBefore = new Map();
   for (const c of five) recordBefore.set(String(c.teamId), await teamCounters(client, c.teamId));
   const fee = feeFor(ctx, { fixtures: 4, teams: 5 });
@@ -1302,7 +1282,7 @@ async function block7(client, ctx) {
   }
 
   // The money still closes with a five-team field, and the venue cost counts only
-  // the FOUR hours that will actually be used — which is precisely why a short
+  // the four hours that will be used — which is precisely why a short
   // field is cheaper per team rather than a loss for someone.
   const split = d.economics;
   const withSlots = rows.filter((f) => f.slotId);
@@ -1356,13 +1336,11 @@ async function block7(client, ctx) {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 8 — ROUND ROBIN: THE TABLE, NOT THE BRACKET (FE-6, FE-7)
-// ════════════════════════════════════════════════════════════════════════════
+// Block 8 — round robin: the table, not the bracket (FE-6, FE-7)
 
 /**
  * A league is a different shape of the same module: no elimination, no advance,
- * n(n-1)/2 fixtures, and the champion decided by a TABLE rather than by a final.
+ * n(n-1)/2 fixtures, and the champion decided by a table rather than by a final.
  * Four teams is six fixtures over three matchdays, which is small enough to state
  * the whole expected table in advance and then assert it row by row.
  *
@@ -1418,7 +1396,7 @@ async function block8(client, ctx) {
   check(rows.every((f) => f.nextRound === null && f.nextPosition === null),
     'no fixture points at a next round — a league does not advance, it accumulates');
 
-  // ── The results, chosen so the table needs its tie-breaks ──────────────────
+  // The results, chosen so the table needs its tie-breaks
   // Seeds 1 and 2 finish level on seven points and are separated by goal
   // difference alone, which is the only way to prove the sort is doing the work.
   const seedOf = new Map(d.seeds.map((s) => [String(s.teamId), s.seed]));
@@ -1468,7 +1446,7 @@ async function block8(client, ctx) {
   money(leagueK[0] && leagueK[0].k, ctx.policy.kEarly,
     `league · and it is the early-round K (${ctx.policy.kEarly}) — a league has no final to weight`);
 
-  // ── The table ──────────────────────────────────────────────────────────────
+  // The table
   // Stated in full and asserted row by row, because "the standings look right" is
   // not a claim: 3/1/0, goal difference as the separator, and the champion taken
   // from the top of the table rather than from a final that a league never plays.
@@ -1529,9 +1507,7 @@ async function block8(client, ctx) {
     `earning ${leagueSplit.ownerEarning} vs venue cost ${leagueSplit.venueCost}`);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 9 — THE OTHER DOOR: THE S.2 MATCH FLOW
-// ════════════════════════════════════════════════════════════════════════════
+// Block 9 — the other door: the S.2 MATCH flow
 
 /**
  * Two doors, one bracket. Block 6 proved the organiser's door; this one proves the
@@ -1540,12 +1516,12 @@ async function block8(client, ctx) {
  * would be worse than one with a single door.
  *
  * `routes/matches.js` is an Express handler and cannot be called from here, so what
- * is asserted is the CONTRACT it depends on, in the order it uses it:
+ * is asserted is the contract it depends on, in the order it uses it:
  *
- *   1. `matchContext` answers WHO may verify and WITH WHAT K — and answers `null`
+ *   1. `matchContext` answers who may verify and with what K — and answers `null`
  *      for a friendly, which is the branch that keeps the S.2 path unchanged;
- *   2. the ELO exchange is applied ONCE, by the caller, with that K;
- *   3. `advanceAfterMatch` moves the bracket and does NOT rate the game a second
+ *   2. the ELO exchange is applied once, by the caller, with that K;
+ *   3. `advanceAfterMatch` moves the bracket and does not rate the game a second
  *      time — the one mistake that leaves no trace afterwards;
  *   4. the extended match view resolves a venue, a time and an owner for a match
  *      that has no booking at all.
@@ -1577,7 +1553,7 @@ async function block9(client, ctx) {
   const semi = board.filter((f) => f.round === 1).sort((a, b) => a.position - b.position)[0];
   eq(board.length, 3, 'a four-team knockout is two semi-finals and a final');
 
-  // ── Step 1: the match row a captain's submission produces ──────────────────
+  // Step 1: the match row a captain's submission produces
   // Written here exactly as `routes/matches.js` writes it: no booking, the
   // tournament on the row, and both scores agreed by the two captains.
   const { rows: ins } = await client.query(
@@ -1589,15 +1565,15 @@ async function block9(client, ctx) {
   const matchId = ins[0].id;
   await client.query('UPDATE fixtures SET match_id = $2 WHERE id = $1', [semi.id, matchId]);
 
-  // ── Step 2: matchContext — authority and K, from the tournament ────────────
+  // Step 2: matchContext — authority and K, from the tournament
   const mctx = await T.matchContext(client, matchId);
   check(Boolean(mctx) && mctx.isTournament === true,
     'matchContext recognises a tournament match');
   if (mctx) {
     eq(String(mctx.ownerId), String(ctx.venue.owner_id),
       'AUTHORITY: the person entitled to verify is the ORGANISER, reached through tournaments.owner_id');
-    // kSemi, not kEarly. This block posts a FOUR-team cup, so it has two rounds
-    // and round 1 IS the semi-final -- `fx.kFactorFor` returns table.semi for
+    // kSemi, not kEarly. This block posts a four-team cup, so it has two rounds
+    // and round 1 is the semi-final -- `fx.kFactorFor` returns table.semi for
     // `round === rounds - 1`. Expecting the early K here asserted the shape of an
     // eight-team bracket against a four-team one.
     eq(Number(mctx.kFactor), ctx.policy.kSemi,
@@ -1607,7 +1583,7 @@ async function block9(client, ctx) {
     eq(mctx.fixtureStatus, 'upcoming', 'and the fixture is still open');
   }
 
-  // ── Step 3: the caller applies the exchange ONCE, with that K ──────────────
+  // Step 3: the caller applies the exchange once, with that K
   const eloPolicy = await settings.elo({ client });
   const exchange = await elo.applyResult(client, {
     matchId,
@@ -1624,7 +1600,7 @@ async function block9(client, ctx) {
     [matchId, semi.teamA, ctx.venue.owner_id]);
   eq(Number(exchange.kFactor), ctx.policy.kSemi, 'the exchange was rated at the tournament K');
 
-  // ── Step 4: advanceAfterMatch moves the bracket, and rates nothing ─────────
+  // Step 4: advanceAfterMatch moves the bracket, and rates nothing
   const adv = await probe(client, () => T.advanceAfterMatch(client, matchId));
   if (worked(adv.out, 'advanceAfterMatch answers on a tournament match', adv.err && adv.err.message)) {
     eq(adv.out.data.advanced, true, 'it reports that it advanced the bracket');
@@ -1638,7 +1614,7 @@ async function block9(client, ctx) {
     ), 'and the winner is standing in the final');
   }
 
-  // THE ASSERTION THIS BLOCK EXISTS FOR. Two rows, not four: `advanceAfterMatch`
+  // The assertion this block exists for. Two rows, not four: `advanceAfterMatch`
   // runs with applyElo:false because the caller has already rated the game. A
   // second application would double the rating change for one match and leave no
   // way to tell afterwards which half was real.
@@ -1657,7 +1633,7 @@ async function block9(client, ctx) {
   eq(again.out && again.out.code, 'already_settled', 'a repeat advance is a no-op');
   eq((await eloRowsFor(client, matchId)).length, 2, 'and writes no further rating rows');
 
-  // ── Step 5: the extended view — a match with NO booking still has a where ──
+  // Step 5: the extended view — a match with no booking still has a where
   const { rows: view } = await client.query(
     `SELECT ${mc.MATCH_VIEW_COLUMNS} ${mc.MATCH_VIEW_FROM} WHERE m.id = $1`, [matchId]);
   check(view.length === 1, 'the match view returns the tournament match');
@@ -1679,7 +1655,7 @@ async function block9(client, ctx) {
       'and both rating deltas are visible on the row', `${v.ct_delta} / ${v.ot_delta}`);
   }
 
-  // ── The friendly branch: the S.2 path must be untouched ────────────────────
+  // The friendly branch: the S.2 path must be untouched
   // A tournament hook that changed how a friendly behaves would be a regression
   // dressed as a feature, so the null answer is asserted rather than assumed.
   const { rows: fr } = await client.query(
@@ -1699,9 +1675,7 @@ async function block9(client, ctx) {
   eq((await eloRowsFor(client, friendly)).length, 0, 'the friendly was not rated by any of this');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 10 — THE CLOSING AUDIT: NOTHING WAS MINTED, NOTHING VANISHED
-// ════════════════════════════════════════════════════════════════════════════
+// Block 10 — the closing audit: nothing was minted, nothing vanished
 
 /**
  * Four tournaments have run: one cancelled under the minimum, one eight-team
@@ -1713,11 +1687,11 @@ async function block9(client, ctx) {
  *
  * It is asked three ways, because each catches a different class of bug:
  *
- *   TOTAL       — every watched wallet's balance PLUS frozen, summed. Catches a
+ *   Total       — every watched wallet's balance plus frozen, summed. Catches a
  *                 payout larger than the pool, and a refund paid twice.
- *   OUTSTANDING — what is still frozen must be exactly the prize of the one
+ *   Outstanding — what is still frozen must be exactly the prize of the one
  *                 tournament still in flight. Catches a hold nobody released.
- *   PER ROW     — for each tournament, what the captains paid in equals the pool
+ *   Per row     — for each tournament, what the captains paid in equals the pool
  *                 plus what was refunded, and the pool equals the owner's earning
  *                 plus what the podium was paid. Catches money moving without a
  *                 ledger row to explain it, which is the failure an auditor finds
@@ -1797,9 +1771,7 @@ async function block10(client, ctx, opening) {
   eq(orphan[0].n, 0, 'every tournament ledger row names the tournament it belongs to');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE DRIVER
-// ════════════════════════════════════════════════════════════════════════════
+// The driver
 
 /**
  * `--verify-clean` — the other half of the promise this script makes.
@@ -1867,7 +1839,7 @@ async function main() {
 
     // The cast: twelve who play, one in the wrong sport, one with an empty wallet.
     // Funded well past the four entry fees any one of them pays, because the point
-    // of the wallet assertions is the DELTA, not the opening number.
+    // of the wallet assertions is the delta, not the opening number.
     ctx.cast = await makeCast(client, { sport, city: ctx.venue.city, count: 12, fund: 60000 });
     [ctx.wrongSport] = await makeCast(client, {
       sport: otherSport, city: ctx.venue.city, count: 1, fund: 60000,
@@ -1880,7 +1852,7 @@ async function main() {
     ctx.captainByTeam = new Map([...ctx.cast, ctx.wrongSport, ctx.broke]
       .map((c) => [String(c.teamId), c.captainId]));
 
-    // The baseline for the closing audit, taken AFTER funding and BEFORE any
+    // The baseline for the closing audit, taken after funding and before any
     // tournament exists. Funding a wallet is a mint; the tournaments must not be.
     const opening = await snapshot(client);
 
@@ -1921,7 +1893,7 @@ async function main() {
     await block9(client, ctx);
     await block10(client, ctx, opening);
 
-    // ---- the evidence pack, while the numbers are still in hand ---------------
+    // The evidence pack, while the numbers are still in hand
     if (ev.on) {
       const sch = (ctx.generated && ctx.generated.meta && ctx.generated.meta.scheduling) || {};
       const econ = (ctx.generated && ctx.generated.economics) || {};
@@ -1959,7 +1931,7 @@ async function main() {
     }
   } catch (err) {
     console.error(`\n  ✗ the run stopped: ${err.message}`);
-    // The stack, not just the message. A bare pg message like "inconsistent types
+    // The stack, not the message alone. A bare pg message like "inconsistent types
     // deduced for parameter $5" names no file and no query, and hunting it by eye
     // across 1900 lines is the slowest possible way to fix a one-line bug.
     if (err.stack) {

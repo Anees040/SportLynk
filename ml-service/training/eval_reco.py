@@ -82,12 +82,10 @@ from app.core import config  # noqa: E402
 from app.core import reco_features as rf  # noqa: E402
 from app.core.reco_model import VenueRecommender  # noqa: E402
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Configuration — every knob in one dict, because the viva question is "why 0.4?"
 # and the answer has to be readable without scrolling. NOTE: `taste` describes the
-# SIMULATED PLAYERS, not the recommender; the recommender's weights are frozen in
+# simulated players, not the recommender; the recommender's weights are frozen in
 # core/reco_features.py and swept in WEIGHT_GRID.
-# ─────────────────────────────────────────────────────────────────────────────
 
 EVAL_CONFIG: dict = {
     "topK": 5,                 # the wave asks for HitRate@5 / Precision@5
@@ -102,7 +100,7 @@ EVAL_CONFIG: dict = {
     },
     "tasteSharpness": 2.0,     # utility ** this, before sampling; >1 = decisive players
     "priceTolerance": 0.35,    # log-price scale of a player's price comfort zone
-    # A long tail on purpose: users with 0-2 bookings are INELIGIBLE for leave-last-out
+    # A long tail on purpose: users with 0-2 bookings are ineligible for leave-last-out
     # but they are the majority of any real platform, and they exercise the cold-start
     # branch that must not crash on a zero vector.
     "bookingsPmf": {0: 0.18, 1: 0.16, 2: 0.14, 3: 0.16, 4: 0.13, 5: 0.10, 6: 0.07, 7: 0.04, 8: 0.02},
@@ -113,7 +111,7 @@ EVAL_CONFIG: dict = {
 
 # Alternatives for the user-vector blend, swept to justify the shipped 0.5/0.3/0.2.
 # No row may contain a hard 0.00: blend_user_vector renormalises over the components a
-# given user actually HAS, so if a user's only present component carries weight 0 the
+# given user has, so if a user's only present component carries weight 0 the
 # renormalisation divides by zero. Unreachable in production (all three shipped weights
 # are non-zero) but reachable from a sweep, hence the 0.01 floor — 0.98/0.01/0.01 is the
 # "history only" row in all but name.
@@ -137,14 +135,12 @@ ARM_LABELS = {
     ARM_CONTENT: "content model",
 }
 
-# Release-style gate: the content model must beat the baseline the app actually falls
+# Release-style gate: the content model must beat the baseline the app falls
 # back to. Beating `random` proves nothing; beating cold-start is the claim on the card.
 MIN_LIFT_OVER_COLD_START = 0.05
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The synthetic world (read from the frozen CSV — never regenerated)
-# ─────────────────────────────────────────────────────────────────────────────
 
 CSV_COLUMNS = ("venue_id", "sport", "city", "venue_rating", "base_price", "ground_type", "slot_date", "booked")
 
@@ -233,9 +229,7 @@ def load_world(csv_path: Path) -> World:
         booked_rows=booked_total,
     )
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The user layer the simulator never had
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _pmf(mapping: dict) -> tuple[list, np.ndarray]:
@@ -317,7 +311,7 @@ def simulate_users(world: World, rng: np.random.Generator, cfg: dict) -> list[di
             {
                 "userId": "synth-%04d" % i,
                 # Blank on purpose — see rank_arms(): the hard city prefilter is disabled
-                # for ALL arms so every arm competes over one candidate set.
+                # for all arms so every arm competes over one candidate set.
                 "city": "",
                 "homeCity": city,
                 "sportPreferences": stated,
@@ -327,9 +321,7 @@ def simulate_users(world: World, rng: np.random.Generator, cfg: dict) -> list[di
         )
     return users
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Metrics
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -434,9 +426,7 @@ def spread(values: list[int]) -> dict:
         "distinctValues": len(set(ordered)),
     }
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The four arms
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _strip(user: dict, *, keep_sports: bool) -> dict:
@@ -535,9 +525,7 @@ def evaluate(
     guard["profiles"] = sorted(set(guard["profiles"]))
     return every, novel, guard
 
-# ─────────────────────────────────────────────────────────────────────────────
 # "Why 0.5 / 0.3 / 0.2?" — the sweep that answers it with a table
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def sweep(venues: list[dict], users: list[dict], *, as_of: str, seed: int) -> list[dict]:
@@ -579,9 +567,7 @@ def sweep(venues: list[dict], users: list[dict], *, as_of: str, seed: int) -> li
     return out
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The real seeded corpus — read from the released artifact, not from Postgres
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def load_artifact(path: Path) -> dict:
@@ -599,9 +585,7 @@ def load_artifact(path: Path) -> dict:
 def eligible_count(users: list[dict], minimum: int) -> int:
     return sum(1 for u in users if len(u.get("bookings") or []) >= minimum)
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Reports
-# ─────────────────────────────────────────────────────────────────────────────
 
 ARM_ORDER = (ARM_RANDOM, ARM_POPULARITY, ARM_COLD, ARM_CONTENT)
 
@@ -961,7 +945,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"world      : {len(world.venues)} venues · {world.booked_rows:,}/{world.rows:,} slots booked · as_of {world.as_of[:10]}")
     print(f"artifact   : {artifact['modelVersion']} · spec {artifact['recoSpecFingerprint']}")
 
-    # ── synthetic arm ──────────────────────────────────────────────────────
+    # Synthetic arm
     synth = simulate_users(world, np.random.default_rng(args.seed), EVAL_CONFIG)
     synth_eligible = eligible_count(synth, EVAL_CONFIG["minBookings"])
     print(f"synthetic  : {len(synth)} players · {synth_eligible} eligible (>={EVAL_CONFIG['minBookings']} bookings)")
@@ -976,7 +960,7 @@ def main(argv: list[str] | None = None) -> int:
         detail=f"{synth_eligible} simulated players with >={EVAL_CONFIG['minBookings']} bookings",
     )
 
-    # ── real arm: the users frozen inside the served artifact, no DB needed ─
+    # Real arm: the users frozen inside the served artifact, no DB needed
     real_users = list(served.users.values())
     r_every, r_novel, _ = evaluate(
         served.venues,
@@ -996,7 +980,7 @@ def main(argv: list[str] | None = None) -> int:
 
     grid = [] if args.no_sweep else sweep(world.venues, synth, as_of=world.as_of, seed=args.seed + 1)
 
-    # ── console summary ────────────────────────────────────────────────────
+    # Console summary
     print("\n" + _arm_table(novel).replace("|", " ").replace("---", "   "))
     print("\n" + _lift_line(novel).replace("**", ""))
     lift = novel.lift(ARM_CONTENT, ARM_COLD)

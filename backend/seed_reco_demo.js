@@ -1,28 +1,28 @@
 /**
  * S.5 Wave C — venue-recommender demo seed.
  *
- * THE PROBLEM IT SOLVES
+ * The problem it solves
  * The milestone asks for a demo beat where "two different players open the app and
  * see different venue rails". That is a property of the DATA, not of the model: a
  * content recommender builds each player's profile out of the venues they booked,
  * so two players with no booking history — or with the same one — get the same rail
- * and the whole point is invisible. This writes two deliberately CONTRASTING booking
+ * and the whole point is invisible. This writes two deliberately contrasting booking
  * histories so the difference is visible on screen and explainable on a slide.
  *
- * WHAT IT LEAVES BEHIND
+ * What it leaves behind
  *   • Player 1 → three bookings on one end of the catalogue (one sport, or the
  *     premium end when the catalogue is single-sport) + one 5-star review there.
- *   • Player 2 → three bookings on the OTHER end + one 5-star review there.
+ *   • Player 2 → three bookings on the other end + one 5-star review there.
  *   • Bookings are dated 4 / 12 / 25 days ago via `created_at`, because the profile
  *     is recency-weighted (90-day half-life): the newest booking pulls the rail
  *     hardest, which is exactly the behaviour worth demonstrating.
- *   • Stated sport preferences, but ONLY for a player whose preferences are empty —
+ *   • Stated sport preferences, but only for a player whose preferences are empty —
  *     it never overwrites a real choice, and says so when it declines.
  *
- * IT DOES NOT CREATE USERS OR VENUES. Register the players and approve the venues
+ * It does NOT CREATE users or VENUES. Register the players and approve the venues
  * first; this script only writes the history that makes them distinguishable.
  *
- * SEEDING IS NOT ENOUGH — THE MODEL MUST BE REBUILT
+ * Seeding is not enough — the MODEL must be rebuilt
  * ml-service serves a FROZEN snapshot: the venue matrix is fitted once at load and
  * cached, so rows written here are invisible until the artifact is retrained and the
  * cache dropped. Full sequence:
@@ -33,16 +33,16 @@
  *   4  node seed_reco_demo.js --verify      ← prints both rails side by side
  *
  * Skip step 2 or 3 and the rails will be identical, which looks like a broken model
- * and is really just a stale snapshot.
+ * and is in fact a stale snapshot.
  *
- * WHY IT WRITES BOOKINGS DIRECTLY (not through POST /api/bookings)
+ * Why it writes bookings directly (not through POST /api/bookings)
  * The booking route runs escrow, wallet debits, slot locks and QR issuance — none of
  * which the recommender reads, and all of which would need unwinding on --undo. The
  * export the trainer pulls (`/api/internal/export/reco-data`) selects exactly four
  * things per player: booking venue, booking created_at, high reviews and stated
  * sports. Those are what this writes. Every database guard still applies.
  *
- * IDEMPOTENT. Bookings are keyed by a stable `notes` marker, reviews by the
+ * Idempotent. Bookings are keyed by a stable `notes` marker, reviews by the
  * (booking, author, type) unique index. Re-running changes nothing.
  *
  * USAGE
@@ -66,9 +66,7 @@ const log = (m) => console.log(`   ${m}`);
 const section = (t) => console.log(`\n── ${t} ${'─'.repeat(Math.max(0, 58 - t.length))}`);
 const asNum = (v) => (v === null || v === undefined ? 0 : Number(v));
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Prerequisites
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function loadPrereqs(client) {
   const players = (await client.query(
@@ -89,7 +87,7 @@ async function loadPrereqs(client) {
 /**
  * Pick two venue groups that are as far apart as the catalogue allows.
  *
- * SPORT FIRST. The sport block is the single strongest axis in the feature space
+ * Sport first. The sport block is the single strongest axis in the feature space
  * (a one-hot that two different sports share nothing on), so if the catalogue has
  * two sports with enough venues each, contrast on that — the rails then differ for
  * a reason anyone in the room can restate: "he plays cricket, she plays football".
@@ -131,16 +129,14 @@ function chooseGroups(venues) {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Idempotent writers
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * One checked-in booking `daysAgo` in the past, tagged so a re-run reuses it.
  *
  * `created_at` is set explicitly, and that is the whole point: the export the
  * trainer reads sends created_at as the booking's timestamp, and the profile weights
- * each venue by `0.5 ** (age / 90 days)`. Left to DEFAULT NOW() every seeded booking
+ * each venue by `0.5 ** (age / 90 days)`. Left to default NOW() every seeded booking
  * would weigh the same and the recency half of the design would be undemonstrable.
  * `status` is checked_in because the export counts only confirmed/checked_in rows.
  */
@@ -194,7 +190,7 @@ async function refreshVenueAggregate(client, venueId) {
 }
 
 /**
- * Set stated sport preferences ONLY when the player has none.
+ * Set stated sport preferences only when the player has none.
  *
  * The stated block carries 0.3 of the profile blend, so a contrasting pair here
  * sharpens the demo — but these are a real person's settings, and --undo cannot
@@ -214,9 +210,7 @@ async function ensureStatedSport(client, player, sport) {
   return { changed: true, reason: `set to [${sport}]` };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Seed
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function seed() {
   const client = await pool.connect();
@@ -291,9 +285,7 @@ function printNextSteps(p1, p2) {
   console.log('');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Verify — ask ml-service for both rails and show that they differ
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * The checklist item is "two different demo users see different venue rankings", and
@@ -373,15 +365,13 @@ async function verify() {
   console.log('');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Undo — remove exactly what seed() created, in FK-safe order
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Reviews before bookings (the FK), then the venue aggregates are recomputed so the
  * ratings this script inflated go back to what the remaining reviews say.
  *
- * It does NOT restore sport preferences: ensureStatedSport only ever fills an empty
+ * It does not restore sport preferences: ensureStatedSport only ever fills an empty
  * list, so there is no prior value to put back, and clearing what a player has since
  * chosen themselves would be worse than leaving a filled-in preference behind.
  */
@@ -412,7 +402,6 @@ async function undo() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 
 (async () => {
   try {

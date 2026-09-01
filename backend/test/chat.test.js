@@ -4,13 +4,12 @@
  * Run:  npm test            (from backend/)
  *   or  node --test test/chat.test.js
  *
- * WHAT THIS FILE IS FOR, AND WHAT IT IS NOT FOR
- * ---------------------------------------------
+ * What this file is for, and what it is not for
  * `src/scripts/check_chat.js` proves the rows: that confirming a booking opens a
  * room, that four people land in a captain channel, that the unread count matches
  * a hand-computed number. It needs a database and forty seconds.
  *
- * These tests prove the SENTENCES and the TABLES — the parts that are pure
+ * These tests prove the sentences and the tables — the parts that are pure
  * functions and constant data, and that therefore break in milliseconds with
  * Supabase switched off. Three of them are the kind of bug a live demo surfaces
  * and a check script cannot:
@@ -35,9 +34,7 @@ const list = require('../src/utils/chatList');
 const qr = require('../src/utils/quickReplies');
 const actions = require('../src/services/assistantActions');
 
-// ════════════════════════════════════════════════════════════════════════════
-// 1 — THE OPENING PILLS: the two sentences the wave promised, verbatim
-// ════════════════════════════════════════════════════════════════════════════
+// 1 — the opening pills: the two sentences the wave promised, verbatim
 
 test('1 — the booking room opens with the sentence a push notification can quote', () => {
   assert.equal(
@@ -67,9 +64,7 @@ test('4 — a no-show is worded as the venue’s action, since that is who marke
   );
 });
 
-// ════════════════════════════════════════════════════════════════════════════
-// 2 — NEUTRALITY: the property that makes one shared room readable to both teams
-// ════════════════════════════════════════════════════════════════════════════
+// 2 — Neutrality: the property that makes one shared room readable to both teams
 
 /** Every sentence the coordination room can ever contain. */
 const COORD_EVENTS = [
@@ -86,7 +81,7 @@ const TEAM_EVENTS = [
 
 test('5 — no sentence in the shared room addresses the reader as "you"', () => {
   // This is the whole reason the coord vocabulary exists separately. A captain
-  // room holds BOTH teams; "you challenged them" is false for half of it.
+  // room holds both teams; "you challenged them" is false for half of it.
   for (const event of COORD_EVENTS) {
     for (const opts of [{}, { a: 'Ali', t: 'Falcons', v: 'Titans', d: 'Falcons won 3-1' }]) {
       const s = sys.sentenceFor(event, opts);
@@ -131,9 +126,7 @@ test('9 — buildSystemMessage returns a body AND structured meta for every wave
   }
 });
 
-// ════════════════════════════════════════════════════════════════════════════
 // 3 — FR8.10: the reply tables, checked against the FROZEN label set
-// ════════════════════════════════════════════════════════════════════════════
 //
 // Model #4 is released and its 23 labels are frozen (ml-service's intent_spec.py,
 // enumerated in Node by assistantActions.intentLabels). A quick-reply table keyed
@@ -244,18 +237,16 @@ test('19 — {venue} and {price} are substituted when the booking supplies them'
   assert.ok(fill("That's PKR {price} for the hour.").includes('2500'));
 });
 
-// ════════════════════════════════════════════════════════════════════════════
-// 4 — THE INBOX SUBTITLE: a wall clock that must never be re-zoned
-// ════════════════════════════════════════════════════════════════════════════
+// 4 — the inbox subtitle: a wall clock that must never be re-zoned
 //
-// `bookings.slot_date` and `start_time` are PKT WALL CLOCK, not instants. The same
+// `bookings.slot_date` and `start_time` are PKT wall clock, not instants. The same
 // rule bookingService.localDateStr follows applies here: format what is written,
 // never pass it through a conversion. A "6:00 pm" slot that renders as "1:00 pm"
 // because the server is in UTC is the kind of bug that only appears on somebody
 // else's machine, so it is pinned with an explicit TZ below.
 
 // en-GB abbreviates September as "Sept", not "Sep" — that is ICU's short form and
-// what the app actually shows, so the expectations below quote it rather than
+// what the app shows, so the expectations below quote it rather than
 // tidying it into a four-letter guess.
 test('20 — a slot renders as written, in 12-hour form with the weekday', () => {
   assert.equal(list.slotLabel('2026-09-05', '18:00:00'), 'Sat 5 Sept, 6:00 pm');
@@ -269,7 +260,7 @@ test('21 — the hour is NOT shifted by the server’s timezone', () => {
   // the value never becomes an instant, so there is nothing to convert.
   const label = list.slotLabel('2026-09-05', '18:00:00');
   assert.ok(label.endsWith('6:00 pm'), label);
-  // A Date-typed slot_date (what pg returns for a DATE column) must read the same
+  // A Date-typed slot_date (what pg returns for a date column) must read the same
   // as the string form, because both reach this function in practice.
   const asDate = new Date(2026, 8, 5);
   assert.equal(list.slotLabel(asDate, '18:00:00'), 'Sat 5 Sept, 6:00 pm');
@@ -290,9 +281,7 @@ test('23 — a wire status becomes a sentence-cased phrase, not a snake_case tok
   assert.equal(list.humanStatus(null), '');
 });
 
-// ════════════════════════════════════════════════════════════════════════════
-// 5 — THE UNREAD RULE, read off the SQL the two readers share
-// ════════════════════════════════════════════════════════════════════════════
+// 5 — the UNREAD rule, read off the SQL the two readers share
 //
 // The list and the badge must never disagree about what "unread" means, and the
 // only way to guarantee that without a database is to prove they are literally the
@@ -349,11 +338,9 @@ test('27 — the badge excludes muted rooms and the list does not', () => {
   assert.ok(!/muted_until IS NULL OR/.test(listFn), 'the list hides muted rooms');
 });
 
-// ════════════════════════════════════════════════════════════════════════════
-// 6 — ROUTE ORDER: the one Express mistake that cannot be caught at runtime
-// ════════════════════════════════════════════════════════════════════════════
+// 6 — route order: the one Express mistake that cannot be caught at runtime
 //
-// Express matches in DECLARATION order. `GET /:channelId` declared above
+// Express matches in declaration order. `GET /:channelId` declared above
 // `GET /unread-count` swallows the literal as a channel id, and the failure is a
 // 404 with a correct-looking body — no stack trace, no log line, nothing to grep.
 // So the order is asserted here, statically, where a future insert in the wrong
@@ -408,7 +395,7 @@ test('30 — a ref lookup answers 404, never 403, when the caller is not a membe
 });
 
 test('31 — the routes delegate to the client-taking utils rather than re-querying', () => {
-  // This is what makes check_chat.js able to prove the REAL query: the endpoint and
+  // This is what makes check_chat.js able to prove the real query: the endpoint and
   // the script call the same function, one with `pool` and one with an open
   // transaction. A route that inlined its own SQL would be unverifiable.
   for (const call of ['list.listChats(', 'list.unreadCounts(', 'list.channelForRef(',

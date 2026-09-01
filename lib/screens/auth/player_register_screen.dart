@@ -175,7 +175,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ─── Avatar ───
+                  // Avatar
                   Center(
                     child: GestureDetector(
                       onTap: _pickAvatar,
@@ -227,7 +227,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // ─── Player chip ───
+                  // Player chip
                   Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -261,7 +261,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // ─── Full Name ───
+                  // Full Name
                   SportTextField(
                     label: 'Full Name *',
                     hint: 'Enter your full name',
@@ -286,7 +286,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // ─── Email ───
+                  // Email
                   SportTextField(
                     label: 'Email (optional)',
                     hint: 'email@example.com',
@@ -297,7 +297,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // ─── Password ───
+                  // Password
                   SportTextField(
                     label: 'Password *',
                     hint: 'Min 8 characters',
@@ -319,7 +319,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                   PasswordStrengthBar(password: _passwordText),
                   const SizedBox(height: 16),
 
-                  // ─── Confirm Password with real-time match ───
+                  // Confirm Password with real-time match
                   SportTextField(
                     label: 'Confirm Password *',
                     hint: 'Re-enter password',
@@ -357,7 +357,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // ─── Create Account ───
+                  // Create Account
                   Consumer<AuthProvider>(
                     builder: (context, auth, _) {
                       return CustomButton(
@@ -477,7 +477,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // ─── Login link ───
+                  // Login link
                   Center(
                     child: RichText(
                       text: TextSpan(

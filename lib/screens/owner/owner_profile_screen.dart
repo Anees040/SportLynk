@@ -255,7 +255,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     );
   }
 
-  // ── Avatar Upload ─────────────────────────────────────────────────────────
+  // Avatar Upload
   Future<void> _pickAndUploadAvatar() async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
@@ -263,7 +263,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     if (picked == null) return;
     if (!mounted) return;
 
-    // Capture context-dependent references BEFORE any async gap
+    // Capture context-dependent references before any async gap
     final authProv = Provider.of<AuthProvider>(context, listen: false);
     final token = authProv.token!;
 
@@ -335,7 +335,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   }
 }
 
-// ── Change Password Sheet ──────────────────────────────────────────────────
+// Change Password Sheet
 
 class _OwnerChangePasswordSheet extends StatefulWidget {
   const _OwnerChangePasswordSheet();
@@ -575,7 +575,7 @@ class _OwnerChangePasswordSheetState extends State<_OwnerChangePasswordSheet> {
   }
 }
 
-// ── Edit Profile Sheet ─────────────────────────────────────────────────────
+// Edit Profile Sheet
 
 class _OwnerEditProfileSheet extends StatefulWidget {
   const _OwnerEditProfileSheet();

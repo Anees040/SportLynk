@@ -1,13 +1,13 @@
 /// chat_channel.dart — one row of the inbox (S.7 Wave B).
 ///
-/// A channel row is NOT just a name. `context` is resolved server-side per
+/// A channel row is not just a name. `context` is resolved server-side per
 /// channel type and is what makes the list readable: a booking row carries its
 /// live status and slot ("Confirmed · Sat 5 Sept, 6:00 pm"), a coordination row
 /// carries the scoreline, a team row its member count. The client renders that
 /// string — it never re-derives it, because the status vocabulary and the PKT
 /// wall-clock formatting live on the server and a second copy here would drift.
 ///
-/// Every numeric field goes through [asNum]: pg hands DECIMAL back as a string
+/// Every numeric field goes through [asNum]: pg hands decimal back as a string
 /// and a raw `as num` on "3" throws.
 library;
 
@@ -197,7 +197,7 @@ class ChatChannel {
         messageCount: messageCount,
         unread: unread ?? this.unread,
         muted: muted ?? this.muted,
-        // `mutedUntil` is cleared by an un-mute, so it CANNOT use `??`: the
+        // `mutedUntil` is cleared by an un-mute, so it cannot use `??`: the
         // server answering `{muted:false, mutedUntil:null}` must be able to erase
         // the old timestamp, and `?? this.mutedUntil` would silently keep it.
         mutedUntil: (muted == false) ? mutedUntil : (mutedUntil ?? this.mutedUntil),
@@ -208,7 +208,7 @@ class ChatChannel {
 }
 
 /// One page of the inbox. [nextCursor] is the server's own `sortAt` string and is
-/// passed back UNTOUCHED — it is keyed on the expression the ORDER BY uses, so a
+/// passed back untouched — it is keyed on the expression the ORDER BY uses, so a
 /// cursor built here would skip or repeat rows at the page seam.
 class ChatInboxPage {
   final List<ChatChannel> items;
@@ -267,7 +267,7 @@ class QuickReply {
 /// The quick-reply response. [source] is the honest provenance of the intent:
 /// `model` when the released classifier answered, `lexicon` when the keyword table
 /// did because ml-service was unreachable, `unavailable` when neither could.
-/// The UI shows the sparkle badge ONLY for `model` — the same rule the venue rail
+/// The UI shows the sparkle badge only for `model` — the same rule the venue rail
 /// follows, for the same reason.
 class QuickReplySet {
   final List<QuickReply> suggestions;

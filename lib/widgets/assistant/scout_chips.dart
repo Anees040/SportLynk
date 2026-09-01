@@ -133,7 +133,7 @@ class ScoutChipButton extends StatelessWidget {
 /// A reply's chips, wrapped over as many lines as they need.
 ///
 /// This is the widget that keeps rule 1 of the reply contract honest — every
-/// answer ends with something to tap. It is rendered INSIDE the bubble group
+/// answer ends with something to tap. It is rendered inside the bubble group
 /// rather than pinned above the composer so that scrolling back to an old turn
 /// brings that turn's options back with it; a chip is a stateless action, so an
 /// hour-old "Book it" still works.

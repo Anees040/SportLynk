@@ -106,7 +106,7 @@ from pathlib import Path
 
 import matplotlib
 
-# Non-interactive backend, set BEFORE pyplot is imported. Without this, importing
+# Non-interactive backend, set before pyplot is imported. Without this, importing
 # pyplot on a machine with no display (CI, a container, a bare SSH session) can
 # fail or hang trying to find a GUI toolkit — and this module is imported from a
 # data-generation script that must never need a screen.
@@ -123,7 +123,6 @@ _ML_ROOT = Path(__file__).resolve().parent.parent
 if str(_ML_ROOT) not in sys.path:
     sys.path.insert(0, str(_ML_ROOT))
 
-# ---------------------------------------------------------------------------
 # Palette. Lifted from the project's visualisation reference rather than chosen
 # here, so every chart in reports/ can look like it came from one system.
 #
@@ -133,7 +132,6 @@ if str(_ML_ROOT) not in sys.path:
 # reference palette's fourth slot is yellow, which sits next to orange and fails
 # that test, so a fourth series is not available — if one is ever needed the
 # answer is a small multiple, not a new hue.
-# ---------------------------------------------------------------------------
 PAGE = "#f9f9f7"      # page plane, behind the panels
 SURFACE = "#fcfcfb"   # chart surface, inside each panel
 INK = "#0b0b0b"       # primary ink: titles, key values
@@ -146,7 +144,7 @@ BLUE = "#2a78d6"
 ORANGE = "#eb6834"
 AQUA = "#1baf7a"
 
-# Sequential ramp, one hue, light -> dark. Used ONLY for the heatmap, where the
+# Sequential ramp, one hue, light -> dark. Used only for the heatmap, where the
 # encoded quantity is a magnitude.
 BLUE_RAMP = (
     "#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5",
@@ -160,7 +158,7 @@ MONTH_LABELS = (
 )
 
 # The frozen peak window, shaded in panel 1. Imported rather than retyped: this
-# figure must show where `is_peak` ACTUALLY sits, including where it disagrees
+# figure must show where `is_peak` sits, including where it disagrees
 # with the true curve, and a hardcoded 18 here would quietly hide a v2 change.
 from app.core import features  # noqa: E402
 
@@ -231,9 +229,7 @@ def _annotate(ax, x, y, text: str, dx: float = 0.0, dy: float = 0.012, **kw) -> 
     )
 
 
-# ---------------------------------------------------------------------------
 # Panel 1 — hour of day. The headline panel.
-# ---------------------------------------------------------------------------
 def _panel_hour(ax, frame: pd.DataFrame) -> None:
     normal = frame["is_ramadan"] == 0
     series = [
@@ -242,10 +238,10 @@ def _panel_hour(ax, frame: pd.DataFrame) -> None:
         ("Football — Ramadan", AQUA, (frame["is_ramadan"] == 1) & (frame["sport"] == "football"), "-"),
     ]
 
-    # Shade the frozen is_peak window FIRST so it sits behind the lines. Drawn as
+    # Shade the frozen is_peak window first so it sits behind the lines. Drawn as
     # a band rather than two vertical rules because the point is the extent of the
     # window, and specifically that the true football peak sits at its far end —
-    # the visual argument for DESIGN DECISION 3(d), that the flag is coarse and
+    # the visual argument for design DECISION 3(d), that the flag is coarse and
     # the `hour` feature is what carries the real shape.
     ax.axvspan(
         features.PEAK_START_HOUR - 0.5,
@@ -255,7 +251,7 @@ def _panel_hour(ax, frame: pd.DataFrame) -> None:
         lw=0,
         zorder=0,
     )
-    # x in DATA coords, y in AXES coords. Using ax.get_ylim() here would read the
+    # x in data coords, y in axes coords. Using ax.get_ylim() here would read the
     # default (0, 1) — the lines are not plotted yet, so autoscale has not run, and
     # the label would land above the finished axes and be clipped away.
     ax.text(
@@ -278,7 +274,7 @@ def _panel_hour(ax, frame: pd.DataFrame) -> None:
         last_x = int(rate.index[-1])
         ax.plot([last_x], [rate.iloc[-1]], "o", color=colour, ms=5, zorder=4)
 
-    # Selective labels: the two peaks that ARE the domain claim.
+    # Selective labels: the two peaks that are the domain claim.
     fb = _rate(frame, "hour", normal & (frame["sport"] == "football")).sort_index()
     ck = _rate(frame, "hour", normal & (frame["sport"] == "cricket")).sort_index()
     if not fb.empty:
@@ -299,13 +295,11 @@ def _panel_hour(ax, frame: pd.DataFrame) -> None:
     ax.legend(loc="upper left", ncols=1)
 
 
-# ---------------------------------------------------------------------------
 # Panel 2 — day of week.
-# ---------------------------------------------------------------------------
 def _panel_dow(ax, frame: pd.DataFrame) -> None:
     rate = _rate(frame, "dow").reindex(range(7))
     # Single series, single hue. Colour must not encode rank, so the tallest bar
-    # is NOT recoloured; the three bars that carry the argument are labelled instead.
+    # is not recoloured; the three bars that carry the argument are labelled instead.
     # width 0.72 leaves a clear surface gap between neighbours, and the surface-
     # coloured edge keeps adjacent fills from touching.
     ax.bar(
@@ -317,8 +311,8 @@ def _panel_dow(ax, frame: pd.DataFrame) -> None:
         linewidth=1.5,
         zorder=3,
     )
-    # Fri, Sat AND Sun all carry labels. Labelling only Fri and Sat hid the real
-    # ordering: Sunday lands ABOVE Friday, because Friday's x0.35 Jummah penalty
+    # Fri, Sat and Sun all carry labels. Labelling only Fri and Sat hid the real
+    # ordering: Sunday lands above Friday, because Friday's x0.35 Jummah penalty
     # on 12-16h drags its daily average down further than its x1.20 night bonus
     # lifts it back. That is a genuine consequence of the parameter table — the
     # panel must show it rather than let a title imply Friday is second.
@@ -338,13 +332,11 @@ def _panel_dow(ax, frame: pd.DataFrame) -> None:
     ax.grid(axis="x", visible=False)  # a categorical axis has no meaningful grid
 
 
-# ---------------------------------------------------------------------------
 # Panel 3 — month. Must read as bimodal.
-# ---------------------------------------------------------------------------
 def _panel_month(ax, frame: pd.DataFrame) -> None:
-    # TWO lines, and the Ramadan-excluded one is the whole point of this panel.
+    # Two lines, and the Ramadan-excluded one is the whole point of this panel.
     #
-    # The all-days line is CONFOUNDED, and it looked wrong on first render: it put
+    # The all-days line is confounded, and it looked wrong on first render: it put
     # March at the year's LOW (23%) even though MONTH_MULT[3] = 1.25 makes March
     # the opening of the spring peak. The cause is not seasonality at all. Ramadan
     # 1447 runs 19 Feb - 19 Mar 2026, and Ramadan collapses daytime demand (0.017
@@ -352,17 +344,17 @@ def _panel_month(ax, frame: pd.DataFrame) -> None:
     # Ramadan, and a reader is invited to conclude the seasonal table is broken.
     #
     # Plotting the Ramadan-excluded line beside it separates the two effects, which
-    # makes the panel's claim STRONGER rather than weaker: the bimodal season is
+    # makes the panel's claim stronger rather than weaker: the bimodal season is
     # genuinely there, and Ramadan is a larger swing than any month multiplier.
     # Deleting or smoothing the confounded line would have been the dishonest fix.
     rate_all = _rate(frame, "month").reindex(range(1, 13))
     rate_ex = _rate(frame, "month", frame["is_ramadan"] == 0).reindex(range(1, 13))
 
-    # DRAWING ORDER MATTERS HERE. Ramadan touches only two of the twelve months, so
-    # these two series are IDENTICAL for the other ten. Drawn as two equal 2px
+    # Drawing order matters here. Ramadan touches only two of the twelve months, so
+    # these two series are identical for the other ten. Drawn as two equal 2px
     # lines, whichever is on top erases the other and the panel reads as a broken
-    # render. So the counterfactual goes UNDERNEATH as a wider halo with no markers:
-    # where the lines agree you see a blue line with an orange edge ("both series,
+    # render. So the counterfactual goes underneath as a wider halo with no markers:
+    # where the lines agree they read as a blue line with an orange edge ("both series,
     # agreeing"), and where Ramadan bites they separate into two distinct lines.
     # lw 4.0 against the 2.0 default leaves ~1pt of orange proud on each side —
     # enough to read as a deliberate edge at 140 dpi, which 3.4 was not.
@@ -371,7 +363,7 @@ def _panel_month(ax, frame: pd.DataFrame) -> None:
     ax.plot(range(1, 13), rate_all.to_numpy(), "-o", color=BLUE,
             label="All days (as simulated)", zorder=4)
 
-    # Band the months Ramadan actually touches, read from the DATA rather than
+    # Band the months Ramadan touches, read from the data rather than
     # hardcoded: the Hijri window moves ~11 days earlier each solar year, so a
     # literal "Feb-Mar" here would quietly lie for any other --start.
     ram_months = sorted({int(m) for m in frame.loc[frame["is_ramadan"] == 1, "month"].unique()})
@@ -393,8 +385,8 @@ def _panel_month(ax, frame: pd.DataFrame) -> None:
     # the line carrying the seasonality claim, plus its deepest trough. Three
     # points, not twenty-four — the labels are exactly the evidence for "bimodal".
     #
-    # NOTE the mask excludes Ramadan, NOT Eid: Eid al-Fitr 1447 is 20 Mar 2026, the
-    # day AFTER Ramadan ends, so March keeps its x0.35 Eid dip and x1.45 rebound.
+    # NOTE the mask excludes Ramadan, not Eid: Eid al-Fitr 1447 is 20 Mar 2026, the
+    # day after Ramadan ends, so March keeps its x0.35 Eid dip and x1.45 rebound.
     # They roughly cancel in a monthly mean, but this line is "Ramadan removed",
     # not "calendar removed", and reports/README.md says so.
     ordered = rate_ex.dropna().sort_values(ascending=False)
@@ -422,9 +414,7 @@ def _panel_month(ax, frame: pd.DataFrame) -> None:
     ax.legend(loc="upper left", ncols=1)
 
 
-# ---------------------------------------------------------------------------
 # Panel 4 — hour x day heatmap. Where the interactions are visible.
-# ---------------------------------------------------------------------------
 def _panel_heatmap(ax, frame: pd.DataFrame, fig) -> None:
     pivot = (
         frame.pivot_table(index="dow", columns="hour", values=features.TARGET, observed=True)
@@ -453,7 +443,7 @@ def _panel_heatmap(ax, frame: pd.DataFrame, fig) -> None:
     cbar.set_label("share of offered slots booked", color=INK_2, fontsize=9)
     cbar.outline.set_visible(False)
     cbar.ax.tick_params(colors=MUTED, labelsize=8.5)
-    # A FORMATTER, not set_yticklabels. A colorbar carries its own locator, so
+    # A formatter, not set_yticklabels. A colorbar carries its own locator, so
     # assigning fixed labels to it warns ("FixedFormatter should only be used
     # together with FixedLocator") and silently misaligns if the locator later
     # picks different ticks.
@@ -491,18 +481,16 @@ def _panel_heatmap(ax, frame: pd.DataFrame, fig) -> None:
         )
 
 
-# ---------------------------------------------------------------------------
 # Panel 5 — price response. The panel that justifies the whole dataset.
-# ---------------------------------------------------------------------------
 def _panel_elasticity(ax, frame: pd.DataFrame) -> None:
     edges = np.arange(0.70, 1.5001, 0.10)
     codes = np.clip(np.digitize(frame["price_ratio"].to_numpy(), edges) - 1, 0, len(edges) - 2)
     centres = (edges[:-1] + edges[1:]) / 2
 
-    # INDEXED to each segment's own cheapest bin. Peak and off-peak have very
+    # Indexed to each segment's own cheapest bin. Peak and off-peak have very
     # different base rates, and plotting raw rates would make the off-peak line
     # look flat purely because it sits lower — visually contradicting the true
-    # finding, which is that off-peak buyers are the MORE price-sensitive ones.
+    # finding, which is that off-peak buyers are the more price-sensitive ones.
     # Indexing to a common base is the correct single-axis fix. A second y-axis
     # would be the wrong one.
     for label, colour, mask in (
@@ -518,7 +506,7 @@ def _panel_elasticity(ax, frame: pd.DataFrame) -> None:
             continue
         indexed = 100.0 * arr / arr[0]
         ax.plot(centres, indexed, "-o", color=colour, label=label, zorder=3)
-        # Label the last bin that actually has enough rows to plot — thin tail bins
+        # Label the last bin that has enough rows to plot — thin tail bins
         # are NaN and must not be labelled as if they were measured.
         end = int(np.flatnonzero(~np.isnan(indexed))[-1])
         _annotate(
@@ -544,9 +532,7 @@ def _panel_elasticity(ax, frame: pd.DataFrame) -> None:
     ax.legend(loc="lower left")
 
 
-# ---------------------------------------------------------------------------
 # Assembly.
-# ---------------------------------------------------------------------------
 def render(frame: pd.DataFrame, out: Path, meta: dict | None = None) -> Path:
     """Render the five-panel figure. Returns the path written."""
     out = Path(out)

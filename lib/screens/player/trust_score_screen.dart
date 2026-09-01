@@ -152,7 +152,7 @@ class _TrustScoreScreenState extends State<TrustScoreScreen> {
     );
   }
 
-  // ── Identity header ────────────────────────────────────────────────────────
+  // Identity header
   Widget _identity(TrustTone tone) {
     final avatarUrl = widget.avatarUrl ?? widget.profile?['avatar_url']?.toString();
     final initial = _name.trim().isNotEmpty ? _name.trim()[0].toUpperCase() : 'P';
@@ -240,7 +240,7 @@ class _TrustScoreScreenState extends State<TrustScoreScreen> {
     );
   }
 
-  // ── The four weighted components ─────────────────────────────────────────────
+  // The four weighted components
   Widget _tiles(TrustBreakdown t) {
     final avg = _data.avgStars;
     final tiles = <Widget>[

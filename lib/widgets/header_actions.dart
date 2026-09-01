@@ -6,10 +6,10 @@ import '../constants/colors.dart';
 /// The two live actions in a home-screen header: chat, and (from Wave C) the
 /// notification bell.
 ///
-/// WHY A WIDGET AND NOT TWO COPIES OF A CONTAINER
+/// Why a widget and not two copies of a container
 /// The player header is a dark gradient and the owner header is a dark
 /// SliverAppBar, so the same glass-on-dark treatment is needed in two files that
-/// otherwise share nothing. More importantly the BADGE is the fiddly part — an
+/// otherwise share nothing. More importantly the badge is the fiddly part — an
 /// unread count has to cap, has to shrink to a dot when it is only a hint, and
 /// has to sit outside the tap target without stealing it — and a second copy of
 /// that would drift the moment one of them is tweaked.
@@ -39,7 +39,7 @@ class HeaderIconButton extends StatelessWidget {
     final button = Stack(
       clipBehavior: Clip.none,
       children: [
-        // The 36×36 box IS the tap target — 36 is the smallest square that still
+        // The 36×36 box is the tap target — 36 is the smallest square that still
         // clears the 32-logical-pixel floor a thumb needs on this header.
         Container(
           width: 36,
@@ -57,7 +57,7 @@ class HeaderIconButton extends StatelessWidget {
             top: -3,
             child: IgnorePointer(
               // The badge overhangs the box, so without this it would eat taps
-              // at the corner — the corner people actually aim for when they can
+              // at the corner — the corner people aim for when they can
               // see a number there.
               child: Container(
                 constraints: const BoxConstraints(minWidth: 18),

@@ -36,7 +36,7 @@ class CsvFile {
 
 /// The financial export (FR4.16), in the two shapes the screen needs.
 ///
-/// WHY THE CSV DOES NOT GO THROUGH [ApiClient].
+/// Why the CSV does not go through [ApiClient].
 /// `ApiClient` sends `Accept: application/json` and decodes every response into
 /// the `{success, ...}` envelope — it is built to never throw and to always return
 /// a Map. The CSV route answers `text/csv; charset=utf-8` with a
@@ -47,7 +47,7 @@ class CsvFile {
 /// survives — which is the whole reason Excel on Windows opens the file with Urdu
 /// venue names and em dashes readable instead of as mojibake.
 ///
-/// The PREVIEW does go through [ApiClient]: `?format=json` is an ordinary
+/// The preview does go through [ApiClient]: `?format=json` is an ordinary
 /// enveloped read, and it is the same server-side walk that the CSV streams, so
 /// the totals on the phone cannot disagree with the totals in the file.
 class ReportService {
@@ -57,9 +57,9 @@ class ReportService {
   static String _path(bool platform) =>
       platform ? ApiConstants.adminPlatformReport : ApiConstants.ownerFinancialReport;
 
-  /// `from`/`to` are REQUIRED `YYYY-MM-DD` and the span is capped at 366 days
+  /// `from`/`to` are required `YYYY-MM-DD` and the span is capped at 366 days
   /// server-side. Returns null on failure, with the server's message in
-  /// [lastMessage] — a report screen has to be able to say WHY it is empty.
+  /// [lastMessage] — a report screen has to be able to say why it is empty.
   String lastMessage = '';
 
   Future<ReportPreview?> preview(
@@ -83,7 +83,7 @@ class ReportService {
   /// Download the CSV itself.
   ///
   /// A non-2xx answer is JSON (`{success:false,message}`) because the failure
-  /// happened BEFORE the first byte of the file went out; once streaming starts
+  /// happened before the first byte of the file went out; once streaming starts
   /// the status code is spent, and a mid-stream failure instead appends a final
   /// `ERROR,…` row to the file. So a 200 whose last line starts with `ERROR,` is a
   /// truncated export, and saying so is better than handing over a file that is

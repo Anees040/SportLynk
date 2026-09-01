@@ -3,31 +3,28 @@
  *
  * Usage:  node src/scripts/check_assistant.js          (ml-service must be running)
  *
- * WHY THIS SCRIPT EXISTS
- * ----------------------
- * test/assistant.test.js proves the DECISIONS: the lexicon, the slot merge, the card
+ * Why this script exists
+ * test/assistant.test.js proves the decisions: the lexicon, the slot merge, the card
  * shapes, the refund arithmetic. None of that touches a row, which is the point — it
  * runs with the database down. But the wave was asked for something working, and a
  * booking that the dialog manager builds correctly and the ledger records wrongly is
- * still a broken feature. So this script drives REAL turns through
+ * still a broken feature. So this script drives real turns through
  * services/dialogManager.handleTurn — real classification by model #4, real venue
  * search, a real booking, a real cancellation, a real escalation answered by a real
  * owner — and then asserts the rows.
  *
- * NOTHING SURVIVES IT
- * -------------------
+ * Nothing survives it
  * handleTurn accepts a caller-owned `client`. Given one, its own BEGIN/COMMIT becomes
- * SAVEPOINT/RELEASE, so this script can hold ONE transaction open across a dozen
+ * SAVEPOINT/RELEASE, so this script can hold one transaction open across a dozen
  * conversations and ROLLBACK at the end. The committee's database is left exactly as
  * it was found: no bookings, no wallet movement, no chat threads, no telemetry.
- * That is also why the assertions read the rows THEMSELVES rather than trusting the
+ * That is also why the assertions read the rows themselves rather than trusting the
  * reply text — the reply is the thing under test, not the evidence.
  *
- * WHAT A FAILURE MEANS
- * --------------------
+ * What a failure means
  *   ✗  a rule broke. The line names it.
  *   ~  the seeded data could not supply the case (no free slot 24h out, no team with
- *      two members). Reported as a SKIP, not a pass — a check that never ran is not
+ *      two members). Reported as a skip, not a pass — a check that never ran is not
  *      a check that passed, and the PASS line counts them separately.
  */
 const fs = require('fs');
@@ -89,7 +86,7 @@ function eq(got, want, label) {
 }
 
 /**
- * Run a read that MIGHT fail without poisoning the outer transaction.
+ * Run a read that might fail without poisoning the outer transaction.
  *
  * Postgres aborts the whole transaction on any error, so one bad query would turn
  * every later check into "current transaction is aborted" and hide the real result.
@@ -107,9 +104,7 @@ async function probe(client, fn) {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// DRIVING SCOUT
-// ════════════════════════════════════════════════════════════════════════════
+// Driving Scout
 
 /** Every turn this script drives, in order, for the transcript printed on failure. */
 const transcript = [];
@@ -117,7 +112,7 @@ const transcript = [];
 /**
  * One turn. `text` goes through model #4; `action`+`args` is a button tap.
  *
- * The turn runs on THIS script's client, so its writes join the outer transaction
+ * The turn runs on this script's client, so its writes join the outer transaction
  * and disappear with it. `quiet` keeps the transcript readable for the dozens of
  * setup turns whose text nobody needs to see.
  */
@@ -155,16 +150,14 @@ function offers(out, action) {
   });
 }
 
-// ════════════════════════════════════════════════════════════════════════════
 // FIXTURES — chosen from the seeded data, never created
-// ════════════════════════════════════════════════════════════════════════════
 
 /**
  * Pick the cast: a player who captains a team and can afford a ground, a venue with
- * free slots TODAY in PKT, and that venue's owner.
+ * free slots today in PKT, and that venue's owner.
  *
  * Chosen rather than inserted. A script that seeds its own perfect row proves only
- * that it can seed a row; the committee's demo runs on THIS data, so the checks run
+ * that it can seed a row; the committee's demo runs on this data, so the checks run
  * on it too — and when it cannot supply a case, that is a skip with a named reason.
  */
 async function pickFixtures(client) {
@@ -185,10 +178,10 @@ async function pickFixtures(client) {
       LIMIT 8`,
     [now.date, now.time],
   );
-  // A player who is an ADMIN of a team unlocks find_players/find_opponents/team_stats
+  // A player who is an admin of a team unlocks find_players/find_opponents/team_stats
   // in the same run as the booking, and the wallet has to cover the cheapest slot of
-  // the venue we are about to choose — otherwise the booking fails on funds and the
-  // conversation under test never reaches the ledger.
+  // the venue this run is about to choose — otherwise the booking fails on funds and
+  // the conversation under test never reaches the ledger.
   const { rows: prows } = await client.query(
     `SELECT u.id, u.name, w.balance,
             (SELECT count(*)::int FROM team_members m
@@ -204,7 +197,7 @@ async function pickFixtures(client) {
   return { now, venues: vrows, players: prows };
 }
 
-/** Pair a player with a venue they can actually pay for. */
+/** Pair a player with a venue they can afford. */
 function castFrom({ venues, players }) {
   for (const p of players) {
     for (const v of venues) {
@@ -214,13 +207,11 @@ function castFrom({ venues, players }) {
   return { player: players[0] || null, venue: venues[0] || null };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// 0 — PREFLIGHT
-// ════════════════════════════════════════════════════════════════════════════
+// 0 — Preflight
 
 /**
  * Nothing below this line is worth running if the registry, the model or migration
- * 018 is not there. A missing intent label is a HARD stop: every later conversation
+ * 018 is not there. A missing intent label is a hard stop: every later conversation
  * would fall back to the help menu and "the menu answered" is not a passing test.
  */
 async function preflight(client) {
@@ -285,9 +276,7 @@ async function preflight(client) {
   return true;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// A — THE BOOKING CONVERSATION (real money, real ledger)
-// ════════════════════════════════════════════════════════════════════════════
+// A — the BOOKING conversation (real money, real ledger)
 
 /**
  * find_venue → check_availability → pick_slot → confirm → a booked row.
@@ -331,7 +320,7 @@ async function conversationA(client, fx) {
   return { thread, a1, vcards, before, player, venue };
 }
 
-// ── row readers, so an assertion looks at the DATABASE and not at the sentence ──
+// Row readers, so an assertion looks at the database and not at the sentence
 
 async function walletOf(client, userId) {
   const { rows } = await client.query(
@@ -357,7 +346,7 @@ async function txnsFor(client, bookingId) {
 }
 
 /**
- * Continues conversation A: the three turns where money actually moves.
+ * Continues conversation A: the three turns where money moves.
  *
  * `ctx` is what the discovery half handed back, which is the point — the venue id
  * used here came out of a card Scout painted, not out of a fixture query.
@@ -368,7 +357,7 @@ async function bookingHalf(client, ctx) {
   const target = vcards.find((c) => bookable.has(String(c.data.id))) || vcards[0];
   if (!target) return skip('booking flow', 'find_venue returned no card to tap');
 
-  // Turn 2: the card's OWN button, args and all — a chip, exactly as Flutter sends it.
+  // Turn 2: the card's own button, args and all — a chip, exactly as Flutter sends it.
   const seeTimes = (target.data.buttons || []).find((b) => b.action === 'check_availability');
   const a2 = await say(client, { userId: player.id, threadId: thread,
     action: seeTimes.action, args: seeTimes.args || { venueId: target.data.id } });
@@ -442,7 +431,7 @@ async function moneyAudit(client, ctx) {
     eq(pay.balance_after, after.balance, 'balance_after matches the wallet it left behind');
   }
 
-  // The utterance that spent the money is in the THREAD, and the telemetry row for the
+  // The utterance that spent the money is in the thread, and the telemetry row for the
   // same turn carries only its length. Both halves of doc/CLAUDE.md's rule, asserted.
   const { rows: [t] } = await client.query(
     `SELECT intent, confidence, model_version, answer_source, action, action_ok, fsm_state,
@@ -463,14 +452,12 @@ async function moneyAudit(client, ctx) {
   return ctx;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// B — THE CANCELLATION (the sentence in the spec, checked against the ledger)
-// ════════════════════════════════════════════════════════════════════════════
+// B — the cancellation (the sentence in the spec, checked against the ledger)
 
 /**
  * The booking made in A, cancelled through the card button on it.
  *
- * The refund is NOT hardcoded here. bookingService.previewCancellation is the
+ * The refund is not hardcoded here. bookingService.previewCancellation is the
  * authority, so the assertion is that Scout's sentence, Scout's card and the wallet
  * all say what the service says — which is the FR8.15 claim itself, stated as a test.
  */
@@ -512,7 +499,7 @@ async function conversationB(client, ctx) {
  * script: money is CONSERVED. A refund that credits the player without releasing
  * the freeze mints money; a penalty that debits the player without crediting the
  * owner burns it. Both are invisible to a happy-path test that only reads the
- * player's balance, so the sum across BOTH wallets is asserted explicitly.
+ * player's balance, so the sum across both wallets is asserted explicitly.
  */
 async function cancelHalf(client, ctx) {
   const { thread, player, booking: row, p, beforeP, beforeO, ownerId } = ctx;
@@ -551,9 +538,9 @@ async function cancelHalf(client, ctx) {
  * The ledger for the cancelled booking, and the notification the owner gets.
  *
  * `transactions` is the audit trail a committee can read, so the assertion is not
- * merely "a refund row exists" but that the SET of rows for this booking is exactly
+ * merely "a refund row exists" but that the set of rows for this booking is exactly
  * the set the policy prescribes: payment + refund always, and the two escrow legs
- * only when a penalty was actually charged.
+ * only when a penalty was charged.
  */
 async function cancelLedger(client, ctx) {
   const { player, booking: row, p, afterP, afterO, ownerId } = ctx;
@@ -598,9 +585,7 @@ async function cancelLedger(client, ctx) {
   return ctx;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// C — THE STALE YES  (the money gate, proved against the live classifier)
-// ════════════════════════════════════════════════════════════════════════════
+// C — the stale yes  (the money gate, proved against the live classifier)
 
 /**
  * Arm a booking confirm on the first slot this venue has free, today or tomorrow.
@@ -634,7 +619,7 @@ async function liveBookings(client, { userId, slotId }) {
  *
  * model #4 labels "haan lekin 7 baje" AFFIRM at 0.61 — over its own 0.45 threshold.
  * A gate that reads `intent === 'affirm'` therefore books the 6pm the user was
- * CORRECTING. The gate asks WHERE the yes came from instead, so this sentence takes
+ * correcting. The gate asks where the yes came from instead, so this sentence takes
  * the correction branch: the same errand re-opens at the hour the user just named,
  * and the armed confirm dies unfired.
  *
@@ -686,12 +671,12 @@ async function conversationC(client, ctx) {
 /**
  * The other three ways a confirm gate goes wrong, all of them money.
  *
- *   STALE   an armed confirm that survives an unrelated turn, so a "haan" about
+ *   Stale   an armed confirm that survives an unrelated turn, so a "haan" about
  *           something else books a slot the user stopped talking about.
  *   DENY    the same asymmetry as C, on the other verdict: model #4 calls "nahi 8
  *           baje karo" DENY at 0.51, and a gate that trusted it would answer a
  *           correction by tearing down the errand.
- *   CHIP    the positive control. A gate that never fires passes every negative
+ *   Chip    the positive control. A gate that never fires passes every negative
  *           test above, so the button path must still spend the money.
  */
 async function conversationC2(client, ctx) {
@@ -699,7 +684,7 @@ async function conversationC2(client, ctx) {
   const { player, thread, booking: row } = ctx;
   const venueId = row.venue_id;
 
-  // ── STALE ────────────────────────────────────────────────────────────────
+  // Stale
   const s1 = await armBooking(client, { player, thread, venueId });
   if (!s1.conf) { skip('the stale-confirm checks', 'no free slot to arm one'); return ctx; }
   const away = await say(client, { userId: player.id, threadId: thread, action: 'wallet_balance' });
@@ -710,7 +695,7 @@ async function conversationC2(client, ctx) {
   check(/yes to what|tell me/i.test(late.reply.text) || late.reply.action === 'affirm',
     `and Scout asks what the yes was for: "${late.reply.text.slice(0, 60)}"`);
 
-  // ── DENY ─────────────────────────────────────────────────────────────────
+  // DENY
   const s2 = await armBooking(client, { player, thread, venueId });
   if (s2.conf) {
     const d = await say(client, { userId: player.id, threadId: thread, text: 'nahi 8 baje karo' });
@@ -723,7 +708,7 @@ async function conversationC2(client, ctx) {
       `and the errand is re-run rather than abandoned: "${d.reply.text.slice(0, 70)}"`);
   }
 
-  // ── CHIP (positive control) ──────────────────────────────────────────────
+  // Chip (positive control)
   const s3 = await armBooking(client, { player, thread, venueId });
   if (!s3.conf) { skip('the chip-confirm control', 'no free slot left to book'); return ctx; }
   // The player already paid a late-cancellation penalty in B, so check the wallet
@@ -747,14 +732,12 @@ async function conversationC2(client, ctx) {
   return ctx;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// D — THE READS  (every answer_source in the enum, earned by a real turn)
-// ════════════════════════════════════════════════════════════════════════════
+// D — the reads  (every answer_source in the enum, earned by a real turn)
 
 /**
  * The six read intents, checked for the thing that is easy to get wrong about each:
  * the wallet must separate spendable from frozen, policy must come from POLICY, an
- * empty tournaments table must be an ANSWER, and anything Scout cannot do must land
+ * empty tournaments table must be an answer, and anything Scout cannot do must land
  * on the menu instead of a dead end.
  */
 async function conversationD(client, ctx) {
@@ -786,7 +769,7 @@ async function conversationD(client, ctx) {
     check(/no bookings/i.test(mb.reply.text), 'an empty history says so plainly', mb.reply.text);
   }
 
-  // ── POLICY: the sentence is editable, the numbers are not ─────────────────
+  // POLICY: the sentence is editable, the numbers are not
   const pol = await say(client, { userId: player.id, threadId: thread, text: 'refund policy kya hai' });
   eq(pol.reply.source, 'policy', 'a rules question is answered from POLICY, never from a query');
   const pcard = cardsOf(pol, 'policy')[0];
@@ -812,7 +795,7 @@ async function conversationD(client, ctx) {
   check(wd.state.slots.topic == null,
     'and the topic is cleared, so the next question starts fresh, not stuck on withdrawals');
 
-  // ── TOURNAMENTS: an empty table is an answer ──────────────────────────────
+  // Tournaments: an empty table is an answer
   const tl = await say(client, { userId: player.id, threadId: thread, action: 'tournament_list' });
   const open = await discovery.listTournaments(client, { openOnly: true, limit: 10 });
   eq(tl.reply.source, 'live', 'the tournament list is live');
@@ -821,11 +804,11 @@ async function conversationD(client, ctx) {
   check((tl.reply.chips || []).length > 0,
     `and the turn still offers somewhere to go: "${tl.reply.text.slice(0, 70)}"`);
 
-  // ── TEAM RATING: the checklist's "my_elo", which on SportLynk is team_stats ──
+  // TEAM rating: the checklist's "my_elo", which on SportLynk is team_stats
   // SportLynk rates TEAMS and not players (FR2.6), so there is no my_elo action to
   // call: the intent is team_stats, and every number on the card comes from
   // teamStats.profileStats — the same function the team profile screen reads. So
-  // this asserts the card against THAT function rather than against a literal, and
+  // this asserts the card against that function rather than against a literal, and
   // it is driven by a real captain, because ctx.player may not be in a team at all
   // and "you are not in a team yet" is a different branch, checked after it.
   if (!ctx.adminTeam || !ctx.adminTeam.adminId) {
@@ -889,7 +872,7 @@ async function conversationD(client, ctx) {
     }
   }
 
-  // ── HELP and OUT OF SCOPE: no dead ends (ER2.6) ───────────────────────────
+  // Help and out of scope: no dead ends (ER2.6)
   const ah = await say(client, { userId: player.id, threadId: thread, text: 'app kaise use karun' });
   check(ah.reply.text.length > 40, `app_help explains the app: "${ah.reply.text.slice(0, 60)}..."`);
   check((ah.reply.chips || []).length >= 2, 'and offers buttons');
@@ -912,15 +895,13 @@ async function conversationD(client, ctx) {
   return ctx;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// E — ASK THE OWNER  (escalated → owner answers → the next player gets it free)
-// ════════════════════════════════════════════════════════════════════════════
+// E — ask the owner  (escalated → owner answers → the next player gets it free)
 
 /**
  * The one loop in the wave that makes Scout better over time, and the only place it
  * is allowed to not know something.
  *
- * A question no query can answer goes to the venue OWNER (`source: 'escalated'`),
+ * A question no query can answer goes to the venue owner (`source: 'escalated'`),
  * the owner's answer is published into assistant_kb AND delivered into the player's
  * own thread, and the same question asked again is served from the KB
  * (`source: 'kb'`) without disturbing anyone. Money and policy may never enter that
@@ -969,7 +950,7 @@ async function conversationE(client, ctx) {
  * The owner's half, and then the payoff.
  *
  * `kb.answer` is what routes/assistant.js calls from the owner's queue screen. The
- * assertion that matters most is DELIVERY: the answer has to appear in the PLAYER's
+ * assertion that matters most is delivery: the answer has to appear in the PLAYER's
  * thread, because a knowledge base nobody sees is not an answer to anybody.
  */
 async function conversationE2(client, ctx) {
@@ -1006,7 +987,7 @@ async function conversationE2(client, ctx) {
        AND (payload->>'kbId') = $2`, [player.id, String(kbRow.id)]);
   check(pnote.rows.length === 1, 'and the player is notified it landed');
 
-  // ── THE PAYOFF: the same question, served from the KB ─────────────────────
+  // The payoff: the same question, served from the KB
   const reuse = await say(client, { userId: player.id, threadId: thread,
     action: 'contact_owner', args: { venueId: ctx.booking.venue_id, question } });
   eq(reuse.reply.source, 'kb', 'the SAME question is now answered from the knowledge base');
@@ -1024,17 +1005,15 @@ async function conversationE2(client, ctx) {
   return ctx;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// F — DISCOVERY  (grounds, players, opponents, teams, and the map)
-// ════════════════════════════════════════════════════════════════════════════
+// F — discovery  (grounds, players, opponents, teams, and the map)
 
 /**
- * The five things the user asked Scout to help them DISCOVER.
+ * The five things the user asked Scout to help them discover.
  *
  * Each one is checked against the service it must agree with rather than against a
  * hardcoded expectation, because the point of the FR8.15 extraction is that Scout
  * and the screens read the same rows. Where a trained model ranks the answer the
- * `source` badge must say `model`, and where it does not the cards must carry NO
+ * `source` badge must say `model`, and where it does not the cards must carry no
  * match percentage — a fabricated number is worse than an absent one.
  */
 async function conversationF(client, ctx) {
@@ -1079,8 +1058,8 @@ async function conversationF(client, ctx) {
     check(elos.every((e, i) => i === 0 || elos[i - 1] >= e), 'strongest first, as the sentence claims');
   }
 
-  // ── PLAYERS and OPPONENTS: only answerable for a team the user administers ─
-  // A user who captains TWO squads has two right answers, so the correct reply to a
+  // Players and opponents: only answerable for a team the user administers
+  // A user who captains two squads has two right answers, so the correct reply to a
   // bare "find me players" is a question. That branch is asserted rather than
   // avoided: it is the one most likely to be quietly broken by a chip that forgets
   // its team id.
@@ -1099,8 +1078,8 @@ async function conversationF(client, ctx) {
     eq(cards.length, Math.min(list.length, actions.TOP_PEOPLE),
       `${list.length} suggestions for ${teamName} → ${cards.length} player cards`);
     if (!list.length) return;
-    // The badge answers a NARROWER question than "is this list well ordered": did a
-    // TRAINED model shape it? For players the honest answer is never yes. reco_rank.py
+    // The badge answers a narrower question than "is this list well ordered": did a
+    // trained model shape it? For players the honest answer is never yes. reco_rank.py
     // is a deterministic weighted scorer whose weights S.5 Wave B states literally, so
     // mlClient gives it its own value, 'ranked', and this reply stays `live` whether or
     // not the formula ran. The scored-vs-recent-activity distinction is not lost — it
@@ -1159,7 +1138,7 @@ async function conversationF(client, ctx) {
       const oppIds = new Set(opps.slice(0, actions.TOP_PEOPLE).map((o) => String(o.id)));
       check(cardsOf(fo, 'team').every((c) => oppIds.has(String(c.data.id))),
         'every opponent card is one the ranking service returned, in its order');
-      // Same rule as find_players: pairing PROXIMITY is arithmetic, not inference,
+      // Same rule as find_players: pairing proximity is arithmetic, not inference,
       // so the badge stays `live` and meta.ranking carries 'ranked' vs 'heuristic'.
       eq(fo.reply.source, 'live',
         'and the badge does not call a weighted mean a model');
@@ -1171,18 +1150,16 @@ async function conversationF(client, ctx) {
   return ctx;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// G — THE CHAT ITSELF  (history, new chat, rename, archive, delete, ownership)
-// ════════════════════════════════════════════════════════════════════════════
+// G — the CHAT itself  (history, new chat, rename, archive, delete, ownership)
 
 /**
  * The affordances the user asked for by name: "chat history, rename (new name),
  * switch chat, new chat".
  *
- * Two of these checks exist because of bugs this wave actually hit. Message ORDER
+ * Two of these checks exist because of bugs this wave hit. Message order
  * is one: both rows of a turn are written in the same transaction, so NOW() gives
  * them a byte-identical created_at and ordering by time alone put Scout's answer
- * above the question. PAGINATION is the other: a cursor carrying that timestamp lost
+ * above the question. Pagination is the other: a cursor carrying that timestamp lost
  * its microseconds through node-postgres and skipped a row.
  */
 async function conversationG(client, ctx) {
@@ -1222,7 +1199,7 @@ async function conversationG(client, ctx) {
   check(open.every((r) => r.archived_at === null), 'and it holds only open chats');
   check(open.length >= 2, `${open.length} chats listed — switching between them is just an id`);
 
-  // ── the ordering bug, asserted ────────────────────────────────────────────
+  // The ordering bug, asserted
   const hAll = await threads.history(client, { userId: player.id, threadId: t2, limit: 100 });
   check(hAll.messages.length >= 4, `${hAll.messages.length} messages stored in this chat`);
   const firstPair = hAll.messages.slice(0, 2);
@@ -1236,7 +1213,7 @@ async function conversationG(client, ctx) {
     `the answer is stamped AFTER the question, never before (${gap}ms apart - the model call sits between them)`);
   // Both halves of the guarantee are asserted, because each covers what the other
   // cannot. The behaviour above proves the rows come back in the right order; the
-  // source below proves the SORT KEY still breaks a tie by kind — which is what
+  // source below proves the sort key still breaks a tie by kind — which is what
   // saves the render when two rows do land in the same microsecond, and what the
   // driver could never distinguish anyway, since node-postgres truncates a
   // timestamptz to milliseconds.
@@ -1251,7 +1228,7 @@ async function conversationG(client, ctx) {
   check(withCards.every((m) => replyUtil.SOURCE_VALUES.includes(m.payload.source)),
     'and every stored payload still carries a legal answer.source');
 
-  // ── the pagination bug, asserted ──────────────────────────────────────────
+  // The pagination bug, asserted
   const full = hAll.messages.map((m) => String(m.id));
   const walked = [];
   let cursor = null;
@@ -1271,7 +1248,7 @@ async function conversationG(client, ctx) {
   eq(junk.messages.map((m) => String(m.id)).join('|'),
     full.slice(-2).join('|'), 'a junk cursor from a client is treated as "no cursor", not an error');
 
-  // ── archive, delete, and the cap ──────────────────────────────────────────
+  // Archive, delete, and the cap
   const arch = await threads.update(client, { userId: player.id, threadId: t2, archived: true });
   check(arch.ok && arch.row.archived_at !== null, 'a chat can be archived');
   const afterArch = await threads.list(client, { userId: player.id, limit: 50 });
@@ -1324,7 +1301,7 @@ async function conversationG(client, ctx) {
       WHERE type = 'assistant' AND created_by = $1 AND archived_at IS NULL`, [player.id])).rows[0].n;
   check(cleaned < threads.MAX_THREADS, `${cleaned} chats left after the cap test cleaned up after itself`);
 
-  // ── ownership: a thread id is not a capability ────────────────────────────
+  // Ownership: a thread id is not a capability
   const other = players.find((p) => String(p.id) !== String(player.id));
   if (!other) {
     skip('another user cannot read this chat', 'only one player fixture available');
@@ -1353,15 +1330,13 @@ async function conversationG(client, ctx) {
   return ctx;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// H — FR8.15: ONE IMPLEMENTATION, AND THE S.5 READS STILL WORK THROUGH IT
-// ════════════════════════════════════════════════════════════════════════════
+// H — FR8.15: one implementation, and the S.5 reads still work through it
 
 /** Every .js file under src/, so a rule can be counted across the whole tree. */
 function srcFiles(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, e.name);
-    // scripts/ is verification code, not production code, and THIS file quotes the
+    // scripts/ is verification code, not production code, and this file quotes the
     // very SQL it is counting -- scanning it would count the assertion as a caller.
     if (e.isDirectory() && e.name !== 'scripts') srcFiles(full, out);
     else if (e.isFile() && e.name.endsWith('.js')) out.push(full);
@@ -1380,7 +1355,7 @@ function countIn(files, re) {
 }
 
 /**
- * The requirement in one sentence: a rule about money or ranking may exist ONCE.
+ * The requirement in one sentence: a rule about money or ranking may exist once.
  * The assistant is not allowed a second copy that drifts. This is asserted by
  * counting, across every file under src/, and by calling the shared read services
  * with the arguments the REST routes pass them.
@@ -1400,7 +1375,7 @@ async function conversationH(client, ctx) {
     `\`INSERT INTO bookings\` appears in exactly ${inserts.length} of ${files.length} backend source `
     + 'files (`services/bookingService.js`), `INSERT INTO tournament_teams` and `INSERT INTO fixtures` in exactly one each (`services/tournamentService.js`), and `assistantActions.js` contains none of the nine money or tournament write primitives. Scout prepares; the shared service spends.');
 
-  // S.7 puts a SECOND spender behind Scout, so the census has to grow with it: a
+  // S.7 puts a second spender behind Scout, so the census has to grow with it: a
   // tournament entry is the same money rule as a booking and gets the same treatment.
   const entries = countIn(files, /INSERT INTO tournament_teams/g);
   eq(entries.length, 1, 'exactly ONE file in the whole backend enters a team in a tournament');
@@ -1442,7 +1417,7 @@ async function conversationH(client, ctx) {
   check(/penaltySplit/.test(routeBody),
     'the owner-settle route keeps its own ledger, which Scout does not expose (not duplicated logic)');
 
-  // ── the S.5 reads, called the way the REST routes call them ───────────────
+  // The S.5 reads, called the way the REST routes call them
   const vList = await discovery.searchVenues(client, { limit: 12 });
   check(vList.length > 0, `searchVenues returns ${vList.length} grounds for GET /api/venues`);
   check(vList.every((v) => v.is_active === true), 'only active grounds, as the venue list page needs');
@@ -1498,7 +1473,7 @@ async function conversationH(client, ctx) {
       'bad_team', 'a junk team id is rejected with the same words for both callers');
   }
 
-  // ── privacy: the telemetry cannot become a transcript ──────────────────────
+  // Privacy: the telemetry cannot become a transcript
   const cols = (await client.query(
     `SELECT column_name, data_type FROM information_schema.columns
       WHERE table_name = 'assistant_turns' ORDER BY ordinal_position`)).rows;
@@ -1534,21 +1509,17 @@ async function conversationH(client, ctx) {
   return ctx;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE CAST'S SUPPORTING ROLES
-// ════════════════════════════════════════════════════════════════════════════
+// The cast's supporting roles
 
 /** A day after PKT today, as YYYY-MM-DD — the date every "kal" assertion uses. */
-// ════════════════════════════════════════════════════════════════════════════
-// I — THE MILESTONE LINE  ("kal shaam football islamabad" → a booked row)
-// ════════════════════════════════════════════════════════════════════════════
+// I — the milestone line  ("kal shaam football islamabad" → a booked row)
 
 /**
  * The first line of the S.6 acceptance checklist, run as one continuous chain
  * instead of argued from two halves that touch.
  *
  * Everything here is already covered: A books through the picker, and the HTTP
- * check parses this exact sentence. What was NOT covered is the JOIN — that the
+ * check parses this exact sentence. What was not covered is the JOIN — that the
  * committee's own utterance, with its Roman-Urdu date and no venue id anywhere in
  * it, reaches a row in `bookings` with the ledger behind it. So this drives the
  * sentence and then taps only what Scout painted: the card's See-times button, the
@@ -1556,7 +1527,7 @@ async function conversationH(client, ctx) {
  * is never computed here — if the extractor read "kal" wrongly the picker is for
  * the wrong day and the assertion below says so.
  *
- * It runs LAST on purpose. It spends real balance, and every earlier section
+ * It runs last on purpose. It spends real balance, and every earlier section
  * asserts against a wallet it measured itself, so a second booking must not land
  * in the middle of them. The whole run is one rolled-back transaction regardless.
  */
@@ -1656,7 +1627,7 @@ function pktTomorrow(now) {
 
 /**
  * A team the cast player administers, whoever administers one otherwise, plus a
- * player who is NOT on it — the negative case for the ranking services. Returns
+ * player who is not on it — the negative case for the ranking services. Returns
  * null when the seed has no team with a captain, which is a skip and not a failure.
  */
 async function adminTeamFor(client, playerId) {
@@ -1681,9 +1652,7 @@ async function adminTeamFor(client, playerId) {
     outsiderId: out.length ? out[0].id : null };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// J — TOURNAMENTS: A CHIP-ONLY DOOR ONTO A SECOND SPENDER
-// ════════════════════════════════════════════════════════════════════════════
+// J — tournaments: a chip-only door onto a second spender
 
 /**
  * S.7 gives Scout a second way to spend a user's money, and this section is the proof
@@ -1691,10 +1660,10 @@ async function adminTeamFor(client, playerId) {
  *
  * Three properties are asserted, in the order that matters:
  *
- *   1. The classifier CANNOT open this door. `tournament_register` is not one of model
+ *   1. The classifier cannot open this door. `tournament_register` is not one of model
  *      #4's 23 labels, so a sentence — any sentence — cannot reach it. That is checked
  *      live, by typing the most direct request there is and reading the intent back.
- *   2. Arming a confirmation moves NOTHING. The wallet is read before and after the
+ *   2. Arming a confirmation moves nothing. The wallet is read before and after the
  *      card appears, and the two numbers must be identical.
  *   3. Only the confirm turn spends, and the row it writes is the tournament service's
  *      own — Scout has no INSERT of its own (section H counts that).
@@ -1716,7 +1685,7 @@ async function conversationJ(client, ctx) {
     return ctx;
   }
 
-  // ── 1. the three actions exist, and the model cannot reach any of them ─────
+  // 1. The three actions exist, and the model cannot reach any of them
   for (const key of ['tournament_detail', 'tournament_register', 'my_tournaments']) {
     check(actions.isAction(key) && actions.BUTTON_ONLY.includes(key)
       && !actions.INTENT_LABELS.includes(key),
@@ -1730,7 +1699,7 @@ async function conversationJ(client, ctx) {
   check(!(begged.reply && (begged.reply.cards || []).some((c) => c.type === replyUtil.CARDS.CONFIRM)),
     'and no confirm card is armed by a sentence — the money door needs a chip');
 
-  // ── 2. browse, by the same chip the capability menu offers ────────────────
+  // 2. Browse, by the same chip the capability menu offers
   const list = await say(client, { userId: player.id, action: 'tournament_list' });
   if (!check(list.ok, 'the Tournaments chip answers', list.error || list.message)) return ctx;
   const cups = cardsOf(list, replyUtil.CARDS.TOURNAMENT);
@@ -1747,7 +1716,7 @@ async function conversationJ(client, ctx) {
   check(offers(list, 'tournament_detail'),
     'the card offers the detail chip — which is the ONLY way in, by design');
 
-  // ── 3. find a cup this run can actually enter ──────────────────────────────
+  // 3. Find a cup this run can enter
   // Chosen from the seed, never created: the same discipline as every other section.
   const open = await tsvc.browse(client, { openOnly: true, limit: 10 });
   let cand = null;
@@ -1761,7 +1730,7 @@ async function conversationJ(client, ctx) {
     if (cand) break;
   }
 
-  // ── 4. the detail turn, on a real cup ─────────────────────────────────────
+  // 4. The detail turn, on a real cup
   const subject = cand ? cand.t : { id: shape.id, name: shape.name };
   const who = cand ? cand.p : player;
   const det = await say(client, { userId: who.id, action: 'tournament_detail',
@@ -1774,7 +1743,7 @@ async function conversationJ(client, ctx) {
     `and meta the UI can trust (${(det.reply.meta || {}).fixtures} fixtures, `
     + `${(det.reply.meta || {}).rounds} rounds)`);
 
-  // ── 5. the entry flow — arm, prove nothing moved, THEN confirm ────────────
+  // 5. The entry flow — arm, prove nothing moved, then confirm
   if (!cand) {
     // Not a silent skip: the refusal ladder is the interesting half when the seed has
     // nobody who can enter, and it is asserted rather than assumed.
@@ -1818,7 +1787,7 @@ async function conversationJ(client, ctx) {
   eq(round2(asNum(mid.frozen_balance)), round2(asNum(before.frozen_balance)),
     'and nothing was frozen either');
 
-  // ── 6. the confirm turn is the one that spends ─────────────────────────────
+  // 6. The confirm turn is the one that spends
   const fee = round2(asNum(cand.t.entryFee));
   const done = await say(client, { userId: cand.p.id, action: 'confirm' });
   if (!check(done.ok && done.reply.actionOk === true,
@@ -1850,7 +1819,7 @@ async function conversationJ(client, ctx) {
   check(txn[0] && String(txn[0].tournament_id) === String(cand.t.id),
     'and carries the tournament id, so an auditor never has to guess which cup it was');
 
-  // ── 7. a second confirm cannot double-charge ───────────────────────────────
+  // 7. A second confirm cannot double-charge
   const again = await say(client, { userId: cand.p.id, action: 'confirm' });
   const afterAgain = await wallet();
   eq(round2(asNum(afterAgain.balance)), round2(asNum(after.balance)),
@@ -1858,7 +1827,7 @@ async function conversationJ(client, ctx) {
   check(!again.reply || again.reply.actionOk !== true,
     'and Scout says there is nothing to confirm rather than pretending it worked');
 
-  // ── 8. the entry is visible where a captain would look for it ─────────────
+  // 8. The entry is visible where a captain would look for it
   const mineOut = await say(client, { userId: cand.p.id, action: 'my_tournaments' });
   check(mineOut.ok && cardsOf(mineOut, replyUtil.CARDS.TOURNAMENT).length >= 1,
     'My tournaments shows the cup the captain just entered');
@@ -1875,12 +1844,10 @@ async function conversationJ(client, ctx) {
   return ctx;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// MAIN
-// ════════════════════════════════════════════════════════════════════════════
+// Main
 
 /**
- * Everything runs inside ONE transaction that is ALWAYS rolled back, so a full
+ * Everything runs inside one transaction that is always rolled back, so a full
  * verification run leaves the seeded database byte-identical: no test booking to
  * explain in the demo, no drained wallet, no orphan chat. The turns still see their
  * own writes, because they run on this client — that is what the `client` parameter

@@ -22,7 +22,7 @@ import '../../widgets/tournament_widgets.dart';
 /// pressed, so the worst a stale screen can do is offer an action that then refuses
 /// politely.
 ///
-/// Every refusal is printed verbatim. In this module a failure is usually a RULE and
+/// Every refusal is printed verbatim. In this module a failure is usually a rule and
 /// not a fault — "the last spot went while you were deciding", "you are PKR 1,200
 /// short", "round 2 needs 4 hours and the venue has 3" — and paraphrasing those into
 /// "Something went wrong" would leave a captain tapping a button that will never work.
@@ -90,7 +90,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     });
   }
 
-  // ---- Actions -------------------------------------------------
+  // Actions
 
   /// Runs one mutation, shows the server's own sentence either way, and reloads.
   ///
@@ -222,7 +222,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     return res == true;
   }
 
-  // ---- Organiser actions (SRS FE-5, FE-6, FE-7) ----------------
+  // Organiser actions (SRS FE-5, FE-6, FE-7)
 
   /// Draw the bracket now. The biggest money move in the module, so it is behind a
   /// confirmation that spells out what settles: every held entry fee is released, the
@@ -255,7 +255,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (!mounted) return;
     // Not a snackbar. The generate response carries the one thing this module claims
     // and has to be able to prove — `meta.scheduling.source`, whether the released
-    // demand model actually placed the hours or the chronological fallback did — and a
+    // demand model placed the hours or the chronological fallback did — and a
     // toast that vanishes in three seconds is not where a provenance record belongs.
     final data = r['data'];
     await showModalBottomSheet<void>(
@@ -462,7 +462,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     return res;
   }
 
-  // ---- Build ---------------------------------------------------
+  // Build
 
   @override
   Widget build(BuildContext context) {
@@ -542,7 +542,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         ),
       );
 
-  // ---- Tabs ----------------------------------------------------
+  // Tabs
 
   List<Widget> _overview(Tournament t) {
     final v = _detail.viewer;
@@ -806,9 +806,9 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         ),
       );
 
-  // ---- The one action ------------------------------------------
+  // The one action
 
-  /// The bar at the bottom offers AT MOST ONE action, and only when the server said it
+  /// The bar at the bottom offers at most one action, and only when the server said it
   /// is available. Registration and withdrawal are money; a screen that showed both,
   /// or showed Enter to somebody who is already in, would be inviting a tap that can
   /// only end in a refusal.
@@ -857,9 +857,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Private pieces of this screen
-// ═══════════════════════════════════════════════════════════════
 
 /// A titled white card. Used four times on this screen, so it is a class rather than
 /// four copies of the same BoxDecoration.
@@ -1190,7 +1188,7 @@ class _TinyAction extends StatelessWidget {
 
 /// The rules, in the words a captain would use to ask about them.
 ///
-/// Every line here is a policy the server actually enforces, and each one exists
+/// Every line here is a policy the server enforces, and each one exists
 /// because it is the sort of thing that causes an argument on a touchline if it was
 /// never written down: what happens to a draw, who gets a bye, whether a walkover moves
 /// ratings, and what a tournament match is worth compared to a friendly.
@@ -1272,7 +1270,7 @@ class _RulesCard extends StatelessWidget {
 /// My team's own entry: what it cost, whether it is confirmed, and who is next.
 ///
 /// The fee is described as *held* until the organiser accepts, because that is what the
-/// ledger actually did — it moved the money into the frozen column, not out of the
+/// ledger did — it moved the money into the frozen column, not out of the
 /// wallet. Calling it "paid" while it can still come back would be a small lie that
 /// the refund would later contradict.
 class _MyEntryCard extends StatelessWidget {
@@ -1601,7 +1599,7 @@ class _OrganiserPanel extends StatelessWidget {
 /// This is a presentation default, not policy — the sheet lets the captain change it,
 /// and the number it produces is labelled as *their* split rather than a charge. The
 /// server never sees it. It exists because "PKR 4,000" and "about PKR 571 each" are the
-/// same fact and only the second one is a decision a captain can actually make.
+/// same fact and only the second one is a decision a captain can make.
 const Map<String, int> _defaultSquad = {
   'football': 7,
   'futsal': 6,
@@ -2158,7 +2156,7 @@ class _ScoreDialogState extends State<_ScoreDialog> {
   }
 }
 
-/// What the draw actually did, shown once, straight after it happened.
+/// What the draw did, shown once, straight after it happened.
 ///
 /// This is the only screen in the app that carries the scheduler's provenance stamp,
 /// because `meta.scheduling` is only on the generate response — `GET /:id` does not

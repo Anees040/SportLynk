@@ -1,36 +1,34 @@
 /**
  * check_ml_service.js — prove the ML integration works, and that it degrades.
  *
- * WHY THIS EXISTS
- * ---------------
+ * Why this exists
  * S.3 Wave A added a whole tier (ml-service/) and a client for it
  * (src/services/mlClient.js), but no route calls that client until Wave C. Without
  * a harness, Wave A would ship code that has never been executed — and the part
- * that matters most, the DEGRADATION path, is exactly the part nobody exercises by
+ * that matters most, the degradation path, is exactly the part nobody exercises by
  * accident because it only runs when something is broken.
  *
  * So this script is the acceptance test for the wave, in the family of
  * verify_schema.js and run_match_flow_check.js: read-only, exits 0 or 1, and safe
  * to run any time.
  *
- * WHAT IT PROVES
- * --------------
- *   1. GUARDRAILS. The clamp band, the PKR 50 rounding and the peak-hour rule are
+ * What it proves
+ *   1. Guardrails. The clamp band, the PKR 50 rounding and the peak-hour rule are
  *      pure functions, so they are checked with no service and no network. A model
  *      must never be able to suggest PKR 47 or PKR 190,000 to a real venue owner.
- *   2. CROSS-LANGUAGE CONSTANTS. PEAK_START_HOUR, PEAK_END_HOUR and the price-ratio
+ *   2. Cross-language constants. PEAK_START_HOUR, PEAK_END_HOUR and the price-ratio
  *      band exist twice — in mlClient.js and in ml-service/app/core/features.py —
  *      because Node cannot import Python. This asserts the two copies agree, by
  *      reading GET /features/spec. That turns "keep these in sync" from a comment
  *      into a check that fails.
- *   3. THE UP PATH. /health answers, reports its model inventory truthfully, and
+ *   3. The up path. /health answers, reports its model inventory truthfully, and
  *      /predict/price either returns a model suggestion (Wave C onward) or an
  *      honest 503 model_not_loaded (Wave A/B). Both are passes; the script says
  *      which it saw.
- *   4. THE API-KEY GATE. A request with no key and a request with a wrong key both
+ *   4. The API-KEY gate. A request with no key and a request with a wrong key both
  *      get 401 with the same body. Verified with raw fetch, because mlClient always
  *      sends the real key and therefore cannot test this itself.
- *   5. THE DOWN PATH — WITHOUT ASKING ANYONE TO STOP UVICORN. The script stands up
+ *   5. The down path — without asking anyone to stop UVICORN. The script stands up
  *      its own failure conditions: a closed port (connection refused) and a socket
  *      that accepts and never replies (timeout). It then checks that suggestPrice
  *      still returns a usable heuristic, that the 2-second ceiling is honoured, and
@@ -39,30 +37,28 @@
  *      Self-contained on purpose. A test that needs a human to kill a process in
  *      another terminal is a test that gets skipped, and this is the path that
  *      protects the owner dashboard in production.
- *   6. WAVE D — THAT THE OWNER'S SCREEN CANNOT LIE. Every figure the dashboard card
+ *   6. Wave D — that the owner's screen cannot lie. Every figure the dashboard card
  *      and the 72-hour chart display is asserted here to be measured rather than
  *      asserted: the confidence is inside its derived clamp, the "why" chips carry
  *      real counterfactual impacts strongest-first, the caption's AUC comes from the
  *      served artifact, the demand palette's thresholds are checked against the
  *      trained base rate in ml-service/reports/pricing_metrics.json, and every
  *      forecast bar carries the colour its own probability earns. It also proves the
- *      cache serves a degraded answer WITHOUT storing it — the difference between a
+ *      cache serves a degraded answer without storing it — the difference between a
  *      30-second outage and a 60-minute one.
  *
- * WHAT IT DOES NOT DO
- * -------------------
+ * What it does not do
  * No database connection, no writes, no schema. Nothing here can affect a booking.
  *
  * USAGE
- * -----
  *   node src/scripts/check_ml_service.js
  *   node src/scripts/check_ml_service.js --verbose      # show every passing check
  *
  * Start the ML service first for the full run:
  *   cd ..\ml-service ; .\run_dev.ps1
  *
- * With the service DOWN the script still passes: sections 1, 5 and the degradation
- * checks all run, and the up-path sections report SKIP with the reason. That is
+ * With the service down the script still passes: sections 1, 5 and the degradation
+ * checks all run, and the up-path sections report skip with the reason. That is
  * intentional — "the backend is fine without the ML service" is a result, not a
  * gap.
  */
@@ -154,7 +150,7 @@ async function main() {
   const url = (process.env.ML_SERVICE_URL || '').trim();
   const key = (process.env.ML_API_KEY || '').trim();
 
-  // ─── 0. Configuration ─────────────────────────────────────────
+  // 0. Configuration
   section('0. Configuration (backend/.env)');
   console.log(`   ML_SERVICE_URL   ${url || '(unset)'}`);
   console.log(`   ML_API_KEY       ${key ? `set, ${key.length} chars, fp=${fingerprint(key)}` : '(unset)'}`);
@@ -167,7 +163,7 @@ async function main() {
     console.log('   -> compare fp above with data.apiKeyFingerprint from /health');
   }
 
-  // ─── 1. Guardrails — pure, no network ─────────────────────────
+  // 1. Guardrails — pure, no network
   section('1. Guardrails and heuristic (pure functions, no service needed)');
 
   const BASE = 2000;
@@ -246,7 +242,7 @@ async function main() {
     );
   }
 
-  // ── Wave D pure functions: the demand palette and the PKT stamp ──
+  // Wave D pure functions: the demand palette and the PKT stamp
   {
     // These three shape every bar on the owner's forecast chart, so they are checked
     // without the service: a colour that is wrong here is wrong on the demo laptop.
@@ -265,7 +261,7 @@ async function main() {
     );
     check(
       // The bug this exists to prevent: Number(null) === 0, which is finite, so a
-      // naive guard buckets an ABSENT probability as `low` and paints a bar on the
+      // naive guard buckets an absent probability as `low` and paints a bar on the
       // chart for an hour nothing is known about.
       'an absent or non-numeric probability gets NO colour, not the low colour',
       [null, undefined, '', '0.5', NaN, {}].every((v) => ml.demandLevel(v) === null),
@@ -295,10 +291,10 @@ async function main() {
     check('normaliseFactors survives a non-array', ml.normaliseFactors(null).length === 0);
   }
 
-  // ── Wave D: the thresholds must be anchored on MEASURED data ────
+  // Wave D: the thresholds must be anchored on measured data
   {
     // The demand palette's whole claim is that "high" means high relative to what
-    // this venue population actually books, not relative to a number someone liked.
+    // this venue population books, not relative to a number someone liked.
     // That claim is only true while DEMAND_BASE_RATE tracks the base rate the model
     // was trained against, so it is asserted against the artifact's own metrics.
     const metricsPath = path.join(
@@ -329,7 +325,7 @@ async function main() {
     }
   }
 
-  // ── Wave D: the owner-route cache ───────────────────────────────
+  // Wave D: the owner-route cache
   {
     // owner.js keys its caches on user-supplied date/hour values, so the bound is
     // what stops a scripted client turning the cache into a memory leak.
@@ -381,7 +377,7 @@ async function main() {
     );
   }
 
-  // ─── 2. Up path ───────────────────────────────────────────────
+  // 2. Up path
   section('2. ML service up path');
 
   ml.resetBreaker();
@@ -525,7 +521,7 @@ async function main() {
         `model=${suggestion.modelVersion}`);
       check('a model response carries a model version', Boolean(suggestion.modelVersion));
 
-      // ── Wave D: the numbers the card puts on screen ──────────
+      // Wave D: the numbers the card puts on screen
       check(
         // Confidence is derived (identification x boundary penalty x attainment) and
         // clamped to [0.05, 0.95]. A hard 0 or 1 would mean the derivation was skipped.
@@ -541,7 +537,7 @@ async function main() {
         `demand=${suggestion.demand}`,
       );
       check(
-        // 19:00 is inside the peak window on a Tuesday, so the model must have SOMETHING
+        // 19:00 is inside the peak window on a Tuesday, so the model must have something
         // to say about why. Zero chips here means the counterfactual probe silently
         // failed and the card would render an unexplained price.
         'a peak-hour suggestion comes with at least one measured "why" chip',
@@ -558,7 +554,7 @@ async function main() {
       );
       check(
         // This is the caption under the card. If it is absent the caption disappears;
-        // if it is WRONG the demo claims a score the artifact never measured.
+        // if it is wrong the demo claims a score the artifact never measured.
         'modelMetrics carries the served artifact\'s own measured scores',
         suggestion.modelMetrics &&
           typeof suggestion.modelMetrics.rocAuc === 'number' &&
@@ -579,7 +575,7 @@ async function main() {
         check(
           // ELASTICITY_PEAK < 1 makes expected revenue rise monotonically to the cap on
           // peak slots, so this fires legitimately and often — but then the reason must
-          // SAY so, or the owner sees a price that stopped for no stated cause.
+          // say so, or the owner sees a price that stopped for no stated cause.
           'a capped suggestion explains that it was the cap that stopped it',
           /cap/i.test(String(suggestion.reason)),
           suggestion.reason,
@@ -599,7 +595,7 @@ async function main() {
       check('heuristic response explains itself', typeof suggestion.reason === 'string' &&
         suggestion.reason.length > 0);
       check(
-        // The heuristic gets ONE chip, and it must be honest about being a rule: an
+        // The heuristic gets one chip, and it must be honest about being a rule: an
         // `impact` of 0 would present a rule as a measurement of no effect, which is
         // the same dishonesty as the old hardcoded "92% CONFIDENCE" in the other
         // direction. The card renders the label without a number when impact is null.
@@ -614,7 +610,7 @@ async function main() {
       );
     }
 
-    // ── demand forecast: must NOT invent a chart
+    // ── demand forecast: must not invent a chart
     ml.resetBreaker();
     const forecast = await ml.forecastDemand({
       sport: 'football', city: 'lahore', basePrice: BASE, hours: 72,
@@ -624,7 +620,7 @@ async function main() {
       check('forecast points are probabilities in [0,1]',
         forecast.points.every((p) => p.bookProbability >= 0 && p.bookProbability <= 1));
       check(
-        // `hours` is the count SERVED, not the count asked for. Any point that could
+        // `hours` is the count served, not the count asked for. Any point that could
         // not be stamped or read is dropped rather than drawn as a zero-height bar at
         // an unknown time, so these two must always agree.
         'the reported hour count is the number of points actually served',
@@ -662,7 +658,7 @@ async function main() {
       );
     }
 
-    // ── sentiment: the cross-language label set, then the up path ──
+    // Sentiment: the cross-language label set, then the up path
     // The mirror of the /features/spec check above. SENTIMENT_LABELS in mlClient.js is
     // a hand-copy of text_norm.LABELS that Node cannot import, and a drift silently
     // mislabels every stored review, so the two are asserted equal over the wire.
@@ -711,7 +707,7 @@ async function main() {
         sentiment.label,
       );
       check(
-        // Stored in reviews.sentiment_score and AVERAGED into trust_sentiment, so a
+        // Stored in reviews.sentiment_score and averaged into trust_sentiment, so a
         // value outside [-1,1] would corrupt the trust ledger, not just one row.
         'score is signed polarity in [-1, 1]',
         typeof sentiment.score === 'number' && sentiment.score >= -1 && sentiment.score <= 1,
@@ -741,7 +737,7 @@ async function main() {
       );
 
       // The deliberate difference from the price path: unusable text is a 422, and it
-      // must come back available:false + clientError:true WITHOUT opening the breaker —
+      // must come back available:false + clientError:true without opening the breaker —
       // bad input is not an outage. sentimentBackfillJob.js relies on exactly this to
       // mark a row 'unscoreable' rather than deferring the whole sweep.
       ml.resetBreaker();
@@ -764,7 +760,7 @@ async function main() {
     }
   }
 
-  // ─── 3. Down path — stood up locally, no human needed ──────────
+  // 3. Down path — stood up locally, no human needed
   section('3. Degradation path (failure conditions created by this script)');
 
   const realUrl = process.env.ML_SERVICE_URL;
@@ -813,7 +809,7 @@ async function main() {
     );
 
     // 3b. Timeout — the "service is up but hung" case, which a refused connection
-    // does not exercise. This is what the 2-second ceiling is actually for.
+    // does not exercise. This is what the 2-second ceiling is for.
     hole = await blackHole();
     process.env.ML_SERVICE_URL = `http://127.0.0.1:${hole.port}`;
     ml.resetBreaker();
@@ -874,7 +870,7 @@ async function main() {
     ml.resetBreaker();
   }
 
-  // ─── Summary ──────────────────────────────────────────────────
+  // Summary
   console.log(`\n${'='.repeat(64)}`);
   if (!failures.length) {
     console.log(`${passed}/${passed} checks passed${skipped.length ? `, ${skipped.length} skipped` : ''}.`);

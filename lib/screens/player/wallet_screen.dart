@@ -90,7 +90,7 @@ class _WalletScreenState extends State<WalletScreen> {
       }));
   }
 
-  // ── FR7.4 / ER1.6 — withdraw ───────────────────────────────
+  // FR7.4 / ER1.6 — withdraw
   // Replaces the "available after launch" stub. The sheet decides for itself
   // whether to show the request form or the pending withdrawal, because that
   // depends on server state this screen does not load.
@@ -105,7 +105,7 @@ class _WalletScreenState extends State<WalletScreen> {
     if (changed && mounted) _load();
   }
 
-  // ── FR7.2 — itemised escrow breakdown ──────────────────────
+  // FR7.2 — itemised escrow breakdown
   void _showFrozenSheet() {
     final token = Provider.of<AuthProvider>(context, listen: false).token;
     if (token == null) return;
@@ -144,7 +144,7 @@ class _WalletScreenState extends State<WalletScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               child: Column(children: [
-                // ── BALANCE CARD ───────────────────────────
+                // Balance card
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
@@ -214,7 +214,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // ── ACTIONS ────────────────────────────────
+                // ACTIONS
                 Row(children: [
                   Expanded(child: ElevatedButton.icon(
                     icon: const Icon(Icons.add, size: 18),
@@ -244,7 +244,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 ]),
                 const SizedBox(height: 24),
 
-                // ── RECENT TRANSACTIONS ────────────────────
+                // Recent transactions
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                   Text('Recent Transactions', style: GoogleFonts.poppins(
                     fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
@@ -314,7 +314,7 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 }
 
-// ── TOP UP SHEET ─────────────────────────────────────────────
+// Top up sheet
 
 class _TopUpSheet extends StatefulWidget {
   final List<double> amounts;

@@ -1,11 +1,11 @@
 // admin_dispute_detail_screen.dart — S.7 Wave D · D5 / FR10.6, FR10.7.
 //
 // The case file. Everything an admin needs to overrule two captains, on one
-// screen, in the order a human actually reads it: what each side claims, whether
+// screen, in the order a human reads it: what each side claims, whether
 // they agree, who was on the pitch, what the venue's check-in says, what the two
 // of them said to each other in the captain channel, and what the ratings did.
 //
-// THE SCREEN DECIDES NOTHING. Severity, the age, whether a correction is even
+// The screen decides nothing. Severity, the age, whether a correction is even
 // possible, which submissions exist, whether the bracket has moved on — all of it
 // arrives from `GET /api/admin/disputes/:id`. The five ruling actions are offered
 // or disabled from `capabilities` and from the presence of a submission, because
@@ -13,7 +13,7 @@
 // there is nothing to adopt.'`) and a button that fails on submit is worse than a
 // button that is visibly unavailable with the reason next to it.
 //
-// A NOTE IS MANDATORY, server-side, minimum three characters. It is quoted to both
+// A NOTE is mandatory, server-side, minimum three characters. It is quoted to both
 // captains and stored in `admin_audit`, so the dialog asks for it rather than
 // letting the admin discover the 400.
 import 'package:flutter/material.dart';
@@ -121,7 +121,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     );
   }
 
-  // ── Shared shell ───────────────────────────────────────────────────────────
+  // Shared shell
   Widget _card({required String title, String? hint, required Widget child, Widget? trailing}) {
     return Container(
       width: double.infinity,
@@ -217,7 +217,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     );
   }
 
-  // ── 1 · What is at stake ───────────────────────────────────────────────────
+  // 1 · What is at stake
   Widget _headerCard(DisputeCase c) {
     final d = c.dispute;
     final m = d.match;
@@ -264,7 +264,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     );
   }
 
-  // ── 2 · Side by side ───────────────────────────────────────────────────────
+  // 2 · Side by side
   /// The two `match_results` rows next to each other. `UNIQUE (match_id,
   /// submitted_by_team)` guarantees at most one per side, so a missing column is
   /// a side that never filed — which is itself the evidence, and is said out loud
@@ -342,7 +342,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     );
   }
 
-  // ── 3 · The venue's evidence ───────────────────────────────────────────────
+  // 3 · The venue's evidence
   /// Check-in is the only third-party fact in the case: the owner scanned a QR (or
   /// did not) at a time neither captain controls. It outranks both submissions
   /// when they disagree, so it gets its own card rather than a line in a summary.
@@ -378,7 +378,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     );
   }
 
-  // ── 4 · Who was on the pitch ───────────────────────────────────────────────
+  // 4 · Who was on the pitch
   Widget _rosterCard(DisputeCase c) {
     return _card(
       title: 'Rosters',
@@ -457,9 +457,9 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     );
   }
 
-  // ── 5 · What the ratings already did ───────────────────────────────────────
+  // 5 · What the ratings already did
   /// `elo_history` for this match. Present only when the rating was applied before
-  /// the dispute landed, which is exactly the case where a ruling must REVERSE
+  /// the dispute landed, which is exactly the case where a ruling must reverse
   /// before it re-applies — so the admin sees the exchange they are about to undo.
   Widget _eloCard(DisputeCase c) {
     return _card(
@@ -498,7 +498,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     );
   }
 
-  // ── 6 · The captain channel, archived ──────────────────────────────────────
+  // 6 · The captain channel, archived
   /// FR10.6 verbatim: the chat log is part of the evidence. A tombstone stays in
   /// the transcript as "message deleted" — a deletion after a dispute was raised
   /// is itself worth seeing, and silently dropping the row would hide it.
@@ -590,7 +590,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     );
   }
 
-  // ── 7 · Siblings, and the record once it is closed ─────────────────────────
+  // 7 · Siblings, and the record once it is closed
   Widget _relatedCard(DisputeCase c) {
     return _card(
       title: 'Other disputes on this match',
@@ -640,8 +640,8 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     );
   }
 
-  // ── The ruling bar ─────────────────────────────────────────────────────────
-  /// Offered only while the dispute is open AND the server says this admin may
+  // The ruling bar
+  /// Offered only while the dispute is open and the server says this admin may
   /// rule. `canChangeResult` is the narrower gate: when the rating was already
   /// applied, changing the result means reversing it, and that needs migration
   /// 022's columns — `correctionBlockedBy` names the file if they are missing.
@@ -722,7 +722,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
   }
 
   /// The four result-changing actions. Adopting a side is offered only when that
-  /// side actually filed a scoreline — the server refuses otherwise with
+  /// side filed a scoreline — the server refuses otherwise with
   /// "there is nothing to adopt", and this sheet says so before the round trip.
   Future<void> _pickRuling(DisputeCase c) async {
     final cs = c.challengerSubmission;
@@ -966,9 +966,9 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     }
   }
 
-  /// What this action will actually do, said before it is taken. The rating clause
+  /// What this action will do, said before it is taken. The rating clause
   /// is the one an admin most needs: on a match that was already rated, a ruling
-  /// REVERSES the old exchange and applies the new one, and every open dispute on
+  /// reverses the old exchange and applies the new one, and every open dispute on
   /// the match closes with it.
   String _actionBlurb(String action, DisputeCase c) {
     if (action == 'dismiss') {

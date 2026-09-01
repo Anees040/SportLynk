@@ -2,33 +2,33 @@
  * disputeService.js — S.7 Wave D · FR10.6 / FR10.7. The queue, the case file, and
  * the ruling.
  *
- * WHY A SERVICE AND NOT SQL IN THE ROUTE
+ * Why a service and not SQL in the route
  * A ruling is the single most consequential write an admin can make: it moves two
  * ratings, can advance a bracket, closes a dispute, notifies four captains and
  * leaves an audit row — all of which must be one transaction or none of it. The
  * route's job is `BEGIN`, the HTTP shape and `emitAfterCommit`; everything that
  * has to be atomic lives here, in one function, where it can be read end to end.
  *
- * THE RULE THIS FILE OBEYS: THE SAME PATH AS `POST /api/matches/:id/verify`
+ * The rule this file obeys: the same path as `POST /api/matches/:id/verify`
  * `mc.lockMatch` → scoreline → `elo` inside the transaction → status/verified_by
  * → `tournaments.advanceAfterMatch` unconditionally → `mc.fanOut` → COMMIT →
  * `mc.emitAfterCommit`. Not a parallel implementation: a second way to finish a
  * match is a second way to get it wrong, and the two would drift the first time
  * either was touched.
  *
- * WHERE IT DEPARTS FROM THE PLAN, AND WHY
+ * WHERE it DEPARTS from the PLAN, and why
  * The plan says a ruling should "refuse if `elo_applied` is already true". It
- * cannot: `POST /api/matches/:id/dispute` deliberately ACCEPTS a dispute against
+ * cannot: `POST /api/matches/:id/dispute` deliberately accepts a dispute against
  * an already-verified match and defers it here, saying the rating "stands until an
  * admin resolves it (S.7)". Refusing would make that entire class of dispute
  * unrulable and leave `matches.winner_team` permanently contradicting `teams.elo`.
- * The operative word in that comment is SILENTLY — it objects to an unexplained
+ * The operative word in that comment is silently — it objects to an unexplained
  * reversal, not to an audited one. So an already-rated match is corrected through
  * `elo.correctResult`, which writes `admin_reversal` + `admin_ruling` rows and
  * leaves the ledger readable as: rated, undone, re-rated.
  *
  * That correction needs the two labels from `migrations/021_dispute_ruling_labels.sql`.
- * Until it is applied, `elo.supportsCorrection` is false and only that ONE branch
+ * Until it is applied, `elo.supportsCorrection` is false and only that one branch
  * refuses — with a message naming the migration, rather than a 23514 from inside a
  * half-finished transaction. Every other ruling works today.
  */
@@ -63,7 +63,7 @@ const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** Uniform refusal, shaped so a route can `return bad(res, r.status, r.message)`. */
 const fail = (status, message, code = null) => ({ ok: false, status, message, code });
 
-/** pg returns DECIMAL/BIGINT as strings; a rating that arrives as "1032" is a bug. */
+/** pg returns decimal/BIGINT as strings; a rating that arrives as "1032" is a bug. */
 function n(v, d = 0) {
   const x = typeof v === 'number' ? v : Number.parseFloat(String(v));
   return Number.isFinite(x) ? x : d;
@@ -79,7 +79,7 @@ function intOrNull(v) {
  * How much rating this dispute is holding hostage — the triage number.
  *
  * The interesting quantity is not the delta of the recorded outcome but the
- * BIGGEST movement still in play, so a 1200 vs 900 upset (where the favourite
+ * biggest movement still in play, so a 1200 vs 900 upset (where the favourite
  * stands to lose ~29 at K=32) outranks an even match (16) in the queue. Computed
  * from the pure `elo.rate` at the live K, so it is the same arithmetic the ruling
  * itself will run, and it costs no query.
@@ -90,9 +90,7 @@ function severityFor({ ratingChallenger, ratingOpponent, kFactor }) {
   return Math.max(Math.abs(win.challenger.delta), Math.abs(loss.challenger.delta));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// THE QUEUE
-// ─────────────────────────────────────────────────────────────────────────────
+// The queue
 
 /**
  * Every column both the queue and the case file need about a dispute. One string,
@@ -131,7 +129,7 @@ const QUEUE_SELECT = `SELECT d.id, d.match_id, d.raised_by_team, d.reason, d.sta
  *
  * Ordered severity-first, then oldest-first, which is what `idx_disputes_queue
  * (severity_elo DESC NULLS LAST, created_at) WHERE status = 'open'` was created
- * for. `severity_elo` is stamped when the dispute is RAISED, so the order is
+ * for. `severity_elo` is stamped when the dispute is raised, so the order is
  * stable while an admin pages through it; the live recomputation below is only
  * used to fill in a row raised before that stamp existed.
  *
@@ -150,7 +148,7 @@ async function queue(db, { status = 'open', cursor = '', limit = 25 } = {}) {
     where.push(`d.status = $${params.length}`);
   }
   // Cursor is `<severity>~<created_at>~<id>`. The sort mixes DESC and ASC, so a
-  // row-value comparison cannot express it; the explicit OR form can.
+  // row-value comparison cannot express it; the explicit or form can.
   if (String(cursor || '').includes('~')) {
     const [sev, ts, id] = String(cursor).split('~');
     if (RE_UUID.test(id || '')) {
@@ -240,22 +238,20 @@ function shapeQueueRow(r, kFactor) {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// THE CASE FILE — FR10.6
-// ─────────────────────────────────────────────────────────────────────────────
+// The case file — FR10.6
 
 /**
  * Everything an admin needs to rule without leaving the screen.
  *
  * FR10.6 asks for the two submissions, the evidence and the chat log. The
  * expensive-looking part — the captain-channel archive — is a plain indexed read
- * of `chat_messages` for the ONE channel Wave B creates per match, which is the
+ * of `chat_messages` for the one channel Wave B creates per match, which is the
  * reason Wave B was sequenced before Wave D: without it this requirement has no
  * data to satisfy it.
  *
- * Read-only, and deliberately on the POOL rather than in a transaction: nothing
- * here writes, and holding a transaction open while an admin reads is how you get
- * an idle-in-transaction lock sitting on a match row.
+ * Read-only, and deliberately on the pool rather than in a transaction: nothing
+ * here writes, and holding a transaction open while an admin reads is how an
+ * idle-in-transaction lock ends up sitting on a match row.
  */
 async function caseFile(db, disputeId) {
   if (!RE_UUID.test(String(disputeId || ''))) return fail(400, 'Invalid dispute id.');
@@ -268,10 +264,10 @@ async function caseFile(db, disputeId) {
   const matchId = row.match_id;
   const teamIds = [row.challenger_team, row.opponent_team];
 
-  // ── The two submissions, side by side ──────────────────────────────────────
+  // The two submissions, side by side
   // `UNIQUE (match_id, submitted_by_team)` guarantees at most one per team, so
   // "side by side" is a real two-column layout and not a list that might have
-  // three entries. Where they DISAGREE is the whole dispute, so it is computed
+  // three entries. Where they disagree is the whole dispute, so it is computed
   // here rather than left to the client to diff.
   const subs = await db.query(
     `SELECT mr.submitted_by_team, mr.winner_team, mr.score_challenger,
@@ -303,9 +299,9 @@ async function caseFile(db, disputeId) {
     && subC.scoreChallenger === subO.scoreChallenger
     && subC.scoreOpponent === subO.scoreOpponent);
 
-  // ── Both rosters, with the trust score that is the other half of the story ──
-  // `trust_score` lives on `player_profiles`, NOT on `users` — and the join has to be
-  // a LEFT one, because a profile row is created lazily by `recomputeTrust` on the
+  // Both rosters, with the trust score that is the other half of the story
+  // `trust_score` lives on `player_profiles`, not on `users` — and the join has to be
+  // a left one, because a profile row is created lazily by `recomputeTrust` on the
   // first booking or review. A captain who has never been rated has no row at all,
   // and an INNER join would silently drop that whole side of the roster out of the
   // case file: the admin would rule on a four-a-side with three players listed.
@@ -332,7 +328,7 @@ async function caseFile(db, disputeId) {
       suspended: r.is_active === false,
     }));
 
-  // ── The booking: when, where, and what the owner actually saw ───────────────
+  // The booking: when, where, and what the owner recorded
   // `checked_in_at` is stamped by the QR scan, so its presence is the strongest
   // evidence in the file that the match was played at all — an admin ruling on a
   // match nobody checked in to is ruling on a match that may not have happened.
@@ -350,7 +346,7 @@ async function caseFile(db, disputeId) {
   );
   const b0 = bk.rows[0] || null;
 
-  // ── The captain-channel archive (FR10.6) ────────────────────────────────────
+  // The captain-channel archive (FR10.6)
   // Capped and oldest-first: an admin reads an argument forwards. Tombstones are
   // included as such — "this message was deleted" is itself evidence, and hiding
   // it would let a captain edit the record an admin is about to rule on.
@@ -390,8 +386,8 @@ async function caseFile(db, disputeId) {
     }));
   }
 
-  // ── What was already applied, if anything ───────────────────────────────────
-  // The admin has to know whether they are RATING a match or CORRECTING one, and
+  // What was already applied, if anything
+  // The admin has to know whether they are rating a match or correcting one, and
   // whether a correction is even possible on this database yet.
   const hist = await db.query(
     `SELECT eh.team_id, eh.elo_before, eh.elo_after, eh.elo_delta, eh.k_factor,
@@ -462,17 +458,15 @@ async function caseFile(db, disputeId) {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// THE RULING — FR10.7
-// ─────────────────────────────────────────────────────────────────────────────
+// The RULING — FR10.7
 
 /**
- * Rule on a dispute. Runs inside the CALLER'S transaction and returns everything
+ * Rule on a dispute. Runs inside the caller's transaction and returns everything
  * the route needs to emit after commit.
  *
- * WHAT THE FIVE ACTIONS MEAN
- * `rule_challenger` / `rule_opponent` adopt THAT TEAM'S OWN SUBMISSION — the two
- * rows the case file shows side by side. That is a ruling about whose ACCOUNT of
+ * What the five ACTIONS mean
+ * `rule_challenger` / `rule_opponent` adopt that TEAM'S own submission — the two
+ * rows the case file shows side by side. That is a ruling about whose account of
  * the match is true, not about who wins: adopting the challenger's submission can
  * perfectly well record a draw, or even a challenger loss, because a captain can
  * submit a loss. `rule_draw` needs an equal scoreline (from the body, or from a
@@ -480,7 +474,7 @@ async function caseFile(db, disputeId) {
  * scores. `dismiss` changes no result at all and hands the match back to whoever
  * was supposed to finish it.
  *
- * A NOTE IS MANDATORY. This is the one write in the app where a human overrides
+ * A NOTE is mandatory. This is the one write in the app where a human overrides
  * two other humans, and `admin_audit.note` + `disputes.resolution_notes` are what
  * make that answerable six months later. It is also quoted to both captains, so
  * "why did my rating change?" has an answer that is not "an admin did something".
@@ -515,7 +509,7 @@ async function rule(client, {
   const m = await mc.lockMatch(client, d.match_id);
   if (!m) return fail(409, 'The match behind this dispute no longer exists.');
 
-  // ── The ruled scoreline ─────────────────────────────────────────────────────
+  // The ruled scoreline
   const rs = await client.query(
     `SELECT submitted_by_team, winner_team, score_challenger, score_opponent
        FROM match_results WHERE match_id = $1`,
@@ -573,7 +567,7 @@ async function rule(client, {
   const ruledWinner = action === ACTION.DISMISS ? m.winner_team
     : (sc > so ? m.challenger_team : (so > sc ? m.opponent_team : null));
 
-  // ── Every open dispute on this match is settled by this one ruling ───────────
+  // Every open dispute on this match is settled by this one ruling
   // Both teams can file (`ux_disputes_match_team` allows one each). Ruling settles
   // the MATCH, so leaving the other side's dispute open would leave both ratings
   // frozen by a question that has already been answered.
@@ -584,10 +578,10 @@ async function rule(client, {
   );
   const closingIds = closing.rows.map((r) => r.id);
 
-  // ── Unfreeze, before any rating moves ───────────────────────────────────────
+  // Unfreeze, before any rating moves
   // ER2.3's freeze notification promises "Ratings will not change until an admin
   // reviews your disputes". Reviewing them is what just happened, so a team with
-  // no OTHER open dispute is released — and released BEFORE the exchange, or a
+  // no other open dispute is released — and released before the exchange, or a
   // team that was right about the scoreline would still gain nothing.
   //
   // Sorted by id for the same reason `elo.lockBothTeams` sorts: two rulings on
@@ -595,7 +589,7 @@ async function rule(client, {
   const teamIds = [String(m.challenger_team), String(m.opponent_team)];
   const unfroze = [];
   const frozenNow = new Map();
-  // Ratings AS THEY STAND BEFORE the exchange — which is exactly what severity
+  // Ratings as they stand before the exchange — which is exactly what severity
   // means (what was at stake when the dispute was filed), and `lockMatch` does not
   // join teams, so this pass is where they are read.
   const eloOf = new Map();
@@ -623,12 +617,12 @@ async function rule(client, {
     frozenNow.set(teamId, stillFrozen);
   }
 
-  // ── Was the previous application a FROZEN one? ───────────────────────────────
+  // Was the previous application a FROZEN one?
   // `elo.applyResult` writes a `frozen_no_change` history row and returns
   // `frozen: true` when either team was frozen — the match is recorded as rated,
   // but no points moved. If the freeze is now lifted (which the pass above may
   // just have done), the honest thing is to re-rate even when the ruling agrees
-  // with what both teams submitted: the exchange never actually happened.
+  // with what both teams submitted: the exchange never happened.
   const nowFrozen = frozenNow.get(teamIds[0]) || frozenNow.get(teamIds[1]);
   let appliedFrozen = false;
   if (m.elo_applied) {
@@ -639,7 +633,7 @@ async function rule(client, {
     appliedFrozen = fr.length > 0;
   }
 
-  // ── K comes from the same two sources as the verify path ─────────────────────
+  // K comes from the same two sources as the verify path
   // Live settings, overridden by the tournament's own K for a fixture. Read
   // through `settings.elo({ client })` so an admin who changed k_factor a minute
   // ago rules at the new value without a restart (FR10.11).
@@ -654,7 +648,7 @@ async function rule(client, {
   if (action !== ACTION.DISMISS) {
     if (!m.elo_applied) {
       // The ordinary case, and the one that needs no migration: the owner never
-      // verified, so this is the FIRST rating for the match and the plain
+      // verified, so this is the first rating for the match and the plain
       // `applyResult` used by every other code path applies.
       exchange = await elo.applyResult(client, {
         matchId: d.match_id,
@@ -669,7 +663,7 @@ async function rule(client, {
       // The hard case the plan did not anticipate. Points are already banked
       // against an outcome an admin has just overturned. Refusing here would
       // leave `matches.winner_team` permanently contradicting `teams.elo`, so
-      // instead the earlier exchange is REVERSED against the current rating and
+      // instead the earlier exchange is reversed against the current rating and
       // the ruled one applied — two audited `elo_history` rows each, never an
       // UPDATE over history.
       if (!(await elo.supportsCorrection(client))) {
@@ -697,10 +691,10 @@ async function rule(client, {
     }
   }
 
-  // ── The match row ────────────────────────────────────────────────────────────
+  // The match row
   // A ruling is a verification by SportLynk: same columns, same latch, so every
   // reader downstream (match centre, team stats, the recommender's features) sees
-  // one shape whether an owner or an admin settled it. `verified_by` is the ADMIN,
+  // one shape whether an owner or an admin settled it. `verified_by` is the admin,
   // which is also how the case file later shows who ruled.
   if (action === ACTION.DISMISS) {
     // Nothing is overturned: the submissions stand. A match that was never rated
@@ -721,10 +715,10 @@ async function rule(client, {
     );
   }
 
-  // ── The bracket ──────────────────────────────────────────────────────────────
+  // The bracket
   // Unconditional, exactly as in the verify path: a friendly answers
   // `not_tournament` and touches nothing. `already_settled` is the honest answer
-  // for a fixture whose winner already advanced — this ruling does NOT rewrite a
+  // for a fixture whose winner already advanced — this ruling does not rewrite a
   // bracket that has moved on, and the caller is told so rather than being left to
   // assume it did.
   let advance = { ok: true, code: 'skipped', data: {} };
@@ -737,7 +731,7 @@ async function rule(client, {
     }
   }
 
-  // ── The dispute rows ─────────────────────────────────────────────────────────
+  // The dispute rows
   // `severity_elo` is stamped here too, not only at raise time, so a row filed
   // before that column existed still records what was at stake when it was ruled.
   const ruling = RULING[action];
@@ -757,10 +751,10 @@ async function rule(client, {
       action === ACTION.DISMISS ? null : so, sev],
   );
 
-  // ── Telling everyone, in the room where they argued about it ─────────────────
+  // Telling everyone, in the room where they argued about it
   // Two audiences, two wordings. Each team's own chat gets a sentence naming the
-  // opponent ("...against the Titans"); the captain room — which holds BOTH teams —
-  // gets ONE neutral sentence, because a per-team wording there would tell half the
+  // opponent ("...against the Titans"); the captain room — which holds both teams —
+  // gets one neutral sentence, because a per-team wording there would tell half the
   // readers the opposite of what happened.
   const features = await mc.teamFeatures(client, [m.challenger_team, m.opponent_team]);
   const cName = features.get(String(m.challenger_team))?.name || 'the challenger';
@@ -783,7 +777,7 @@ async function rule(client, {
     return String(teamId) === String(m.challenger_team)
       ? exchange.challenger : exchange.opponent;
   };
-  // What the captain is actually owed: the ruled line, whether it went their way,
+  // What the captain is owed: the ruled line, whether it went their way,
   // and what it did to their rating — including the two honest non-answers
   // ("frozen", "no change") rather than a silent omission.
   const detailFor = (teamId) => {
@@ -818,7 +812,7 @@ async function rule(client, {
     coord: { event: 'match_ruled', detail: neutral },
   });
 
-  // ── The audit row ────────────────────────────────────────────────────────────
+  // The audit row
   // `before` is the match as it was found, `after` what this ruling made of it —
   // enough to answer "who overturned this, and what did they overturn?" from SQL
   // alone, which is the whole point of the table. Never throws (see adminAudit).
@@ -837,7 +831,7 @@ async function rule(client, {
       eloApplied: m.elo_applied === true,
       disputeStatus: d.status,
       // Both submissions verbatim. If a later ruling is questioned, the trail has
-      // to hold what the teams actually claimed, not only what the admin chose.
+      // to hold what the teams claimed, not only what the admin chose.
       submissions: rs.rows.map((x) => ({
         teamId: x.submitted_by_team,
         scoreChallenger: intOrNull(x.score_challenger),
@@ -880,11 +874,11 @@ async function rule(client, {
     unfroze,
     closed: closingIds.length,
     // `already_settled` here means the bracket had moved past this fixture before
-    // the ruling landed: the rating is corrected, the bracket is NOT rewritten.
+    // the ruling landed: the rating is corrected, the bracket is not rewritten.
     // Surfaced rather than hidden so the route can say so out loud.
     bracket: advance.code || null,
     advanced: !!(advance.data && advance.data.advanced),
-    // For the route to hand to `mc.emitAfterCommit` AFTER it commits.
+    // For the route to hand to `mc.emitAfterCommit` after it commits.
     pills,
     memberIds,
   };

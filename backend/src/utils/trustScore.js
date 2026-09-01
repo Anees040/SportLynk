@@ -1,11 +1,10 @@
 /**
  * Trust Score 2.0 (ER2.5)
- * ═══════════════════════════════════════════════════════════════════════════
  *
  * One composite score, 0..100, recomputed synchronously after every event that
  * can move it — a review received, a no-show, a dispute. It replaces the old
  * flat "trust_score − 10 per no-show" decrement, which could only ever fall and
- * said nothing about WHY.
+ * said nothing about why.
  *
  *   trust = round( 35·rating_norm + 30·attendance_rate
  *                + 20·dispute_free_rate + 15·sentiment_norm )
@@ -17,40 +16,40 @@
  *   dispute_free_rate 1 − disputes_against / matches      — a pre-S.7 proxy (see below)
  *   sentiment_norm    (avg(sentiment_score) + 1) / 2      — model score on review text
  *
- * COLD START. A brand-new user has no reviews, no bookings, no matches — every
+ * Cold start. A brand-new user has no reviews, no bookings, no matches — every
  * component is absent. Rather than let "no data" read as "zero trust" (the
  * cold-start injustice ER2.5 warns about), an absent component contributes a
- * NEUTRAL 0.5 PRIOR to the aggregate. A user with no signal at all therefore
+ * neutral 0.5 prior to the aggregate. A user with no signal at all therefore
  * scores round(35·.5 + 30·.5 + 20·.5 + 15·.5) = 50 — exactly the documented
  * baseline. The component COLUMNS are stored NULL when there is no signal (so a
  * UI can say "no data yet" rather than draw a misleading 50% bar); only the
- * AGGREGATE substitutes the prior.
+ * aggregate substitutes the prior.
  *
- * dispute_free_rate is a PROXY until S.7. Fault in a dispute is not adjudicated
- * until an admin resolves it, so before then we can only count "disputes the
- * OTHER side filed on a match this user's team played" as a soft negative
- * signal. A dispute this user's own team raised does NOT count against them
+ * dispute_free_rate is a proxy until S.7. Fault in a dispute is not adjudicated
+ * until an admin resolves it, so before then the metric can only count "disputes the
+ * other side filed on a match this user's team played" as a soft negative
+ * signal. A dispute this user's own team raised does not count against them
  * (that would punish objecting to a bad result), and a `dismissed` dispute is
  * dropped entirely. This is intentionally conservative and documented as a
  * proxy; S.7's resolution flow can refine it.
  *
- * SCOPE. Reviews target one user (a venue review has no user target; an opponent
+ * Scope. Reviews target one user (a venue review has no user target; an opponent
  * review targets the opposing team's captain — see routes/reviews.js), so the
- * review-based components move a CAPTAIN's score as the team's representative.
+ * review-based components move a captain's score as the team's representative.
  * Attendance is genuinely per-user. This matches the captain-to-captain review
  * model chosen for Wave C.
  *
- * The functions take any pg client (a transaction client OR the pool) so the
+ * The functions take any pg client (a transaction client or the pool) so the
  * caller controls atomicity: the no-show and review paths call recomputeTrust
- * INSIDE their money/state transaction (so the score and the event commit
- * together); the dispute path calls recomputeForMatch on the pool AFTER commit
+ * inside their money/state transaction (so the score and the event commit
+ * together); the dispute path calls recomputeForMatch on the pool after commit
  * (best-effort — a failed recompute must never roll back a filed dispute).
  */
 
 // Spec weights. They sum to 100, so the aggregate is already on a 0..100 scale.
 const WEIGHTS = { rating: 35, attendance: 30, disputes: 20, sentiment: 15 };
 
-// What an absent component contributes to the AGGREGATE (not to its column).
+// What an absent component contributes to the aggregate (not to its column).
 const NEUTRAL_PRIOR = 0.5;
 
 /** pg returns numeric/bigint as strings; NULL as null. */
@@ -192,7 +191,7 @@ async function representativeCaptain(db, teamId) {
  * it was filed against; recomputing both captains covers either side without the
  * caller having to work out which. De-dupes in case one user captains both.
  *
- * Best-effort by contract: call it AFTER the state transaction has committed.
+ * Best-effort by contract: call it after the state transaction has committed.
  */
 async function recomputeForMatch(db, matchId) {
   const { rows: [m] } = await db.query(

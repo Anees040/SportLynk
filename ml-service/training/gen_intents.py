@@ -76,7 +76,7 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-# --- paths ------------------------------------------------------------------
+# Paths
 DATA = ROOT / "data" / "assistant"
 TEMPLATES_PATH = DATA / "templates.csv"
 AUTHORED_PATH = DATA / "authored_intents.csv"
@@ -100,7 +100,7 @@ _RE_TEMPLATE_ID = re.compile(r"^([a-z_]+)-(en|mix|ru)-(\d{2,})$")
 _RE_AUTHORED_ID = re.compile(r"^au-\d{3,}$")
 
 
-# --- check ledger -----------------------------------------------------------
+# Check ledger
 class Ledger:
     """Named checks with a severity. ``gate`` fails the run, ``warn`` reports.
 
@@ -144,7 +144,7 @@ class Ledger:
                 for n, ok, d, sev in self.rows]
 
 
-# --- small helpers ----------------------------------------------------------
+# Small helpers
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -244,9 +244,7 @@ def cramers_v(pairs: list[tuple[str, str]]) -> tuple[float, float, int]:
     return v, chi2, (len(rows) - 1) * (len(cols) - 1)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
 # Inputs
-# ═════════════════════════════════════════════════════════════════════════════
 @dataclass
 class Template:
     template_id: str
@@ -762,9 +760,7 @@ def assign_split(rows: list[dict[str, str]], seed: int,
             "per_intent": per_intent}
 
 
-# ═════════════════════════════════════════════════════════════════════════════
 # The pipeline
-# ═════════════════════════════════════════════════════════════════════════════
 def generate(per_intent: int, seed: int, led: Ledger,
              templates_path: Path = TEMPLATES_PATH,
              authored_path: Path = AUTHORED_PATH,

@@ -16,7 +16,7 @@ const recoCache = new TtlCache({ name: 'venue-recommendations', ttlMs: 15 * 60 *
  */
 
 /**
- * GET /api/venues — browse with filters. TRANSPORT ONLY.
+ * GET /api/venues — browse with filters. Transport only.
  *
  * The owner-verification gate, the filter list and the five sorts are in
  * discoveryService.searchVenues; the response bytes are unchanged.
@@ -66,7 +66,7 @@ router.get('/recommended', authMiddleware, async (req, res, next) => {
 });
 
 /**
- * GET /api/venues/:id — detail + the day's slots. TRANSPORT ONLY.
+ * GET /api/venues/:id — detail + the day's slots. Transport only.
  *
  * discoveryService.venueDetail owns the three-branch slot window (future date =
  * all slots, today = only slots that have not started in PKT, past = none) so

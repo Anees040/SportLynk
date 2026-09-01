@@ -2,12 +2,12 @@
  * adminSettings.js — S.7 Wave D · FR10.9–FR10.11. Read and change platform policy
  * from the admin app, with no restart.
  *
- * MOUNTING
- * Mounted INTO `routes/admin.js` after its single `router.use(auth,
+ * Mounting
+ * Mounted into `routes/admin.js` after its single `router.use(auth,
  * checkRole('admin'))`, exactly like `adminUsers.js` and `adminDisputes.js`: one
  * place decides who is an admin, so a new admin surface cannot forget to ask.
  *
- * WHY "APPLIES ON THE NEXT OPERATION" IS TRUE HERE AND NOT A PROMISE
+ * Why "applies on the next operation" is true here and not a promise
  * `utils/globalSettings.js` caches for 60 s and exposes `invalidate()`; its header
  * has said since it was written that the hook exists "so an admin settings endpoint
  * (S.7) can drop the cache the moment it writes". This is that endpoint. The write
@@ -15,21 +15,21 @@
  * or Scout turn reads the new row. FR10.11 asks for exactly that and nothing more:
  * there is no deploy, no restart, no config reload.
  *
- * WHY VALIDATION LIVES IN `settingsCatalog.js` AND NOT HERE
- * The accessor CLAMPS out-of-range values so a bad row can never break a booking.
+ * Why validation lives in `settingsCatalog.js` and not here
+ * The accessor clamps out-of-range values so a bad row can never break a booking.
  * That is right for a read and disastrous for a write: an admin who types 900 and
  * is told "saved" would believe the ladder moves 28 times harder than it does. The
  * catalog holds one table of ranges, the route rejects with it, and the accessor
  * clamps with it. Two behaviours, one source.
  *
- * WHAT THIS ROUTE OWNS THAT THE CATALOG CANNOT
+ * What this route owns that the catalog cannot
  * Three things that need a database and therefore cannot be pure:
  *   1. reading the seven `global_settings` rows through the same accessor the app
- *      uses, so the admin sees EFFECTIVE values rather than raw jsonb;
+ *      uses, so the admin sees effective values rather than raw jsonb;
  *   2. refusing to switch off a sport that has future confirmed bookings, and
  *      saying how many;
  *   3. pushing `deposit_pct` into `escrow.POLICY.DEPOSIT_PERCENT`, which ~30
- *      synchronous call sites use to DESCRIBE the policy in copy. Copy that
+ *      synchronous call sites use to describe the policy in copy. Copy that
  *      disagrees with the row is worse than either number alone.
  */
 const express = require('express');
@@ -46,11 +46,11 @@ function bad(res, status, message, extra = {}) {
 }
 
 /**
- * The raw jsonb for every row the catalog knows about, in ONE query.
+ * The raw jsonb for every row the catalog knows about, in one query.
  *
  * Deliberately not `settings.get()` per key: that would serve the 60 s cache, and
  * an admin screen must show what is stored right now, not what was stored a minute
- * ago. The EFFECTIVE value the app will use is then derived by the catalog from
+ * ago. The effective value the app will use is then derived by the catalog from
  * these same rows, so the screen and the accessor cannot disagree.
  */
 async function rawRows(db = pool) {
@@ -66,15 +66,15 @@ async function rawRows(db = pool) {
 /**
  * How many future confirmed bookings a sport still has.
  *
- * WHY THIS BLOCKS THE WRITE
- * Switching a sport off stops NEW bookings (`bookingService.createBooking`) and NEW
+ * Why this blocks the write
+ * Switching a sport off stops new bookings (`bookingService.createBooking`) and new
  * venues (`routes/owner.js POST /venues`). It says nothing about money already
  * held in escrow for a game on Saturday. Letting the switch flip silently would
  * leave those players with a confirmed booking for a sport the platform no longer
  * books — they can still check in, but nothing in the app explains that, and an
  * admin who was not told the count could not have known to look.
  *
- * So it is a REFUSAL WITH A NUMBER, not a warning and not a cascade: the admin can
+ * So it is a refusal with a number, not a warning and not a cascade: the admin can
  * wait for the fixtures to play out, or cancel them deliberately through the
  * booking routes where each refund is logged. An endpoint that quietly refunded
  * dozens of bookings as a side effect of a toggle would be the worse of the two.
@@ -99,8 +99,8 @@ async function futureBookingsBySport(db, sports) {
  * GET /api/admin/settings
  *
  * Sections in screen order, each field carrying `{value, default, isOverridden,
- * type, min, max, step, unit, description}`. `value` is EFFECTIVE — what the next
- * booking will actually use — so an admin reading this screen is reading the
+ * type, min, max, step, unit, description}`. `value` is effective — what the next
+ * booking will use — so an admin reading this screen is reading the
  * platform, not a table.
  */
 router.get('/settings', async (req, res, next) => {
@@ -125,16 +125,16 @@ router.get('/settings', async (req, res, next) => {
  * Body: `{ settings: { 'elo.k_factor': 40, commission_pct: 5, ... }, note }`
  * (a bare flat object is accepted too, so a curl one-liner works).
  *
- * ORDER OF OPERATIONS, AND WHY
+ * Order of operations, and why
  *   1. `FOR UPDATE` on the rows being touched. Two admins saving different sections
- *      of the same screen at once would otherwise each write a MERGE built from the
+ *      of the same screen at once would otherwise each write a merge built from the
  *      state they loaded, and the later write would silently undo the earlier one.
- *   2. validate against the CURRENT rows (so cross-field rules see values this
+ *   2. validate against the current rows (so cross-field rules see values this
  *      request did not send).
  *   3. the sports refusal, which needs a count.
  *   4. write, audit inside the transaction, COMMIT.
  *   5. only then `invalidate()` and the escrow push — invalidating before COMMIT
- *      would let a concurrent read cache the OLD value for another 60 s, which is
+ *      would let a concurrent read cache the old value for another 60 s, which is
  *      the one ordering mistake that turns "applies immediately" back into a lie.
  */
 router.put('/settings', async (req, res, next) => {
@@ -173,7 +173,7 @@ router.put('/settings', async (req, res, next) => {
       });
     }
 
-    // The sports refusal. Only sports going from on to OFF are checked; switching
+    // The sports refusal. Only sports going from on to off are checked; switching
     // one on can never orphan anything.
     if (v.rows.sports_enabled) {
       const before = catalog.valueOf('sports_enabled', raw) || {};
@@ -181,7 +181,7 @@ router.put('/settings', async (req, res, next) => {
       const turningOff = Object.keys(after).filter((s) => after[s] === false && before[s] !== false);
       // A sport dropped from the map entirely is also being switched off, and
       // `isSportEnabled` fails OPEN for an unknown name — so removing a key would
-      // otherwise LOOK like a disable and behave like an enable.
+      // otherwise look like a disable and behave like an enable.
       for (const s of Object.keys(before)) {
         if (before[s] !== false && !Object.prototype.hasOwnProperty.call(after, s)) turningOff.push(s);
       }
@@ -249,13 +249,13 @@ router.put('/settings', async (req, res, next) => {
  * POST /api/admin/settings/reset
  * Body: `{ keys: ['elo.k_factor', 'commission_pct'] }` — or `{ all: true }`.
  *
- * WHY A ROW IS DELETED RATHER THAN REWRITTEN WITH THE DEFAULT
+ * Why a row is deleted rather than rewritten with the default
  * `settings.get()` treats an absent row as "use the documented default", so no row
  * is the truest possible statement of "not overridden": the day a default changes
  * in `DEFAULTS`, a reset key follows it, while a key rewritten with today's number
  * would be frozen at it forever and look overridden again.
  *
- * A row holding an object is only deleted when EVERY field in it is being reset;
+ * A row holding an object is only deleted when every field in it is being reset;
  * otherwise the remaining overrides are merged back and the row stays.
  */
 router.post('/settings/reset', async (req, res, next) => {
@@ -279,7 +279,7 @@ router.post('/settings/reset', async (req, res, next) => {
     );
     const raw = await rawRows(client);
 
-    // Only keys that are actually overridden are worth touching, so a reset of an
+    // Only keys that are overridden are worth touching, so a reset of an
     // untouched key is a no-op rather than a spurious audit row.
     const doing = keys.filter((k) => !catalog.sameValue(catalog.valueOf(k, raw), catalog.defaultOf(k)));
     if (!doing.length) {

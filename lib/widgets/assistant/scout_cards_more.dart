@@ -61,10 +61,11 @@ class ScoutExtraCard extends StatelessWidget {
 /// A player, as ranked by model #4's player scorer.
 ///
 /// The layout puts the match percentage on the same line as the name because that
-/// number is the whole reason this player is in front of you — it is the ranker's
+/// number is the whole reason this player is on the list — it is the ranker's
 /// answer, and burying it under the position and the trust score would make the card
 /// look like a directory listing instead of a recommendation. When it is null there
-/// is simply no badge; the card still works as a directory listing, honestly.
+/// is no badge and the card reads as that plain listing, which is the honest
+/// presentation of a player the ranker did not score.
 class _PlayerCard extends StatelessWidget {
   final CardData d;
   final ScoutCardActions actions;
@@ -316,7 +317,7 @@ class _TournamentCard extends StatelessWidget {
   }
 }
 
-/// `teamsIn` of `maxTeams`, as a bar you can read without reading.
+/// `teamsIn` of `maxTeams`, as a bar that reads at a glance.
 class _FillBar extends StatelessWidget {
   final int value;
   final int of;
@@ -374,7 +375,7 @@ class _MiniPill extends StatelessWidget {
 /// Directions to a ground.
 ///
 /// The backend sends two URIs because there are two different failures to avoid: a
-/// `geo:` intent opens whatever maps app the phone actually has, and a Google Maps
+/// `geo:` intent opens whatever maps app the phone has, and a Google Maps
 /// web URL works when it has none. It also sends `hasPin`, which is the honest part —
 /// not every venue row has coordinates, and for those the link searches by name and
 /// city. Saying so on the card is the difference between "Maps opened somewhere odd"
@@ -568,7 +569,7 @@ class _WalletCard extends StatelessWidget {
 
 /// A policy answer, rendered as its numbers.
 ///
-/// This card deliberately does NOT print `body`, because `body` is the same string as
+/// This card deliberately does not print `body`, because `body` is the same string as
 /// the bubble it sits under — the backend passes the reply text into the card so a
 /// client that shows cards only still has the answer. Printing both would say
 /// everything twice, so what is left is the part prose is bad at: the figures, each
@@ -615,7 +616,7 @@ class _PolicyCard extends StatelessWidget {
     final figures = _figures();
     final extra = d.strOrNull('extra');
 
-    // `topup_help` puts both policy sentences in the reply AND in the card; only show
+    // `topup_help` puts both policy sentences in the reply and in the card; only show
     // the second one when the bubble above has not already said it.
     final showExtra = extra != null &&
         extra.length > 8 &&
@@ -707,7 +708,7 @@ class _FigureTile extends StatelessWidget {
       );
 }
 
-/// The capability list — what Scout can actually do, as buttons.
+/// The capability list — what Scout can do, as buttons.
 ///
 /// This card is the recovery path from a sentence the classifier could not place, so
 /// every entry is a **button carrying its action**, not a suggested phrase to retype.
@@ -846,7 +847,7 @@ class _StatsCard extends StatelessWidget {
 
 /// A card type this build has never heard of.
 ///
-/// Not a crash, not a silent drop. The reply's TEXT is always a complete answer on its
+/// Not a crash, not a silent drop. The reply's text is always a complete answer on its
 /// own — cards are enrichment — so the honest degradation is to say a piece of the
 /// answer needs a newer app and leave the sentence above intact.
 class _UnknownCard extends StatelessWidget {

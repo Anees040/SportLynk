@@ -6,15 +6,14 @@
  *         node src/scripts/check_notifications.js --evidence
  *         node src/scripts/check_notifications.js --verify-clean
  *
- * WHY THIS SCRIPT EXISTS
- * ----------------------
- * Before S.7 Wave C the `notifications` table was WRITE-ONLY: thirty-eight call
+ * Why this script exists
+ * Before S.7 Wave C the `notifications` table was write-only: thirty-eight call
  * sites inserted into it and nothing on earth read it. That is the exact shape of
  * breakage that survives a green `npm test` — every unit test passed while the
  * feature did not exist — so this wave is not called done on unit tests.
  *
  * What the unit tests cannot reach is everything interesting here. The collapse
- * upsert depends on Postgres inferring a PARTIAL UNIQUE INDEX from an ON CONFLICT
+ * upsert depends on Postgres inferring a partial UNIQUE INDEX from an ON CONFLICT
  * predicate, and a mismatch is a runtime 42P10 inside a money transaction rather
  * than a compile error. `created_at` being timestamptz rather than timestamp is a
  * property of the column, not of the code. The outbox claiming a row exactly once
@@ -23,22 +22,20 @@
  * Each of those is a claim about the database or about wall-clock arithmetic, and
  * the only honest way to check them is to write the rows and read them back.
  *
- * NOTHING SURVIVES IT
- * -------------------
+ * Nothing survives it
  * notify(), the feed and the outbox drain all take a caller-owned `client` and
  * write no BEGIN of their own — that is why they compose inside a booking approval,
- * and it is why this script holds ONE transaction across the whole run and
+ * and it is why this script holds one transaction across the whole run and
  * ROLLBACKs at the end. Rows are prefixed `zznotif-` so a run interrupted before
  * its rollback is identifiable, and `--verify-clean` re-checks that none exist.
  *
- * WHAT IT DOES NOT PROVE
- * ----------------------
+ * What it does not prove
  * It drives the core functions, not HTTP, and it never contacts Firebase. The
  * final block therefore closes the gap the only way a rolled-back script can: it
  * reads the SOURCE of server.js, routes/chat.js and routes/auth.js and asserts the
  * wiring exists, and it reads the Flutter route table — lib/routes/app_routes.dart,
  * and lib/main.dart with it — and asserts every route the registry
- * can emit is a route the app actually registers. "A function that works and is
+ * can emit is a route the app registers. "A function that works and is
  * never called" and "a notification whose tap goes nowhere" are the two failures
  * this wave exists to end, so both are checked rather than assumed.
  *
@@ -130,7 +127,7 @@ function has(haystack, needle, label) {
 }
 
 /**
- * Run something that MIGHT fail without poisoning the outer transaction. Postgres
+ * Run something that might fail without poisoning the outer transaction. Postgres
  * aborts the whole transaction on any error, so one bad query would turn every
  * later check into "current transaction is aborted" and hide the real result.
  */
@@ -171,15 +168,13 @@ async function rowOf(client, id) {
   return rows[0] || null;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 1 · THE REGISTRY  — the thing that decides where a tap goes
-// ═══════════════════════════════════════════════════════════════════════════
+// 1 · the registry  — the thing that decides where a tap goes
 //
 // Every property the feed renders — category chip, icon, priority, destination —
 // is a property of the TYPE, resolved server-side. So the registry is the single
 // place a notification can be silently broken, and it is checked first.
 //
-// The last assertion in this block is the important one: it SCRAPES every
+// The last assertion in this block is the important one: it scrapes every
 // `type: '...'` passed to a notify() call site out of the source tree and requires
 // each to be registered. An unregistered type still writes a row (notify() must
 // never throw inside a money transaction) but lands as category=system with a dead
@@ -191,8 +186,8 @@ function probeSync(fn) {
 }
 
 // `type:` and the rest of its line, then every QUOTED lowercase literal on it.
-// The quoting is the whole point. `type: side.notify.type` is a VARIABLE whose value
-// is a literal written somewhere else, and a ternary puts TWO type names on one line
+// The quoting is the whole point. `type: side.notify.type` is a variable whose value
+// is a literal written somewhere else, and a ternary puts two type names on one line
 // -- a single combined capture reads the first as the identifier before the quote and
 // the second not at all, then fails the check on a name no call site ever emits.
 // Splitting it in two costs one regex and makes the assertion say what it means.
@@ -247,7 +242,7 @@ function blockRegistry() {
   eq(badPrio, 0, 'every type has a priority the CHECK allows');
   eq(badIcon, 0, 'every type has an icon — a feed row can never draw blank');
 
-  // 'system' must NOT be mutable: a suspension the user opted out of being told
+  // 'system' must not be mutable: a suspension the user opted out of being told
   // about is a suspension they discover by being unable to log in.
   check(!reg.MUTABLE_CATEGORIES.includes('system'),
     "'system' is not a mutable category — a suspension cannot be opted out of");
@@ -261,7 +256,7 @@ function blockRegistry() {
     `every type a notify() call site emits is registered (${emitted.length} scraped)`);
   if (unregistered.length) console.log(`      unregistered: ${unregistered.join(', ')}`);
 
-  // The reverse is NOT an error and is deliberately reported rather than failed:
+  // The reverse is not an error and is deliberately reported rather than failed:
   // dispute_resolved and account_* are registered ahead of Wave D's call sites, and
   // a registry entry with no caller yet is a plan, not a bug.
   const unused = types.filter((t) => !emitted.includes(t));
@@ -270,9 +265,7 @@ function blockRegistry() {
     + '— these are Wave D call sites, not defects.');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 2 · WHAT notify() ACTUALLY WRITES
-// ═══════════════════════════════════════════════════════════════════════════
+// 2 · what notify() writes
 
 async function blockRow(client, ctx) {
   section('2 · The row — registry-stamped columns, inside the caller transaction');
@@ -314,7 +307,7 @@ async function blockRow(client, ctx) {
   }
 
   // The UTC rule, checked on the COLUMN rather than on a value. Migration 010 used
-  // bare TIMESTAMP, which makes "2 hours ago" wrong by the server offset; 020
+  // bare timestamp, which makes "2 hours ago" wrong by the server offset; 020
   // converts it, and that conversion is exactly the kind of thing that silently
   // does not happen on a database one migration behind.
   const { rows: t } = await client.query(
@@ -324,7 +317,7 @@ async function blockRow(client, ctx) {
   eq(t[0] && t[0].data_type, 'timestamp with time zone',
     'notifications.created_at is timestamptz — the UTC-storage rule holds after 020');
 
-  // An unregistered type must DEGRADE, never throw: notify() runs while holding
+  // An unregistered type must degrade, never throw: notify() runs while holding
   // FOR UPDATE locks on wallet rows, and losing an alert costs a refresh while
   // rolling the transaction back costs money.
   const u = await probe(client, () => notify(client, {
@@ -338,17 +331,15 @@ async function blockRow(client, ctx) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 3 · THE COLLAPSE UPSERT  — three messages, one feed row
-// ═══════════════════════════════════════════════════════════════════════════
+// 3 · the collapse UPSERT  — three messages, one feed row
 //
 // This is the block that justifies migration 020 existing at all. Postgres infers a
-// PARTIAL unique index as the ON CONFLICT arbiter only when the clause predicate
-// implies the index predicate, and a mismatch raises 42P10 at RUNTIME — inside a
+// partial unique index as the ON CONFLICT arbiter only when the clause predicate
+// implies the index predicate, and a mismatch raises 42P10 at runtime — inside a
 // money transaction, on a path that until then looked fine.
 //
-// The second half is the rule that keeps collapse honest: a row that has been READ
-// or DISMISSED leaves the partial index, so the next message must start a FRESH
+// The second half is the rule that keeps collapse honest: a row that has been read
+// or dismissed leaves the partial index, so the next message must start a fresh
 // row. Bumping a hidden counter instead would show "2 new messages", then tell the
 // user nothing at all about the third.
 
@@ -402,7 +393,7 @@ async function blockCollapse(client, ctx) {
   ev.note(`After three messages the feed holds one row: ${row.title} / ${row.body} `
     + `(group_count=${row.group_count}).`);
 
-  // Read it, then send a fourth. It must NOT bump the read row.
+  // Read it, then send a fourth. It must not bump the read row.
   await feed.markRead(client, ctx.alice.id, row.id);
   const four = await probe(client, () => send(4));
   if (check(four.ok, 'a fourth message after the user has read the row',
@@ -425,7 +416,7 @@ async function blockCollapse(client, ctx) {
     ctx.otherChatId = other.out.id;
   }
 
-  // Two join requests for one team collapse with their OWN wording, which proves the
+  // Two join requests for one team collapse with their own wording, which proves the
   // group is a registry property rather than something hard-coded for chat.
   const j1 = await probe(client, () => notify(client, {
     userId: ctx.alice.id, type: 'team_request', title: 'Lightning XI',
@@ -443,11 +434,9 @@ async function blockCollapse(client, ctx) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 4 · THE FEED  — the read side that did not exist before this wave
-// ═══════════════════════════════════════════════════════════════════════════
+// 4 · the feed  — the read side that did not exist before this wave
 //
-// The unread count is checked against a HAND-COMPUTED number rather than against a
+// The unread count is checked against a hand-computed number rather than against a
 // second copy of the same query. A check script that re-implements the query it is
 // verifying proves only that the author can write the bug twice.
 
@@ -475,8 +464,8 @@ async function blockFeed(client, ctx) {
   check(!!first.category, 'and a category');
   check('isExpired' in first, 'and an isExpired flag so a dead challenge does not look actionable');
 
-  // The pair cursor, exercised where it actually matters. Every row in this run was
-  // written inside ONE transaction milliseconds apart, so several share a created_at to
+  // The pair cursor, exercised where it matters. Every row in this run was
+  // written inside one transaction milliseconds apart, so several share a created_at to
   // the microsecond — exactly the tie that a timestamp-only cursor silently drops rows
   // on. Page 2 must therefore neither repeat page 1 nor lose anything between them.
   const next = await feed.listFeed(client, {
@@ -519,7 +508,7 @@ async function blockStates(client, ctx) {
   eq(r2.group_count, 1,
     'and RESETS group_count — otherwise it would read 4 new messages when one is new');
 
-  // Somebody else must not be able to touch it. Authorisation IS the WHERE clause,
+  // Somebody else must not be able to touch it. Authorisation is the WHERE clause,
   // so the honest answer is "no such row for you" rather than 403.
   eq(await feed.markRead(client, ctx.bob.id, target), -1,
     'another user marking it read gets -1 — the route turns that into a 404');
@@ -549,7 +538,7 @@ async function blockPrefs(client, ctx) {
   check(!!d.push && !!d.inApp, 'with a push and an inApp map');
 
   // setPrefs returns `{prefs, categories, unmutable}`, not the bare prefs: the
-  // settings screen needs the CATEGORY LIST from the registry in the same response, or
+  // settings screen needs the CATEGORY list from the registry in the same response, or
   // it would hard-code its own copy and a new category would need a client release.
   const saved = await feed.setPrefs(client, ctx.alice.id, {
     muteAll: false,
@@ -572,7 +561,7 @@ async function blockPrefs(client, ctx) {
     'and it round-trips through the database — one normaliser on read and on write');
 
   // The two failure modes are asserted apart. An unparseable value falls back to the
-  // DEFAULT window, and a sloppy but readable one is normalised -- if the check used
+  // default window, and a sloppy but readable one is normalised -- if the check used
   // '7:0' and expected '07:00' it would pass either way, and would keep passing after
   // somebody broke normalisation.
   eq(feed.validHM('9:5'), '09:05', 'validHM zero-pads a readable time');
@@ -580,9 +569,7 @@ async function blockPrefs(client, ctx) {
   eq(feed.validHM('nope'), null, 'and anything unparseable, so the caller can fall back');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 7 · QUIET HOURS  — the two comparisons whose naive form is exactly backwards
-// ═══════════════════════════════════════════════════════════════════════════
+// 7 · quiet hours  — the two comparisons whose naive form is exactly backwards
 //
 // `start <= t && t < end` gets 22:00 → 07:00 inverted: quiet all day, loud all
 // night. That is a pure function, so it is checked without touching the database,
@@ -631,14 +618,12 @@ function blockQuietHours() {
     'an empty prefs object means everything ON — a new category is never silently off');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 8 · THE OUTBOX  — every row leaves with an honest reason
-// ═══════════════════════════════════════════════════════════════════════════
+// 8 · the outbox  — every row leaves with an honest reason
 //
-// The drain runs against the SAME transaction this script owns, which is the only
+// The drain runs against the same transaction this script owns, which is the only
 // way to observe it without leaving stamped rows behind. Firebase is never called:
 // with no service account the send path is skipped and the row is stamped with why,
-// and that is the state this wave SHIPS in — so it is the state that gets tested.
+// and that is the state this wave ships in — so it is the state that gets tested.
 //
 // The important ordering claim is that a muted category is recorded as muted even
 // while push is unconfigured. Both are true at once, and reporting the Firebase key
@@ -719,7 +704,7 @@ async function blockOutbox(client, ctx) {
   }
   await feed.setPrefs(client, ctx.bob.id, {});
 
-  // retireStale. An over-age row must LEAVE the outbox with a reason, because
+  // retireStale. An over-age row must leave the outbox with a reason, because
   // idx_notifications_outbox is partial on sent_push = false and a row that can never
   // be sent would otherwise sit in that index forever, walked by every 4-second scan.
   const old = await notify(client, {
@@ -757,12 +742,10 @@ async function blockOutbox(client, ctx) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 9 · WIRING  —  the part a passing unit test cannot see
-// ═══════════════════════════════════════════════════════════════════════════
+// 9 · wiring  —  the part a passing unit test cannot see
 //
-// Everything above proves the notification MACHINE works. This block proves it is
-// PLUGGED IN, by reading the source of the files that have to call it. That
+// Everything above proves the notification machine works. This block proves it is
+// plugged in, by reading the source of the files that have to call it. That
 // distinction is the whole reason this block exists: the failure that opened this
 // sprint was not a broken function, it was a correct function nobody called — a
 // notifications table with 33 writers and no reader, and a bell icon with no onTap.
@@ -805,11 +788,9 @@ function blockWiring() {
     'SAVEPOINT-wrapped, so a notifications failure cannot roll back somebody message');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 10 · THE DEEP LINKS RESOLVE  —  server routes vs the Flutter route table
-// ═══════════════════════════════════════════════════════════════════════════
+// 10 · the deep links resolve  —  server routes vs the Flutter route table
 //
-// The registry computes the destination SERVER-side and ships it as
+// The registry computes the destination server-side and ships it as
 // `deep_link: {route, args}`, so the client never guesses. That removes one class of
 // drift and creates another: the server can now name a route the app does not have,
 // and the symptom is a notification that looks perfect and does nothing when tapped.
@@ -821,7 +802,7 @@ function blockWiring() {
 // user reported, and it is why the registry keeps its routes in one exported list.
 //
 // The table's home is lib/routes/app_routes.dart; it used to be inline in lib/main.dart.
-// BOTH are read and their keys UNIONED, because this block does not care which file
+// Both are read and their keys UNIONED, because this block does not care which file
 // declares a route — only that the app registers it. Reading both is also what stops a
 // future move of the table from turning a real assertion into a silent false pass: the
 // route set would have to vanish from two files at once for that.
@@ -859,13 +840,11 @@ function blockDeepLinks() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 11 · SCHEMA CENSUS  —  migration 020 is actually applied
-// ═══════════════════════════════════════════════════════════════════════════
+// 11 · schema census  —  migration 020 is applied
 //
 // Wave A shipped on `npm test` alone against a schema that had never been applied, and
 // every check script in it was unrunnable as a result. So the last block asserts the
-// columns and indexes this wave depends on are present on the CONNECTED database, not
+// columns and indexes this wave depends on are present on the connected database, not
 // merely present in a .sql file in the repo.
 async function blockSchema(client) {
   section('11 · Schema census — migration 020 on the live database');
@@ -911,9 +890,7 @@ async function blockSchema(client) {
     'idx_chat_messages_channel covers (channel_id, created_at) — the chat list is not a seq scan');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE RUN
-// ════════════════════════════════════════════════════════════════════════════
+// The run
 
 /** No row this script writes may ever be found outside its own transaction. */
 async function verifyClean(client) {
@@ -960,7 +937,7 @@ async function main() {
     ctx.alice = await makeUser(client, 'alice');
     ctx.bob = await makeUser(client, 'bob');
     // Ids for things this run does not need to exist. `entity_id` is deliberately
-    // NOT a foreign key (it is polymorphic across six entity types), and the deep
+    // not a foreign key (it is polymorphic across six entity types), and the deep
     // link is a string the app resolves, so a random uuid exercises every code path
     // a real one would without dragging six tables' worth of fixtures into a test
     // about notifications.

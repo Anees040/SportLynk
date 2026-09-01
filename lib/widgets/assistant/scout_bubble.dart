@@ -11,7 +11,7 @@ import 'scout_theme.dart';
 /// The ordering here is the argument of the whole screen. A reply is
 /// sentence, then evidence, then next move — so the text comes first, the cards that
 /// back it come under it, and the chips that continue the conversation come last.
-/// Chips are drawn INSIDE the group rather than pinned above the composer, which costs
+/// Chips are drawn inside the group rather than pinned above the composer, which costs
 /// a little convenience and buys the thing that matters more: scrolling back to a turn
 /// brings back the options that were offered at that turn. A pinned dock silently
 /// rewrites history to whatever the newest message happened to suggest.
@@ -130,7 +130,7 @@ class ScoutMessageGroup extends StatelessWidget {
 
   /// Scout's side: avatar, provenance, sentence, cards, chips, vote.
   ///
-  /// The bubble is only drawn when there IS text. A few replies are pure card — the
+  /// The bubble is only drawn when there is text. A few replies are pure card — the
   /// slot picker after a ground is chosen, for instance — and an empty rounded
   /// rectangle above a card looks like a rendering bug rather than a design.
   Widget _scout(BuildContext context) {
@@ -220,7 +220,7 @@ class ScoutMessageGroup extends StatelessWidget {
 /// that has none. These votes are the only quality signal that comes from real use
 /// rather than from a held-out exam, so the row is always present and never modal.
 ///
-/// A vote can be CHANGED but not withdrawn: the endpoint takes 1 or -1 and upserts on
+/// A vote can be changed but not withdrawn: the endpoint takes 1 or -1 and upserts on
 /// `(message_id, user_id)`, so the active thumb is inert rather than pretending to
 /// offer an undo the server would reject.
 class _VoteRow extends StatelessWidget {
@@ -329,11 +329,11 @@ class ScoutDateSeparator extends StatelessWidget {
 ///
 /// Every assistant demo gets the same question, and it is the right question: which
 /// part of this was a model and which part was an if-statement? This sheet answers it
-/// for the message in front of you — the source, the predicted intent, the confidence,
+/// for the message on screen — the source, the predicted intent, the confidence,
 /// which route produced the answer, the model version and how long the parse took.
 ///
 /// It is also honest about its own limits. `nlu` travels with the live POST response
-/// and is NOT stored on the message row, so an answer reloaded from history can show
+/// and is not stored on the message row, so an answer reloaded from history can show
 /// its source but not its confidence. Saying that beats showing a blank field, and
 /// beats guessing a number.
 Future<void> showScoutExplainSheet(BuildContext context, ScoutMessage msg) {

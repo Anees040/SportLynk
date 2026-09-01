@@ -21,7 +21,7 @@ import 'team_roster_screen.dart';
 ///   • The "YOU" badge comes from the server's `is_mine`. It used to be guessed
 ///     from a `role` field this endpoint never sent, so it could never appear.
 ///   • Every row carries its movement over the last 7 days, and city chips filter
-///     the board — built from the cities that actually hold ranked teams, so a
+///     the board — built from the cities that hold ranked teams, so a
 ///     chip can never lead to an empty screen.
 class TeamRankingsScreen extends StatefulWidget {
   const TeamRankingsScreen({super.key});
@@ -41,7 +41,7 @@ class _TeamRankingsScreenState extends State<TeamRankingsScreen> {
   String? _city;
 
   /// The chips from the last unfiltered load. Keeping them means picking a city
-  /// does not make the row you just tapped disappear and come back.
+  /// does not make the row just tapped disappear and come back.
   List<CityCount> _chips = const [];
 
   late final String _token;
@@ -138,7 +138,7 @@ class _TeamRankingsScreenState extends State<TeamRankingsScreen> {
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [
-        // A refresh failed but we still have the previous board. Say so instead of
+        // A refresh failed but the previous board is still held. Say so instead of
         // showing week-old ranks as though they were live.
         if (_error != null) _staleBanner(),
         _hero(teams.first),
@@ -164,7 +164,7 @@ class _TeamRankingsScreenState extends State<TeamRankingsScreen> {
     );
   }
 
-  // ── City filter (FR5.13) ───────────────────────────────────
+  // City filter (FR5.13)
   Widget _cityFilter() => Container(
         width: double.infinity,
         color: Colors.white,
@@ -260,7 +260,7 @@ class _TeamRankingsScreenState extends State<TeamRankingsScreen> {
         ),
       );
 
-  // ── Empty / error ──────────────────────────────────────────
+  // Empty / error
   /// Two different empty boards, because they need two different answers: one is
   /// "nobody has played yet", the other is "nobody in Multan has".
   Widget _emptyBoard(RankingsPage? page) {
@@ -299,7 +299,7 @@ class _TeamRankingsScreenState extends State<TeamRankingsScreen> {
         ],
       );
 
-  // ── Cards ──────────────────────────────────────────────────
+  // Cards
   Widget _hero(RankedTeam t) => InkWell(
         onTap: () => _openTeam(t),
         borderRadius: BorderRadius.circular(16),

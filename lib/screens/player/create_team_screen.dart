@@ -29,7 +29,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
   void dispose() { _nameCtrl.dispose(); _bioCtrl.dispose(); super.dispose(); }
 
   /// Pick a logo from the gallery and upload it to Cloudinary's `teams` folder.
-  /// We store only the returned https URL — the raw file never touches our API.
+  /// Only the returned https URL is stored — the raw file never touches this API.
   Future<void> _pickLogo() async {
     final picked = await _picker.pickImage(
         source: ImageSource.gallery, maxWidth: 800, imageQuality: 85);
@@ -60,7 +60,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-          // ── LOGO PICKER ─────────────────────────────────
+          // Logo picker
           Center(child: GestureDetector(
             onTap: _uploadingLogo ? null : _pickLogo,
             child: Container(width: 100, height: 100,
@@ -87,7 +87,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
           )),
           const SizedBox(height: 28),
 
-          // ── TEAM NAME ───────────────────────────────────
+          // TEAM name
           Text('TEAM NAME', style: GoogleFonts.poppins(
             fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary,
             letterSpacing: 1)),
@@ -105,7 +105,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                 borderSide: const BorderSide(color: AppColors.accent, width: 1.5)))),
           const SizedBox(height: 20),
 
-          // ── SPORT ───────────────────────────────────────
+          // Sport
           Text('SPORT', style: GoogleFonts.poppins(
             fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary,
             letterSpacing: 1)),
@@ -117,7 +117,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
           ]),
           const SizedBox(height: 20),
 
-          // ── VISIBILITY ──────────────────────────────────
+          // Visibility
           Text('VISIBILITY', style: GoogleFonts.poppins(
             fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary,
             letterSpacing: 1)),
@@ -169,7 +169,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
           ]),
           const SizedBox(height: 20),
 
-          // ── TEAM BIO ─────────────────────────────────────
+          // TEAM bio
           Text('TEAM BIO', style: GoogleFonts.poppins(
             fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary,
             letterSpacing: 1)),
@@ -187,7 +187,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                 borderSide: const BorderSide(color: AppColors.accent, width: 1.5)))),
           const SizedBox(height: 32),
 
-          // ── CREATE BUTTON ────────────────────────────────
+          // CREATE button
           SizedBox(width: double.infinity,
             child: ElevatedButton.icon(
               icon: const Icon(Icons.arrow_forward, size: 18),

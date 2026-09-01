@@ -1,13 +1,12 @@
 /**
  * reconcile_wallets.js — repair drift between wallets.frozen_balance and the
- * bookings that are actually holding escrow.
+ * bookings that are holding escrow.
  *
- * WHY THIS EXISTS
- * ---------------
+ * Why this exists
  * Escrow lives in two places that must agree:
  *
- *   wallets.frozen_balance   ==   SUM(bookings.security_deposit)
- *                                 WHERE status IN ('pending','confirmed')
+ *   wallets.frozen_balance   ==   sum(bookings.security_deposit)
+ *                                 WHERE status in ('pending','confirmed')
  *
  * `security_deposit` — not `total_amount` — is the authority: routes/bookings.js
  * says "security_deposit holds what is ACTUALLY in escrow for this booking", and
@@ -23,27 +22,25 @@
  * user cannot reach, GET /api/wallet/frozen reports a non-zero `delta` forever,
  * and the S1 acceptance check "delta = 0" can never pass honestly.
  *
- * WHAT IT DOES
- * ------------
+ * What it does
  * Per wallet, inside one transaction with FOR UPDATE (golden rule 4):
  *
  *   over-frozen  (frozen > owed)  → frozen -= diff, balance += diff,
  *                                   one `refund` ledger row for the audit trail
- *   under-frozen (frozen < owed)  → REPORTED ONLY, never auto-fixed
+ *   under-frozen (frozen < owed)  → reported only, never auto-fixed
  *
  * Under-frozen is deliberately not touched. It would mean silently taking money
  * out of someone's spendable balance to satisfy a claim they may never have
  * agreed to, and it points at a different bug that a script should not paper over.
  *
- * The ledger stays append-only — the correction is a NEW row, never an edit or a
+ * The ledger stays append-only — the correction is a new row, never an edit or a
  * reversal of history. `refund` is used because transactions.type is the `txn_type`
  * enum and `refund` is its honest member for "money returning to spendable
  * balance"; inventing a label would need a schema migration for a one-off repair.
  *
  * USAGE
- * -----
  *   node src/scripts/reconcile_wallets.js            # dry run — reports, changes nothing
- *   node src/scripts/reconcile_wallets.js --apply    # actually moves the money
+ *   node src/scripts/reconcile_wallets.js --apply    # moves the money
  *
  * Dry run is the default on purpose: this touches real balances.
  */
@@ -53,7 +50,7 @@ const { round2, asNum, applyWallet, logTxn } = require('../utils/escrow');
 
 const APPLY = process.argv.includes('--apply');
 
-/** Every wallet, with what it holds frozen vs what its bookings actually owe. */
+/** Every wallet, with what it holds frozen vs what its bookings owe. */
 const AUDIT_SQL = `
   SELECT u.id                AS user_id,
          u.name,
@@ -154,7 +151,7 @@ async function main() {
       await client.query('BEGIN');
 
       // Re-read under FOR UPDATE and recompute inside the transaction. The audit
-      // pass above is only a candidate scan — by the time we get here a booking
+      // pass above is only a candidate scan — by the time this point is reached a booking
       // may have been made or cancelled, and acting on the stale number would
       // move the wrong amount.
       const locked = await client.query(

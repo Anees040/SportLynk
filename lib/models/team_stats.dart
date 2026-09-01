@@ -3,7 +3,7 @@
 /// These parse `GET /api/teams/rankings` and the `stats` / `eloHistory` blocks
 /// that `GET /api/teams/:id` gained in Wave D.
 ///
-/// KEY DETAIL: these fields are snake_case, and that is deliberate. routes/
+/// Key detail: these fields are snake_case, and that is deliberate. routes/
 /// teams.js returns columns straight out of SQL (`logo_url`, `member_count`),
 /// while routes/matches.js hand-shapes camelCase (`logoUrl`, `displayElo`). Both
 /// conventions are live in this app. Parsing the wrong one silently yields null
@@ -206,8 +206,8 @@ class EloPoint {
   /// hollow red one.
   final bool verified, disputed;
 
-  /// Whether any rating actually moved. A verified match can still be unrated
-  /// when the team's rating is frozen (ER2.3) — that is NOT a dispute, and the
+  /// Whether any rating moved. A verified match can still be unrated
+  /// when the team's rating is frozen (ER2.3) — that is not a dispute, and the
   /// UI must not label it as one.
   final bool rated;
 

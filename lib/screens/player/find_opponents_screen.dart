@@ -73,7 +73,7 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
       _myTeams = mine;
       _loadingTeams = false;
       // Keep an explicitly passed team; otherwise default to the first one the
-      // user actually captains, since that is the only team they can challenge
+      // user captains, since that is the only team they can challenge
       // with — landing on a team whose Challenge buttons are all disabled would
       // read as the feature being broken.
       if (_teamId == null || !mine.any((t) => t.id == _teamId)) {
@@ -177,7 +177,7 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
     );
   }
 
-  // ── Header ─────────────────────────────────────────────────
+  // Header
 
   /// "Playing as" — the whole list is relative to this choice, so it sits above
   /// everything and shows my own standing next to the picker.
@@ -354,7 +354,7 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
         ),
       );
 
-  // ── List ───────────────────────────────────────────────────
+  // List
 
   Widget _body() {
     if (_loadingList && _list.opponents.isEmpty) {
@@ -383,7 +383,7 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
       );
     }
 
-    // The band divider only makes sense on the FALLBACK path. There the server
+    // The band divider only makes sense on the fallback path. There the server
     // orders by |rating gap| ascending (FR5.3), so every in-band team sits ahead
     // of every out-of-band one and the divider names a real boundary. On the
     // ranked path the order is by match quality, so an out-of-band team can sit

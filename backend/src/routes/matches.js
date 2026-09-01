@@ -1,7 +1,7 @@
 /**
  * Matches API (S.2 Wave C) — challenge, respond, result, verify, dispute, list.
  *
- * THE STATE MACHINE — doc/API.md is the authoritative copy, chk_matches_status
+ * The state machine — doc/API.md is the authoritative copy, chk_matches_status
  * (migration 016) is the database's copy, utils/matchCore.STATUS is the code's.
  * All three must agree.
  *
@@ -18,31 +18,31 @@
  *         │                                            FR5.17
  *         └─(admin resolves — S.7)──→ completed
  *
- * FOUR RULES THAT SHAPE EVERY HANDLER
+ * Four rules that shape every handler
  *
- *   1. THE BODY IS NEVER AUTHORITY. Which team the caller may act for is read
+ *   1. The body is never authority. Which team the caller may act for is read
  *      from team_members inside the locked transaction (access.requireRole →
  *      lockTeam FOR UPDATE), never taken from the request. A client that sends
  *      `{"challengerTeam": someoneElsesTeam}` gets a 403, not a match.
  *
- *   2. LOCK, THEN DECIDE. Every transition does matchCore.lockMatch first. Two
+ *   2. Lock, then decide. Every transition does matchCore.lockMatch first. Two
  *      captains submitting the final result in the same instant would otherwise
  *      both see "one result in", both decide they are not the second, and leave
  *      the match stuck in `accepted` with two results and nobody to advance it.
  *
- *   3. A RETURN MUST NEVER LEAVE AN OPEN TRANSACTION. `finally` always releases,
+ *   3. A return must never leave an open transaction. `finally` always releases,
  *      and every early exit rolls back first via `bail()`. A client released
  *      mid-BEGIN is handed to the next request still inside that transaction —
  *      a cross-request corruption bug, not a slow query.
  *
- *   4. EMIT AFTER COMMIT, ALWAYS. Sockets and chat pills flush once the row is
+ *   4. Emit after COMMIT, always. Sockets and chat pills flush once the row is
  *      durable. Emitting inside the transaction tells a client to re-fetch a row
  *      that is not committed yet, and it reads the old one.
  *
- * WHAT IS DELIBERATELY *NOT* HERE
+ * What this file deliberately does not cover
  *   • Admin dispute resolution. S.7 owns that UI; this file's job is to make
  *     sure a disputed match cannot have ELO applied to it in the meantime.
- *   • Any score override by the venue owner. The owner VERIFIES what two
+ *   • Any score override by the venue owner. The owner verifies what two
  *     captains already agreed on; adjudicating a disagreement is the admin's
  *     job, and giving the owner a pen here would make the "both captains agree"
  *     gate decorative.
@@ -84,7 +84,7 @@ const { STATUS, LIVE_STATUSES } = mc;
  */
 const uuid = (v) => String(v ?? '').trim().toLowerCase();
 
-// ─── Envelope helpers (same shape as routes/teams.js) ───────────────────────
+// Envelope helpers (same shape as routes/teams.js)
 const fail = (res, status, message) => res.status(status).json({ success: false, message });
 const ok = (res, data, message) => res.json({ success: true, data, ...(message ? { message } : {}) });
 
@@ -97,7 +97,7 @@ async function bail(client, res, status, message) {
 /**
  * Turn the DB errors this flow can legitimately produce into friendly envelopes.
  *
- * Keyed on the constraint NAME rather than just the SQLSTATE, because three
+ * Keyed on the constraint name rather than on the SQLSTATE alone, because three
  * different unique violations reach here and "already exists" is useless as an
  * answer to all three. Anything unrecognised returns null and goes to next(e),
  * which answers a generic 500 — never a raw SQL string (golden rule 5).
@@ -112,7 +112,7 @@ function friendlyDbError(e) {
       case 'ux_disputes_match_team':
         return { status: 409, message: 'Your team has already disputed this match.' };
       // 022 renamed this index (the key gained `reason` so a dispute ruling can
-      // write its reversal+ruling pair). The NAME is what this switch keys on, so
+      // write its reversal+ruling pair). The name is what this switch keys on, so
       // the rename has to land here too or a double-rating degrades to the generic
       // "That has already been recorded." — run_migration_022.js asserts this line.
       case 'ux_elo_history_team_match_reason':
@@ -132,7 +132,7 @@ async function nameOf(client, userId) {
   return rows[0]?.name || null;
 }
 
-// ─── Input validation ───────────────────────────────────────────────────────
+// Input validation
 
 /**
  * A scoreline component.
@@ -160,14 +160,14 @@ function parseScore(raw, label) {
  * How much rating this match can still move — stamped onto the dispute row when it
  * is raised (S.7 Wave D).
  *
- * WHY IT IS STORED AND NOT COMPUTED IN THE QUEUE
+ * Why it is stored and not computed in the queue
  * The admin queue sorts by it (`idx_disputes_queue`), and a value recomputed per
  * page would drift as the two teams play other matches — so a dispute could move
  * between pages while an admin is reading them. Stamped once, the order an admin
  * pages through is the order that existed when they opened the screen.
  *
- * WHY THE GLOBAL K AND NOT THE TOURNAMENT'S
- * This is a TRIAGE number, not a payout: the ruling itself re-reads the fixture's
+ * Why the global K and not the TOURNAMENT'S
+ * This is a triage number, not a payout: the ruling itself re-reads the fixture's
  * own K (`tournaments.matchContext`) and rates with that. A fixture K only ever
  * makes the true stake larger, so using the global one here can under-rank a
  * final — never over-rank a friendly — and it keeps a released, verified path from
@@ -186,7 +186,7 @@ async function severityAtStake(client, features, m) {
     });
   } catch {
     // A null here costs nothing: the queue falls back to computing it live, and a
-    // dispute must never fail to be RAISED because a triage number was unavailable.
+    // dispute must never fail to be raised because a triage number was unavailable.
     return null;
   }
 }
@@ -208,7 +208,7 @@ function parseDisputeReason(raw) {
 /**
  * How many unanswered challenges one team may have out at once.
  *
- * Not in the spec, but every live challenge PINS A BOOKING (one live match per
+ * Not in the spec, but every live challenge pins A BOOKING (one live match per
  * booking, migration 016) and fires a notification at another captain. Without a
  * cap, one compromised account can paper every public team in its sport with
  * challenges and lock up its own slots for 48 hours at a time. Ten is far above
@@ -216,18 +216,16 @@ function parseDisputeReason(raw) {
  */
 const MAX_LIVE_CHALLENGES = 10;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// READS
+// Reads
 //
 // Registered before `/:id` — Express matches in registration order, so a literal
 // path declared after a param route is unreachable ("preview" would arrive as an
 // id and 404 as a malformed uuid).
-// ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * GET /api/matches/preview?challengerTeam=&opponentTeam=
  *
- * Everything the challenge screen shows BEFORE anything is created: both teams'
+ * Everything the challenge screen shows before anything is created: both teams'
  * ratings and records, the competitiveness score (FR5.4) and the generated
  * preview sentence (FR5.10).
  *
@@ -246,8 +244,8 @@ router.get('/preview', async (req, res, next) => {
   const client = await pool.connect();
   try {
     // Read-only, but the membership check still has to happen: a preview leaks
-    // another team's form and rating, so only someone who could actually send
-    // this challenge may see it.
+    // another team's form and rating, so only a caller entitled to send this
+    // challenge may see it.
     const role = await mc.roleInTeam(client, a, req.user.id);
     if (!role) return fail(res, 403, 'You are not a member of that team.');
 
@@ -310,7 +308,7 @@ router.get('/preview', async (req, res, next) => {
 /**
  * GET /api/matches/linkable-bookings?teamId=
  *
- * The venue picker on the challenge screen (FR5.11): the caller's own CONFIRMED,
+ * The venue picker on the challenge screen (FR5.11): the caller's own confirmed,
  * still-in-the-future bookings that no live match is already using.
  *
  * Filtered server-side, not in the app. A client-side filter would eventually
@@ -382,7 +380,7 @@ router.get('/linkable-bookings', async (req, res, next) => {
  * GET /api/matches/owner/pending
  *
  * The owner's "Match results to verify" queue: `awaiting_owner` matches on
- * venues this account owns, each with BOTH submissions attached so the verify
+ * venues this account owns, each with both submissions attached so the verify
  * screen can show what the two captains said side by side.
  *
  * Authority is the ownership test in the WHERE clause, not a role check on the
@@ -390,7 +388,7 @@ router.get('/linkable-bookings', async (req, res, next) => {
  * it in the query means a player who calls this gets an empty list rather than a
  * list filtered by something else.
  *
- * For a tournament fixture the authority is the ORGANISER rather than the venue
+ * For a tournament fixture the authority is the organiser rather than the venue
  * owner, and a fixture has no booking to reach a venue through, so the test is on
  * the coalesced column: see the note on the query.
  */
@@ -449,10 +447,10 @@ router.get('/owner/pending', async (req, res, next) => {
 /**
  * GET /api/matches/opponents — FR5.3 – FR5.5, the Find Opponents list.
  *
- * TRANSPORT ONLY, for the same reason as suggested-players: the candidate pool,
+ * Transport only, for the same reason as suggested-players: the candidate pool,
  * the rating band, the competitiveness score, the trust badge and the ranking
  * fallback now live in services/rosterService.js so Scout's `find_opponents`
- * answers with the SAME opinion this screen shows (FR8.15). The teamId guard
+ * answers with the same opinion this screen shows (FR8.15). The teamId guard
  * moved with them — the assistant resolves a team by name and has to be refused
  * in the same words a bad query string is.
  */
@@ -480,7 +478,7 @@ router.get('/opponents', async (req, res, next) => {
  * Everything the Match Center renders, in one round trip, bucketed for its three
  * tabs (FR5.16).
  *
- * ONE QUERY, BUCKETED IN JS — deliberately. The four buckets are four filters
+ * One query, bucketed in JS — deliberately. The four buckets are four filters
  * over the same rows and the same joins, so four queries would repeat the whole
  * MATCH_VIEW join four times for a screen that is opened constantly. It also puts
  * the "is this challenge still live?" rule in one readable place instead of
@@ -563,9 +561,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // POST /api/matches/challenge          (FR5.8 – FR5.12)
-// ═══════════════════════════════════════════════════════════════════════════
 router.post('/challenge', async (req, res, next) => {
   const challengerTeam = uuid(req.body.challengerTeam || req.body.teamId);
   const opponentTeam = uuid(req.body.opponentTeam);
@@ -642,7 +638,7 @@ router.post('/challenge', async (req, res, next) => {
     }
 
     // 5. Friendly version of what ux_matches_booking_live enforces. The index is
-    //    what actually holds under a double tap; this exists so the ordinary case
+    //    what holds under a double tap; this exists so the ordinary case
     //    reads as a sentence instead of a constraint name.
     const { rows: taken } = await client.query(
       `SELECT 1 FROM matches WHERE booking_id = $1 AND status = ANY($2::text[]) LIMIT 1`,
@@ -661,7 +657,7 @@ router.post('/challenge', async (req, res, next) => {
 
     const { challengeTtlHours } = await settings.match({ client });
 
-    // 7. Insert. The deadline is the EARLIER of "now + TTL" and kickoff: a
+    // 7. Insert. The deadline is the earlier of "now + TTL" and kickoff: a
     //    challenge that outlives the slot it is for cannot be accepted usefully,
     //    and would keep the booking pinned past the point of no return.
     const { rows: ins } = await client.query(
@@ -732,9 +728,7 @@ router.post('/challenge', async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // GET /api/matches/:id
-// ═══════════════════════════════════════════════════════════════════════════
 router.get('/:id', async (req, res, next) => {
   const id = uuid(req.params.id);
   if (!access.isUuid(id)) return fail(res, 404, 'Match not found.');
@@ -756,7 +750,7 @@ router.get('/:id', async (req, res, next) => {
     const { disputeWindowHours } = await settings.match({ client });
 
     // Submissions are visible to the owner (who must compare them) and to the
-    // teams once BOTH are in. Showing the opponent's submission while yours is
+    // teams once both are in. Showing one side's submission while the other is
     // still missing would let a captain copy it, which is exactly the agreement
     // the two-submission rule is supposed to be evidence of.
     const { rows: subs } = await client.query(
@@ -796,9 +790,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // PATCH /api/matches/:id/respond        (FE-4)
-// ═══════════════════════════════════════════════════════════════════════════
 router.patch('/:id/respond', async (req, res, next) => {
   const id = uuid(req.params.id);
   if (!access.isUuid(id)) return fail(res, 404, 'Match not found.');
@@ -816,7 +808,7 @@ router.patch('/:id/respond', async (req, res, next) => {
       return bail(client, res, 409, `This challenge has already been ${m.status === STATUS.REJECTED ? 'declined' : 'answered'}.`);
     }
 
-    // Only the CHALLENGED team's captain may answer. Locks that team, so a
+    // Only the challenged team's captain may answer. Locks that team, so a
     // demotion cannot land between this check and the write.
     const gate = await access.requireRole(client, m.opponent_team, req.user.id, 'captain');
     if (gate.error) {
@@ -833,7 +825,7 @@ router.patch('/:id/respond', async (req, res, next) => {
 
     // FR5.12 — expired in the window between the app rendering the card and this
     // request arriving. Settle the row rather than answering 409 against a
-    // `challenge_sent` that is actually dead; otherwise the sweep never sees it
+    // `challenge_sent` that is already dead; otherwise the sweep never sees it
     // as expired-and-unannounced and the two teams keep a stale card.
     const expired = m.challenge_expires_at && new Date(m.challenge_expires_at).getTime() <= Date.now();
     if (expired) {
@@ -864,7 +856,7 @@ router.patch('/:id/respond', async (req, res, next) => {
       ? `${opponentName} accepted your challenge`
       : `${opponentName} declined your challenge`;
 
-    // FR8.5 -- the coordination room. Opened HERE, on accept, and nowhere else:
+    // FR8.5 -- the coordination room. Opened here, on accept, and nowhere else:
     // a declined or expired challenge is not a fixture and must not leave a
     // thread behind in either captain's list. Created before the fan-out so the
     // "coordinate here" pill lands in the same transaction as the acceptance,
@@ -888,7 +880,7 @@ router.patch('/:id/respond', async (req, res, next) => {
           event,
           otherTeamName: opponentName,
           // FE-4: the challenger is the side that has been waiting, so this is
-          // the notification that actually matters. Both sides get the pill.
+          // the notification that matters most. Both sides get the pill.
           notify: {
             type: accepted ? 'match_accepted' : 'match_rejected',
             title,
@@ -937,9 +929,7 @@ router.patch('/:id/respond', async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // POST /api/matches/:id/result          (ER2.1)
-// ═══════════════════════════════════════════════════════════════════════════
 router.post('/:id/result', async (req, res, next) => {
   const id = uuid(req.params.id);
   if (!access.isUuid(id)) return fail(res, 404, 'Match not found.');
@@ -994,7 +984,7 @@ router.post('/:id/result', async (req, res, next) => {
       return bail(client, res, 409, 'You can submit the result once the slot has started.');
     }
 
-    // The winner is DERIVED from the scores, never taken from the body. If the
+    // The winner is derived from the scores, never taken from the body. If the
     // client also sent one, it has to agree — a picker that disagrees with the
     // steppers is a client bug, and silently trusting either one would record a
     // result the captain did not intend.
@@ -1039,7 +1029,7 @@ router.post('/:id/result', async (req, res, next) => {
       // First submission. Nothing changes state; the other captain is nudged.
       const { pills, memberIds } = await mc.fanOut(client, {
         matchId: id,
-        // The coordination room gets ONE neutral line naming who submitted --
+        // The coordination room gets one neutral line naming who submitted --
         // both captains are reading it, so "you submitted" would be wrong for one.
         coord: { event: 'match_result_in', teamName: nameOfTeam(submittedByTeam) },
         sides: [
@@ -1237,9 +1227,7 @@ router.post('/:id/result', async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // PATCH /api/matches/:id/verify         (ER2.2)
-// ═══════════════════════════════════════════════════════════════════════════
 router.patch('/:id/verify', async (req, res, next) => {
   const id = uuid(req.params.id);
   if (!access.isUuid(id)) return fail(res, 404, 'Match not found.');
@@ -1267,9 +1255,9 @@ router.patch('/:id/verify', async (req, res, next) => {
     }
 
     // Authority: the owner of the venue this match is booked at. Expressed as a
-    // WHERE clause so ownership of THIS venue is the permission, not a role claim.
+    // WHERE clause so ownership of this venue is the permission, not a role claim.
     //
-    // S.7 Wave A added a SECOND kind of match that reaches this handler. A
+    // S.7 Wave A added a second kind of match that reaches this handler. A
     // tournament fixture reserves its slot instead of booking it, so there is no
     // `bookings` row to join through and the old `if (!m.booking_id) 409` refused
     // every tournament result. For those, authority comes from
@@ -1321,7 +1309,7 @@ router.patch('/:id/verify', async (req, res, next) => {
     // SELECT k_factor FROM elo_history.
     const k = tctx && Number.isFinite(tctx.kFactor) ? tctx.kFactor : kFactor;
 
-    // The rating exchange. Participates in THIS transaction — a rating that
+    // The rating exchange. Participates in this transaction — a rating that
     // committed separately could survive a rolled-back verification, and every
     // future match for both teams would compute from a rating describing a match
     // that never officially happened.
@@ -1342,7 +1330,7 @@ router.patch('/:id/verify', async (req, res, next) => {
       [id, STATUS.COMPLETED, req.user.id],
     );
 
-    // THE TOURNAMENT HOOK. Inside this transaction, after the rating, so a bracket
+    // The TOURNAMENT hook. Inside this transaction, after the rating, so a bracket
     // that advances and a rating that was applied can never disagree: if the
     // advance fails, the whole verification rolls back and the owner retries.
     //
@@ -1371,7 +1359,7 @@ router.patch('/:id/verify', async (req, res, next) => {
 
     const { pills, memberIds } = await mc.fanOut(client, {
       matchId: id,
-      // The coordination room gets the scoreline WITHOUT the win/loss word and
+      // The coordination room gets the scoreline without the win/loss word and
       // without either side's ELO delta: it is one room holding both teams, and
       // "(win), +18 ELO" is only true for half of the people reading it.
       coord: {
@@ -1461,9 +1449,7 @@ router.patch('/:id/verify', async (req, res, next) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // POST /api/matches/:id/dispute         (FR5.17, ER2.3)
-// ═══════════════════════════════════════════════════════════════════════════
 router.post('/:id/dispute', async (req, res, next) => {
   const id = uuid(req.params.id);
   if (!access.isUuid(id)) return fail(res, 404, 'Match not found.');
@@ -1483,8 +1469,8 @@ router.post('/:id/dispute', async (req, res, next) => {
       return bail(client, res, 409, 'This match is already under review.');
     }
     // Disputable at two points: after the owner verifies (within the window), or
-    // while it is sitting in the owner's queue — a result you know is wrong
-    // should not have to be rated first before you can object to it.
+    // while it is sitting in the owner's queue — a result a captain believes is
+    // wrong should not have to be rated before it can be objected to.
     if (m.status !== STATUS.COMPLETED && m.status !== STATUS.AWAITING_OWNER) {
       return bail(client, res, 409, 'Only a completed or pending-verification match can be disputed.');
     }
@@ -1517,7 +1503,7 @@ router.post('/:id/dispute', async (req, res, next) => {
     );
 
     // Freezes ELO if it has not been applied yet: `disputed` is not a status the
-    // verify endpoint accepts, so the exchange can no longer run. If it HAS been
+    // verify endpoint accepts, so the exchange can no longer run. If it has been
     // applied, the rating stands until an admin resolves it (S.7) — silently
     // reversing a verified result would move two ratings with no audit row
     // explaining why, and the elo_history ledger is the thing that makes a
@@ -1538,7 +1524,7 @@ router.post('/:id/dispute', async (req, res, next) => {
 
     const { pills, memberIds } = await mc.fanOut(client, {
       matchId: id,
-      // Neutral: the room holds the team that filed AND the team it was filed
+      // Neutral: the room holds the team that filed and the team it was filed
       // against. It says a dispute exists, not who is right.
       coord: { event: 'match_under_review' },
       sides: [

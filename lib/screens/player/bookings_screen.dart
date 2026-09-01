@@ -51,7 +51,7 @@ class BookingsScreenState extends State<BookingsScreen>
 
   /// Reload unconditionally, ignoring the 5-second staleness guard.
   ///
-  /// Used when something outside this screen is KNOWN to have changed the rows —
+  /// Used when something outside this screen is known to have changed the rows —
   /// a booking made or cancelled through the assistant. `refreshIfNeeded` would be
   /// free to skip that, and a booking the user just paid for missing from the list
   /// is not a cache miss, it is the app calling them a liar.

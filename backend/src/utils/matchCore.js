@@ -6,27 +6,27 @@
  * both teams attached, finding who a team's captains are, posting the chat pills,
  * shaping a row for the app, and the ER2.3 freeze check.
  *
- * WHY A SEPARATE FILE
+ * Why a separate file
  * Six endpoints plus a background sweep all need the same loads and the same
  * fan-out. Inlining them would put the state machine and the SQL in one file
  * where neither is readable, and the fan-out in particular has to be identical
  * everywhere: a "match accepted" pill worded or targeted differently from a
  * "match verified" pill is how a chat thread starts contradicting itself.
  *
- * THREE RULES THIS FILE ENFORCES
+ * Three rules this file enforces
  *
- *   1. NOTHING HERE OPENS A TRANSACTION. Every function takes an already-open
+ *   1. Nothing here opens a transaction. Every function takes an already-open
  *      client and participates in the caller's transaction, for the same reason
  *      utils/elo.js does: a chat pill that committed separately could survive a
  *      rolled-back verification, leaving the thread claiming a result the
  *      matches table never recorded.
  *
- *   2. SIDE EFFECTS CANNOT FAIL THE MATCH. Chat pills go through a SAVEPOINT,
+ *   2. Side effects cannot FAIL the MATCH. Chat pills go through a SAVEPOINT,
  *      mirroring utils/notify.js. A missing channel or a chat hiccup must never
  *      be the reason a result that two captains agreed on and an owner verified
  *      gets rolled back. The result is the durable fact; the pill is a courtesy.
  *
- *   3. LOCK THE MATCH ROW ALONE. lockMatch() deliberately does not join teams,
+ *   3. LOCK the MATCH row alone. lockMatch() deliberately does not join teams,
  *      because `FOR UPDATE` across a join locks the joined rows too, in whatever
  *      order the planner chose. utils/elo.lockBothTeams() takes the team locks
  *      afterwards in sorted id order; letting a join take them first would
@@ -41,7 +41,7 @@ const { notify } = require('./notify');
 const elo = require('./elo');
 const { PREVIEW_LABEL, buildPreview } = require('./matchPreview');
 
-// ─── The state machine, as data ─────────────────────────────────────────────
+// The state machine, as data
 //
 // doc/API.md holds the authoritative diagram; chk_matches_status (migration 016)
 // holds the same vocabulary in the database. This is the third copy and it is
@@ -80,7 +80,7 @@ const CLOSED_STATUSES = Object.freeze([STATUS.REJECTED, STATUS.EXPIRED]);
 /** Slot dates/times are PKT wall-clock values (same convention as escrow.js). */
 const TIMEZONE = 'Asia/Karachi';
 
-// ─── Loads ──────────────────────────────────────────────────────────────────
+// Loads
 
 /**
  * Lock one match row for the duration of a state transition.
@@ -299,7 +299,7 @@ function shapeMatch(row, { viewerTeamIds = [], viewerUserId = null, base = 1000 
     // Viewer-relative facts, so the screens do not each re-derive them.
     myTeamId,
     iAmChallenger: myTeamId !== null && String(myTeamId) === String(challenger.id),
-    // Has MY team already had its one submission? Never leaks the opponent's —
+    // Has my team already had its one submission? Never leaks the opponent's —
     // only whether the viewer's own side is still owed one.
     iSubmitted: myTeamId !== null
       && (row.submitted_teams || []).map(String).includes(String(myTeamId)),
@@ -308,7 +308,7 @@ function shapeMatch(row, { viewerTeamIds = [], viewerUserId = null, base = 1000 
   };
 }
 
-/** One match, hydrated. Read-only, so it takes a client OR the pool. */
+/** One match, hydrated. Read-only, so it takes a client or the pool. */
 async function fetchMatchView(clientOrPool, matchId) {
   const { rows } = await (clientOrPool || pool).query(
     `SELECT ${MATCH_VIEW_COLUMNS} ${MATCH_VIEW_FROM} WHERE m.id = $1`,
@@ -317,13 +317,13 @@ async function fetchMatchView(clientOrPool, matchId) {
   return rows[0] || null;
 }
 
-// ─── Who is who ─────────────────────────────────────────────────────────────
+// Who is who
 
 /**
  * The caller's role in a team, or null. Read inside the caller's transaction so
  * a demotion cannot slip between the check and the write it authorises.
  *
- * team_members.role is the authority for captaincy, NOT teams.captain_id: FR2.10
+ * team_members.role is the authority for captaincy, not teams.captain_id: FR2.10
  * allows more than one captain, and captain_id can only ever name one of them.
  */
 async function roleInTeam(client, teamId, userId) {
@@ -368,10 +368,10 @@ async function captainIdsOf(client, teamIds) {
 }
 
 /**
- * Captains AND vice-captains of these teams, deduped -- the membership of a
+ * Captains and vice-captains of these teams, deduped -- the membership of a
  * coordination room (S.7 Wave B).
  *
- * WHY BOTH ROLES
+ * Why both roles
  * FR8.5 calls it the captains' room, but "the captain is unreachable" is exactly
  * the failure the room exists to prevent, and a vice-captain is the person who
  * covers it. Two extra rows remove a single point of failure.
@@ -412,18 +412,18 @@ async function channelIdsOf(client, teamIds) {
   return out;
 }
 
-// ─── Features and the derived numbers ───────────────────────────────────────
+// Features and the derived numbers
 
 /**
  * Ratings, records, last-5 form and roster trust for a set of teams, in one round
  * trip.
  *
- * The LATERAL is worth the density: form is "the outcome of your five most
+ * The LATERAL is worth the density: form is "the outcome of a team's five most
  * recent completed matches, most recent first", which is a per-team ordered
  * window. Doing it per team in JS would be N+1 queries on the challenge screen,
- * which is opened far more often than a challenge is actually sent.
+ * which is opened far more often than a challenge is sent.
  *
- * Trust (FR5.5) is the roster AVERAGE, not the captain's own score. A team is the
+ * Trust (FR5.5) is the roster average, not the captain's own score. A team is the
  * people who turn up: judging it by one account would let a captain with a clean
  * record front a squad that no-shows, and would also punish a good squad whose
  * captain took one no-show penalty. COALESCE to 100 because a team whose members
@@ -516,7 +516,7 @@ function trustBadge(score) {
  * The two numbers a challenge is created with: competitiveness (FR5.4) and the
  * preview sentence (FR5.10).
  *
- * Both are SNAPSHOTS and are stored on the row. They describe the two teams as
+ * Both are snapshots and are stored on the row. They describe the two teams as
  * they were when the challenge was sent; recomputing them later from current
  * ratings would silently rewrite the challenge card after the fact, so that a
  * card a captain is looking at changes while they read it.
@@ -540,11 +540,11 @@ function deriveCompAndPreview({ challenger, opponent, seed }) {
   return { competitiveness, previewText };
 }
 
-// ─── Side effects ───────────────────────────────────────────────────────────
+// Side effects
 
 /**
  * Post a grey pill into a team's chat, and return the message id so the caller
- * can emit it AFTER COMMIT.
+ * can emit it after COMMIT.
  *
  * SAVEPOINT-wrapped for the reason in the file header: a team whose channel row
  * is missing (created before chat existed, or hand-deleted) must not be able to
@@ -572,7 +572,7 @@ async function announceToTeam(client, channelId, event, opts) {
  * a notification row per captain, and the list of member ids to socket-ping
  * after commit.
  *
- * `sides` is one entry per team, each carrying the wording FOR THAT TEAM. The
+ * `sides` is one entry per team, each carrying the wording for that TEAM. The
  * two teams genuinely need different sentences — "you challenged them" and "they
  * challenged you" are different facts — and passing both in explicitly is what
  * keeps that asymmetry visible at the call site instead of hidden in a flag.
@@ -619,10 +619,10 @@ async function fanOut(client, { matchId, sides, coord = null }) {
     }
   }
 
-  // ONE neutral pill in the coordination room, if this match has one (S.7 Wave B).
+  // One neutral pill in the coordination room, if this match has one (S.7 Wave B).
   //
   // The per-team sentences above are written from one team's point of view --
-  // "you challenged them" -- and a captain room holds BOTH teams, so half the
+  // "you challenged them" -- and a captain room holds both teams, so half the
   // readers would be told the opposite of what happened. `coord.event` names one
   // of the neutral sentences in chatSystemMessages, and it is posted once.
   //
@@ -648,7 +648,7 @@ async function fanOut(client, { matchId, sides, coord = null }) {
 
 /**
  * Emit everything a completed transition should tell the apps about. Called
- * strictly AFTER COMMIT.
+ * strictly after COMMIT.
  *
  * `match:update` carries only ids — the client re-fetches. Pushing the whole
  * match down a socket would mean two code paths producing the payload the
@@ -663,27 +663,27 @@ async function emitAfterCommit(client, { matchId, pills, memberIds, extra = {} }
   }
 }
 
-// ─── ER2.3 — platform-wide ELO freeze ───────────────────────────────────────
+// ER2.3 — platform-wide ELO freeze
 
 /**
  * A team that disputes more than 30% of its matches (minimum 3) gets its ELO
  * frozen platform-wide.
  *
- * WHY THE RATIO AND NOT A FLAT COUNT
+ * Why the ratio and not a flat count
  * A team that has played fifty matches and disputed four is arguing about 8% of
  * its results, which is plausible. A team that has played four and disputed
  * three is using the dispute button as a way to refuse every loss. A flat count
  * punishes the first and a flat ratio punishes a team whose first ever match
  * genuinely went wrong, which is why ER2.3 has both a ratio and a floor.
  *
- * WHY ONLY DISPUTES THE TEAM ITSELF RAISED
+ * Why only disputes the TEAM itself raised
  * `raised_by_team` is the filter. A conflict between two submitted results
  * creates a system dispute with `raised_by_team = NULL`, and it must not count
  * against either side: neither of them filed it, and an honest team on the wrong
  * end of an opponent's mis-typed scoreline would otherwise be frozen for it.
  *
  * Idempotent — a team already frozen is left alone, so the reason and timestamp
- * keep pointing at the moment the threshold was actually crossed.
+ * keep pointing at the moment the threshold was crossed.
  */
 async function applyDisputeFreeze(client, teamId, { ratio, min }) {
   const { rows } = await client.query(
@@ -712,7 +712,7 @@ async function applyDisputeFreeze(client, teamId, { ratio, min }) {
   return { frozen: true, changed: true, disputed, played, reason };
 }
 
-// ─── Small shared formatting ────────────────────────────────────────────────
+// Small shared formatting
 
 /** "+16" / "-16" / "0" — the string the ER2.2 notification puts in its body. */
 function signed(n) {

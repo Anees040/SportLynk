@@ -49,8 +49,8 @@ from pathlib import Path
 LEXICON_PATH = Path(__file__).resolve().parents[2] / "data" / "abuse_lexicon.txt"
 
 #: Token = run of letters/digits/apostrophes. Roman Urdu abuse is ASCII, so this
-#: covers both English and Roman Urdu; it is intentionally NOT unicode-word (\w)
-#: because we match against an ASCII lexicon and want no surprises from scripts.
+#: covers both English and Roman Urdu; it is intentionally not unicode-word (\w)
+#: because the lexicon is ASCII and other scripts would only bring surprises.
 _TOKEN_RE = re.compile(r"[a-z0-9']+")
 
 

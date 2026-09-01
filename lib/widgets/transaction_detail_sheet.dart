@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../constants/colors.dart';
 import '../utils/num_util.dart';
 
-// ─── Shared transaction vocabulary ────────────────────────────────────────────
+// Shared transaction vocabulary
 //
 // The label / icon / credit maps below used to exist three times over, in
 // wallet_screen, wallet_history_screen and owner_wallet_screen — and all three
@@ -119,7 +119,7 @@ String fmtSlotTime(dynamic t) {
   return s.length >= 5 ? s.substring(0, 5) : s;
 }
 
-// ─── FR7.9 — transaction detail ───────────────────────────────────────────────
+// FR7.9 — transaction detail
 
 /// The receipt for one ledger row.
 ///

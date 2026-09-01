@@ -109,7 +109,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
             if (found.isNotEmpty && _isSelectable(found.first)) {
               _selectedSlot = found.first;
             } else {
-              // Someone else booked it, or our hold expired and they took it.
+              // Someone else booked it, or the hold expired and they took it.
               // Drop the selection now rather than let checkout fail with a 409.
               _selectedSlotId = null;
               _selectedSlot = null;
@@ -124,7 +124,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     } catch (_) { if (mounted) setState(() => _loading = false); }
   }
 
-  /// Venue-wide review aggregates + the first page (we only preview the top 3
+  /// Venue-wide review aggregates + the first page (only the top 3 are previewed
   /// here). Only the first page is fetched with page 1; "View all" opens the
   /// dedicated paginated screen. Silent on failure by design.
   Future<void> _loadReviews() async {
@@ -264,7 +264,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // ── HERO GALLERY ─────────────────────────────────────
+          // Hero gallery
           SliverAppBar(
             expandedHeight: 280,
             pinned: true,
@@ -358,7 +358,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
             ),
           ),
 
-          // ── VENUE INFO CARD ──────────────────────────────
+          // VENUE INFO card
           SliverToBoxAdapter(
             child: Transform.translate(offset: const Offset(0, 0),
               child: Container(
@@ -411,7 +411,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
               )),
           ),
 
-          // ── AMENITIES SECTION ──────────────────────────────
+          // Amenities section
           if (_amenities.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
@@ -470,12 +470,12 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
               ),
             ),
 
-          // ── REVIEWS SUMMARY ────────────────────────────────
+          // Reviews summary
           // Sits with the other "about this venue" content, above the date/slot
           // booking flow. Aggregates are venue-wide; only the top 3 preview here.
           SliverToBoxAdapter(child: _reviewsSummary()),
 
-          // ── DATE SELECTOR ──────────────────────────────────
+          // Date selector
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -538,7 +538,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
             ),
           ),
 
-          // ── SLOTS HEADER + LEGEND ──────────────────────────
+          // SLOTS HEADER + legend
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -556,7 +556,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
             ),
           ),
 
-          // ── SLOT GRID ──────────────────────────────────────
+          // Slot GRID
           if (_slots.isNotEmpty)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
@@ -659,7 +659,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
         color: Colors.white.withValues(alpha: 0.08), size: 160)));
   }
 
-  // ── REVIEWS SUMMARY (venue detail) ──────────────────────────
+  // Reviews summary (venue detail)
   void _openAllReviews() {
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => VenueReviewsScreen(

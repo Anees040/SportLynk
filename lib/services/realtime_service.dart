@@ -16,7 +16,7 @@ import '../constants/api_constants.dart';
 /// cancel on close without ever tearing down the shared socket. The socket itself
 /// only goes away on [disconnect] (logout).
 ///
-/// The connect target is [ApiConstants.socketUrl] — the bare origin, NOT the
+/// The connect target is [ApiConstants.socketUrl] — the bare origin, not the
 /// `/api` REST base — because engine.io is mounted at the server root.
 class RealtimeService {
   static final RealtimeService _instance = RealtimeService._();
@@ -68,7 +68,7 @@ class RealtimeService {
   /// on every `true` so a reconnect silently restores live delivery.
   /// Every notification row, the moment `pushJob` drains it from the outbox.
   ///
-  /// This is the IN-APP half of delivery and it is not conditional on Firebase: the
+  /// This is the in-app half of delivery and it is not conditional on Firebase: the
   /// job emits `notification:new` after stamping the row whether or not a push was
   /// sent, suppressed by a preference or skipped because no service account is
   /// configured. So the bell moves on a dev machine with no FCM key at all -- which
@@ -84,7 +84,7 @@ class RealtimeService {
 
   bool get isConnected => _socket?.connected ?? false;
 
-  /// Connect if we aren't already, for this token. Idempotent: called on every
+  /// Connect if not already connected for this token. Idempotent: called on every
   /// chat open, on app resume, and right after login — a matching live socket is
   /// reused, a stale-token socket is replaced.
   void ensureConnected(String token) {
@@ -137,7 +137,7 @@ class RealtimeService {
     if (data is Map) c.add(Map<String, dynamic>.from(data));
   }
 
-  // ── Outbound ───────────────────────────────────────────────
+  // Outbound
   void joinChannel(String channelId) => _socket?.emit('channel:join', {'channelId': channelId});
   void leaveChannel(String channelId) => _socket?.emit('channel:leave', {'channelId': channelId});
   void sendTyping(String channelId, bool isTyping) =>

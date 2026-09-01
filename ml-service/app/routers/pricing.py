@@ -111,7 +111,7 @@ REVENUE_TIE_TOLERANCE = 0.02
 
 #: Multiplier applied to confidence when the revenue optimum lands on either end
 #: of the allowed band. A boundary optimum means the true optimum may well sit
-#: OUTSIDE the band we are permitted to quote, so the recommendation is the best
+#: outside the band the service is permitted to quote, so the recommendation is the best
 #: available answer rather than a located one. Honest to discount it.
 BOUNDARY_CONFIDENCE_PENALTY = 0.85
 
@@ -150,21 +150,19 @@ class CamelModel(BaseModel):
         populate_by_name=True,
         extra="forbid",
         str_strip_whitespace=True,
-        # `model_version` and `model_status` are fields we genuinely want on the
+        # `model_version` and `model_status` are fields that genuinely belong on the
         # wire, and both sit in pydantic's protected `model_` namespace. Depending
         # on the pydantic version fastapi resolves, declaring them emits a
         # UserWarning at class-definition time — i.e. on import, i.e. in the boot
         # log, where a warning reads as a broken service and gets ignored once
         # people learn to ignore it. Cleared explicitly rather than left to the
         # resolved version's default, because requirements.txt pins fastapi but
-        # pydantic arrives as a transitive dependency and can move underneath us.
+        # pydantic arrives as a transitive dependency and can shift underneath the pin.
         protected_namespaces=(),
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Requests
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class SlotContext(CamelModel):
@@ -246,9 +244,7 @@ class DemandRequest(CamelModel):
     venue_id: str | None = Field(default=None, max_length=64)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Responses — declared now, returned from Wave C
-# ─────────────────────────────────────────────────────────────────────────────
 #
 # Declared in Wave A on purpose: this is what makes /docs a contract the Node and
 # Flutter work can be written against before the model exists, and it is what
@@ -360,9 +356,7 @@ class DemandForecastResponse(CamelModel):
     model_metrics: ModelMetrics | None = None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _require_model() -> Any:
@@ -599,8 +593,8 @@ def _sweep(entry: Any, payload: SlotContext, *, attainment: float) -> _Sweep:
     base = float(payload.base_price)
     cap = _policy_max_ratio(entry)
     grid = features.price_grid(base, steps=SWEEP_STEPS)
-    # 1e-9 absorbs the float error in base * (MIN + span * i/(steps-1)); without it
-    # the grid point that IS the cap can fall outside its own bound.
+    # 1e-9 absorbs the float error in base * (min + span * i/(steps-1)); without it
+    # the grid point that is the cap can fall outside its own bound.
     prices = [p for p in grid if p <= base * cap + 1e-9]
     if len(prices) < 2:
         prices = grid[:2]
@@ -729,7 +723,7 @@ def _factor_probes(payload: SlotContext, row: pd.Series, price: float) -> list[_
             _FactorProbe(
                 key="day_of_week",
                 # "Weekend" for Sat/Sun, because that is the fact the model keyed on
-                # and the word an owner uses. For a weekday the DAY NAME, not the
+                # and the word an owner uses. For a weekday the day name, not the
                 # word "Weekday" — the neutral it is being compared against is a
                 # Wednesday, so a chip reading "Weekday, down" would be comparing a
                 # weekday against a weekday and saying nothing.
@@ -755,13 +749,13 @@ def _factor_probes(payload: SlotContext, row: pd.Series, price: float) -> list[_
             )
         )
 
-    # NO venue_rating PROBE, AND NO sport/city PROBE. This is a measured decision,
+    # No venue_rating probe, and no sport/city probe. This is a measured decision,
     # not an oversight.
     #
     # "Unrated" is the correct neutral on paper: generate_bookings.py gives an
     # unrated venue an odds multiplier of exactly 1.00, the same as a venue sitting
     # on RATING_PIVOT = 4.4. So the probe was written, run, and then removed,
-    # because of what it returned. On a 4.5-star venue it reported P(book) FALLING
+    # because of what it returned. On a 4.5-star venue it reported P(book) falling
     # by 0.052 -- opposite in sign to the generator's causal effect
     # (exp(0.55 * 0.1) = 1.06x odds, i.e. a rise of about 0.01) and five times its
     # size.
@@ -775,7 +769,7 @@ def _factor_probes(payload: SlotContext, row: pd.Series, price: float) -> list[_
     # `sport` and `city` are venue proxies for the same reason (one city, one sport
     # per venue) and are excluded on the same grounds.
     #
-    # The three probes above survive because each is a WITHIN-venue contrast: the
+    # The three probes above survive because each is a within-venue contrast: the
     # same venue at 15:00 instead of 20:00, on a Wednesday instead of a Saturday,
     # booked a week out instead of tomorrow. Every venue in the data supplies rows
     # on both sides of those comparisons, so the model has something real to have
@@ -827,9 +821,7 @@ def _top_factors(
     return factors[:MAX_FACTORS]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Routes
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 @router.get("/features/spec", summary="The frozen feature contract")

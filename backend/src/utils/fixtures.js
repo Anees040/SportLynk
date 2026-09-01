@@ -1,8 +1,7 @@
 /**
  * fixtures.js — the tournament arithmetic, with no database in sight.
  *
- * WHY THIS FILE EXISTS
- * --------------------
+ * Why this file exists
  * Everything a tournament argues about is a calculation: who plays whom, who
  * gets a bye, which node a winner walks into, how many points a draw is worth,
  * how much of the pool is prize money and how much is the venue's. If those
@@ -15,59 +14,57 @@
  * runs under `npm test` with the database switched off, and a bracket bug is
  * caught in 40ms instead of during a demo.
  *
- * THE FOUR THINGS THIS FILE DECIDES
- * ---------------------------------
- * 1. THE BRACKET. Teams are seeded by ELO (strongest = seed 1) and paired by the
+ * The four things this file decides
+ * 1. The bracket. Teams are seeded by ELO (strongest = seed 1) and paired by the
  *    standard recursive bracket order, so seeds 1 and 2 can only meet in the
- *    final. `max_teams` is a power of two, but the number that actually turns up
+ *    final. `max_teams` is a power of two, but the number that turns up
  *    at the deadline is whatever registered — so the bracket is padded to the
- *    next power of two and the missing opponents become BYES. Because the
+ *    next power of two and the missing opponents become byes. Because the
  *    bracket order always pairs a top-half seed with a bottom-half seed, and the
  *    padding only ever removes bottom-half seeds, byes land on the top seeds
  *    automatically. That is a property of the ordering, not a special case:
  *    `test/fixtures.test.js` asserts it for every size from 2 to 32.
  *
- * 2. THE K-FACTOR. Tournament results are more authoritative than a friendly, so
+ * 2. The K-factor. Tournament results are more authoritative than a friendly, so
  *    they move ELO harder — 40 in the early rounds, 48 in a semi-final, 56 in a
  *    final, against 32 for a friendly. This is one ladder with FIDE's own
- *    device (one rating, different K per event tier), NOT a second tournament
+ *    device (one rating, different K per event tier), not a second tournament
  *    rating: a team with three tournament matches has no meaningful separate
- *    rating, and the bracket is SEEDED by ELO, so a separate ladder would seed
+ *    rating, and the bracket is seeded by ELO, so a separate ladder would seed
  *    the first tournament off all-1000s. A bye gets K = 0 — no game was played,
  *    so no rating may move. `elo.applyResult` already takes `kFactor` and
  *    `elo_history.k_factor` already stores it per row, so "why did this count
  *    more?" is answered by a SELECT rather than by a second number on a screen.
  *
- * 3. THE STANDINGS. 3 for a win, 1 for a draw, 0 for a loss, ordered by points,
+ * 3. The standings. 3 for a win, 1 for a draw, 0 for a loss, ordered by points,
  *    then goal difference, then goals for, then the head-to-head result, then
  *    name. Derived on read from the fixtures — there is no `standings` table to
  *    fall out of date (see the note at the end of migration 019).
  *
- * 4. THE MONEY, which is the part most worth being able to unit-test. The venue
- *    cost is recovered FIRST and the prize comes out of what is left:
+ * 4. The money, which is the part most worth being able to unit-test. The venue
+ *    cost is recovered first and the prize comes out of what is left:
  *
  *        pool       = entry_fee x teams_accepted
- *        venue_cost = SUM(slots.price over the allocated slots)
+ *        venue_cost = sum(slots.price over the allocated slots)
  *                     x (1 - venue_discount_percent)
  *        surplus    = pool - venue_cost
  *        prize      = surplus x prize_percent      (winner 70 / runner-up 30)
  *        owner      = venue_cost + (surplus - prize)
  *
  *    A flat percentage commission would have been simpler and wrong: the venue
- *    cost is FIXED while the pool is VARIABLE, so 8 teams x PKR 2,000 = 16,000
+ *    cost is fixed while the pool is variable, so 8 teams x PKR 2,000 = 16,000
  *    pool against seven hours of inventory worth ~14,000 would pay the owner a
  *    30% commission of 4,800 for slots they could have sold for 14,000. The
  *    tournament would lose them money, which inverts the whole point of the
  *    feature. Recovering the inventory first means a tournament can never be
  *    worse for an owner than selling the same hours.
  *
- *    `splitPool` works in PAISA as integers and hands the rounding remainder to
+ *    `splitPool` works in paisa as integers and hands the rounding remainder to
  *    the owner's margin, so `pool = venue_cost + prize + margin` holds to the
  *    paisa by construction rather than by luck — `check_tournaments.js` asserts
  *    exactly that identity.
  *
- * WHAT IS NOT HERE
- * ---------------
+ * What is not here
  * Slot choice (`utils/fixtureSchedule.js` — which hour each fixture is played
  * in), demand forecasting (`services/tournamentScheduler.js`, model #1), and
  * every row that gets written (`services/tournamentService.js`). This file
@@ -112,9 +109,7 @@ const MAX_KNOCKOUT_TEAMS = 32;
 const MAX_ROUND_ROBIN_TEAMS = 6;
 const MIN_TEAMS_FLOOR = 2;
 
-// ---------------------------------------------------------------------------
 // numeric helpers
-// ---------------------------------------------------------------------------
 
 /** pg DECIMALs arrive as strings; every number here goes through this first. */
 function asNum(v, fallback = 0) {
@@ -144,19 +139,17 @@ const count = (v) => {
   return n > 0 ? n : 0;
 };
 
-// ==========================================================================
-// SEEDING AND BRACKET SHAPE
-// ==========================================================================
+// Seeding and bracket shape
 
 /**
- * seedTeams — strongest first, and DETERMINISTIC when ratings tie.
+ * seedTeams — strongest first, and deterministic when ratings tie.
  *
  * ELO descending is the seeding rule, but two 1000-rated teams (every team that
  * has never played a verified match) must still get a stable order, or the same
  * eight registrations would produce a different bracket on every generation
  * attempt and nobody could reproduce a bug. So name and then id break the tie.
  *
- * Returns NEW objects with `seed` attached (1-based); the input is not mutated,
+ * Returns new objects with `seed` attached (1-based); the input is not mutated,
  * because the caller usually still needs its rows for the INSERT.
  */
 function seedTeams(teams) {
@@ -205,7 +198,7 @@ function roundsFor(n) {
  *
  * Two properties matter downstream and are asserted in the tests: every pair
  * contains exactly one seed from the top half (so padding, which only removes
- * the highest seed NUMBERS, can never empty a pair), and seed 1 meets seed 2
+ * the highest seed numbers, can never empty a pair), and seed 1 meets seed 2
  * only in round `rounds`.
  */
 function bracketOrder(size) {
@@ -240,7 +233,7 @@ function roundLabel(round, rounds, format = FORMATS.KNOCKOUT) {
  * advanceSlot — where the winner of (round, position) goes next.
  *
  * Nodes 1 and 2 of a round both feed node 1 of the next, 3 and 4 feed node 2,
- * and so on: `ceil(position / 2)`. Which SIDE matters too — the odd node fills
+ * and so on: `ceil(position / 2)`. Which side matters too — the odd node fills
  * team_a and the even node fills team_b — because that is what stops two
  * winners racing for the same column and one of them overwriting the other.
  */
@@ -252,7 +245,7 @@ function advanceSlot(round, position) {
 }
 
 /**
- * fixtureCount — how many fixtures will actually be PLAYED, which is the number
+ * fixtureCount — how many fixtures will be played, which is the number
  * the venue is paid for. Byes are excluded because a bye consumes no hour: it is
  * a bracket bookkeeping row, not a match.
  *
@@ -306,7 +299,7 @@ const winProbability = (eloA, eloB) => elo.expected(Math.round(asNum(eloA, 1000)
   Math.round(asNum(eloB, 1000)));
 
 /**
- * knockoutFixtures — the ENTIRE bracket in one pass: every node of every round,
+ * knockoutFixtures — the entire bracket in one pass: every node of every round,
  * round 1 paired from the seeds, later rounds left TBD but already wired to the
  * node that feeds them, and byes resolved on the spot.
  *
@@ -317,11 +310,11 @@ const winProbability = (eloA, eloB) => elo.expected(Math.round(asNum(eloA, 1000)
  * on the row so `advanceAfterMatch` does one UPDATE by coordinate instead of
  * re-deriving the tree shape every time a score comes in.
  *
- * BYES ARE RESOLVED HERE, not left for the job. A padded pair whose bottom-half
+ * Byes are resolved here, not left for the job. A padded pair whose bottom-half
  * seed does not exist becomes `{team_a: <seed>, team_b: null, is_bye: true,
  * status: 'walkover', winner: team_a}` and its team is written straight into the
  * next round's slot. That is why a 5-team bracket produces four round-1 rows of
- * which three are byes, and why the first REAL fixture a 5-team draw needs is
+ * which three are byes, and why the first real fixture a 5-team draw needs is
  * seed 4 v seed 5.
  *
  * Input: the output of `seedTeams` (or anything with `id` and `seed`).
@@ -400,9 +393,9 @@ function knockoutFixtures(seededTeams) {
  * circleMethod — the round-robin schedule, by the standard rotation.
  *
  * One team is pinned and the rest rotate one place each matchday, which is the
- * textbook construction guaranteeing every pair meets EXACTLY once and no team
+ * textbook construction guaranteeing every pair meets exactly once and no team
  * plays twice on the same matchday. An odd count gets a ghost entry, and the
- * team drawn against the ghost simply rests that matchday — that is a rest, not
+ * team drawn against the ghost rests that matchday — that is a rest, not
  * a bye fixture, so no row is created for it.
  *
  * Sides alternate by matchday so that one team is not listed first in every
@@ -464,9 +457,7 @@ function buildFixtures(format, seededTeams) {
   return knockoutFixtures(seededTeams);
 }
 
-// ==========================================================================
-// RESULTS AND STANDINGS
-// ==========================================================================
+// Results and standings
 
 /**
  * normaliseFixture — one reader for a fixture, whether it came from Postgres
@@ -496,11 +487,11 @@ function normaliseFixture(row) {
 /**
  * standings — the league table, derived on read.
  *
- * ORDER: points, then goal difference, then goals for, then the head-to-head
+ * Order: points, then goal difference, then goals for, then the head-to-head
  * result, then name. Goal-difference-before-head-to-head is the FIFA World Cup
  * ordering (UEFA does the opposite); either is defensible, so the one in use is
  * written down here and in `doc/TESTING.md` rather than left implicit in a
- * comparator. Head-to-head is applied PAIRWISE, which is not a total order in a
+ * comparator. Head-to-head is applied pairwise, which is not a total order in a
  * three-way tie — name is the final tiebreak precisely so that the table is
  * always deterministic even when the sport's own rules would shrug.
  *
@@ -584,32 +575,30 @@ function standings(teams, fixtures) {
   return table;
 }
 
-// ==========================================================================
-// MONEY  (the waterfall from note 4 of the header)
-// ==========================================================================
+// Money  (the waterfall from note 4 of the header)
 
 /**
  * splitPool — the whole economics of a tournament as one pure function.
  *
  * Called three times over a tournament's life, and it must give the same answer
  * every time: once by `POST /api/tournaments/preview` before the row exists,
- * once by `generateFixtures` when the money actually moves, and once by the
+ * once by `generateFixtures` when the money moves, and once by the
  * check script asserting the ledger. One function is the only way those three
  * can agree.
  *
- * EVERYTHING IS COMPUTED IN PAISA AS INTEGERS. Rupee floats do not divide by 3,
+ * Everything is computed in paisa as integers. Rupee floats do not divide by 3,
  * and a prize pool that is one paisa short of its parts is a failed assertion in
  * `check_tournaments.js` and an unexplainable wallet in the demo. The prize is
- * FLOORED and the winner's share is FLOORED, which means every lost fraction
+ * floored and the winner's share is floored, which means every lost fraction
  * lands in the owner's margin — the residual goes to the party that carries the
  * venue cost, and `pool = venue_cost + prize + margin` holds exactly.
  *
- * UNDERWATER (pool < venue_cost) is a real case, not an error: four teams at a
+ * Underwater (pool < venue_cost) is a real case, not an error: four teams at a
  * low fee may not cover seven hours of ground. Then the prize is zero and the
- * owner takes the entire pool — the margin goes NEGATIVE, which is the honest
+ * owner takes the entire pool — the margin goes negative, which is the honest
  * statement that the tournament did not cover its inventory, but no money is
- * ever taken FROM the owner. `owner_earning` is `pool - prize`, so it can never
- * exceed what the captains actually paid in.
+ * ever taken from the owner. `owner_earning` is `pool - prize`, so it can never
+ * exceed what the captains paid in.
  *
  * Accepts either a `pool` outright, or `entryFee` x `teams` for the preview,
  * where no team has registered yet.
@@ -674,20 +663,20 @@ function splitPool({
  * recommendEntryFee — the number the create screen fills in for the owner.
  *
  * An owner guessing a fee is how a tournament ends up losing them money, so the
- * preview endpoint works BACKWARDS from the margin they want:
+ * preview endpoint works backwards from the margin they want:
  *
  *   margin      = surplus x (1 - prize_percent/100)      the owner keeps what the
  *                                                        prize pool does not take
  *   surplus     = target_margin / (1 - prize_percent/100)
  *   pool needed = venue_cost + surplus
- *   fee         = pool needed / min_teams,  rounded UP to `roundTo`
+ *   fee         = pool needed / min_teams,  rounded up to `roundTo`
  *
  * Dividing by `min_teams` rather than `max_teams` is deliberate: the fee has to
- * work at the WORST legal turnout, or a half-full tournament is the one that
- * goes underwater. A full field then simply earns more than the target.
+ * work at the worst legal turnout, or a half-full tournament is the one that
+ * goes underwater. A full field then earns more than the target.
  *
- * `target_margin` is a percentage OF THE VENUE COST (default 25%), not of the
- * pool, because the venue cost is the thing actually at risk.
+ * `target_margin` is a percentage of the venue cost (default 25%), not of the
+ * pool, because the venue cost is the money at risk.
  *
  * When `prize_percent` is 100 there is no margin to solve for — the owner can
  * only ever recover the venue cost — so the recommendation covers cost alone and
@@ -719,7 +708,7 @@ function recommendEntryFee({
     targetMargin: fromPaisa(targetP),
     achievable,
     roundedTo: fromPaisa(step),
-    // The breakdown AT that fee and the worst legal turnout, so the screen can
+    // The breakdown at that fee and the worst legal turnout, so the screen can
     // show the owner the floor of what they are agreeing to rather than the best
     // case. `atCapacity` is the same fee with a full field.
     atMinTeams: splitPool({

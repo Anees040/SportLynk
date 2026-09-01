@@ -71,7 +71,7 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
     return Image.file(File(f.path), width: w, height: h, fit: fit);
   }
 
-  // ── STEP INDICATOR ──
+  // Step indicator
   Widget _stepIndicator() {
     final labels = ['Ground Info','Documents'];
     return Padding(
@@ -92,7 +92,7 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
     );
   }
 
-  // ── STEP 1 ──
+  // Step 1
   Widget _buildStep1() {
     return Form(key: _formKey1, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _stepIndicator(),
@@ -174,7 +174,7 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
     ]));
   }
 
-  // ── STEP 2 ──
+  // Step 2
   Widget _buildStep2() {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _stepIndicator(),

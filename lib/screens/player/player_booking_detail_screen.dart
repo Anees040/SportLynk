@@ -24,7 +24,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
 
   /// The booking's chat room, or null when there is none.
   ///
-  /// This is RESOLVED rather than inferred from the status. A room is created when the
+  /// This is resolved rather than inferred from the status. A room is created when the
   /// booking is confirmed, so a booking cancelled while still pending never had one,
   /// while a booking cancelled after confirmation still does — and that room is
   /// exactly where the cancellation notice was posted. Asking the server removes the
@@ -193,7 +193,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           padding: const EdgeInsets.all(20),
           child: Column(children: [
-            // ── STATUS BANNER ──────────────────────────────
+            // STATUS banner
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -220,10 +220,10 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
               ]),
             ),
             
-            // ── MESSAGE THE VENUE ─────────────────
+            // Message the VENUE
             // Rendered only once the room is known to exist — see [_chatChannelId].
             // It sits above the QR on purpose: on the day of the slot this is what
-            // you reach for, and it must not be below a 200px fold.
+            // the player reaches for, and it must not be below a 200px fold.
             if (_chatChannelId != null) ...[
               const SizedBox(height: 14),
               SizedBox(
@@ -246,7 +246,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
             ],
             const SizedBox(height: 20),
 
-            // ── QR CODE (confirmed/checked_in) ─────────────
+            // QR code (confirmed/checked_in)
             if ((isConfirmed || isCheckedIn) && qrCode != null) ...[
               Container(
                 padding: const EdgeInsets.all(20),
@@ -299,7 +299,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
               const SizedBox(height: 16),
             ],
 
-            // ── PENDING STATE ──────────────────────────────
+            // Pending state
             if (isPending) ...[
               Container(
                 padding: const EdgeInsets.all(16),
@@ -328,7 +328,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
               const SizedBox(height: 16),
             ],
 
-            // ── BOOKING DETAILS ────────────────────────────
+            // BOOKING details
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(

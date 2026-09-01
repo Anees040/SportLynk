@@ -1,18 +1,18 @@
 /**
  * ELO rating engine  —  S.2 Wave B
  *
- * DELIBERATELY HAS NO DATABASE IMPORT.
+ * Deliberately has no database import.
  *
  * That is the single most important line in this file. `require('../db/pool')`
  * connects on import (pool.js runs `SELECT NOW()` at module load), so a rating
  * module that reached for the pool could not be unit-tested without a live
  * Supabase connection and an open handle that never lets the test process exit.
- * So: the arithmetic here is pure, `base` and `kFactor` are passed IN by the
+ * So: the arithmetic here is pure, `base` and `kFactor` are passed in by the
  * caller (which reads them from `global_settings` via utils/globalSettings), and
  * the one function that touches Postgres — applyResult() — receives an
  * already-open client and never opens or commits a transaction of its own.
  *
- * WHY applyResult() DOES NOT BEGIN/COMMIT
+ * Why applyResult() does NOT BEGIN/COMMIT
  * The route that verifies a match already runs connect → BEGIN → … → COMMIT, and
  * the rating change must land in that same transaction as the match row's move
  * to `completed`. A rating that committed separately could survive a rolled-back
@@ -21,18 +21,18 @@
  * never officially happened. So applyResult() is a *participant* in the caller's
  * transaction, not an owner of its own.
  *
- * THE ROUNDING PROBLEM (and why the exchange is forced zero-sum)
+ * The rounding problem (and why the exchange is forced zero-sum)
  * `newRating` rounds, and rounding each side independently does not conserve
  * points. Raw deltas are exact negatives (because sA + sB = 1 and eA + eB = 1),
  * but JS `Math.round` breaks ties toward +Infinity: round(r + 2.5) - r = +3
  * while round(r - 2.5) - r = -2. One point is minted from nothing, and over
- * thousands of matches the ladder inflates. So rate() rounds ONCE, on the
+ * thousands of matches the ladder inflates. So rate() rounds once, on the
  * challenger's side, and mirrors it: deltaOpponent = -deltaChallenger. The pure
  * `newRating` stays exactly as specified (it is what the unit tests exercise);
  * conservation is a property of the *exchange*, enforced structurally rather
  * than hoped for. `elo.test.js` pins this.
  *
- * FR2.6 — UNRANKED UNTIL ONE VERIFIED MATCH
+ * FR2.6 — unranked until one VERIFIED MATCH
  * A new team's rating is `base` (1000) from the moment it is created, but 1000 is
  * a placeholder, not a measurement, so showing it next to a team that earned
  * 1000 over twenty matches would be a lie of equivalence. isRanked() gates
@@ -61,7 +61,7 @@ const PREFERRED_ELO_BAND = 400;
 const REASON = Object.freeze({
   VERIFIED: 'match_verified',
   FROZEN: 'frozen_no_change',
-  // S.7 Wave D. An admin ruling on a dispute filed against an ALREADY-RATED
+  // S.7 Wave D. An admin ruling on a dispute filed against an already-rated
   // match has to move ratings that were already moved, and `elo_history` is the
   // thing that makes a rating explainable. So a correction writes both halves:
   // one row undoing this match's contribution, one row applying the ruled one.
@@ -70,7 +70,7 @@ const REASON = Object.freeze({
   ADMIN_RULING: 'admin_ruling',
 });
 
-// ── Pure arithmetic ─────────────────────────────────────────────────────────
+// Pure arithmetic
 
 /**
  * Expected score for a team rated `ra` against a team rated `rb`.
@@ -156,7 +156,7 @@ function outcomeFor({ winnerTeam, challengerTeam, opponentTeam }) {
   throw new Error('winnerTeam must be one of the two teams in the match, or null for a draw');
 }
 
-// ── FR2.6 ranked / unranked ─────────────────────────────────────────────────
+// FR2.6 ranked / unranked
 
 /** Verified matches played. Counts only what applyResult() has incremented. */
 function playedCount(team) {
@@ -170,7 +170,7 @@ function isRanked(team) {
 }
 
 /**
- * The rating to SHOW. `null` means the UI must render "Unranked" rather than a
+ * The rating to show. `null` means the UI must render "Unranked" rather than a
  * number — returning null instead of 1000 makes it impossible for a screen to
  * accidentally display a placeholder as though it were earned.
  */
@@ -179,7 +179,7 @@ function displayElo(team, base = 1000) {
   return Math.round(num(team && team.elo, base));
 }
 
-// ── Competitiveness (deterministic v1; S.5 blends this into the recommender) ─
+// Competitiveness (deterministic v1; S.5 blends this into the recommender)
 
 /**
  * comp = round(100 − (min(|a − b|, 400) / 400) × 95)   →  5 … 100
@@ -204,7 +204,7 @@ function competitivenessFor(teamA, teamB) {
   return competitiveness(teamA.elo, teamB.elo);
 }
 
-// ── The one database-touching function ──────────────────────────────────────
+// The one database-touching function
 
 /**
  * Lock both team rows in a deterministic order.
@@ -228,10 +228,10 @@ async function lockBothTeams(client, idA, idB) {
 }
 
 /**
- * Apply a verified result: both ratings, both W/L/D counters, and TWO
+ * Apply a verified result: both ratings, both W/L/D counters, and two
  * elo_history rows — all inside the caller's transaction.
  *
- * ER2.3 — if EITHER team's rating is frozen (dispute-abuse ratio over the
+ * ER2.3 — if either team's rating is frozen (dispute-abuse ratio over the
  * threshold), the whole exchange is frozen, not just that team's half. Letting a
  * clean team collect points from a frozen one would make a frozen account a
  * points farm, and would also break zero-sum. W/L/D and the history rows are
@@ -290,11 +290,11 @@ async function applyResult(client, {
       ? { c: 'wins', o: 'losses' }
       : { c: 'losses', o: 'wins' };
 
-  // `elo_rating` is the legacy DECIMAL from schema.sql. `elo` (int, from 013) is
+  // `elo_rating` is the legacy decimal from schema.sql. `elo` (int, from 013) is
   // the authority, but the older column is still selected by pre-S2 code, so it
   // is kept in lockstep rather than left to drift into a contradiction.
   //
-  // The same number is bound TWICE on purpose. `elo` is integer and `elo_rating`
+  // The same number is bound twice on purpose. `elo` is integer and `elo_rating`
   // is numeric, and a single placeholder feeding both makes Postgres deduce two
   // conflicting types for one parameter (42P08, "integer versus numeric"). Two
   // placeholders let each column infer its own type, with no casts to get wrong.
@@ -324,9 +324,7 @@ async function applyResult(client, {
   return { ...exchange, frozen, reason };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // S.7 Wave D — correcting a rating that was already applied
-// ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * Does this database accept the two labels a correction writes?
@@ -336,7 +334,7 @@ async function applyResult(client, {
  * bracket advances. That rolls back cleanly, but the admin is told "23514"
  * instead of "run migration 021", so `disputeService` asks this first.
  *
- * Only a POSITIVE answer is cached. Caching a negative would mean applying 021
+ * Only a positive answer is cached. Caching a negative would mean applying 021
  * had no effect until the server was restarted, which is exactly the kind of
  * "it's applied but it still doesn't work" that costs an evening.
  */
@@ -359,11 +357,11 @@ async function supportsCorrection(client) {
 /**
  * Replace an applied result with a ruled one.
  *
- * WHY THIS IS A REVERSAL AND NOT AN EDIT
+ * Why this is a reversal and not an edit
  * The disputed match is rarely the teams' last match. By the time an admin rules,
  * both sides may have played again, and their current ratings already fold those
  * in. Setting a rating back to `elo_history.elo_before` would silently delete
- * every match played since. So this subtracts THIS MATCH'S NET CONTRIBUTION from
+ * every match played since. So this subtracts this MATCH'S net contribution from
  * the current rating — the discipline the money ledger already uses, where a
  * wrong entry is reversed rather than overwritten — and applies the ruled
  * exchange from there.
@@ -376,9 +374,9 @@ async function supportsCorrection(client) {
  * `SELECT * FROM elo_history WHERE match_id = … ORDER BY created_at` then reads
  * as the whole story: rated, undone, re-rated. That is the property the dispute
  * route's "no audit row explaining why" comment was protecting — it objected to
- * a SILENT reversal, not to an audited one.
+ * a silent reversal, not to an audited one.
  *
- * W/L/D COUNTERS move with it. The original application incremented one column
+ * W/L/D counters move with it. The original application incremented one column
  * per team; this decrements those and increments the ruled ones, so a team whose
  * loss became a win does not end up carrying both. GREATEST(…, 0) guards a
  * counter that was never incremented in the first place.
@@ -451,7 +449,7 @@ async function correctResult(client, {
       kFactor,
     });
 
-  // ── Counters: −1 on what the old outcome recorded, +1 on the ruled one ─────
+  // Counters: −1 on what the old outcome recorded, +1 on the ruled one
   const cols = (w) => {
     if (!w) return { c: null, o: null }; // a draw that was never a win/loss
     const o = outcomeFor({ winnerTeam: w, challengerTeam, opponentTeam });
@@ -462,7 +460,7 @@ async function correctResult(client, {
   };
   // `winnerTeam = null` is a genuine draw on both sides of this comparison, and
   // `cols(null)` cannot tell that apart from "no previous outcome". So the ruled
-  // side is derived from the outcome we already computed, and only the PREVIOUS
+  // side is derived from the outcome already computed, and only the previous
   // side is allowed to be unknown.
   const prev = previousWinnerTeam === undefined
     ? { c: null, o: null }
@@ -480,7 +478,7 @@ async function correctResult(client, {
     return m;
   };
 
-  // `elo` and the legacy `elo_rating` are bound as TWO placeholders on purpose:
+  // `elo` and the legacy `elo_rating` are bound as two placeholders on purpose:
   // one placeholder used twice raises 42P08 on this driver.
   const writeTeam = (teamId, after, m) => client.query(
     `UPDATE teams
@@ -496,7 +494,7 @@ async function correctResult(client, {
   await writeTeam(challengerTeam, exchange.challenger.after, moves(prev.c, next.c));
   await writeTeam(opponentTeam, exchange.opponent.after, moves(prev.o, next.o));
 
-  // ── Two history rows per team ─────────────────────────────────────────────
+  // Two history rows per team
   const writeHistory = (teamId, before, after, delta, reason) => client.query(
     `INSERT INTO elo_history
        (team_id, match_id, elo_before, elo_after, elo_delta, k_factor, reason)

@@ -1,9 +1,9 @@
 /**
  * CSV writing, with the one thing every naive CSV writer gets wrong.
  *
- * THE INJECTION PROBLEM (the reason this file exists)
+ * The injection problem (the reason this file exists)
  * Excel, LibreOffice and Google Sheets treat a cell whose text begins with
- * `=`, `+`, `-`, `@`, a tab or a carriage return as a FORMULA, not as text. A
+ * `=`, `+`, `-`, `@`, a tab or a carriage return as a formula, not as text. A
  * venue named `=cmd|'/c calc'!A1` therefore executes when an owner opens the
  * export their own dashboard produced. It is a real, catalogued vulnerability
  * (CSV / formula injection) and the export surface is exactly where it lands,
@@ -14,14 +14,14 @@
  * spreadsheet on display, so the sheet shows the venue's real name and the
  * formula never runs.
  *
- * WHY NOT JUST WRAP EVERYTHING IN QUOTES
+ * Why not just wrap everything in quotes
  * Because quoting does not help: `"=1+1"` is still evaluated. Quoting solves
  * commas and newlines; the leading apostrophe solves formulas. Both are needed,
  * and this file does both.
  *
- * THE OTHER TWO RULES
+ * The other two rules
  *   - a field containing `"` `,` `\n` or `\r` is wrapped in quotes and its own
- *     quotes are DOUBLED (RFC 4180),
+ *     quotes are doubled (RFC 4180),
  *   - the file opens with a UTF-8 BOM. Without it Excel on Windows reads the
  *     bytes as the system codepage and every Urdu venue name, every ₨ and every
  *     em dash in the export turns to mojibake.
@@ -31,7 +31,7 @@
 const FORMULA_START = /^[=+\-@\t\r]/;
 
 /**
- * One field, escaped for a spreadsheet AND for the CSV grammar, in that order.
+ * One field, escaped for a spreadsheet and for the CSV grammar, in that order.
  *
  * Order matters: the apostrophe has to go on before the quoting decision, or a
  * field like `-5,00` gets quoted for its comma, escapes the formula check on the
@@ -40,8 +40,8 @@ const FORMULA_START = /^[=+\-@\t\r]/;
 function cell(value) {
   if (value === null || value === undefined) return '';
   let s = typeof value === 'string' ? value : String(value);
-  // Nothing to protect against in a number we produced ourselves, and prefixing
-  // one would turn it into text and break every SUM() in the sheet.
+  // Nothing to protect against in a number this module produced itself, and prefixing
+  // one would turn it into text and break every sum() in the sheet.
   if (typeof value === 'number') return String(value);
 
   if (FORMULA_START.test(s)) s = `'${s}`;
@@ -60,7 +60,7 @@ const BOM = '﻿';
 /**
  * A money value as a plain decimal string with two places.
  *
- * pg returns DECIMAL as a string, so `asNum` first (the golden rule), and never
+ * pg returns decimal as a string, so `asNum` first (the golden rule), and never
  * `toLocaleString` — a thousands separator inside an unquoted CSV field is a new
  * column, and inside a quoted one it stops the cell being a number at all.
  */

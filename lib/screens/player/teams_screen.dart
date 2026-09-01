@@ -73,7 +73,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
     _reload(); // membership may have changed (e.g. left from group info)
   }
 
-  // ── Join with an invite link ───────────────────────────────
+  // Join with an invite link
   Future<void> _joinByLink() async {
     final ctrl = TextEditingController();
     final proceed = await showDialog<bool>(
@@ -295,7 +295,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                       // Counted achievements rather than a second rating: a
                       // tournament match moves this same ELO harder (K 40–56)
                       // instead of feeding a separate ladder, so "2 titles" is
-                      // what actually distinguishes a cup squad. The line hides
+                      // what distinguishes a cup squad. The line hides
                       // itself for a team that has never entered one.
                       if (!t.tournamentRecord.isEmpty) ...[
                         const SizedBox(height: 6),

@@ -2,11 +2,11 @@
  * Notification rows — written inside the same transaction as the ledger move that
  * caused them, so a rolled-back money move never leaves a stray alert.
  *
- * ─── WHAT CHANGED IN S.7 WAVE C ──────────────────────────────────────────────
+ * What changed in S.7 wave C
  * The signature did not. Thirty-eight call sites across jobs, routes and services
  * pass `{ userId, bookingId?, type, title, body?, payload? }` and every one of
  * them still does — moving them would have been the largest and least useful diff
- * in the wave, and a notification's CALL SITE is exactly the wrong place to
+ * in the wave, and a notification's call site is exactly the wrong place to
  * decide what category it belongs to or where tapping it goes. Those facts are
  * properties of the TYPE, they are identical at every site that emits it, and
  * they now come from `utils/notificationTypes.js`.
@@ -16,10 +16,10 @@
  * onto the row before inserting it. The caller supplies the sentence; the registry
  * supplies the behaviour.
  *
- * ─── THE COLLAPSE UPSERT ─────────────────────────────────────────────────────
+ * The collapse UPSERT
  * When the registry gives the type a `group_key` (chat messages, join requests),
  * the write becomes an upsert against `ux_notifications_group` — the UNIQUE
- * PARTIAL index from migration 020 — and a repeat BUMPS `group_count` instead of
+ * Partial index from migration 020 — and a repeat bumps `group_count` instead of
  * inserting a second row. Three messages from one person are one feed row and one
  * tray banner reading "3 new messages", which is what every professional app
  * does and what the notifications table could not represent before 020.
@@ -31,10 +31,10 @@
  * this query is asserted by run_migration_020.js's probes rather than trusted.
  *
  * Once a collapsed row is read or dismissed it leaves the index, so the next
- * message starts a FRESH row: seeing "2 new messages" and then being told nothing
+ * message starts a fresh row: seeing "2 new messages" and then being told nothing
  * about the third is the failure mode that rule exists to prevent.
  *
- * ─── WHY EVERY DEGRADATION PATH IS STILL HERE ────────────────────────────────
+ * Why every degradation path is still here
  * The whole body is SAVEPOINT-wrapped, and a missing table (42P01), a missing
  * column (42703) or a missing index (42P10) each fall back to a simpler write
  * rather than failing. This is not defensive habit: `notify()` is called while
@@ -52,8 +52,8 @@ const reg = require('./notificationTypes');
 
 // Every column 020 added that this writer fills. Kept as one list so the
 // degradation path below can be reasoned about in one place.
-// created_at is written EXPLICITLY as clock_timestamp() rather than left to the
-// column default now(). now() is the TRANSACTION timestamp, so several notifications
+// created_at is written explicitly as clock_timestamp() rather than left to the
+// column default now(). now() is the transaction timestamp, so several notifications
 // written in one transaction -- a booking approval alerts the player and the owner, a
 // generated bracket alerts every captain -- would land on a byte-identical created_at.
 // The feed sorts and pages on (created_at, id), so a tie is survivable there; it is
@@ -150,7 +150,7 @@ async function insertPlain(client, r) {
  *
  * The WHERE clause after ON CONFLICT is the index predicate, repeated word for
  * word. It is not a filter on which conflicts to handle — it is how Postgres
- * identifies WHICH partial index to use as the arbiter, and it must imply the
+ * identifies which partial index to use as the arbiter, and it must imply the
  * index's own predicate or the statement fails with 42P10 ("there is no unique or
  * exclusion constraint matching the ON CONFLICT specification").
  *
@@ -190,7 +190,7 @@ async function insertGrouped(client, r) {
   const id = rows[0].id;
   const count = rows[0].group_count;
 
-  // Rewrite the wording only once it IS a group. Doing this in a second statement
+  // Rewrite the wording only once it is a group. Doing this in a second statement
   // rather than in the upsert keeps the SQL readable and costs one small indexed
   // update on a path that only runs for a genuine repeat.
   if (count > 1) {
@@ -211,9 +211,9 @@ async function insertGrouped(client, r) {
  * instead. Runs after the savepoint has already been rolled back, so each attempt
  * starts from a clean subtransaction.
  *
- * The order matters: 42P10 (no matching index) is retried as a PLAIN insert, which
+ * The order matters: 42P10 (no matching index) is retried as a plain insert, which
  * still delivers the notification and merely fails to collapse it. Only after that
- * do we fall back to the pre-020 column set.
+ * does the write fall back to the pre-020 column set.
  */
 async function degrade(client, r, e) {
   if (e.code === '42P01') {

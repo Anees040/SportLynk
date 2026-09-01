@@ -232,16 +232,14 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
 # sys.path bootstrap.
 #
-# `python training/generate_bookings.py` puts `training/` on sys.path[0], NOT the
+# `python training/generate_bookings.py` puts `training/` on sys.path[0], not the
 # ml-service root, so `from app.core import features` would raise ImportError.
 # The documented command in data/README.md and in this file's CLI contract is the
 # plain script invocation, so the script has to make that command work rather
 # than demanding `python -m training.generate_bookings` and quietly breaking
 # every doc that says otherwise.
-# ---------------------------------------------------------------------------
 _ML_ROOT = Path(__file__).resolve().parent.parent
 if str(_ML_ROOT) not in sys.path:
     sys.path.insert(0, str(_ML_ROOT))
@@ -251,14 +249,12 @@ import pandas as pd  # noqa: E402
 
 from app.core import features, pk_calendar  # noqa: E402
 
-# ===========================================================================
-# SECTION 1 — VENUE POPULATION
-# ===========================================================================
+# Section 1 — VENUE population
 #
-# 20 venues. The first ten are the REAL seeded population, copied field by field
+# 20 venues. The first ten are the real seeded population, copied field by field
 # from backend/src/scripts/seed_venues.js so the simulated market has the same
 # price tiers, sports mix, ground types and operating windows as the one the
-# model will actually serve. The last ten extend it, because ten venues in two
+# model will serve. The last ten extend it, because ten venues in two
 # cities cannot teach a `city` feature anything and cannot give `venue_rating`
 # enough spread to be usable (the real ten are all 4.3-4.9).
 #
@@ -267,14 +263,13 @@ from app.core import features, pk_calendar  # noqa: E402
 # so a venue listed [16, 23] offers hours 16..22. Getting this off by one would
 # silently add or drop ~7% of all rows.
 #
-# The football/cricket split in operating hours is REAL and is the most
+# The football/cricket split in operating hours is real and is the most
 # interesting learnable structure in the population:
-#   [MEASURED] football venues open late  (10:00-23:00)
-#   [MEASURED] cricket venues open early  (06:00-20:00)
+#   [measured] football venues open late  (10:00-23:00)
+#   [measured] cricket venues open early  (06:00-20:00)
 # Cricket is a morning game in Pakistan; futsal is a night game. `sport` is a
 # categorical feature, so the model can learn a genuine sport x hour interaction
 # rather than one averaged daily curve.
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -299,7 +294,7 @@ class Venue:
 
 
 VENUES: tuple[Venue, ...] = (
-    # -- the real ten -------------------------------------------- [MEASURED] --
+    # The real ten  [measured]
     Venue("v01", "football", "Islamabad", 2000, "turf", 4.8, 16, 23, "measured"),
     Venue("v02", "football", "Islamabad", 2500, "indoor", 4.5, 8, 22, "measured"),
     Venue("v03", "football", "Islamabad", 3000, "turf", 4.9, 10, 23, "measured"),
@@ -310,17 +305,17 @@ VENUES: tuple[Venue, ...] = (
     Venue("v08", "cricket", "Rawalpindi", 1500, "indoor", 4.6, 10, 22, "measured"),
     Venue("v09", "cricket", "Rawalpindi", 2200, "turf", 4.5, 7, 19, "measured"),
     Venue("v10", "cricket", "Islamabad", 4000, "turf", 4.9, 6, 20, "measured"),
-    # -- the extension ten ------------------------------------- [ASSUMPTION] --
+    # The extension ten  [ASSUMPTION]
     # Chosen to widen three things the real ten cannot teach:
-    #   RATING SPREAD  the real ten are 4.3-4.9, i.e. nearly constant. Four
+    #   Rating spread  the real ten are 4.3-4.9, i.e. nearly constant. Four
     #                  unrated venues and four in the 3.6-4.2 band give the
     #                  feature real variance and exercise the pipeline's imputer.
-    #   CITY SPREAD    'Lahore' and 'Karachi' already appear as literals in the
+    #   City spread    'Lahore' and 'Karachi' already appear as literals in the
     #                  repo. Training on four cities rather than two means the
     #                  encoder has seen a plausible expansion market, and the
     #                  model does not meet its third city for the first time in
     #                  production.
-    #   PRICE SPREAD   1500-4000 kept, with more mass at the ends so
+    #   PRICE spread   1500-4000 kept, with more mass at the ends so
     #                  `base_price` is not effectively categorical.
     Venue("v11", "football", "Rawalpindi", 1600, "turf", None, 15, 23, "extension"),
     Venue("v12", "football", "Islamabad", 2800, "indoor", 4.1, 9, 23, "extension"),
@@ -334,23 +329,20 @@ VENUES: tuple[Venue, ...] = (
     Venue("v20", "football", "Islamabad", 3400, "indoor", None, 10, 23, "extension"),
 )
 
-# ===========================================================================
-# SECTION 2 — THE PARAMETER TABLE
+# Section 2 — the parameter table
 #
-# Every value below is an ODDS multiplier (see DESIGN DECISION 1). 1.00 means
+# Every value below is an odds multiplier (see design DECISION 1). 1.00 means
 # "no effect". They are relative to hour 17, Thursday, an average month, a
 # same-day decision, a 4.4-rated venue, at list price.
-# ===========================================================================
 
-# ---------------------------------------------------------------------------
 # Target occupancy. [ASSUMPTION]
 #
-# The intercept is NOT a hand-tuned constant. It is SOLVED at run time so the
+# The intercept is not a hand-tuned constant. It is solved at run time so the
 # realised booked share matches this target (see `_solve_intercept`). That
 # inversion is worth the twenty lines it costs:
 #   * the knob becomes a business quantity an owner would recognise — "about a
 #     third of offered hours sell" — instead of a magic number in log-odds;
-#   * every OTHER parameter stays interpretable as a pure relative effect,
+#   * every other parameter stays interpretable as a pure relative effect,
 #     because changing one no longer silently moves the overall rate;
 #   * adding a new effect later cannot accidentally drift the class balance and
 #     invalidate a Brier score comparison against an earlier run.
@@ -359,18 +351,16 @@ VENUES: tuple[Venue, ...] = (
 # nearly empty at 11:00. Asserted afterwards to land in [0.25, 0.50] — a rate
 # outside that band would make the classification problem either trivial or
 # degenerate.
-# ---------------------------------------------------------------------------
 TARGET_BOOKED_RATE = 0.34
 
-# ---------------------------------------------------------------------------
-# Hour of day. [ASSUMPTION, shape corroborated by MEASURED operating hours]
+# Hour of day. [ASSUMPTION, shape corroborated by measured operating hours]
 #
 # Reference hour is 17 (= 1.00). Two curves, because the two sports genuinely
 # differ, and the operating windows in seed_venues.js corroborate it: cricket
 # venues open at 06:00 and shut by 20:00; football venues do not open until
 # 09:00-17:00 and run to 23:00. Nobody builds a 06:00 football pitch.
 #
-# FOOTBALL / FUTSAL — one sharp night peak.
+# Football / futsal — one sharp night peak.
 #   06-15  dead. Work, school, and from May to September it is 35-42 C.
 #   16     schools out; the first real trade of the day.
 #   17     after-work start. The reference.
@@ -378,17 +368,16 @@ TARGET_BOOKED_RATE = 0.34
 #   20-22  the rush. 21:00 is the single busiest hour of the week.
 #   23     last slot; still busy in summer, thin in winter (see COLD_NIGHT).
 #
-# CRICKET — bimodal: a dawn peak and an evening peak.
+# Cricket — bimodal: a dawn peak and an evening peak.
 #   06-08  real, and specific to cricket. Morning nets and early ground
 #          bookings before the heat; a genuine Pakistani pattern.
 #   09-15  falls away.
-#   17-20  evening peak, softer and EARLIER than football's, because most
+#   17-20  evening peak, softer and earlier than football's, because most
 #          cricket venues have no lights past 20:00.
 #
 # 00-05 is near-zero for both. Almost no seeded venue is open then, so these
 # entries mostly guard against a future venue with a midnight window rather than
 # generating rows today.
-# ---------------------------------------------------------------------------
 HOUR_MULT: dict[str, tuple[float, ...]] = {
     #        00    01    02    03    04    05    06    07    08    09    10    11
     #        12    13    14    15    16    17    18    19    20    21    22    23
@@ -402,7 +391,6 @@ HOUR_MULT: dict[str, tuple[float, ...]] = {
     ),
 }
 
-# ---------------------------------------------------------------------------
 # Day of week. [ASSUMPTION]
 #
 # Indexed 0=Monday..6=Sunday to match `date.weekday()`, which is what
@@ -417,7 +405,6 @@ HOUR_MULT: dict[str, tuple[float, ...]] = {
 #   Sat 1.55  the busiest day, all day. Pakistan's weekend is Sat+Sun.
 #   Sun 1.30  busy, but below Saturday and it tails off after ~20:00 because
 #             Monday is a working day. Modelled via SUNDAY_LATE_ADJ.
-# ---------------------------------------------------------------------------
 DOW_MULT: tuple[float, ...] = (0.80, 0.85, 0.90, 1.00, 1.35, 1.55, 1.30)
 
 FRIDAY_DOW = 4
@@ -442,7 +429,6 @@ FRIDAY_NIGHT_ADJ = 1.20
 SUNDAY_LATE_HOURS = range(21, 24)
 SUNDAY_LATE_ADJ = 0.70
 
-# ---------------------------------------------------------------------------
 # Month of year — the bimodal season. [ASSUMPTION]
 #
 # Islamabad / Rawalpindi (Potohar plateau). Two peaks, not one:
@@ -462,50 +448,44 @@ SUNDAY_LATE_ADJ = 0.70
 #   Dec 0.75  cold again.
 #
 # Two peaks (Mar-Apr, Sep-Oct) and two troughs (Jun-Jul, Dec-Jan) is why the
-# wave prompt's single sine wave was replaced with a table — see DESIGN
+# wave prompt's single sine wave was replaced with a table — see design
 # DECISION 3(b). Index 0 is unused so the month number indexes directly.
-# ---------------------------------------------------------------------------
 MONTH_MULT: tuple[float, ...] = (
     0.00,  # index 0 unused — months are 1-based
     0.70, 0.85, 1.25, 1.30, 1.00, 0.80, 0.70, 0.75, 1.15, 1.30, 1.10, 0.75,
 )
 
-# ---------------------------------------------------------------------------
 # Winter late-night collapse — a month x hour interaction. [ASSUMPTION]
 #
 # The wave prompt asks for a "winter dip for late-night slots" and it is right to
 # separate it: a flat winter month multiplier cannot express it, because winter
-# AFTERNOONS in Islamabad are pleasant (17-20 C) while winter NIGHTS are not.
+# afternoons in Islamabad are pleasant (17-20 C) while winter nights are not.
 # Folding both into MONTH_MULT would wrongly suppress the 15:00 slot and wrongly
 # spare the 22:00 one.
-# ---------------------------------------------------------------------------
 COLD_MONTHS = (12, 1, 2)
 COLD_NIGHT_FROM_HOUR = 21
 COLD_NIGHT_ADJ = 0.55
 COLD_LATE_FROM_HOUR = 22  # compounds with the above
 COLD_LATE_ADJ = 0.80
 
-# ---------------------------------------------------------------------------
 # Monsoon, outdoor only — the strongest argument for a v2 feature. [ASSUMPTION]
 #
 # July-August rain stops play on turf and does nothing to an indoor arena. In
-# fact it HELPS indoor venues: the demand does not evaporate, it relocates.
+# fact it helps indoor venues: the demand does not evaporate, it relocates.
 #
-# `ground_type` is NOT a model feature, so this is deliberate irreducible noise
+# `ground_type` is not a model feature, so this is deliberate irreducible noise
 # — and it is the single most persuasive item on the v2 list, because the column
 # already exists on `venues`, is already populated, and is materially predictive
 # for two months of the year.
-# ---------------------------------------------------------------------------
 MONSOON_MONTHS = (7, 8)
 MONSOON_OUTDOOR_ADJ = 0.72
 MONSOON_INDOOR_ADJ = 1.18
 
-# ---------------------------------------------------------------------------
 # Public holidays and the Islamic calendar. [ASSUMPTION on magnitude,
 # dates from app/core/pk_calendar.py with their own confidence labels]
 #
 # The prompt's single "holidays x1.8" is replaced by four separate effects,
-# because they do not share a sign — see DESIGN DECISION 3(c).
+# because they do not share a sign — see design DECISION 3(c).
 #
 #   HOLIDAY_MULT 1.60
 #       A gazetted day off behaves like a weekend day dropped onto a weekday.
@@ -515,7 +495,7 @@ MONSOON_INDOOR_ADJ = 1.18
 #       consistent with the weekend the table already describes.
 #
 #   EID_MULT 0.35
-#       Eid EMPTIES venues. Three gazetted days of family visits. The prompt's
+#       Eid empties venues. Three gazetted days of family visits. The prompt's
 #       x1.8 would have made the three emptiest days of the year the busiest.
 #
 #   EID_REBOUND_MULT 1.45
@@ -526,14 +506,12 @@ MONSOON_INDOOR_ADJ = 1.18
 #   ASHURA_MULT 0.45
 #       9-10 Muharram is mourning, with processions and widespread closures. A
 #       "public holiday" flag alone would have read it as festive.
-# ---------------------------------------------------------------------------
 HOLIDAY_MULT = 1.60
 EID_MULT = 0.35
 EID_REBOUND_MULT = 1.45
 ASHURA_MULT = 0.45
 ASHURA_NAMES = ("9 Muharram", "10 Muharram (Ashura)")
 
-# ---------------------------------------------------------------------------
 # Ramadan, by intraday phase. [ASSUMPTION]
 #
 # The user asked for this explicitly and it is the largest single reshaping of
@@ -545,18 +523,17 @@ ASHURA_NAMES = ("9 Muharram", "10 Muharram (Ashura)")
 #   iftar       0.02   18:00. This hour is not negotiable.
 #   post_iftar  0.30   19:00. Eating, then Maghrib.
 #   taraweeh    0.55   20:00-21:00. Prayers; some play before going.
-#   late_night  1.85   22:00-02:00. THE Ramadan window. Post-Taraweeh futsal and
+#   late_night  1.85   22:00-02:00. The Ramadan window. Post-Taraweeh futsal and
 #                      cricket tournaments are a national fixture, and demand
-#                      here is HIGHER than an ordinary night, not lower. This is
+#                      here is higher than an ordinary night, not lower. This is
 #                      the one multiplier above 1.0 in the table and it is the
 #                      whole point of modelling Ramadan at all.
 #   sehri       0.08   03:00-05:00. Awake, but eating, not playing.
 #
-# The seeded venues shut at 22:00 or 23:00, so the dataset captures the LEADING
-# EDGE of the late-night surge rather than its peak. That is a property of the
+# The seeded venues shut at 22:00 or 23:00, so the dataset captures the leading
+# edge of the late-night surge rather than its peak. That is a property of the
 # venue population, not of this table, and the accept-criterion plot should show
 # it rather than hide it.
-# ---------------------------------------------------------------------------
 RAMADAN_PHASE_MULT: dict[str, float] = {
     "none": 1.00,
     "sehri": 0.08,
@@ -568,70 +545,63 @@ RAMADAN_PHASE_MULT: dict[str, float] = {
     "late_night": 1.85,
 }
 
-# ---------------------------------------------------------------------------
 # Payday. [ASSUMPTION]
 #
 # Pakistani salaries land in the first few days of the month. Discretionary
 # spending — which a turf booking is — follows. Not in the feature matrix
 # (`day_of_month` is not a feature), so this is more honest irreducible noise.
-# ---------------------------------------------------------------------------
 PAYDAY_DAYS = 7
 PAYDAY_MULT = 1.12
 MONTH_END_FROM_DAY = 22
 MONTH_END_MULT = 0.88
 
-# ---------------------------------------------------------------------------
 # Lead time. [ASSUMPTION]
 #
 # Two distinct things, and conflating them is a classic simulator bug:
 #
-#  (1) LEAD_MULT — the EFFECT. A decision taken 60 days out is less likely to
+#  (1) LEAD_MULT — the effect. A decision taken 60 days out is less likely to
 #      convert than one taken today; casual sport is an impulse purchase.
 #      Bounded below at LEAD_FLOOR so a 120-day lead is unlikely, not impossible.
 #
-#  (2) The lead-day DISTRIBUTION — how often each lead time is even observed.
+#  (2) The lead-day distribution — how often each lead time is even observed.
 #      Heavily short-notice, with bumps at 7 and 14 days from people booking
 #      "next Friday" and "the Friday after".
 #
-# Sampled INDEPENDENTLY of hour. Real peak slots do book further ahead — you
-# cannot get Friday 21:00 on the day — but encoding that here would make
+# Sampled independently of hour. Real peak slots do book further ahead — Friday
+# 21:00 is gone before the day itself — but encoding that here would make
 # lead time both a cause and a consequence of peak demand, double-counting the
 # peak effect and leaving the model an inconsistent story to fit. Recorded as a
 # known simplification in data/README.md rather than smuggled in.
-# ---------------------------------------------------------------------------
 LEAD_DECAY_DAYS = 20.0
 LEAD_FLOOR = 0.25
 LEAD_SAMPLE_SCALE = 6.0
 LEAD_BUMPS = ((7, 0.28), (14, 0.16), (21, 0.06))
 LEAD_BUMP_WIDTH = 1.2
 
-# ---------------------------------------------------------------------------
 # Venue rating. [ASSUMPTION]
 #
 # exp(RATING_SLOPE * (rating - RATING_PIVOT)) in odds. At the pivot the effect is
 # 1.00; a 4.9 venue gets ~1.32x the odds of a 4.4 one, and a 3.6 venue ~0.65x.
 #
-# UNRATED venues get exactly 1.00 — the neutral centre, not a penalty. An unrated
+# Unrated venues get exactly 1.00 — the neutral centre, not a penalty. An unrated
 # venue is a new venue, and new venues are a mix of good and bad, so the neutral
 # effect plus the per-venue random effect is the right representation. Reaching
 # the model as NaN, this also gives the pipeline's imputer something real to do.
-# ---------------------------------------------------------------------------
 RATING_PIVOT = 4.4
 RATING_SLOPE = 0.55
 
-# ---------------------------------------------------------------------------
 # Price elasticity. [ASSUMPTION — and the most consequential number in the file]
 #
 # Applied as  -elasticity * ln(price_ratio)  in log-odds.
 #
-# ASYMMETRIC BY DESIGN. A Tuesday 11:00 player is shopping; a Friday 20:00 team
+# Asymmetric by design. A Tuesday 11:00 player is shopping; a Friday 20:00 team
 # wants that specific slot at that specific venue and will pay for it. Uniform
 # elasticity would make the pricing engine equally timid everywhere and throw
 # away the one genuinely valuable thing it could tell an owner: that the peak has
 # room to move and the off-peak does not.
 #
 # The switch is keyed on the FROZEN `is_peak` indicator (18..22), not on latent
-# demand. That is deliberate and it matters: `is_peak` IS a model feature, so the
+# demand. That is deliberate and it matters: `is_peak` is a model feature, so the
 # interaction is representable and a tree can split on it. Keying the switch on
 # latent demand instead would encode an interaction the feature matrix cannot
 # express, and the model would look permanently miscalibrated for a reason no
@@ -640,12 +610,10 @@ RATING_SLOPE = 0.55
 # The wave prompt specifies a single exponent of 1.2; these two bracket it, and
 # the row-weighted mean lands near it. The prompt's intent is preserved, its
 # uniformity is not.
-# ---------------------------------------------------------------------------
 ELASTICITY_PEAK = 0.85
 ELASTICITY_OFFPEAK = 2.20
 
-# ---------------------------------------------------------------------------
-# Price randomisation. See DESIGN DECISION 2 — this is the load-bearing block.
+# Price randomisation. See design DECISION 2 — this is the load-bearing block.
 #
 # PRICE_AT_LIST_PROB: the share of rows offered at exactly the list price. Real
 # venues do not experiment on every slot, so a point mass at ratio 1.00 keeps the
@@ -654,14 +622,12 @@ ELASTICITY_OFFPEAK = 2.20
 #
 # Offered prices are rounded to PKR 50 to match `mlClient.js`'s PRICE_ROUND_TO,
 # so training data lives on the same lattice the price sweep will search. Then
-# RE-CLAMPED, because rounding a boundary can cross it: base 1010 -> min 707 ->
+# re-clamped, because rounding a boundary can cross it: base 1010 -> min 707 ->
 # rounds to 700, which is below the floor. That is the exact bug found and fixed
 # in mlClient.js's guardrail during Wave A, and it is the same arithmetic here.
-# ---------------------------------------------------------------------------
 PRICE_AT_LIST_PROB = 0.30
 PRICE_ROUND_TO = 50  # mirrors backend/src/services/mlClient.js:121
 
-# ---------------------------------------------------------------------------
 # Noise. [ASSUMPTION]
 #
 # VENUE_EFFECT_SD  a per-venue log-odds offset for everything the features cannot
@@ -669,49 +635,44 @@ PRICE_ROUND_TO = 50  # mirrors backend/src/services/mlClient.js:121
 #                  responsiveness, whether a good team has a standing Tuesday
 #                  booking. Drawn once per venue, held for the whole year, which
 #                  is what makes it a venue effect rather than extra slot noise.
-#                  `venue_id` is deliberately NOT a feature (cold start), so this
+#                  `venue_id` is deliberately not a feature (cold start), so this
 #                  is permanently unlearnable — exactly the point.
 # SLOT_NOISE_SD    per-row log-odds noise: who happened to be free that night.
 # CANCEL_RATE      5% of gross bookings flip to not-booked. The wave prompt asks
 #                  for it, and it also keeps the label from being a deterministic
 #                  function of p.
-# ---------------------------------------------------------------------------
 VENUE_EFFECT_SD = 0.35
 SLOT_NOISE_SD = 0.30
 CANCEL_RATE = 0.05
 
-# ---------------------------------------------------------------------------
-# Default window. FIXED, not rolling — see the CLI section of the docstring.
+# Default window. Fixed, not rolling — see the CLI section of the docstring.
 #
 # 2025-08-01 .. 2026-07-31 is a complete year that happens to contain an unusually
 # rich calendar: Independence Day 2025, Milad, Iqbal Day, Quaid Day, Kashmir Day,
 # the whole of Ramadan 1447, Eid al-Fitr, Pakistan Day (three days after Eid —
 # a genuinely awkward overlap worth having in the data), Labour Day, Eid al-Adha
 # and Ashura. Every calendar effect in the parameter table gets exercised.
-# ---------------------------------------------------------------------------
 DEFAULT_START = date(2025, 8, 1)
 DEFAULT_DAYS = 365
 DEFAULT_SEED = 42
 DEFAULT_OUT = Path("data/bookings_synth.csv")
 
-# ---------------------------------------------------------------------------
 # Column bookkeeping.
 #
-# The CSV is a SUPERSET of the feature contract: the columns
+# The CSV is a superset of the feature contract: the columns
 # `build_feature_dict` consumes, plus the target, plus diagnostics.
 #
 # Why extra columns are safe: training builds its matrix through
 # `features.build_frame(rows)`, which constructs each record from
-# `build_feature_dict` and therefore reads ONLY the keys the contract names. A
+# `build_feature_dict` and therefore reads only the keys the contract names. A
 # diagnostic column is structurally incapable of reaching the model — there is no
 # `df.drop(target)` anywhere in the pipeline, and Wave C must not introduce one.
-# That rule is restated in data/README.md as a MUST.
+# That rule is restated in data/README.md as a must.
 #
 # LEAKY_COLUMNS are the ones that would be catastrophic: they encode the answer.
 # `latent_p` is the true probability each label was drawn from — invaluable for
 # measuring calibration against ground truth, which almost no real project can
 # do, and fatal as an input.
-# ---------------------------------------------------------------------------
 FEATURE_SOURCE_COLUMNS = (
     "venue_id",
     "sport",
@@ -755,9 +716,7 @@ CSV_COLUMNS = (
 )
 
 
-# ===========================================================================
-# SECTION 3 — THE MODEL
-# ===========================================================================
+# Section 3 — the MODEL
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
@@ -813,9 +772,7 @@ def _rating_multiplier(rating: float | None) -> float:
     return float(np.exp(RATING_SLOPE * (rating - RATING_PIVOT)))
 
 
-# ===========================================================================
-# SECTION 4 — SIMULATION
-# ===========================================================================
+# Section 4 — Simulation
 
 
 @dataclass
@@ -839,7 +796,7 @@ def simulate(seed: int, start: date, days: int, row_cap: int | None) -> Dataset:
     calendar = pk_calendar.build_calendar(start, days)
     all_days = sorted(calendar)
 
-    # -- per-day lookups, computed once and indexed by day offset --------------
+    # Per-day lookups, computed once and indexed by day offset
     day_dow = np.array([d.weekday() for d in all_days], dtype=np.int16)
     day_month = np.array([d.month for d in all_days], dtype=np.int16)
     day_of_month = np.array([d.day for d in all_days], dtype=np.int16)
@@ -863,7 +820,7 @@ def simulate(seed: int, start: date, days: int, row_cap: int | None) -> Dataset:
             "while the contract agrees. Fix the generator, not this check."
         )
 
-    # -- enumerate (venue, day, hour) ----------------------------------------
+    # Enumerate (venue, day, hour)
     venue_idx: list[int] = []
     day_idx: list[int] = []
     hours: list[int] = []
@@ -880,8 +837,8 @@ def simulate(seed: int, start: date, days: int, row_cap: int | None) -> Dataset:
     h_arr = np.array(hours, dtype=np.int16)
     n_full = v_arr.size
 
-    # -- optional cap --------------------------------------------------------
-    # Subsample WITHOUT replacement and sort, so a capped run is a random
+    # Optional cap
+    # Subsample without replacement and sort, so a capped run is a random
     # subset of the same dataset rather than a different one. Recorded in the
     # metadata so a capped CSV can never be mistaken for a complete one.
     if row_cap is not None and row_cap < n_full:
@@ -889,7 +846,7 @@ def simulate(seed: int, start: date, days: int, row_cap: int | None) -> Dataset:
         v_arr, d_arr, h_arr = v_arr[keep], d_arr[keep], h_arr[keep]
     n = v_arr.size
 
-    # -- per-row venue attributes -------------------------------------------
+    # Per-row venue attributes
     sports = np.array([v.sport for v in VENUES])
     cities = np.array([v.city for v in VENUES])
     ground = np.array([v.ground_type for v in VENUES])
@@ -914,7 +871,7 @@ def simulate(seed: int, start: date, days: int, row_cap: int | None) -> Dataset:
         (h_arr >= features.PEAK_START_HOUR) & (h_arr <= features.PEAK_END_HOUR)
     ).astype(np.int8)
 
-    # -- price: sampled independently of EVERYTHING above --------------------
+    # Price: sampled independently of everything above
     # Nothing in this block reads row_dow, row_month, h_arr or v_arr. That is the
     # identification design, and check_price_independence() enforces it.
     ratio_raw = rng.uniform(features.PRICE_RATIO_MIN, features.PRICE_RATIO_MAX, size=n)
@@ -922,19 +879,19 @@ def simulate(seed: int, start: date, days: int, row_cap: int | None) -> Dataset:
     ratio_raw = np.where(at_list, 1.0, ratio_raw)
 
     offered = np.round(row_base * ratio_raw / PRICE_ROUND_TO) * PRICE_ROUND_TO
-    # Re-clamp onto the 50-grid INSIDE the band. Rounding can cross a boundary.
+    # Re-clamp onto the 50-grid inside the band. Rounding can cross a boundary.
     floor_price = np.ceil(row_base * features.PRICE_RATIO_MIN / PRICE_ROUND_TO) * PRICE_ROUND_TO
     ceil_price = np.floor(row_base * features.PRICE_RATIO_MAX / PRICE_ROUND_TO) * PRICE_ROUND_TO
     offered = np.clip(offered, floor_price, ceil_price)
     price_ratio = offered / row_base
 
-    # -- lead time: also independent ----------------------------------------
+    # Lead time: also independent
     pmf = _lead_day_pmf()
     lead_days = rng.choice(
         np.arange(features.LEAD_DAYS_MIN, features.LEAD_DAYS_MAX + 1), size=n, p=pmf
     ).astype(np.int32)
 
-    # -- assemble log-odds ---------------------------------------------------
+    # Assemble log-odds
     hour_tables = {s: np.array(HOUR_MULT[s], dtype=np.float64) for s in HOUR_MULT}
     hour_mult = np.empty(n, dtype=np.float64)
     for sport, table in hour_tables.items():
@@ -984,7 +941,7 @@ def simulate(seed: int, start: date, days: int, row_cap: int | None) -> Dataset:
     calendar_mult = np.where(row_is_eid, EID_MULT, calendar_mult)
     calendar_mult = np.where(row_is_ashura, ASHURA_MULT, calendar_mult)
 
-    # Ramadan by phase. Given that a day IS in Ramadan the phase depends only on
+    # Ramadan by phase. Given that a day is in Ramadan the phase depends only on
     # the hour, so two 24-wide lookups cover the whole effect: one for the
     # multiplier, one for the phase name that goes in the diagnostic column.
     phase_by_hour = [pk_calendar.ramadan_phase(h) for h in range(24)]
@@ -1035,12 +992,12 @@ def simulate(seed: int, start: date, days: int, row_cap: int | None) -> Dataset:
     intercept = _solve_intercept(logit_wo_intercept, TARGET_BOOKED_RATE)
     latent_p = _sigmoid(logit_wo_intercept + intercept)
 
-    # -- labels --------------------------------------------------------------
+    # Labels
     booked_gross = (rng.random(n) < latent_p).astype(np.int8)
     cancelled = ((booked_gross == 1) & (rng.random(n) < CANCEL_RATE)).astype(np.int8)
     booked = (booked_gross & (1 - cancelled)).astype(np.int8)
 
-    # -- dates ---------------------------------------------------------------
+    # Dates
     slot_dates = np.array([all_days[i].isoformat() for i in d_arr])
     as_of = np.array(
         [(all_days[i] - timedelta(days=int(ld))).isoformat() for i, ld in zip(d_arr, lead_days)]
@@ -1094,18 +1051,16 @@ def simulate(seed: int, start: date, days: int, row_cap: int | None) -> Dataset:
     )
 
 
-# ===========================================================================
-# SECTION 5 — MECHANICAL SELF-CHECKS
+# Section 5 — Mechanical self-checks
 #
 # These are the reason to trust the dataset. A comment claiming "price is
 # independent of demand" is worth nothing; a check that exits non-zero when it
 # stops being true is worth something.
 #
 # Every check answers a question that, answered wrongly, would silently poison
-# Wave C. They run BEFORE the CSV is accepted. On failure the data is written to
+# Wave C. They run before the CSV is accepted. On failure the data is written to
 # `<out>.rejected.csv` instead — debuggable, but impossible to train on by
 # accident, because nothing in the pipeline looks for that name.
-# ===========================================================================
 
 
 @dataclass
@@ -1118,8 +1073,8 @@ class CheckResult:
         return f"  [{'PASS' if self.passed else 'FAIL'}] {self.name}: {self.detail}"
 
 
-# Drivers that price must NOT correlate with. This tuple IS the identification
-# argument from DESIGN DECISION 2, written as something executable.
+# Drivers that price must not correlate with. This tuple is the identification
+# argument from design DECISION 2, written as something executable.
 INDEPENDENCE_DRIVERS = (
     "hour",
     "dow",
@@ -1184,20 +1139,18 @@ def check_price_independence(frame: pd.DataFrame) -> CheckResult:
     )
 
 
-# ---------------------------------------------------------------------------
 # Monotonicity check tuning.
 #
 # The same lesson as _independence_threshold, and it had to be learned twice: a
-# FIXED tolerance is a sample-size bug wearing a disguise. The true step between
+# fixed tolerance is a sample-size bug wearing a disguise. The true step between
 # adjacent 0.10-wide price bins is ~0.03. On a 6,000-row smoke run each bin holds
-# ~525 rows, so the binomial standard error of a bin-to-bin DIFFERENCE is ~0.028
+# ~525 rows, so the binomial standard error of a bin-to-bin difference is ~0.028
 # -- the noise is the same size as the signal. A fixed tol=0.01 therefore failed
-# this check on roughly HALF of all valid smoke runs, which is exactly the failure
+# this check on roughly half of all valid smoke runs, which is exactly the failure
 # mode check_ramadan_reached_data's docstring warns about: a check that cries wolf
 # on good data teaches people to ignore checks, and that is worse than no check.
 #
 # So each comparison is made against its own noise level rather than a constant.
-# ---------------------------------------------------------------------------
 MONOTONE_MIN_BIN = 100  # below this a bin says nothing; it is skipped
 MONOTONE_SIGMA = 3.0  # adjacent-pair slack, in SDs of the difference
 MONOTONE_TOL_FLOOR = 0.01  # floor, so a huge sample cannot make this absurdly strict
@@ -1267,7 +1220,7 @@ def check_price_monotone(frame: pd.DataFrame) -> CheckResult:
             "-- too few to test a trend (raise --rows)",
         )
 
-    # -- 1. end-to-end, the high-power test ---------------------------------
+    # 1. End-to-end, the high-power test
     se_end = _binom_se_diff(rates[0], counts[0], rates[-1], counts[-1])
     drop = rates[0] - rates[-1]
     z_end = drop / se_end if se_end > 0 else 0.0
@@ -1281,7 +1234,7 @@ def check_price_monotone(frame: pd.DataFrame) -> CheckResult:
             "suspect a sign flip on price_term or a broken elasticity mask.",
         )
 
-    # -- 2. adjacent pairs, noise-aware -------------------------------------
+    # 2. Adjacent pairs, noise-aware
     breaks = []
     for i in range(len(rates) - 1):
         se = _binom_se_diff(rates[i], counts[i], rates[i + 1], counts[i + 1])
@@ -1601,7 +1554,7 @@ def check_row_count(frame: pd.DataFrame, capped: bool) -> CheckResult:
 
 def run_checks(ds: Dataset, seed: int) -> list[CheckResult]:
     """Every check, ordered by how much a reader should care."""
-    # A SEPARATE RNG stream, so adding or removing a check cannot shift the
+    # A separate RNG stream, so adding or removing a check cannot shift the
     # dataset's own random draws. Sampling for verification must never perturb the
     # thing being verified, or the CSV's sha256 would change whenever a check did.
     rng = np.random.default_rng(seed + 1_000_003)
@@ -1622,9 +1575,7 @@ def run_checks(ds: Dataset, seed: int) -> list[CheckResult]:
     ]
 
 
-# ===========================================================================
-# SECTION 6 — OUTPUT
-# ===========================================================================
+# Section 6 — output
 
 
 def _library_versions() -> dict[str, str]:
@@ -1712,7 +1663,7 @@ def _parameter_snapshot() -> dict:
 def write_outputs(ds: Dataset, checks: list[CheckResult], out: Path) -> Path:
     """Write the CSV and its metadata. Returns the path actually written."""
     passed = all(c.passed for c in checks)
-    # A rejected dataset is kept for debugging but RENAMED, so nothing downstream
+    # A rejected dataset is kept for debugging but renamed, so nothing downstream
     # can pick it up by accident. Nothing in the pipeline reads *.rejected.csv.
     target = out if passed else out.with_suffix(".rejected.csv")
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -1793,9 +1744,7 @@ def write_outputs(ds: Dataset, checks: list[CheckResult], out: Path) -> Path:
     return target
 
 
-# ===========================================================================
-# SECTION 7 — CLI
-# ===========================================================================
+# Section 7 — CLI
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -1894,7 +1843,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"  {png}")
         except Exception as exc:  # noqa: BLE001 -- deliberately broad; see below
-            # NOT fatal, on purpose. By this line the dataset is written, hashed and
+            # Not fatal, on purpose. By this line the dataset is written, hashed and
             # check-passed: it is the deliverable, and a plotting failure must not
             # make a good 12-month run exit non-zero and read as a rejected dataset.
             # It must also never pass silently, because the figure is a human gate --

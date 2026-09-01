@@ -10,21 +10,21 @@
  * So the wiring is inverted: everyone talks to this module, and the socket
  * server registers itself here once it exists.
  *
- * The second reason is just as important — every emit here is a NO-OP until
+ * The second reason is just as important — every emit here is a no-op until
  * `attach()` is called. That means `node src/scripts/*.js`, the migration
  * runners and the background jobs can all import a route helper that emits,
  * without a socket server, without a crash, and without knowing this exists.
  *
- * ROOM NAMING
+ * Room naming
  *   u:<userId>     every socket that user has open (phone + emulator + a second
  *                  device). Used for events that matter wherever they are in the
  *                  app: a new message in a chat they are not looking at, an
  *                  invite, a promotion.
- *   c:<channelId>  sockets currently VIEWING that chat. Used for the chatter
+ *   c:<channelId>  sockets currently viewing that chat. Used for the chatter
  *                  that is pointless off-screen — typing indicators, read
  *                  receipts ticking over.
  *
- * A message is emitted to BOTH: `c:` so the open thread appends it instantly,
+ * A message is emitted to both: `c:` so the open thread appends it instantly,
  * `u:` so the chat list badge and any other screen update too. Socket.IO
  * de-duplicates when one socket is in several of the target rooms, so a member
  * who is looking at the chat receives it exactly once.
@@ -76,7 +76,7 @@ function emitToChannel(channelId, event, payload, { exceptSocketId = null } = {}
 }
 
 /**
- * A new/changed message: to the open thread AND to every member's device.
+ * A new/changed message: to the open thread and to every member's device.
  *
  * `memberIds` comes from the caller because it already had to read the roster to
  * write notifications, and reading it twice for one message is the kind of extra
@@ -111,7 +111,7 @@ function isUserOnline(userId) {
 }
 
 /**
- * Is this user LOOKING AT this chat right now?
+ * Is this user looking at this chat right now?
  *
  * The distinction matters because of what Wave C does with the answer: a new chat
  * message writes a notification row (and therefore a tray push) only when the

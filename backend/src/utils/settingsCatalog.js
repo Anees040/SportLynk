@@ -1,20 +1,20 @@
 /**
- * What each global setting IS -- where it lives, its type, the range a write may
+ * What each global setting is -- where it lives, its type, the range a write may
  * use, and the sentence an admin reads next to it -- plus the validator that
  * guards `PUT /api/admin/settings`.
  *
- * WHY THIS IS A SEPARATE FILE FROM `globalSettings.js`
+ * Why this is a separate file from `globalSettings.js`
  * `globalSettings.js` is on the hot path: every booking, every rating, every
- * Scout turn reads it, and its job is to answer fast and NEVER THROW. It
- * therefore CLAMPS -- a k_factor of 900 quietly falls back to 32 and the app
- * keeps working. That is right for a READ and wrong for a WRITE: an admin who
+ * Scout turn reads it, and its job is to answer fast and never throw. It
+ * therefore clamps -- a k_factor of 900 quietly falls back to 32 and the app
+ * keeps working. That is right for a read and wrong for a write: an admin who
  * types 900, is shown "saved", and then watches ratings move by 32 has been lied
  * to by their own admin panel.
  *
  * So a write is REJECTED with a named range instead, and the ranges live here.
  *
- * THE INVARIANT THAT MATTERS (asserted by check_admin.js)
- * every field's [min, max] is a SUBSET of the clamp its accessor applies.
+ * The invariant that matters (asserted by check_admin.js)
+ * every field's [min, max] is a subset of the clamp its accessor applies.
  * Anything this file accepts therefore survives the accessor byte-for-byte -- a
  * saved value can never be silently rewritten on the next read. Where the two
  * differ it is deliberate and one-directional: `k_factor` reads 1..200 (tolerating
@@ -22,18 +22,18 @@
  * 8..64 from an admin, because a K of 1 freezes the ladder and a K of 200 makes
  * one friendly worth a season. Never the other way round.
  *
- * WHY THE LABELS AND DESCRIPTIONS ARE SERVER-SIDE
+ * Why the LABELS and descriptions are server-side
  * The admin screen renders whatever this file sends, so a key added in a later
  * wave appears in the app -- correctly labelled, correctly bounded -- with no
  * client change and no release. The alternative is a Dart const map that drifts
- * out of step with what the server actually enforces, which is exactly the class
+ * out of step with what the server enforces, which is exactly the class
  * of bug where the UI offers a range the API refuses.
  *
- * SHAPE OF THE STORE
- * `global_settings` is `(key text, value jsonb)` with SEVEN rows, one per
+ * Shape of the store
+ * `global_settings` is `(key text, value jsonb)` with seven rows, one per
  * top-level key; five of them hold an object. A field is therefore addressed as
- * `row.path` ('elo.k_factor') or bare when the row IS the value
- * ('commission_pct'). `isOverridden` is a VALUE comparison against DEFAULTS, not
+ * `row.path` ('elo.k_factor') or bare when the row is the value
+ * ('commission_pct'). `isOverridden` is a value comparison against DEFAULTS, not
  * "does a row exist" -- the seed wrote all seven rows on day one.
  */
 
@@ -54,7 +54,7 @@ const SECTIONS = [
  * inside that row's object, or null when the row itself is the value.
  *
  * `type`: 'int' | 'number' | 'bool' | 'text' | 'sports'.
- * `min`/`max` bound the WRITE (see the invariant above). `readClamp` records the
+ * `min`/`max` bound the write (see the invariant above). `readClamp` records the
  * accessor's own band so the check script can assert the subset relationship
  * rather than take this comment's word for it.
  */
@@ -222,7 +222,7 @@ Object.assign(FIELDS, {
   },
 });
 
-/** Row keys that hold an object; the rest ARE the value. */
+/** Row keys that hold an object; the rest are the value. */
 const OBJECT_ROWS = Object.freeze(['elo', 'match', 'tournament', 'assistant', 'sports_enabled']);
 
 /** The documented default for one field, dug out of the frozen DEFAULTS tree. */
@@ -270,7 +270,7 @@ function sortedKeys(o) {
 
 /**
  * The whole settings surface as the admin screen wants it: sections, each with its
- * fields, each field carrying the EFFECTIVE value (what the app will actually use)
+ * fields, each field carrying the effective value (what the app will use)
  * beside its default.
  *
  * `isOverridden` compares values rather than checking for a row, because the seed
@@ -301,7 +301,7 @@ function describe(rawByRow) {
           value: flat[k] === undefined ? def : flat[k],
           default: def,
           isOverridden: !sameValue(flat[k], def),
-          // Every setting here applies to the NEXT operation: the accessor's cache
+          // Every setting here applies to the next operation: the accessor's cache
           // is dropped by `invalidate()` in the same request that writes the row.
           restartRequired: false,
         };
@@ -315,7 +315,7 @@ function normSport(s) {
 }
 
 /**
- * Coerce and bounds-check ONE field. Returns `{ok, value}` or `{ok:false, message}`.
+ * Coerce and bounds-check one field. Returns `{ok, value}` or `{ok:false, message}`.
  * The message names the range, because "invalid value" tells an admin nothing about
  * what to type instead.
  */
@@ -377,11 +377,11 @@ function coerce(key, raw) {
  *
  * `patch`    flat `{ 'elo.k_factor': 40, sports_enabled: {...} }` from the request.
  * `rawByRow` the current jsonb rows, so cross-field rules can see the values the
- *            admin did NOT send and the returned rows can be a MERGE rather than a
+ *            admin did not send and the returned rows can be a merge rather than a
  *            replace -- sending `{k_factor: 40}` must not delete `base`.
  *
  * Returns `{ok, errors:[{key,message}], rows:{key:value}, diff:[{key,from,to}]}`.
- * `rows` is empty when nothing actually changed, which is how the route avoids
+ * `rows` is empty when nothing changed, which is how the route avoids
  * writing an audit row for a no-op save.
  */
 function validate(patch, rawByRow) {
@@ -406,8 +406,8 @@ function validate(patch, rawByRow) {
     next[key] = c.value;
   }
 
-  // ── Cross-field rules ───────────────────────────────────────────────────────
-  // Checked against `next`, so they hold for the state AFTER the save whether or
+  // Cross-field rules
+  // Checked against `next`, so they hold for the state after the save whether or
   // not the admin sent both halves in this request.
 
   // The platform cannot take more than exists. Commission comes out of the owner's
@@ -422,7 +422,7 @@ function validate(patch, rawByRow) {
     });
   }
 
-  // `globalSettings.tournament()` silently reverts BOTH to 70/30 when they do not
+  // `globalSettings.tournament()` silently reverts both to 70/30 when they do not
   // total 100. Rejecting here is the difference between an error and a lie.
   const w = Number(next['tournament.winner_percent']);
   const r = Number(next['tournament.runnerup_percent']);
@@ -444,7 +444,7 @@ function validate(patch, rawByRow) {
 
   if (errors.length) return { ok: false, errors, rows: {}, diff: [] };
 
-  // ── Build the rows to write ─────────────────────────────────────────────────
+  // Build the rows to write
   const touchedRows = new Set();
   for (const key of Object.keys(patch)) {
     if (!FIELDS[key]) continue;
@@ -457,7 +457,7 @@ function validate(patch, rawByRow) {
   for (const rowKey of touchedRows) {
     const base = rawByRow[rowKey];
     if (!OBJECT_ROWS.includes(rowKey)) {
-      // Scalar row: the field IS the row.
+      // Scalar row: the field is the row.
       const only = Object.keys(FIELDS).find((k) => FIELDS[k].row === rowKey);
       rows[rowKey] = next[only];
       continue;
@@ -472,7 +472,7 @@ function validate(patch, rawByRow) {
       if (f.row !== rowKey || !f.path) continue;
       // Only write paths this file knows. A key some later migration added to the
       // row and this catalog has not caught up with is left exactly as it was
-      // rather than dropped -- a MERGE, not a replace.
+      // rather than dropped -- a merge, not a replace.
       if (next[k] !== undefined) merged[f.path] = next[k];
     }
     rows[rowKey] = merged;

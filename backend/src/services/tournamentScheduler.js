@@ -1,13 +1,12 @@
 /**
  * tournamentScheduler.js — where trained model #1 chooses the tournament's hours.
  *
- * WHAT THIS FILE IS FOR
- * --------------------
+ * What this file is for
  * `utils/fixtureSchedule.js` knows how to place fixtures on hours but is pure: it
  * cannot read the venue's free slots and it cannot call the ml-service. This file
  * is the impure half. It does three things and nothing else:
  *
- *   1. reads the venue's genuinely free hours, using the SAME "is this slot free?"
+ *   1. reads the venue's genuinely free hours, using the same "is this slot free?"
  *      predicate the browse screen and the booking route use, so the scheduler can
  *      never place a fixture on an hour a player is midway through paying for;
  *   2. asks model #1 (`POST /predict/demand`, the released booking-probability
@@ -16,27 +15,25 @@
  *      `meta.scheduling.source` — 'model' when the forecast was used, and
  *      'chronological' when it was not.
  *
- * WHY THE PROVENANCE STAMP MATTERS
- * -------------------------------
+ * Why the provenance stamp matters
  * The demo has to be able to prove which path ran. `source: 'model'` with a
  * `modelVersion` and a coverage count is a checkable claim; a schedule that
  * silently looks the same whether or not the ml-service was up would let anyone
  * say "the AI placed these" about a plain chronological list. So the fallback is
- * loud, and `utils/fixtureSchedule.js` deliberately makes the fallback LOOK
+ * loud, and `utils/fixtureSchedule.js` deliberately makes the fallback look
  * different (PICK.EARLY, chronological) rather than quietly ranking on price.
  *
- * This is model REUSE, not a new model. Nothing is trained here, no artifact is
+ * This is model reuse, not a new model. Nothing is trained here, no artifact is
  * touched, and the released `booking-demand` model keeps its fingerprint. What is
  * new is the question being asked of it: the owner dashboard asks "which hours
  * will sell?" to draw a chart, and this file asks the same model the inverse —
  * "which hours will NOT sell?" — because those are the hours a tournament should
  * consume. Same model, same weights, opposite end of the ranking.
  *
- * WHEN THE MODEL IS UNREACHABLE
- * -----------------------------
+ * When the MODEL is unreachable
  * The schedule is still produced, chronologically. That asymmetry with
  * `mlClient.forecastDemand` — which refuses to invent a forecast — is deliberate
- * and the reasoning is the same: a fabricated probability CURVE would be a lie
+ * and the reasoning is the same: a fabricated probability curve would be a lie
  * drawn as a chart, but "play the earliest free hours" is not a fabricated
  * forecast, it is the obvious default a human would pick, and it is labelled as
  * such. A tournament whose deadline has passed must be generated either way.
@@ -151,7 +148,7 @@ async function candidateSlots(client, {
  * model had an opinion about all of them.
  *
  * A consequence worth naming: the ceiling is seven days, and the candidates start
- * at the registration deadline. Generation happens AT that deadline, so the model
+ * at the registration deadline. Generation happens at that deadline, so the model
  * covers it; a `preview` for a deadline three weeks out is outside the forecast's
  * reach and legitimately falls back to chronological with `reason` saying why. That
  * is the right answer rather than a defect — nobody can forecast a Tuesday in
@@ -257,7 +254,7 @@ async function loadVenue(client, venueId) {
  * allocator testable with the database down.
  *
  * Returns the allocation verbatim plus `meta.scheduling`, the provenance record:
- * which path ran, which model version, how many candidate hours it actually scored,
+ * which path ran, which model version, how many candidate hours it scored,
  * and why it fell back when it did. `POST /api/tournaments/:id/generate` echoes
  * that block, so the demo can prove the model ran instead of asserting it.
  */
@@ -315,7 +312,7 @@ async function schedule(client, {
     venue: { id: row.id, name: row.name, sportType: row.sport_type, city: row.city },
     meta: {
       scheduling: {
-        // 'model' only when a forecast actually scored candidate hours. Anything
+        // 'model' only when a forecast scored candidate hours. Anything
         // else — ml-service down, breaker open, forecast past its 168-hour horizon,
         // no base price — is 'chronological', and `reason` says which.
         source: demandInfo.source,

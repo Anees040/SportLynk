@@ -4,16 +4,16 @@
  * inbox, history, sending, read-marks, membership watermarks, reactions,
  * delete-for-everyone, mute and the FR8.10 reply suggestions.
  *
- * THREE CHANNEL TYPES, ONE SET OF HANDLERS. A team chat, a booking room and a
+ * Three channel TYPES, one set of handlers. A team chat, a booking room and a
  * match coordination room differ in who is in them and what the header shows —
  * never in how a message is sent or read. Membership on chat_channel_members is
  * the only authorisation rule, so adding a type costs a creator in chatCore and
  * nothing at all here.
  *
- * TWO INVARIANTS, same as routes/teams.js:
+ * Two invariants, same as routes/teams.js:
  *   1. Membership is authority. Every handler proves the caller is a live member
  *      of the channel via `member()` before doing anything — never trusts a body.
- *   2. A media URL is only ever one of ours. Images are pinned to Cloudinary by
+ *   2. A media URL is only ever one of the app's own. Images are pinned to Cloudinary by
  *      access.validateMediaUrl, so a caller cannot make the app render a request
  *      to a host of their choosing (the same rule team logos follow).
  *
@@ -58,21 +58,19 @@ async function member(client, channelId, userId) {
   return r.rows[0] || null;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THE CHAT LIST  (S.7 Wave B)
-// ═══════════════════════════════════════════════════════════════════════════
+// The CHAT list  (S.7 Wave B)
 //
 // Every channel the caller belongs to, most-recent first — the inbox. Until this
 // existed the app could only open a chat it already knew the id of (a team, from
 // the team screen), which is why a booking room nobody navigates to might as well
 // not exist.
 //
-// MOUNTED BEFORE '/:channelId/*' — and that is not a style choice. Express matches
+// Mounted before '/:channelId/*' — and that is not a style choice. Express matches
 // in declaration order, so a '/:channelId' route declared above '/unread-count'
 // would swallow the literal string as a channel id and answer 404 forever.
 //
 // The queries live in utils/chatList.js and take a client, so check_chat.js drives
-// these EXACT reads inside a transaction it rolls back.
+// these exact reads inside a transaction it rolls back.
 
 /**
  * GET /api/chat?limit&cursor&type — the inbox page.
@@ -103,9 +101,7 @@ router.get('/unread-count', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CHANNEL LOOKUP
-// ═══════════════════════════════════════════════════════════════════════════
+// Channel lookup
 
 /** Resolve a team's channel id — the entry point the chat screen opens with. */
 router.get('/team/:teamId', async (req, res, next) => {
@@ -131,7 +127,7 @@ router.get('/team/:teamId', async (req, res, next) => {
  * about — the entry points behind "Message venue" on a booking and "Coordinate"
  * on a match.
  *
- * 404, NEVER 403, when the caller is not a member: the two are indistinguishable
+ * 404, never 403, when the caller is not a member: the two are indistinguishable
  * to an honest client and telling a stranger "that room exists but is not yours"
  * confirms a booking they have no business knowing about. Same reason
  * /team/:teamId answers 404 for a non-member.
@@ -155,9 +151,7 @@ function refLookup(type, param) {
 router.get('/booking/:bookingId', refLookup('booking', 'bookingId'));
 router.get('/match/:matchId', refLookup('captain', 'matchId'));
 
-// ═══════════════════════════════════════════════════════════════════════════
-// HISTORY
-// ═══════════════════════════════════════════════════════════════════════════
+// History
 
 /**
  * A page of messages, oldest-first for direct rendering. `before` is a created_at
@@ -190,9 +184,7 @@ router.get('/:channelId/messages', async (req, res, next) => {
   } catch (e) { next(e); } finally { client.release(); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SEND
-// ═══════════════════════════════════════════════════════════════════════════
+// Send
 
 /**
  * Post a message. `kind` is 'text' (default) or 'image'; voice ('audio') is a
@@ -231,8 +223,8 @@ router.post('/:channelId/messages', async (req, res, next) => {
 
     await client.query('BEGIN');
     const out = await chat.insertMessage(client, insert);
-    // Inside the SAME transaction as the insert, and only for a message that was
-    // actually new: a retried clientId returns the original row, and notifying again
+    // Inside the same transaction as the insert, and only for a message that was
+    // new: a retried clientId returns the original row, and notifying again
     // would ping a phone twice for one message. chatCore skips anybody with the thread
     // open or the channel muted, and is SAVEPOINT-wrapped so a notifications failure
     // cannot roll the message back (S.7 Wave C).
@@ -251,9 +243,7 @@ router.post('/:channelId/messages', async (req, res, next) => {
   } finally { client.release(); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// READ MARK  (blue tick)
-// ═══════════════════════════════════════════════════════════════════════════
+// Read MARK  (blue tick)
 
 /**
  * Mark the channel read up to `at` (or now). GREATEST so a late-arriving mark can
@@ -276,14 +266,12 @@ router.post('/:channelId/read', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MEMBERS  (the tick watermarks + last-seen, for the client to compute ticks)
-// ═══════════════════════════════════════════════════════════════════════════
+// Members  (the tick watermarks + last-seen, for the client to compute ticks)
 
 /**
  * Every live member with their read/delivered watermarks and last-seen. The chat
  * screen loads this once, then keeps the marks current from live `receipt` events;
- * the group tick for one of my messages is MIN(other members' mark) vs its time.
+ * the group tick for one of my messages is min(other members' mark) vs its time.
  */
 router.get('/:channelId/members', async (req, res, next) => {
   const client = await pool.connect();
@@ -303,9 +291,7 @@ router.get('/:channelId/members', async (req, res, next) => {
   } catch (e) { next(e); } finally { client.release(); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // REACTIONS  (one emoji per person per message — tapping another replaces it)
-// ═══════════════════════════════════════════════════════════════════════════
 router.post('/:channelId/messages/:messageId/reactions', async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -352,12 +338,10 @@ router.post('/:channelId/messages/:messageId/reactions', async (req, res, next) 
   } finally { client.release(); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DELETE FOR EVERYONE
-// ═══════════════════════════════════════════════════════════════════════════
+// DELETE FOR everyone
 
 /**
- * Delete a message for everyone. Your own message, or any message if you are a
+ * Delete a message for everyone: the caller's own, or any message if the caller is a
  * channel admin (captain / vice captain). A tombstone keeps the row — so replies
  * and history stay coherent — but strips the payload entirely (body, media), which
  * the DB payload-check explicitly permits only when deleted_at is set. The client
@@ -400,16 +384,14 @@ router.delete('/:channelId/messages/:messageId', async (req, res, next) => {
   } finally { client.release(); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MUTE  (S.7 Wave B)
-// ═══════════════════════════════════════════════════════════════════════════
+// Mute  (S.7 Wave B)
 
 /**
  * POST /api/chat/:channelId/mute — body `{hours}` or `{muted:false}`.
  *
  * `muted_until` has existed on chat_channel_members since migration 013 and
- * nothing has ever written it. A TIMESTAMP rather than a boolean is the point:
- * "mute for 8 hours" is what somebody actually wants from a booking room the night
+ * nothing has ever written it. A timestamp rather than a boolean is the point:
+ * "mute for 8 hours" is what somebody wants from a booking room the night
  * before a match, and it lifts by itself so nobody finds out three weeks later
  * that they silenced their own team.
  */
@@ -434,16 +416,14 @@ router.post('/:channelId/mute', async (req, res, next) => {
   } catch (e) { next(e); } finally { client.release(); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// FR8.10 — AI QUICK REPLIES  (S.7 Wave B)
-// ═══════════════════════════════════════════════════════════════════════════
+// FR8.10 — AI quick replies  (S.7 Wave B)
 
 /**
  * POST /api/chat/:channelId/quick-replies — body `{text}` or `{messageId}`.
  *
  * Classifies the other side's last message with model #4 (the released 23-label
  * classifier, unchanged) and returns three sendable replies chosen by the caller's
- * role in THIS room. ADVISORY ONLY: tapping a chip fills the composer, and the
+ * role in this room. Advisory only: tapping a chip fills the composer, and the
  * send goes through POST /:channelId/messages like any other message. See
  * utils/quickReplies.js for why the replies are a table and not generated.
  */

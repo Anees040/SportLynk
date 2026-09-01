@@ -1,8 +1,7 @@
 /**
- * assistantThreads.js — Scout's chat threads, on the EXISTING chat tables.
+ * assistantThreads.js — Scout's chat threads, on the existing chat tables.
  *
- * WHY NOT A NEW TABLE
- * -------------------
+ * Why not a new table
  * The user asked for the affordances a general-purpose assistant has: history,
  * new chat, switch chat, rename. That is a channel with messages, which S.5's
  * chat already is. Migration 018 therefore added `type='assistant'` to
@@ -10,10 +9,9 @@
  * assistant_persona) rather than building a parallel messaging stack that would
  * need its own pagination, its own soft-delete and its own Flutter list widget.
  *
- * WHAT MAKES AN ASSISTANT CHANNEL DIFFERENT
- * -----------------------------------------
+ * What makes an ASSISTANT channel different
  *   ref_id IS NULL       a Scout thread points at no team and no booking, which
- *                        is what lets one user own MANY of them. The unique index
+ *                        is what lets one user own many of them. The unique index
  *                        ux_chat_channels_type_ref does not apply to NULL ref_id
  *                        — probe 5a in run_migration_018.js proves it, and "new
  *                        chat" stands entirely on that fact.
@@ -25,10 +23,9 @@
  *                        assistant_payload so Flutter can re-render the cards of
  *                        an old turn instead of showing a bare sentence.
  *
- * THE UTTERANCE LIVES HERE AND ONLY HERE
- * --------------------------------------
- * doc/CLAUDE.md forbids logging the user's message. That ban is about LOGS and
- * TELEMETRY: assistant_turns holds text_chars and no text. The text itself has to
+ * The utterance lives here and only here
+ * doc/CLAUDE.md forbids logging the user's message. That ban is about logs and
+ * telemetry: assistant_turns holds text_chars and no text. The text itself has to
  * exist somewhere for a chat history to exist at all, and this is that place —
  * inside the user's own access-controlled thread, which they can delete.
  */
@@ -52,7 +49,7 @@ function freshState() {
 /**
  * Read session_state defensively.
  *
- * An unknown version is RESET, not migrated. A half-understood state is how a
+ * An unknown version is reset, not migrated. A half-understood state is how a
  * dialog manager ends up confirming a booking the user never asked for, and the
  * cost of a reset is one re-asked question.
  */
@@ -142,7 +139,7 @@ async function getOrCreate(client, { userId, threadId = null, persona = 'player'
     // Re-read through get(): `list` deliberately omits session_state (a list of 30
     // threads has no use for 30 dialog states, and a `confirm` block has no business
     // in a list view), so returning its row here would hand the dialog manager a row
-    // with session_state UNDEFINED. readState() would then reset to a fresh state on
+    // with session_state undefined. readState() would then reset to a fresh state on
     // every turn and Scout would forget the question it had just asked -- for exactly
     // the clients that do not echo a session_id back, which is the default case.
     const full = await get(client, { userId, threadId: open[0].id });
@@ -203,13 +200,11 @@ async function remove(client, { userId, threadId } = {}) {
     : { ok: false, code: 'thread_not_found', status: 404, message: 'That chat does not exist.' };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// MESSAGES
-// ════════════════════════════════════════════════════════════════════════════
+// Messages
 
 /**
  * Write one message into a thread through utils/chatCore.insertMessage — the
- * SAME function routes/chat.js uses. That is deliberate: last_message_at,
+ * same function routes/chat.js uses. That is deliberate: last_message_at,
  * last_message_preview, last_message_sender_id and message_count are maintained
  * in exactly one place, so a Scout thread and a team thread can never drift into
  * showing their previews differently. chatCore gained one optional parameter
@@ -220,10 +215,10 @@ async function remove(client, { userId, threadId } = {}) {
  * assistant_payload, so an old turn re-renders with its cards instead of
  * degrading to a bare sentence when the user scrolls back.
  *
- * The FIRST user message also names the thread, which is the "New chat" → real
+ * The first user message also names the thread, which is the "New chat" → real
  * title behaviour of a general assistant, done without asking the user to type
  * a name. An explicit rename via update() wins forever after: once the title is
- * not DEFAULT_TITLE we never touch it again.
+ * not DEFAULT_TITLE it is never touched again.
  */
 async function appendMessage(client, {
   threadId, userId, who, text, payload = null, clientId = null,
@@ -254,14 +249,14 @@ async function appendMessage(client, {
 
 /**
  * A page cursor is the ID of the oldest message on the page, and the sort key it
- * stands for is resolved SERVER-SIDE from that id. Two facts forced this shape:
+ * stands for is resolved server-side from that id. Two facts forced this shape:
  *
  * 1. chat_messages.created_at defaults to NOW(), and NOW() in Postgres is the
- *    TRANSACTION timestamp, not the statement's. One Scout turn writes the
+ *    transaction timestamp, not the statement's. One Scout turn writes the
  *    user's message and Scout's reply in a single transaction — deliberately, so
  *    a booking can never be recorded without the sentence that asked for it — so
  *    those two rows carry a byte-identical created_at. Ordering by created_at
- *    alone put Scout's answer ABOVE the question (observed, not theorised), so
+ *    alone put Scout's answer above the question (observed, not theorised), so
  *    the sort key is (created_at, is_assistant, id): within one timestamp the
  *    user speaks before Scout, which is exactly what a turn means, and `id`
  *    makes the order total.
@@ -323,7 +318,7 @@ async function history(client, {
       createdAt: r.created_at,
     })),
     hasMore: more,
-    // The cursor for the NEXT (older) page is the oldest row on this one.
+    // The cursor for the next (older) page is the oldest row on this one.
     cursor: window.length ? encodeCursor(window[window.length - 1]) : null,
   };
 }
@@ -331,7 +326,7 @@ async function history(client, {
 /**
  * The last few turns, oldest-first, as flat text — what the dialog manager shows
  * itself when a follow-up ("aur koi?") only makes sense against what was just
- * said. It is CONTEXT, not a prompt: there is no LLM here, and nothing in this
+ * said. It is context, not a prompt: there is no LLM here, and nothing in this
  * array reaches the classifier.
  */
 async function recentTurns(client, { threadId, limit = 6 } = {}) {

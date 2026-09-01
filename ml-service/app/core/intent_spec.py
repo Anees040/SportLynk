@@ -102,9 +102,7 @@ import re
 import unicodedata
 from typing import Iterable, Sequence
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 1. Identity
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: Bump when the label contract in section 2 changes. Stamped into
 #: ``intents_meta.json``, into the exam lock, and (Wave C) into the model.
@@ -116,11 +114,9 @@ INTENT_SPEC_VERSION: str = "assistant-intents-v2"
 DATASET_SPEC_VERSION: str = "assistant-dataset-v2"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 2. The label contract
-# ─────────────────────────────────────────────────────────────────────────────
 
-#: The 23 intents, ALPHABETICAL. Alphabetical because scikit-learn sorts string
+#: The 23 intents, alphabetical. Alphabetical because scikit-learn sorts string
 #: classes, so ``model.classes_`` lines up with this tuple with no remapping --
 #: the same reason ``text_norm.LABELS`` is alphabetical. Every confusion-matrix
 #: axis, every ``labels=`` argument and every ``predict_proba`` column uses this
@@ -131,25 +127,25 @@ DATASET_SPEC_VERSION: str = "assistant-dataset-v2"
 #: eight below, and the rule that made it a version bump rather than an edit is
 #: the reason v1's released model is still loadable and still comparable.
 #:
-#: ── why these eight, and not the other things Scout can do ────────────────
+#: Why these eight, and not the other things Scout can do
 #:
-#: The test for "deserves a trained label" is: does it arrive as UNPROMPTED FREE
-#: TEXT, in many phrasings, meaning something no existing label means? Eight
+#: The test for "deserves a trained label" is: does it arrive as unprompted free
+#: text, in many phrasings, meaning something no existing label means? Eight
 #: things passed it.
 #:
-#: * ``find_players`` -- "koi player chahiye", "need 2 guys tonight". A PERSON,
+#: * ``find_players`` -- "koi player chahiye", "need 2 guys tonight". A person,
 #:   which ``find_opponents`` (a whole opposing team) does not cover, and the
 #:   confusion between the two is the interesting one.
-#: * ``find_teams`` -- "kisi team me join karna hai". JOINING a squad, the mirror
+#: * ``find_teams`` -- "kisi team me join karna hai". Joining a squad, the mirror
 #:   of ``find_opponents`` playing against one.
 #: * ``navigate`` -- "kaise pohnchu", "location bhejo". ``venues.latitude`` and
 #:   ``longitude`` are already populated, so this answers with a real map card
 #:   and real directions rather than a paragraph.
 #: * ``elo_help`` -- "rating kaise barhay". Answered from the seeded ``elo``
 #:   block in ``global_settings``, so the numbers in the reply are the numbers
-#:   the ranking system actually uses.
+#:   the ranking system uses.
 #: * ``app_help`` -- "app kaise use karu", "ye wallet kya hota hai". The
-#:   where-is-it / what-is-it bucket. Deliberately NARROW: a specific procedure
+#:   where-is-it / what-is-it bucket. Deliberately narrow: a specific procedure
 #:   already has a label (``topup_help``, ``create_team_help``,
 #:   ``refund_policy``) and must keep it, because this class is a semantic sponge
 #:   and every phrasing it absorbs is one the specific label loses.
@@ -157,14 +153,14 @@ DATASET_SPEC_VERSION: str = "assistant-dataset-v2"
 #:   escalation loop: Scout does not know, a human is asked, the answer is
 #:   remembered for the next person who asks.
 #: * ``affirm`` / ``deny`` -- "haan bhai kar do" / "nahi ruko". A pending
-#:   confirmation is resolved by a DETERMINISTIC lexicon before the classifier
+#:   confirmation is resolved by a deterministic lexicon before the classifier
 #:   is consulted, because two classes of one-word replies is a job a rule does
 #:   at ~100% and a 23-way classifier can only do worse. They are trained labels
 #:   anyway, for the case the rule never sees: a bare "haan" arriving with
 #:   nothing pending, which must land somewhere sane instead of firing the
 #:   out-of-scope menu at a user who was agreeing with Scout.
 #:
-#: What is deliberately NOT here: new chat, switch chat, rename thread. Nobody
+#: What is deliberately not here: new chat, switch chat, rename thread. Nobody
 #: types "switch chat" at an assistant -- they tap the thread. Those are REST
 #: endpoints and UI affordances, and putting them in the classifier would cost
 #: real accuracy on all 23 labels to serve a gesture nobody makes.
@@ -198,14 +194,14 @@ INTENTS: tuple[str, ...] = (
 #:
 #: ``mix`` means genuinely code-switched: an English noun phrase inside an Urdu
 #: frame, or the reverse. A loanword everybody uses in both languages (football,
-#: booking, parking, slot) is NOT a code switch. If it were, almost every Roman
+#: booking, parking, slot) is not a code switch. If it were, almost every Roman
 #: Urdu sentence written in Pakistan would be tagged ``mix`` and the tag would
 #: carry no information at all.
 LANGS: tuple[str, ...] = ("en", "mix", "ru")
 
 #: Which slot buckets each language may draw from. ``"*"`` is the
 #: language-neutral bucket: sports, areas, cities, venue names and counts, all
-#: written the same way in either language. ``mix`` draws from BOTH language
+#: written the same way in either language. ``mix`` draws from both language
 #: buckets, which is what makes a code-switched row possible at all.
 LANG_BUCKETS: dict[str, tuple[str, ...]] = {
     "en": ("*", "en"),
@@ -221,7 +217,7 @@ LANG_BUCKETS: dict[str, tuple[str, ...]] = {
 #: the grouped matrix answers directly.
 #:
 #: ``confusable`` is documentation for the annotator and for error analysis. It
-#: is deliberately NOT consulted by anything at runtime -- no code in this
+#: is deliberately not consulted by anything at runtime -- no code in this
 #: repository uses it to pick or rewrite a label.
 INTENT_CATALOG: tuple[tuple[str, str, str, str], ...] = (
     ("find_venue", "discovery",
@@ -283,7 +279,7 @@ INTENT_CATALOG: tuple[tuple[str, str, str, str], ...] = (
      "PSL fixtures",
      "tournament_list"),
 
-    # ── v2 ─────────────────────────────────────────────────────────────────
+    # v2
     # Appended rather than interleaved: INTENT_GROUPS is derived from
     # first-appearance order here, so appending puts the two new groups at the
     # end of that tuple and leaves the six v1 groups on the axis positions the
@@ -333,8 +329,8 @@ INTENT_GROUPS: tuple[str, ...] = (
 
 #: The closed tag vocabulary for the ``phenomena`` column, alphabetical.
 #:
-#: A tag says what a row is testing, so error analysis can ask "how do we do on
-#: typos" or "how do we do on boundary cases" instead of eyeballing 150 rows.
+#: A tag says what a row is testing, so error analysis can ask "how does it do on
+#: typos" or "how does it do on boundary cases" instead of eyeballing 150 rows.
 #: ``;``-separated in the CSV. Every row carries at least one tag; ``plain`` is
 #: the tag for "nothing special about this row".
 PHENOMENA: tuple[str, ...] = (
@@ -366,9 +362,7 @@ SOURCES: tuple[str, ...] = ("authored", "template")
 SPLITS: tuple[str, ...] = ("train", "val")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 3. Slot vocabulary
-# ─────────────────────────────────────────────────────────────────────────────
 #
 # ``SLOT_VOCAB[slot][bucket]`` -> the values a template written in a language
 # that may draw from ``bucket`` is allowed to receive. Buckets are ``"*"``
@@ -379,7 +373,7 @@ SPLITS: tuple[str, ...] = ("train", "val")
 #
 # * A value goes in ``"*"`` only if it is written identically in both languages.
 #   "tomorrow" is not; "F-11 Markaz" is.
-# * ``{polite}`` and ``{opener}`` contain the EMPTY STRING as their first value.
+# * ``{polite}`` and ``{opener}`` contain the empty string as their first value.
 #   That is what lets a slot-free utterance expand at all: "salam {polite}"
 #   yields "salam", "salam bhai", "salam yaar", and :func:`tidy` removes the
 #   whitespace the empty draw leaves behind. Without the empty value, every
@@ -483,7 +477,7 @@ SLOT_VOCAB: dict[str, dict[str, tuple[str, ...]]] = {
         "ru": ("ek ghanta", "do ghante", "dedh ghanta"),
     },
     "count": {"*": ("2", "3", "4", "5", "10", "11")},
-    # ── decorators: the empty string is the first value, on purpose ──────────
+    # Decorators: the empty string is the first value, on purpose
     "polite": {
         "en": ("", "please", "plz", "thanks"),
         "ru": ("", "bhai", "yaar", "plz", "boss"),
@@ -512,9 +506,7 @@ DOMAIN_SLOTS: tuple[str, ...] = tuple(
 )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 4. Quotas and gate thresholds
-# ─────────────────────────────────────────────────────────────────────────────
 #
 # These are the numbers ``gen_intents.py`` gates on. They live here rather than
 # as argparse defaults for one reason: a gate whose threshold can be relaxed
@@ -523,7 +515,7 @@ DOMAIN_SLOTS: tuple[str, ...] = tuple(
 
 #: Default rows per intent, counting authored rows. 15 x 112 = 1,680, inside
 #: [TOTAL_MIN, TOTAL_MAX] and close to the ~1,800 the sprint plan asked for.
-#: Deliberately EQUAL across intents: a classifier trained on an unbalanced
+#: Deliberately equal across intents: a classifier trained on an unbalanced
 #: intent set answers with the prior when it is unsure, and "unsure" is exactly
 #: when a booking assistant must not guess.
 ROWS_PER_INTENT_TARGET: int = 112
@@ -532,7 +524,7 @@ ROWS_PER_INTENT_TARGET: int = 112
 ROWS_PER_INTENT_MIN: int = 100
 ROWS_PER_INTENT_MAX: int = 130
 
-#: Hard corpus bounds -- DERIVED from the per-intent bounds, not a second opinion
+#: Hard corpus bounds -- derived from the per-intent bounds, not a second opinion
 #: about corpus size. Writing 1600/2000 by hand here is how the two gates end up
 #: contradicting each other: fifteen intents each sitting legally on 100 rows
 #: total 1500, which a hand-written floor of 1600 would then reject with no way
@@ -540,13 +532,13 @@ ROWS_PER_INTENT_MAX: int = 130
 TOTAL_ROWS_MIN: int = len(INTENTS) * ROWS_PER_INTENT_MIN
 TOTAL_ROWS_MAX: int = len(INTENTS) * ROWS_PER_INTENT_MAX
 
-#: Target share of each intent's TEMPLATE rows by language. English leads
+#: Target share of each intent's template rows by language. English leads
 #: because it is the shortest path to a working demo; Roman Urdu is close behind
 #: because it is what the committee will type; ``mix`` is smallest because a
 #: code-switched row is also partly evidence for both other languages.
 LANG_BUDGET: dict[str, float] = {"en": 0.40, "ru": 0.35, "mix": 0.25}
 
-#: Hard per-intent, per-language floors over ALL rows (template + authored). The
+#: Hard per-intent, per-language floors over all rows (template + authored). The
 #: budget above is a target and rounding plus capacity limits can move it; these
 #: cannot be missed. Without them one intent could end up English-only and the
 #: macro-F1 would hide it behind the other fourteen.
@@ -565,12 +557,12 @@ EXAM_ROWS_PER_INTENT: int = 10
 EXAM_ROWS_TOTAL: int = EXAM_ROWS_PER_INTENT * len(INTENTS)
 EXAM_LANG_QUOTA: dict[str, int] = {"ru": 4, "mix": 3, "en": 3}
 
-#: Grouped 80/20 split. GROUPED, not random: the group is the ``template_id``, so
+#: Grouped 80/20 split. Grouped, not random: the group is the ``template_id``, so
 #: no template family can appear on both sides. A plain random split over
 #: template-expanded rows puts "show football grounds in F-11" in train and
 #: "show cricket grounds in G-6" in val, and the resulting ~0.99 accuracy
 #: measures slot-value memorisation. Holding out whole templates measures what
-#: we actually want to know: does it generalise to a phrasing it has never seen.
+#: matters: does it generalise to a phrasing it has never seen.
 #:
 #: The cost, stated plainly: with ~18 templates per intent, 20% is 3-4 held-out
 #: phrasings, so the validation score has real variance and is not a headline
@@ -580,8 +572,8 @@ VAL_FRACTION: float = 0.20
 VAL_FRACTION_MIN: float = 0.15
 VAL_FRACTION_MAX: float = 0.25
 
-#: Contamination gate. A corpus row this close to an exam row is dropped FROM THE
-#: CORPUS -- never from the exam. Same threshold and same two-metric rule as the
+#: Contamination gate. A corpus row this close to an exam row is dropped from the
+#: corpus -- never from the exam. Same threshold and same two-metric rule as the
 #: S.4 sentiment build: character shingles miss word reordering, word sets miss
 #: spelling drift, so the gate takes the max of both.
 NEAR_DUP_CONTAM: float = 0.80
@@ -609,15 +601,15 @@ SHINGLE_N: int = 4
 MAX_ROWS_PER_TEMPLATE: int = 12
 
 #: Fewest templates an intent must have for one language. Four, because the
-#: train/val split is GROUPED on template_id: at three, holding out one template
+#: train/val split is grouped on template_id: at three, holding out one template
 #: leaves two phrasings in train, and a class that has seen two phrasings of a
 #: language is not being taught that language. It also bounds the other end -- the
 #: minimum four templates times the per-template cap must still cover the largest
 #: per-language quota, which is asserted in self_check() rather than hoped for.
 MIN_TEMPLATES_PER_LANG: int = 4
 
-#: Required headroom between what an intent's templates CAN produce for a
-#: language and what the quota ASKS for. Exactly 1.0 would be satisfiable only by
+#: Required headroom between what an intent's templates can produce for a
+#: language and what the quota asks for. Exactly 1.0 would be satisfiable only by
 #: exhausting every template to its last combination, which is how a corpus ends
 #: up with every value of every slot appearing exactly once -- the allocator needs
 #: slack to spread rows across phrasings instead.
@@ -631,17 +623,15 @@ TEMPLATE_CAPACITY_MARGIN: float = 1.30
 MIN_TEXT_CHARS: int = 3
 MAX_TEXT_CHARS: int = 160
 
-#: Above this Cramer's V between language and intent, the generator WARNS: it
+#: Above this Cramer's V between language and intent, the generator warns: it
 #: would mean a model could score by detecting language instead of intent. It
 #: warns rather than fails because the per-intent language floors above already
 #: bound the effect structurally, and a threshold that fails on a diagnostic
-#: nobody can act on just gets raised until it stops firing.
+#: nobody can act on ends up raised until it stops firing.
 CRAMERS_V_WARN: float = 0.50
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 5. Compiled patterns and helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: A slot reference in a template. Deliberately narrow -- lowercase ASCII and
 #: underscores only -- so a typo like ``{Sport}`` or ``{ sport }`` is reported as
@@ -1065,9 +1055,7 @@ def validate_pattern(pattern: str, lang: str, intent: str | None = None) -> list
     return problems
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 6. Contract identity helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def intent_spec_fingerprint() -> str:
@@ -1202,12 +1190,10 @@ def spec() -> dict[str, object]:
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 7. Self-check
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: ``(input, expected)`` for :func:`tidy`. Every one of these is an artifact an
-#: empty decorator draw actually produces, not a hypothetical.
+#: empty decorator draw produces, not a hypothetical.
 _TIDY_CASES: tuple[tuple[str, str], ...] = (
     ("salam ", "salam"),
     (" kal ka slot?", "kal ka slot?"),
@@ -1259,7 +1245,7 @@ _TEXT_CASES: tuple[tuple[str, str | None], ...] = (
 )
 
 #: :func:`stable_seed` pinned against a literal. Recomputing sha256 inside the
-#: test would prove nothing; a literal is what actually detects the day somebody
+#: test would prove nothing; a literal is what detects the day somebody
 #: "simplifies" this to ``hash()`` and reproducibility quietly dies.
 _PINNED_SEED: int = 3481851257299005900  # stable_seed(INTENT_SPEC_VERSION, "find_venue-en-01")
 #: The v1 value was 3041649028626642170. It changed because INTENT_SPEC_VERSION is
@@ -1268,7 +1254,7 @@ _PINNED_SEED: int = 3481851257299005900  # stable_seed(INTENT_SPEC_VERSION, "fin
 #: v1's draws and pass itself off as the same dataset.
 
 #: ``(left, right, same?)`` for :func:`dedup_key`. The two ``False`` rows are the
-#: load-bearing ones: they pin that this key does NOT fold Roman Urdu spelling
+#: load-bearing ones: they pin that this key does not fold Roman Urdu spelling
 #: variants, because folding them here would delete the very rows that teach the
 #: classifier ``nhi`` and ``nahi`` are the same intent.
 _DEDUP_CASES: tuple[tuple[str, str, bool], ...] = (
@@ -1293,7 +1279,7 @@ def self_check() -> list[tuple[str, str]]:
     """
     receipts: list[tuple[str, str]] = []
 
-    # ---- 1. the label contract ------------------------------------------------
+    # 1. The label contract
     assert len(INTENTS) == 23, (
         f"INTENTS has {len(INTENTS)} entries; the S.6 contract fixes the v2 label "
         f"set at 23. Adding a twenty-fourth is a model-invalidating change: bump "
@@ -1316,7 +1302,7 @@ def self_check() -> list[tuple[str, str]]:
     )
     receipts.append(("intents", f"{len(INTENTS)} unique, alphabetical, incl out_of_scope"))
 
-    # ---- 2. the catalog agrees with the label set -----------------------------
+    # 2. The catalog agrees with the label set
     catalog_names = tuple(name for name, _g, _gl, _c in INTENT_CATALOG)
     assert len(set(catalog_names)) == len(catalog_names), (
         f"INTENT_CATALOG lists an intent twice: "
@@ -1352,7 +1338,7 @@ def self_check() -> list[tuple[str, str]]:
         f"confusable != self",
     ))
 
-    # ---- 3. languages ---------------------------------------------------------
+    # 3. Languages
     assert set(LANG_BUCKETS) == set(LANGS), "LANG_BUCKETS and LANGS disagree"
     for lang, buckets in LANG_BUCKETS.items():
         assert buckets, f"lang {lang!r} has no buckets"
@@ -1367,7 +1353,7 @@ def self_check() -> list[tuple[str, str]]:
     )
     receipts.append(("langs", f"{'/'.join(LANGS)}, mix reads en+ru, '*' first"))
 
-    # ---- 4. phenomena, sources, splits ---------------------------------------
+    # 4. Phenomena, sources, splits
     assert list(PHENOMENA) == sorted(PHENOMENA), "PHENOMENA must stay alphabetical"
     assert len(set(PHENOMENA)) == len(PHENOMENA), "PHENOMENA contains a duplicate"
     assert "plain" in PHENOMENA, (
@@ -1386,7 +1372,7 @@ def self_check() -> list[tuple[str, str]]:
         f"splits={'/'.join(SPLITS)}",
     ))
 
-    # ---- 5. slot vocabulary ---------------------------------------------------
+    # 5. Slot vocabulary
     assert SLOTS == tuple(sorted(SLOT_VOCAB)), "SLOTS is out of sync with SLOT_VOCAB"
     assert set(DECORATOR_SLOTS) <= set(SLOTS), "a decorator slot is not in SLOT_VOCAB"
     assert set(DOMAIN_SLOTS) | set(DECORATOR_SLOTS) == set(SLOTS), (
@@ -1443,7 +1429,7 @@ def self_check() -> list[tuple[str, str]]:
         f"decorator) resolve non-empty and dedup in all {len(LANGS)} langs",
     ))
 
-    # ---- 6. tidy --------------------------------------------------------------
+    # 6. Tidy
     for raw, expected in _TIDY_CASES:
         got = tidy(raw)
         assert got == expected, f"tidy({raw!r}) -> {got!r}, expected {expected!r}"
@@ -1454,7 +1440,7 @@ def self_check() -> list[tuple[str, str]]:
         )
     receipts.append(("tidy", f"{len(_TIDY_CASES)} pinned cases, idempotent"))
 
-    # ---- 7. the dedup key does not fold spelling ------------------------------
+    # 7. The dedup key does not fold spelling
     for left, right, same in _DEDUP_CASES:
         got = dedup_key(left) == dedup_key(right)
         assert got == same, (
@@ -1506,7 +1492,7 @@ def self_check() -> list[tuple[str, str]]:
         f"{len(_DEDUP_CASES)} cases; case/punct/space folded, spelling NOT folded",
     ))
 
-    # ---- 8. near-duplicate scoring -------------------------------------------
+    # 8. Near-duplicate scoring
     score, metric = near_dup_score("kal shaam football ground", "kal shaam football ground")
     assert score == 1.0, f"identical texts scored {score}, expected 1.0"
     score, metric = near_dup_score(
@@ -1523,7 +1509,7 @@ def self_check() -> list[tuple[str, str]]:
     assert near_dup_score("", "")[0] == 0.0, "empty/empty must be 0.0, not a ZeroDivisionError"
     receipts.append(("near_dup", "identical=1.0, reordering caught by word_set, empty safe"))
 
-    # ---- 9. determinism -------------------------------------------------------
+    # 9. Determinism
     got_seed = stable_seed(INTENT_SPEC_VERSION, "find_venue-en-01")
     assert got_seed == _PINNED_SEED, (
         f"stable_seed(INTENT_SPEC_VERSION, 'find_venue-en-01') is {got_seed}, "
@@ -1570,7 +1556,7 @@ def self_check() -> list[tuple[str, str]]:
         f"seed pinned at {_PINNED_SEED}, decode_index bijective over {total} indices",
     ))
 
-    # ---- 10. pattern validation ----------------------------------------------
+    # 10. Pattern validation
     for pattern, lang, intent, expected in _PATTERN_CASES:
         problems = validate_pattern(pattern, lang, intent)
         if expected is None:
@@ -1587,7 +1573,7 @@ def self_check() -> list[tuple[str, str]]:
     )
     receipts.append(("validate_pattern", f"{len(_PATTERN_CASES)} pinned cases + unknown lang"))
 
-    # ---- 11. capacity and rendering ------------------------------------------
+    # 11. Capacity and rendering
     capacity = pattern_capacity("{sport} {venue_word} in {city}", "en")
     expected_capacity = (
         len(slot_values("sport", "en"))
@@ -1629,7 +1615,7 @@ def self_check() -> list[tuple[str, str]]:
         f"{MAX_ROWS_PER_TEMPLATE}/template, render clean",
     ))
 
-    # ---- 12. quota coherence --------------------------------------------------
+    # 12. Quota coherence
     assert ROWS_PER_INTENT_MIN <= ROWS_PER_INTENT_TARGET <= ROWS_PER_INTENT_MAX, (
         f"target {ROWS_PER_INTENT_TARGET} is outside "
         f"[{ROWS_PER_INTENT_MIN}, {ROWS_PER_INTENT_MAX}]"
@@ -1719,7 +1705,7 @@ def self_check() -> list[tuple[str, str]]:
         f"thresholds ordered",
     ))
 
-    # ---- 13. fingerprints -----------------------------------------------------
+    # 13. Fingerprints
     label_fp = intent_spec_fingerprint()
     data_fp = dataset_spec_fingerprint()
     for name, value in (("intent", label_fp), ("dataset", data_fp)):
@@ -1752,9 +1738,7 @@ def self_check() -> list[tuple[str, str]]:
     return receipts
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 8. CLI
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _main(argv: Sequence[str] | None = None) -> int:

@@ -82,7 +82,7 @@ router.post('/topup', authMiddleware, async (req, res, next) => {
   finally { client.release(); }
 });
 
-// ─── FR7.2 — itemised frozen-balance breakdown ────────────────────────────────
+// FR7.2 — itemised frozen-balance breakdown
 //
 // GET /api/wallet/frozen
 //
@@ -90,15 +90,15 @@ router.post('/topup', authMiddleware, async (req, res, next) => {
 // currently holding escrow, which is while the booking is pending or confirmed —
 // escrow is released on check-in, cancel, reject and no-show.
 //
-// The itemised figure is `security_deposit`, NOT `total_amount`. That is the
+// The itemised figure is `security_deposit`, not `total_amount`. That is the
 // column the money code treats as authoritative (routes/bookings.js: "security_
-// deposit holds what is ACTUALLY in escrow for this booking", and both cancel
+// deposit holds what is in escrow for this booking", and both cancel
 // paths release exactly it). For a Wave-A booking the two are equal, because
 // booking freezes the full slot price. For a legacy row created under the old 30%
 // rule they differ — one live booking here has total_amount 3000 against
 // security_deposit 900 — and summing total_amount then reported "PKR 3,000 frozen
 // for this booking" when 900 was frozen. That is a wrong number in the user's
-// wallet AND it made `delta` permanently non-zero, so the honest diagnostic below
+// wallet and it made `delta` permanently non-zero, so the honest diagnostic below
 // could never read 0 and stopped meaning anything.
 //
 // `slot_price` is returned alongside so the sheet can still show what the booking
@@ -146,7 +146,7 @@ router.get('/frozen', authMiddleware, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ─── FR7.4 / ER1.6 — withdrawals ──────────────────────────────────────────────
+// FR7.4 / ER1.6 — withdrawals
 
 // GET /api/wallet/withdrawals — history plus the one pending row, if any.
 router.get('/withdrawals', authMiddleware, async (req, res, next) => {
@@ -174,8 +174,8 @@ router.get('/withdrawals', authMiddleware, async (req, res, next) => {
 
 // POST /api/wallet/withdraw
 //
-// The money leaves `balance` HERE, not when the job settles the row — you must
-// not be able to spend what you have already asked to withdraw. The hold is a
+// The money leaves `balance` here, not when the job settles the row — a user must
+// not be able to spend what has already been requested. The hold is a
 // plain balance debit rather than frozen_balance because frozen_balance means
 // "booking escrow" and GET /frozen above itemises it.
 router.post('/withdraw', authMiddleware, async (req, res, next) => {
@@ -197,7 +197,7 @@ router.post('/withdraw', authMiddleware, async (req, res, next) => {
   try {
     await client.query('BEGIN');
 
-    // Pending check BEFORE the wallet lock, and with FOR UPDATE.
+    // Pending check before the wallet lock, and with FOR UPDATE.
     //
     // Both parts matter. It gives a readable 409 instead of a raw constraint
     // error — and, critically, it fixes a lock-order deadlock: DELETE below
@@ -226,10 +226,10 @@ router.post('/withdraw', authMiddleware, async (req, res, next) => {
       return res.status(404).json({ success:false, message:'Wallet not found' });
     }
 
-    // S.7 Wave D — belt and braces on the one route that moves money OUT of the
+    // S.7 Wave D — belt and braces on the one route that moves money out of the
     // platform. `authMiddleware` already refuses a suspended account on every
     // request, but it answers from a 30-second cache, and a suspension applied by
-    // a SECOND server instance is only visible here after that window. Everything
+    // a second server instance is only visible here after that window. Everything
     // else a suspended user could do is reversible; a payout is not, so this one
     // reads the row inside the transaction that is about to freeze the money.
     const acct = await client.query('SELECT is_active FROM users WHERE id = $1', [req.user.id]);

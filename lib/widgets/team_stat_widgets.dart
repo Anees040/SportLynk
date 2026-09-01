@@ -8,7 +8,7 @@
 /// Pieces:
 ///   • [EloHistoryChart]  FR5.14 — last-10 line chart, solid green dot = verified,
 ///                        hollow red dot = disputed
-///   • [MovementBadge]    FR5.13 — rank change vs 7 days ago, with NEW as its own
+///   • [MovementBadge]    FR5.13 — rank change vs 7 days ago, with new as its own
 ///                        state rather than a zero
 ///   • [FormRow]          the last-5 W/L/D pills
 ///   • [StatTile]         one labelled number, used across the profile header
@@ -31,9 +31,7 @@ import '../models/team_stats.dart';
 const Color kVerifiedDot = AppColors.success;
 const Color kDisputedDot = AppColors.error;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// RATING TEXT
-// ═══════════════════════════════════════════════════════════════════════════
+// Rating text
 
 /// Prints a rating or the word "Unranked" (FR2.6). Screens should use this
 /// rather than reading `elo` directly — that is exactly how the leaderboard
@@ -68,9 +66,7 @@ class RatingText extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MOVEMENT BADGE
-// ═══════════════════════════════════════════════════════════════════════════
+// Movement badge
 
 /// Rank change over the movement window. Four distinct states, because
 /// collapsing "new to the board" into "no change" would claim a history the
@@ -130,9 +126,7 @@ class MovementBadge extends StatelessWidget {
       );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// FORM ROW
-// ═══════════════════════════════════════════════════════════════════════════
+// FORM row
 
 /// The last-5 W/L/D pills, oldest on the left — the order every football table
 /// uses, so it needs no legend.
@@ -191,9 +185,7 @@ class FormRow extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// STAT TILE
-// ═══════════════════════════════════════════════════════════════════════════
+// Stat tile
 
 class StatTile extends StatelessWidget {
   final String label;
@@ -235,9 +227,7 @@ class StatTile extends StatelessWidget {
       );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ELO HISTORY CHART  (FR5.14)
-// ═══════════════════════════════════════════════════════════════════════════
+// ELO history chart  (FR5.14)
 
 /// The team's rating over its last matches.
 ///
@@ -482,9 +472,7 @@ class EloHistoryChart extends StatelessWidget {
       );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MATCH HISTORY TILE  (FR5.16)
-// ═══════════════════════════════════════════════════════════════════════════
+// MATCH history tile  (FR5.16)
 
 /// One row of match history: opponent, "Won 2–1", the date, and the signed ELO
 /// change. A disputed row says so instead of showing a delta, because no points

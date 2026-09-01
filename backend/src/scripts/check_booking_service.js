@@ -9,8 +9,8 @@
  * kind of change that passes review and still loses PKR 200 per cancellation, so
  * this script books and cancels for real and asserts the ledger.
  *
- * EVERYTHING RUNS INSIDE A TRANSACTION THAT IS ALWAYS ROLLED BACK. It calls the
- * CORE functions (createBooking / cancelBooking), not the *Tx wrappers, precisely
+ * Everything runs inside a transaction that is always rolled back. It calls the
+ * core functions (createBooking / cancelBooking), not the *Tx wrappers, precisely
  * so the transaction stays this script's to abandon: a verification pass must not
  * leave a booked slot, a spent wallet or a ledger row behind on a database the
  * committee will look at.
@@ -20,7 +20,7 @@
  *   book                  player balance -P, frozen +P, booking pending, slot booked
  *   cancel  >= 24h out    player balance +P, frozen -P, owner untouched, slot free
  *   cancel  <  24h out    player balance +0.8P, frozen -P, owner +0.2P
- *   preview               quotes the SAME refund/penalty the execution then moves
+ *   preview               quotes the same refund/penalty the execution then moves
  *   double-book           second attempt on a booked slot is refused (slot_taken)
  *   double-cancel         second cancel is refused (not_cancellable)
  *   broke player          a balance below the slot price is refused, wallet intact
@@ -57,7 +57,7 @@ async function wallet(client, userId) {
 
 /**
  * Find a player and an available slot whose start is at least `minHoursOut` away
- * (or, when `late` is true, INSIDE the cancellation window so the 80/20 split is
+ * (or, when `late` is true, inside the cancellation window so the 80/20 split is
  * the one under test). Returns null when the seeded data cannot supply one, and
  * the caller reports a skip rather than a failure — an empty slot table is a
  * seeding problem, not a bug in the money.
@@ -122,7 +122,7 @@ async function cycle(client, { late }) {
     + `at ${slot.venue_name}, PKR ${price}`);
   console.log(`   player ${player.name}: balance ${before.balance}, frozen ${before.frozen}`);
 
-  // ── BOOK ──────────────────────────────────────────────────────────────────
+  // Book
   const booked = await createBooking(client, {
     userId: player.id, slotId: slot.id, venueId: slot.venue_id,
     notes: '__check_booking_service',
@@ -154,14 +154,14 @@ async function cycle(client, { late }) {
   check(txns.length === 1 && txns[0].type === 'booking_payment' && near(txns[0].amount, -price),
     `exactly one ledger row: booking_payment ${-price} — got ${JSON.stringify(txns)}`);
 
-  // ── DOUBLE BOOK — the row lock's job ──────────────────────────────────────
+  // Double book — the row lock's job
   const again = await createBooking(client, {
     userId: player.id, slotId: slot.id, venueId: slot.venue_id,
   });
   check(!again.ok && again.status === 409 && again.code === 'slot_taken',
     `booking the same slot twice is refused with 409 slot_taken — got ${again.status}/${again.code}`);
 
-  // ── PREVIEW — must quote what execution will actually move ────────────────
+  // Preview — must quote what execution will move
   const pv = await previewCancellation(client, { userId: player.id, bookingId: booked.data.id });
   check(pv.ok, 'previewCancellation reads the booking back', JSON.stringify(pv));
   if (!pv.ok) return;
@@ -179,7 +179,7 @@ async function cycle(client, { late }) {
   check(Array.isArray(cancellable) && cancellable.some((b) => b.id === booked.data.id),
     'listCancellable offers the new booking to the dialog manager');
 
-  // ── CANCEL ────────────────────────────────────────────────────────────────
+  // Cancel
   const cancelled = await cancelBooking(client, { userId: player.id, bookingId: booked.data.id });
   check(cancelled.ok && cancelled.status === 200, 'cancelBooking returns 200', JSON.stringify(cancelled));
   if (!cancelled.ok) return;
@@ -222,7 +222,7 @@ async function cycle(client, { late }) {
   check(near(sum, -expectPenalty),
     `the ledger sums to -${expectPenalty} (what the player actually lost) — got ${sum}`);
 
-  // ── DOUBLE CANCEL ─────────────────────────────────────────────────────────
+  // Double cancel
   const twice = await cancelBooking(client, { userId: player.id, bookingId: booked.data.id });
   check(!twice.ok && twice.status === 400 && twice.code === 'not_cancellable',
     `cancelling twice is refused with 400 not_cancellable — got ${twice.status}/${twice.code}`);

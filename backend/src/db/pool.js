@@ -16,8 +16,8 @@ const connectionString = process.env.DATABASE_URL || '';
  *      for, and `sslmode=disable` must be honoured).
  *   2. NODE_ENV=production still forces TLS on.
  *   3. Otherwise: anything that is not localhost is assumed to be remote, and
- *      therefore to need TLS. This is the case that matters for us — we develop
- *      against Supabase, so the local run needs TLS just as much as Render does.
+ *      therefore to need TLS. This is the case that matters most, because local
+ *      development runs against Supabase and so needs TLS just as much as Render.
  */
 function needsSsl(url) {
   const explicit = /[?&]sslmode=([a-z-]+)/i.exec(url);
@@ -32,20 +32,20 @@ function needsSsl(url) {
  *
  * This is not tidying — it fixes a connection failure. In pg 8.20,
  * pg-connection-string parses `sslmode=require` and treats it as an alias for
- * `verify-full`, and that parsed value OVERRIDES the `ssl` option passed to the
+ * `verify-full`, and that parsed value overrides the `ssl` option passed to the
  * Pool constructor. Supabase's pooler presents a chain Node has no root for, so
  * the result is a hard failure:
  *
  *   ❌ Database connection failed: self-signed certificate in certificate chain
  *
  * Measured on this project's exact URL and pg version:
- *   sslmode=require   + ssl:{rejectUnauthorized:false}  → FAILS
+ *   sslmode=require   + ssl:{rejectUnauthorized:false}  → fails
  *   (no sslmode)      + ssl:{rejectUnauthorized:false}  → connects
  *   sslmode=no-verify + ssl:{rejectUnauthorized:false}  → connects
  *
  * That made the documented setup self-defeating: doc/claude.md and
  * DEPLOY_GUIDE.md both say to append `?sslmode=require`, and the old error hint
- * below told you to add it too — so following our own instructions broke Render.
+ * below said to add it too — so the project's own instructions broke Render.
  *
  * Stripping it means `sslmode` stays a *signal* that needsSsl() reads, but never
  * a *directive* pg acts on. TLS is then decided in exactly one place: the `ssl`
@@ -66,14 +66,14 @@ const useSsl = needsSsl(connectionString);
 const pool = new Pool({
   connectionString: stripSslMode(connectionString),
   // rejectUnauthorized:false — Supabase's pooler presents a chain Node does not
-  // have a root for by default. The connection is still encrypted; we simply do
-  // not verify the certificate, which is the accepted trade-off for this project.
+  // have a root for by default. The connection is still encrypted; only the
+  // certificate is left unverified, which is the accepted trade-off here.
   ssl: useSsl ? { rejectUnauthorized: false } : false,
 });
 
 // Fail loudly and usefully. "Database connection failed: <driver error>" on its
 // own has cost hours before; the hints below name the three things that are
-// actually ever wrong.
+// ever wrong.
 if (!connectionString) {
   console.error(
     '❌ DATABASE_URL is not set.\n' +

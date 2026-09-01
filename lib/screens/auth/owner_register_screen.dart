@@ -85,7 +85,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
     return Image.file(File(f.path), width: w, height: h, fit: fit);
   }
 
-  // ── STEP INDICATOR ──
+  // Step indicator
   Widget _stepIndicator() {
     final labels = ['Personal','Ground','Docs'];
     return Padding(
@@ -106,7 +106,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
     );
   }
 
-  // ── STEP 0 ──
+  // Step 0
   Widget _buildStep0() {
     return Form(key: _formKey0, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _stepIndicator(),
@@ -173,7 +173,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
     ]));
   }
 
-  // ── STEP 1 ──
+  // Step 1
   Widget _buildStep1() {
     return Form(key: _formKey1, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _stepIndicator(),
@@ -258,7 +258,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
     ]));
   }
 
-  // ── STEP 2 ──
+  // Step 2
   Widget _buildStep2() {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _stepIndicator(),

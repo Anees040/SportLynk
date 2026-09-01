@@ -1,31 +1,31 @@
 /**
  * Match preview generator (FR5.10)  —  S.2 Wave C
  *
- * Template NLG v1. Every sentence is assembled from REAL features already in the
+ * Template NLG v1. Every sentence is assembled from real features already in the
  * database — both ratings, the gap between them, last-5 form, win rates, and the
  * competitiveness score — and nothing here invents a fact it was not given.
  *
- * WHY THIS IS NOT AN LLM CALL
+ * Why this is not an LLM call
  * doc/claude.md is explicit that the committee requires genuinely trained ML and
  * that no external AI API may be called. A template generator over real features
  * is the honest thing to ship at this stage: it is deterministic, it is auditable
  * sentence by sentence, and it cannot hallucinate a scoreline that never
  * happened. S.6 may optionally route this text through the LLM garnish flag for
- * fluency, but the FACTS will still be produced here.
+ * fluency, but the facts will still be produced here.
  *
- * WHY THE UI LABEL IS "Preview" AND NOT "AI PREDICTION"
+ * Why the UI label is "Preview" and not "AI PREDICTION"
  * This text does not predict a result; it summarises a rating gap and recent
  * form. Calling it a prediction would overclaim, so PREVIEW_LABEL is exported
  * from this module and the screens render that constant rather than their own
  * wording — a label that lives in one place cannot drift into a claim the
  * generator does not support.
  *
- * WHY IT IS PURE (no database import)
+ * Why it is pure (no database import)
  * Same reason as utils/elo.js: importing the pool connects at module load, which
  * would make this untestable without a live database. The route fetches the
  * features and passes them in.
  *
- * WHY IT IS DETERMINISTIC
+ * Why it is deterministic
  * Variety comes from hashing a caller-supplied seed (the match id), not from
  * Math.random(). The same match therefore always reads the same way — a preview
  * that reworded itself on every pull-to-refresh would look broken, and it could
@@ -41,7 +41,7 @@ const FORM_WINDOW = 5;
 /** Below this many completed matches, a form sentence is noise, not signal. */
 const MIN_MATCHES_FOR_FORM = 2;
 
-// ── Small pure helpers ──────────────────────────────────────────────────────
+// Small pure helpers
 
 function num(v, fallback = 0) {
   const n = typeof v === 'number' ? v : Number.parseFloat(String(v));
@@ -120,7 +120,7 @@ function isRanked(team) {
   return num(team.wins) + num(team.losses) + num(team.draws) >= 1;
 }
 
-// ── Sentence 1: who is favoured, and by how much ────────────────────────────
+// Sentence 1: who is favoured, and by how much
 
 /**
  * The framing sentence. `gap` bands are deliberately coarse — the ELO curve is
@@ -172,7 +172,7 @@ function framingSentence({ favourite, underdog, gap, seed, bothRanked }) {
   ], seed);
 }
 
-// ── Sentence 2: recent form ─────────────────────────────────────────────────
+// Sentence 2: recent form
 
 /**
  * Pick the side whose form is most worth mentioning, and say it. Preference goes
@@ -212,7 +212,7 @@ function formSentence({ favourite, underdog, seed }) {
   return `${name} won ${wins} of their last ${played}${rateClause}.`;
 }
 
-// ── Sentence 3: the closer ──────────────────────────────────────────────────
+// Sentence 3: the closer
 
 function closingSentence({ competitiveness, favourite, underdog, seed }) {
   if (competitiveness === null || competitiveness === undefined) {
@@ -235,7 +235,7 @@ function closingSentence({ competitiveness, favourite, underdog, seed }) {
   return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)} — competitiveness ${Math.round(c)}%.`;
 }
 
-// ── The one public entry point ──────────────────────────────────────────────
+// The one public entry point
 
 /**
  * Build the 2–3 sentence preview.

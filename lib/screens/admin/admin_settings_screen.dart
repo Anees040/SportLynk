@@ -1,17 +1,17 @@
 // admin_settings_screen.dart — S.7 Wave D · D5 / FR10.9–10.11.
 //
-// THE CATALOGUE IS THE SERVER'S. Every section, every field, its type, its unit,
+// The catalogue is the server's. Every section, every field, its type, its unit,
 // its bounds, its step, its description, its default and whether it is currently
 // overridden all arrive from `GET /api/admin/settings`. There is deliberately no
 // Dart copy of any of it: a second list of settings is a second source of truth,
 // and the moment one of them gains a key the other one is a lie. Add a field to
 // `backend/src/utils/settingsCatalog.js` and it appears here with no Flutter change.
 //
-// So this screen only knows how to render FIVE TYPES — `int`, `number`, `bool`,
+// So this screen only knows how to render five TYPES — `int`, `number`, `bool`,
 // `text`, `sports` — and how to send a patch back. It does not know what
 // `elo.k_factor` means, and it must not.
 //
-// WHAT IT DOES CHECK, and only because the server checks the same thing and an
+// What it does CHECK, and only because the server checks the same thing and an
 // instant answer beats a round trip: the numeric bounds it was handed, and the two
 // cross-field rules whose violation the accessor would otherwise paper over —
 // commission + deposit must not exceed 100 % of a slot, and the tournament pool
@@ -128,7 +128,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     return a == b;
   }
 
-  /// The bounds the server handed us, plus the two cross-field rules. Runs on every
+  /// The bounds the server returned, plus the two cross-field rules. Runs on every
   /// edit so the Save button can be honest about whether the patch would be taken.
   void _revalidate() {
     _fieldErrors.clear();
@@ -163,7 +163,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   }
 
   /// Two rules the accessor would otherwise absorb silently — which is why they are
-  /// refused at the edge instead. Both are evaluated on the state AFTER the save,
+  /// refused at the edge instead. Both are evaluated on the state after the save,
   /// exactly as `settingsCatalog.validate()` does, so half a pair still counts.
   void _crossFieldRules() {
     num? live(String key) {
@@ -330,7 +330,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     );
   }
 
-  // ── One field, whatever it is ──────────────────────────────────────────────
+  // One field, whatever it is
   Widget _field(SettingsField f) {
     final err = _fieldErrors[f.key];
     final dirty = _draft.containsKey(f.key);
@@ -394,7 +394,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   /// "default" · "overridden" · "edited", plus the per-key reset.
   ///
-  /// `isOverridden` is the SERVER's comparison of the stored value against the
+  /// `isOverridden` is the server's comparison of the stored value against the
   /// documented default — it is not recomputed here, because the server compares
   /// values and the seed migration wrote a row for every key, so "has a row" and
   /// "is overridden" are different facts.
@@ -459,7 +459,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         ),
       );
 
-  // ── The five editors ──────────────────────────────────────────────────────
+  // The five editors
   /// An unrecognised `type` falls through to a read-only value rather than a
   /// guessed editor: a new server type must be added here deliberately, and until
   /// it is, the admin sees the truth instead of a box that submits the wrong shape.
@@ -548,7 +548,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   }
 
   /// Move a numeric field by one step, clamped to the server's bounds. A field
-  /// that has been typed into something unparseable steps from the SAVED value,
+  /// that has been typed into something unparseable steps from the saved value,
   /// which is the only number here that is known to be legal.
   void _nudge(SettingsField f, num delta) {
     if (_saving) return;
@@ -626,7 +626,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   /// small and the whole point is to see at a glance which sports the platform is
   /// currently taking bookings for.
   ///
-  /// Switching one OFF is the dangerous direction — the server refuses with a 409
+  /// Switching one off is the dangerous direction — the server refuses with a 409
   /// and a count when that sport has future confirmed bookings — so the chip stays
   /// tappable and the refusal is shown; guessing here would need a booking count the
   /// screen does not have.
@@ -670,7 +670,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     );
   }
 
-  // ── Save ──────────────────────────────────────────────────────────────────
+  // Save
   /// The bar only exists while there is a diff, and it refuses to open the confirm
   /// dialog while any field is invalid: the errors are already on screen next to the
   /// fields that caused them, so a disabled button with a count is more useful than
@@ -763,7 +763,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   ///
   /// The note is optional here because the server treats it as optional, but it is
   /// asked for on the same screen as the diff because it is the only free-text
-  /// record of WHY a rate changed, and `admin_audit` keeps it next to the before and
+  /// record of why a rate changed, and `admin_audit` keeps it next to the before and
   /// after jsonb forever.
   Future<void> _confirmSave(List<SettingsChange> changes) async {
     final noteCtl = TextEditingController();
@@ -894,8 +894,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   ///
   /// Three answers matter and each is shown as the server worded it: a 400 carrying
   /// an `errors` array (pinned back onto the fields that caused it, so the admin sees
-  /// WHERE not just WHAT), the 409 that names the sport whose future bookings block a
-  /// switch-off, and the honest success that says nothing actually changed.
+  /// WHERE not just what), the 409 that names the sport whose future bookings block a
+  /// switch-off, and the honest success that says nothing changed.
   Future<void> _save(String note) async {
     final token = _token;
     if (token == null) return;
@@ -961,7 +961,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         ),
       );
 
-  // ── Reset ─────────────────────────────────────────────────────────────────
+  // Reset
   /// Reset deletes the override row, so the key follows `DEFAULTS` from then on
   /// rather than being frozen at today's number — which is why this is a separate
   /// endpoint and not a save of the default value.

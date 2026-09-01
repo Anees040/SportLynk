@@ -5,17 +5,16 @@ import 'team.dart' show asNum;
 /// Wire models for the S.5 Wave B recommenders — the player-for-team rail (FR2.8)
 /// and the re-ranked opponent list (FR5.3 – FR5.5).
 ///
-/// THE ONE RULE THIS FILE EXISTS TO ENFORCE
-/// ----------------------------------------
-/// A percentage is shown ONLY when the ranking service actually produced it.
+/// The one rule this file exists to enforce
+/// A percentage is shown only when the ranking service produced it.
 /// Every payload from the backend carries a `ranking` block saying which path ran
-/// — the weighted scorer, or the SQL fallback — and both paths ship the SAME field
+/// — the weighted scorer, or the SQL fallback — and both paths ship the same field
 /// names, with the score fields simply null on the fallback. So the screens never
 /// need a second shape, and they can never print a number the server did not
 /// compute. `ranking.available == false` means "no percentages exist", not "show
 /// zero percent".
 ///
-/// A component that is null is NOT zero either. It means the input for that block
+/// A component that is null is not zero either. It means the input for that block
 /// did not exist for this candidate (a teamless player has no team rating, a
 /// player with no bookings has no home area), and the server scored it neutrally
 /// rather than punishing a cold start. [ScoreComponent.known] is what separates
@@ -61,12 +60,12 @@ class ScoreComponent {
   int get percent => ((value ?? 0).clamp(0, 1) * 100).round();
   int get weightPercent => (weight.clamp(0, 1) * 100).round();
 
-  /// How much of the final score this block actually contributed. Null when the
+  /// How much of the final score this block contributed. Null when the
   /// block is unknown, because the neutral value the server substituted is its
   /// policy, not this candidate's evidence.
   double? get contribution => value == null ? null : value! * weight;
 
-  /// Wording that holds for BOTH recommenders. `elo` is a rating-proximity block
+  /// Wording that holds for both recommenders. `elo` is a rating-proximity block
   /// in each of them — the opponent's own rating, or the rating of the teams a
   /// player already plays for — so "Level match" is true either way, and neither
   /// screen has to relabel it.
@@ -110,7 +109,7 @@ class ScoreComponent {
 class RankingInfo {
   final String source;
 
-  /// True when the scorer ran. The ONLY gate on showing a percentage.
+  /// True when the scorer ran. The only gate on showing a percentage.
   final bool available;
 
   final String? specVersion;
@@ -128,7 +127,7 @@ class RankingInfo {
 
   final int activityWindowDays;
 
-  /// A sentence to show INSTEAD of percentages when the scorer did not run.
+  /// A sentence to show instead of percentages when the scorer did not run.
   /// Written by the server so the two endpoints' degradations read differently
   /// (one loses its order, the other loses its numbers).
   final String? fallbackNote;
@@ -171,7 +170,7 @@ class RankingInfo {
     return out;
   }
 
-  /// The per-candidate `components` map. Values stay NULLABLE — a missing block
+  /// The per-candidate `components` map. Values stay nullable — a missing block
   /// and a block that scored zero are different facts.
   static Map<String, double?>? componentsFrom(dynamic v) {
     if (v is! Map) return null;
@@ -300,7 +299,7 @@ class SuggestedPlayers {
   final String? city;
 
   /// The city of the venue its members book most — the value the "same city"
-  /// pool was actually built from, which is not always [city].
+  /// pool was built from, which is not always [city].
   final String? homeCity;
 
   final RankingInfo ranking;

@@ -45,8 +45,8 @@ double? asNumOrNull(dynamic value) {
 
 /// Parse into a non-null int, rounding a decimal input. Falls back to [fallback].
 ///
-/// Needed because pg hands back `"3"` for an INT column inside a JOIN just as
-/// readily as it does for a DECIMAL one.
+/// Needed because pg hands back `"3"` for an int column inside a JOIN just as
+/// readily as it does for a decimal one.
 int asInt(dynamic value, {int fallback = 0}) {
   final d = asNumOrNull(value);
   return d == null ? fallback : d.round();

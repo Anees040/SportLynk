@@ -19,12 +19,12 @@ import 'api_service.dart';
 class MatchService {
   final ApiClient _api = ApiClient();
 
-  // ── Reads ──────────────────────────────────────────────────
+  // Reads
 
   /// FR5.3 – FR5.5. Candidate opponents for [teamId], closest rating first, each
   /// with its competitiveness score and trust badge.
   ///
-  /// Returns [OpponentList.empty] rather than throwing, so a 403 (not your team)
+  /// Returns [OpponentList.empty] rather than throwing, so a 403 (not the caller's team)
   /// renders as an empty list with `canChallenge: false` instead of a crash.
   Future<OpponentList> opponents(String token, String teamId, {String? q}) async {
     final r = await _api.get(
@@ -70,7 +70,7 @@ class MatchService {
 
   /// FR5.11 — my confirmed, future bookings that no live match is already using.
   /// A challenge must be pinned to one of these; there is no "pick a venue and
-  /// hope" path, because the pitch has to actually be booked.
+  /// hope" path, because the pitch has to be booked.
   Future<List<LinkableBooking>> linkableBookings(String token, String teamId) async {
     final r = await _api.get(
       ApiConstants.matchLinkableBookings,
@@ -105,7 +105,7 @@ class MatchService {
   }
 
   /// ER2.2 — the owner's verification queue: `awaiting_owner` matches on venues
-  /// this account owns, each with BOTH captains' submissions.
+  /// this account owns, each with both captains' submissions.
   Future<List<MatchModel>> ownerPending(String token) async {
     final r = await _api.get(ApiConstants.matchOwnerPending, token: token);
     if (r['success'] != true) return const [];
@@ -115,7 +115,7 @@ class MatchService {
         .toList();
   }
 
-  // ── Mutations ──────────────────────────────────────────────
+  // Mutations
 
   /// FR5.8 – FR5.12. The server re-reads captaincy, sport, booking ownership and
   /// slot availability inside its transaction, so a stale screen produces a

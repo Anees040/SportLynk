@@ -1,10 +1,9 @@
 /**
  * fixtureSchedule.js — which hour each fixture is played in. Pure, like fixtures.js.
  *
- * WHY THIS IS A SEPARATE FILE
- * ---------------------------
- * `utils/fixtures.js` decides the SHAPE of a tournament (who plays whom, who
- * advances where). This file decides WHEN, which is a different problem with
+ * Why this is a separate file
+ * `utils/fixtures.js` decides the shape of a tournament (who plays whom, who
+ * advances where). This file decides when, which is a different problem with
  * different inputs: the venue's free hours, the rest a squad needs between
  * rounds, and — the interesting part — how much each of those hours is worth to
  * the owner if they sold it instead.
@@ -16,17 +15,16 @@
  * database down and the ml-service off, and it keeps the "which hour?" decision
  * out of an HTTP call's error path.
  *
- * THE THREE RULES
- * ---------------
- * 1. ROUNDS ARE ORDERED IN TIME. Round 2 cannot be played before round 1 has
+ * The three rules
+ * 1. Rounds are ordered in time. Round 2 cannot be played before round 1 has
  *    produced the teams that play in it — that is not a preference, it is
- *    causality. The separation is expressed by TWO settings, because they answer
+ *    causality. The separation is expressed by two settings, because they answer
  *    two different questions and collapsing them into one is a real bug:
  *
- *      `round_gap_days`     (default 1) is a CALENDAR rule: round r+1 is played
+ *      `round_gap_days`     (default 1) is a calendar rule: round r+1 is played
  *                           at least this many dates after round r's last date.
- *      `round_rest_minutes` (default 60) is a CLOCK rule: round r+1 starts at
- *                           least this long after round r's last slot ENDS.
+ *      `round_rest_minutes` (default 60) is a clock rule: round r+1 starts at
+ *                           least this long after round r's last slot ends.
  *
  *    Measuring the calendar rule on the clock — "24 hours after the final
  *    whistle" — looks equivalent and is not: round 1 finishing at 20:00 would
@@ -35,35 +33,34 @@
  *    of rest means "tomorrow", so the calendar cursor is midnight of the target
  *    date and the clock rule only bites when both rounds share a date.
  *
- * 2. NO TEAM PLAYS TWICE AT ONCE. Within a round every team appears exactly once
+ * 2. No TEAM plays twice at once. Within a round every team appears exactly once
  *    (a property of the bracket and of the circle method), so ordering the rounds
  *    is sufficient: a team's next match is always after its previous one with at
  *    least the configured rest in between. Set `round_gap_days` to 0 for a
  *    one-day cup and `round_rest_minutes` is what keeps a squad from being asked
  *    to play two matches in the same hour.
  *
- * 3. THE FINAL TAKES THE BEST WINDOW, THE EARLY ROUNDS TAKE THE DEAD ONES.
+ * 3. The FINAL takes the best window, the EARLY rounds take the dead ones.
  *    Candidate hours are ranked by P(booked) from trained model #1, and early
- *    rounds are placed in the LOWEST-demand windows while the final is placed in
- *    the HIGHEST. This is not decoration:
+ *    rounds are placed in the lowest-demand windows while the final is placed in
+ *    the highest. This is not decoration:
  *
  *      - the owner's sellable peak inventory stays sellable. A tournament that
  *        eats every Saturday 6pm slot costs the owner the customers who would
  *        have paid retail for them.
- *      - `venue_cost` is the SUM of the chosen slots' real prices, so when an
+ *      - `venue_cost` is the sum of the chosen slots' real prices, so when an
  *        owner prices peak hours higher (most do), off-peak placement lowers what
  *        every round except the final costs the pool — and therefore lowers the
  *        entry fee teams have to pay. Price is the secondary sort for exactly this
  *        reason, so the benefit appears even at a venue with flat pricing.
- *      - the final gets the crowd, and deliberately BUYS one peak hour to do it.
- *        So the claim this file's tests actually make is the precise one: every
+ *      - the final gets the crowd, and deliberately buys one peak hour to do it.
+ *        So the claim this file's tests make is the precise one: every
  *        round but the final costs no more than a chronological schedule would,
  *        and the final takes the busiest hour of its date on purpose.
  *
- * WHAT THIS FILE WILL NOT DO
- * --------------------------
+ * What this file will not do
  * Partially schedule. If the venue does not have enough free hours for every
- * fixture, `allocate` reports the shortfall and assigns NOTHING — a bracket with
+ * fixture, `allocate` reports the shortfall and assigns nothing — a bracket with
  * three of its seven fixtures placed would compute a `venue_cost` for three
  * hours and pay the owner for three hours while consuming seven. The service
  * refuses generation instead and tells the owner how many hours to open.
@@ -103,9 +100,9 @@ const round2 = fx.round2;
  * A calendar date as a day number, so two dates can be compared and subtracted
  * without constructing a Date in the server's timezone.
  *
- * Accepts what the service actually has: the `to_char(slot_date,'YYYY-MM-DD')`
+ * Accepts what the service has: the `to_char(slot_date,'YYYY-MM-DD')`
  * string it should be selecting, a plain 'YYYY-MM-DD', or — as a last resort —
- * the JS Date node-postgres hands back for a DATE column, which is LOCAL
+ * the JS Date node-postgres hands back for a date column, which is local
  * midnight, so its local components are the correct read. Using `toISOString()`
  * on that Date is the bug this function exists to avoid: one hour west of PKT it
  * reports the previous day.
@@ -155,10 +152,10 @@ function minutesTime(mins) {
 /**
  * A PKT wall-clock date + time as an offset-qualified ISO string.
  *
- * `fixtures.scheduled_at` is a timestamptz, so the offset has to be IN the value.
+ * `fixtures.scheduled_at` is a timestamptz, so the offset has to be in the value.
  * Handing Postgres '2026-09-01T18:00:00' would store 6pm in whatever timezone the
  * session happens to be in; '2026-09-01T18:00:00+05:00' stores the instant the
- * players are actually expected at the ground, wherever the server sits.
+ * players are expected at the ground, wherever the server sits.
  */
 function pktIso(date, minutes) {
   const d = dateString(date);
@@ -171,7 +168,7 @@ function pktIso(date, minutes) {
 /**
  * A candidate slot row → the internal shape the allocator sorts and compares.
  *
- * `startAt` / `endAt` are ABSOLUTE minutes (day number × 1440 + minutes past
+ * `startAt` / `endAt` are absolute minutes (day number × 1440 + minutes past
  * midnight) so "does round 2 start after round 1 finished?" is one subtraction
  * whether the two rounds are on the same date or a fortnight apart.
  *
@@ -267,18 +264,16 @@ function rankSlots(slots, pick) {
  * The days a round is allowed to look at: the earliest eligible date, plus as
  * many following dates as it takes to reach `need` slots.
  *
- * WHY A WINDOW AND NOT THE WHOLE POOL
- * -----------------------------------
+ * Why a window and not the whole pool
  * Ranking every free hour the venue has by demand and taking the quietest ones
  * would schedule round 1 across three different weeks, because the quietest
  * hours of a month are scattered. A tournament has to feel like an event. So the
  * calendar decision is made first and stays boring — the earliest date that can
- * hold the whole round — and the model then chooses WITHIN that date, where its
+ * hold the whole round — and the model then chooses within that date, where its
  * opinion is both useful and cheap to check: of the hours available on Saturday,
  * take the ones nobody was going to buy.
  *
- * ONE DATE PER ROUND, WHEN THE VENUE ALLOWS IT
- * -------------------------------------------
+ * One date per round, when the VENUE allows it
  * A round split across two dates gives one half of the draw a day less rest than
  * the other before they meet, so the first pass looks for a single date with
  * enough free hours even if that means skipping an earlier date with one hour
@@ -335,7 +330,7 @@ const keyOf = (round, position) => `${asNum(round, 0)}:${asNum(position, 0)}`;
  *
  * @param {object[]} fixtures  nodes from `fixtures.buildFixtures` (or rows read
  *        back from the table — `normaliseFixture` shapes are accepted).
- * @param {object[]} slots     candidate venue slots. The SERVICE is responsible
+ * @param {object[]} slots     candidate venue slots. The service is responsible
  *        for these being genuinely free: status 'available', no live checkout
  *        hold, still in the future. This file trusts the list and only decides
  *        which of them to take.
@@ -353,7 +348,7 @@ const keyOf = (round, position) => `${asNum(round, 0)}:${asNum(position, 0)}`;
  *        once and taking three peak hours for it would cost the pool more than
  *        the occasion is worth.
  *
- * Returns ok:false with a `shortfall` and NO assignments when the venue cannot
+ * Returns ok:false with a `shortfall` and no assignments when the venue cannot
  * host the whole bracket — see the file header for why a partial schedule is
  * worse than no schedule.
  */
@@ -374,7 +369,7 @@ function allocate({
     roundRestMinutes == null ? DEFAULT_ROUND_REST_MINUTES : roundRestMinutes,
     DEFAULT_ROUND_REST_MINUTES));
 
-  // ---- slots -------------------------------------------------------------
+  // Slots
   const pool = [];
   const seen = new Set();
   let dropped = 0;
@@ -388,7 +383,7 @@ function allocate({
   pool.sort(byTime);
   const demandUsed = pool.some((s) => s.pBooked != null);
 
-  // ---- fixtures ----------------------------------------------------------
+  // Fixtures
   const playable = [];
   const byes = [];
   for (const raw of Array.isArray(fixtures) ? fixtures : []) {
@@ -428,7 +423,7 @@ function allocate({
     return PICK.CHEAP;
   };
 
-  // ---- round by round ----------------------------------------------------
+  // Round by round
   const assignments = [];
   const roundMeta = [];
   const consumed = new Set();
@@ -529,7 +524,7 @@ function meanDemand(list) {
 }
 
 /**
- * The refusal an owner actually reads. It names the round, the hours it needed
+ * The refusal an owner reads. It names the round, the hours it needed
  * and the hours that were open, because "cannot generate fixtures" leaves them
  * with nothing to do about it.
  */

@@ -7,7 +7,7 @@ class NotificationPage {
   final List<AppNotification> items;
   final bool hasMore;
 
-  /// Passed back to the server VERBATIM. It is a `"<createdAt>~<id>"` pair today
+  /// Passed back to the server verbatim. It is a `"<createdAt>~<id>"` pair today
   /// and must be free to become something else without a client release, so
   /// nothing on this side parses it or builds one.
   final String? nextCursor;
@@ -154,7 +154,7 @@ class NotificationService {
         if (category != null && category.isNotEmpty) 'category': category,
       }, token: token);
 
-  /// Dismiss, NOT delete: the row stays on disk with `dismissed_at` set, out of the
+  /// Dismiss, not delete: the row stays on disk with `dismissed_at` set, out of the
   /// feed and out of the badge. That is what makes a swipe recoverable by support
   /// and what keeps "you were marked a no-show" from being erasable evidence.
   Future<Map<String, dynamic>> dismiss(String token, String id) =>
@@ -164,7 +164,7 @@ class NotificationService {
   /// rows survive and so do rows younger than an hour, so a tap right after a batch
   /// lands cannot erase what just arrived.
   ///
-  /// The category rides in the QUERY STRING because that is where the route reads it
+  /// The category rides in the query string because that is where the route reads it
   /// (`req.query.category`); ApiClient.delete has no queryParams argument, so it is
   /// appended here rather than silently sent in a body the server never opens.
   Future<Map<String, dynamic>> clearRead(String token, {String? category}) {
@@ -180,7 +180,7 @@ class NotificationService {
     return NotificationPrefs.fromJson(Map<String, dynamic>.from(r['data'] as Map));
   }
 
-  /// The response is what was actually KEPT after the server re-normalised it, so
+  /// The response is what was kept after the server re-normalised it, so
   /// the screen renders the echo rather than its own optimistic copy -- an unknown
   /// category or a malformed "25:99" is dropped server-side, and showing the user
   /// their rejected input back as if it stuck is the failure this avoids.
@@ -213,7 +213,7 @@ class NotificationService {
   Future<Map<String, dynamic>> revokeDevice(String token, String fcmToken) =>
       _api.delete(ApiConstants.notificationDevices, body: {'token': fcmToken}, token: token);
 
-  /// Dev-only, and only ever to yourself -- the demo lever for showing push work
+  /// Dev-only, and only ever to the signed-in device -- the demo lever for showing push work
   /// without waiting for a real booking. The route accepts no userId at all, so it
   /// cannot be turned into a way to buzz somebody else's phone, and it is refused
   /// outright in production.

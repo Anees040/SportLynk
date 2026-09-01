@@ -10,34 +10,31 @@
  *                    prize, and notify everyone.
  *   too few teams →  cancel and refund every entry in full.
  *
- * WHY A JOB AND NOT JUST THE BUTTON
- * ---------------------------------
+ * Why a job and not just the button
  * `POST /:id/generate` exists for an owner who wants to start early, but FE-4 says
- * the deadline is ENFORCED, and nobody is obliged to press anything. Without this
+ * the deadline is enforced, and nobody is obliged to press anything. Without this
  * sweep a tournament whose owner lost interest would sit at `open` forever with
  * eight captains' money frozen — the fee held, no bracket, no refund. That is the
  * worst state in the whole module, and it is exactly the state that only a clock
  * can prevent.
  *
- * WHY PER-TOURNAMENT TRANSACTIONS
- * -------------------------------
+ * Why per-tournament transactions
  * Same reason matchExpiryJob works per row: one generation moves eight wallets,
  * blocks seven slots and writes nine notifications. Batching them would mean one
  * venue with no free hours takes down the whole sweep, and a long transaction would
  * hold every affected wallet's lock at once. Per tournament, a failure costs that
  * one tournament, which the next sweep retries.
  *
- * WHY IT NEVER "FIXES" A REFUSAL
- * ------------------------------
+ * Why it never "FIXES" A refusal
  * `generateFixtures` returning `ok: false` — not enough free hours, a slot taken
  * mid-scan — rolls back and the tournament stays `open` for the next sweep. The job
- * does NOT then cancel it, because a venue that has not opened next week's slots
+ * does not then cancel it, because a venue that has not opened next week's slots
  * yet is a fixable situation and the owner is the one who can fix it; auto-cancelling
  * would refund eight teams for an administrative gap that a single tap resolves.
  * `not_enough_slots` is therefore logged loudly and left alone, and the only
- * automatic cancellation is the one FE-4 actually specifies: too few teams.
+ * automatic cancellation is the one FE-4 specifies: too few teams.
  *
- * The candidate scan runs OUTSIDE any transaction; `generateFixturesTx` re-reads
+ * The candidate scan runs outside any transaction; `generateFixturesTx` re-reads
  * and locks each tournament and re-checks the latch, so a deadline that the owner
  * pressed Generate on a millisecond earlier turns into `already_generated` and is
  * skipped rather than drawn twice.

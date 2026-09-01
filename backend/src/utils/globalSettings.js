@@ -2,25 +2,25 @@
  * global_settings reader  —  S.2 Wave B
  *
  * Migration 013 created `global_settings (key text PRIMARY KEY, value jsonb)` and
- * seeded four rows, but until now NOTHING read them. This module is the single
+ * seeded four rows, but until now nothing read them. This module is the single
  * place that does, so a value like the ELO K-factor is tunable from the database
  * instead of being a literal buried in a route.
  *
  * Three things this has to get right, none of which are obvious:
  *
- *   1. NEVER THROW. Settings are read on the hot path of verifying a match. If
+ *   1. Never throw. Settings are read on the hot path of verifying a match. If
  *      the settings table is missing, empty, or the connection blips, an ELO
  *      calculation must still happen with the documented defaults rather than
  *      500-ing a match the players already played. Every failure here degrades
  *      to DEFAULTS and logs once.
  *
- *   2. SCALARS AND OBJECTS BOTH. The seeded rows are a mix: `elo` is a jsonb
- *      OBJECT (`{"base":1000,"k_factor":32}`) while `commission_pct` is a jsonb
- *      STRING (`'0'`). node-postgres parses jsonb for us, so `value` arrives as
+ *   2. Scalars and objects both. The seeded rows are a mix: `elo` is a jsonb
+ *      object (`{"base":1000,"k_factor":32}`) while `commission_pct` is a jsonb
+ *      string (`'0'`). node-postgres parses jsonb automatically, so `value` arrives as
  *      an object, a string, or a number depending on the row. Callers get a
  *      typed accessor per setting rather than having to know which.
  *
- *   3. CLAMP, DON'T TRUST. `global_settings` is admin-writable. A typo like
+ *   3. Clamp, don't trust. `global_settings` is admin-writable. A typo like
  *      `{"base":"abc"}` must not propagate NaN into a team's rating column,
  *      where it would poison every future match. Anything non-finite or out of
  *      a sane band falls back to the default for that field alone.
@@ -54,10 +54,10 @@ const DEFAULTS = Object.freeze({
     dispute_freeze_ratio: 0.30, // ER2.3
     dispute_freeze_min: 3,     // ER2.3
   }),
-  // Migration 019. These are the defaults a NEW tournament is created with, not
+  // Migration 019. These are the defaults a new tournament is created with, not
   // live policy: min_teams / prize_percent / winner_percent / runnerup_percent /
   // venue_discount_percent / slot_minutes are copied onto the tournament row at
-  // create time, and the ROW wins from then on. A tournament already holding
+  // create time, and the row wins from then on. A tournament already holding
   // captains' entry fees must not have its prize split changed underneath them.
   tournament: Object.freeze({
     min_teams: 4,
@@ -94,7 +94,7 @@ function warnOnce(key, message) {
 /**
  * Read one row. Accepts an optional `client` so a caller already inside a
  * transaction reads through the same connection instead of grabbing a second one
- * from the pool (which, under load, is how you deadlock yourself).
+ * from the pool (which, under load, is how a deadlock happens).
  */
 async function readRow(key, client) {
   const q = 'SELECT value FROM global_settings WHERE key = $1';
@@ -144,7 +144,7 @@ function clampNum(raw, fallback, min, max) {
 /**
  * ELO parameters, already validated and camelCased for JS callers.
  *
- *   base     starting rating for a brand-new team  (teams.elo DEFAULT 1000)
+ *   base     starting rating for a brand-new team  (teams.elo default 1000)
  *   kFactor  how violently one match can move a rating
  *
  * Bands are deliberately generous but finite: a K of 0 would freeze the whole
@@ -162,7 +162,7 @@ async function elo({ client = null, fresh = false } = {}) {
 }
 
 /**
- * Platform commission as a PERCENTAGE of a booking's price (FR10.9).
+ * Platform commission as a percentage of a booking's price (FR10.9).
  *
  * Seeded 0, which is why nothing read this until now: at 0 there is nothing to
  * take. `routes/owner.js`'s QR check-in is the one place it applies — the moment
@@ -181,15 +181,15 @@ async function commission({ client = null, fresh = false } = {}) {
 /**
  * The player's at-risk deposit, as a percentage of the slot price (FR10.10).
  *
- * WHERE THIS IS AUTHORITATIVE, AND WHERE IT IS NOT
- * Authoritative at ONE moment: `bookingService.createBooking` stamps
+ * WHERE this is authoritative, AND WHERE it is not
+ * Authoritative at one moment: `bookingService.createBooking` stamps
  * `bookings.deposit_amount` from it. Every refund afterwards works from that
- * STORED amount (`escrow.penaltySplit(escrowHeld, depositAmount)`), so lowering
+ * stored amount (`escrow.penaltySplit(escrowHeld, depositAmount)`), so lowering
  * the percentage tomorrow cannot retroactively change what a player already
  * agreed to — which is the whole reason the amount is a column and not a formula.
  *
  * `escrow.POLICY.DEPOSIT_PERCENT` is the same number kept in sync for the ~30
- * places that only DESCRIBE the policy ("20% of the total is at risk"). Copy that
+ * places that only describe the policy ("20% of the total is at risk"). Copy that
  * disagrees with the row is worse than either value alone, so the settings writer
  * pushes it there (`escrow.setDepositPercent`) as well as into the cache.
  *
@@ -206,7 +206,7 @@ async function deposit({ client = null, fresh = false } = {}) {
  * Which sports may be booked or listed right now (FR10.9).
  *
  * Returned as a plain object of booleans keyed by the sport enum. A key that is
- * ABSENT is treated as enabled by `isSportEnabled` below: adding `padel` to the
+ * absent is treated as enabled by `isSportEnabled` below: adding `padel` to the
  * database enum must not silently disable it because nobody remembered to add a
  * `true` here.
  */
@@ -247,7 +247,7 @@ function invalidate(key) {
  *   challengeTtlHours   how long an unanswered challenge lives            (48)
  *   disputeWindowHours  how long after verification a result can be
  *                       disputed                                          (24)
- *   disputeFreezeRatio  fraction of a team's matches disputed BY that team
+ *   disputeFreezeRatio  fraction of a team's matches disputed by that team
  *                       that triggers a platform-wide ELO freeze         (0.30)
  *   disputeFreezeMin    minimum disputes before the ratio is even
  *                       considered, so a team that disputes its first and
@@ -285,7 +285,7 @@ async function match({ client = null, fresh = false } = {}) {
  *
  *   name              what the assistant calls itself in its own replies
  *   confidenceFloor   below this the dialog manager shows the capability menu
- *                     instead of guessing. A MIRROR of the artifact's threshold,
+ *                     instead of guessing. A mirror of the artifact's threshold,
  *                     not the authority on it: the model applies its own floor
  *                     and reports it on every parse, so this value exists for the
  *                     UI copy and for an owner who wants Scout to be more
@@ -293,7 +293,7 @@ async function match({ client = null, fresh = false } = {}) {
  *   escalationEnabled whether an unknown venue question may be forwarded to that
  *                     venue's owner. One switch, so a demo can turn the learning
  *                     loop off without a deploy.
- *   policyText        editable SENTENCES with {placeholders}; the numbers are
+ *   policyText        editable sentences with {placeholders}; the numbers are
  *                     substituted from escrow.js POLICY by utils/policyText.js.
  *
  * The clamp on confidenceFloor is [0.05, 0.95] for the same reason the ELO bands

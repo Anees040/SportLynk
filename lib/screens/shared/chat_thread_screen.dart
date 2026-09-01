@@ -28,10 +28,10 @@ import '../player/team_roster_screen.dart';
 /// delete. The heavy lifting is in [ChatController]; this screen is composition,
 /// gestures, and the handful of things that genuinely differ per channel type.
 ///
-/// WHY ONE SCREEN FOR THREE CHANNEL TYPES
+/// Why one screen for three channel types
 /// [ChatController] was already generic over `channelId` — it never knew what a
-/// team was. Only three things actually vary: how the room is resolved when the
-/// caller holds the THING instead of the room, what the header says, and where
+/// team was. Only three things vary: how the room is resolved when the
+/// caller holds the thing instead of the room, what the header says, and where
 /// the header can jump to. A screen per type would have forked the bubbles, the
 /// ticks and the reaction palette three ways in order to change a title.
 ///
@@ -46,7 +46,7 @@ class ChatThreadScreen extends StatefulWidget {
   /// The room, when the caller already knows it. Every inbox row does.
   final String? channelId;
 
-  /// The thing the room is ABOUT — a team id, a booking id or a match id — used
+  /// The thing the room is about — a team id, a booking id or a match id — used
   /// to resolve [channelId] when it was not supplied.
   final String? refId;
 
@@ -59,7 +59,7 @@ class ChatThreadScreen extends StatefulWidget {
   final String? contextLine;
 
   /// Team rooms only, and only so the header can reach the roster and the match
-  /// centre — both of which need the team's NAME as well as its id.
+  /// centre — both of which need the team's name as well as its id.
   final String? teamId;
   final String? teamName;
 
@@ -174,9 +174,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   String? _fatalError;
   int _lastCount = 0;
 
-  // ── FR8.10 reply suggestions ───────────────────────────────
-  // Only ever offered for the message somebody ELSE just sent, and the endpoint
-  // refuses to suggest a reply to your own message anyway — so `_qrFor` is the
+  // FR8.10 reply suggestions
+  // Only ever offered for the message somebody else just sent, and the endpoint
+  // refuses to suggest a reply to the viewer's own message anyway — so `_qrFor` is the
   // inbound message id the current set answers, and it is how a set is replaced
   // exactly once per incoming message instead of on every controller tick.
   QuickReplySet? _qr;
@@ -201,15 +201,15 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
 
   /// Resolve the room, then open the controller.
   ///
-  /// A MISSING ROOM IS NOT AN ERROR, and the message says so per type: a booking
+  /// A missing room is not an error, and the message says so per type: a booking
   /// room exists only once the booking is confirmed, and a coordination room only
   /// once the challenge is accepted, so "not open yet" is the truth in both cases.
-  /// The server answers 404 rather than 403 for a room that is not yours, which is
+  /// The server answers 404 rather than 403 for a room the viewer is not in, which is
   /// why every branch here reads the same way — a stranger cannot tell a room they
   /// are not in from a room that does not exist. Each message therefore says who the
-  /// room is FOR rather than anything about the viewer, which keeps it true in all
+  /// room is for rather than anything about the viewer, which keeps it true in all
   /// three cases: not created yet, created before this feature shipped, or created
-  /// and not yours.
+  /// and not this viewer's.
   Future<void> _bootstrap() async {
     if (_channelId == null || _channelId!.isEmpty) {
       final ref = widget.refId;
@@ -249,7 +249,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
 
   /// True where a canned reply is a help rather than a nuisance: a booking room
   /// has exactly two people and the same six questions all day. Group rooms can
-  /// still ask for suggestions from the overflow menu — they are just not offered
+  /// still ask for suggestions from the overflow menu — they are not offered
   /// unprompted, because a suggestion per inbound message in a busy team chat is
   /// a round trip nobody asked for.
   bool get _suggestsAutomatically => widget.type == ChatChannelType.booking;
@@ -269,9 +269,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     if (_suggestsAutomatically) _maybeSuggest();
   }
 
-  // ── FR8.10: three replies, one tap ─────────────────────────
+  // FR8.10: three replies, one tap
   //
-  // ADVISORY BY CONSTRUCTION. A tap fills the composer and stops there; the send
+  // Advisory by construction. A tap fills the composer and stops there; the send
   // is the ordinary send, with the same validation, flood limit and idempotency
   // key. Nothing on this screen can put a sentence in somebody's mouth.
 
@@ -336,7 +336,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     await _fetchSuggestions(m);
   }
 
-  /// A chip fills the composer and puts the caret at the end. It does NOT send.
+  /// A chip fills the composer and puts the caret at the end. It does not send.
   void _pickSuggestion(QuickReply q) {
     _input.text = q.text;
     _input.selection = TextSelection.collapsed(offset: q.text.length);
@@ -351,9 +351,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
         _qr = null;
       });
 
-  // ── Mute ───────────────────────────────────────────────────
+  // Mute
   //
-  // `muted_until` is a TIMESTAMP on the server, not a boolean, so "mute for 8
+  // `muted_until` is a timestamp on the server, not a boolean, so "mute for 8
   // hours" un-mutes itself. The room keeps showing its own unread count in the
   // inbox either way — muting only takes it out of the header badge.
   Future<void> _toggleMute() async {
@@ -386,8 +386,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   }
 
   void _onScroll() {
-    // Reversed list: approaching maxScrollExtent means we're reaching the oldest
-    // loaded message — page in more history.
+    // Reversed list: approaching maxScrollExtent nears the oldest loaded message,
+    // so page in more history.
     if (!_scroll.hasClients) return;
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 240) {
       _controller?.loadMore();
@@ -409,7 +409,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     super.dispose();
   }
 
-  // ── Sending an image ───────────────────────────────────────
+  // Sending an image
   Future<void> _pickImage() async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -464,7 +464,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     _jumpToBottom();
   }
 
-  // ── Long-press actions ─────────────────────────────────────
+  // Long-press actions
   void _showActions(ChatMessage m) {
     final c = _controller;
     if (c == null) return;
@@ -643,7 +643,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     );
   }
 
-  /// The header, which is the only part of this screen that really knows what the
+  /// The header, which is the only part of this screen that knows what the
   /// room is about.
   ///
   /// The subtitle has a precedence and each step earns its place: live typing
@@ -761,7 +761,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   }
 
   /// An empty room is never a blank screen, and the sentence says what this
-  /// particular room is FOR — a booking room and a coordination room are opened by
+  /// particular room is for — a booking room and a coordination room are opened by
   /// the system, so the first person in will not otherwise know why they are here.
   Widget _emptyState() => ListView(
         children: [

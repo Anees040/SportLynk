@@ -28,14 +28,14 @@ class ScoutExit {
 
 /// Scout: the whole assistant, one screen.
 ///
-/// THE SURFACE IS DARK ON PURPOSE. Every other player screen is white cards on grey,
+/// The SURFACE is dark on purpose. Every other player screen is white cards on grey,
 /// and that is right for browsing — but a conversation is a different kind of place,
 /// and twelve card types stacked in one scroll view need a background that recedes
 /// instead of competing. The dark green keeps the brand and gives the cards, the money
 /// figures and the accents somewhere to sit. Contrast ratios were checked, not
 /// eyeballed; see `scout_theme.dart`.
 ///
-/// THERE IS NO MIC BUTTON. Voice was a stretch goal, and a microphone icon that does
+/// There is no mic button. Voice was a stretch goal, and a microphone icon that does
 /// nothing is worse than no microphone at all — it is the single most tapped affordance
 /// in any chat UI and a dead one reads as a broken app. Text-first, as specified.
 class AssistantScreen extends StatefulWidget {
@@ -116,9 +116,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
 
   /// Decide whether this change should move the viewport.
   ///
-  /// Only a change at the END of the transcript may scroll. Loading OLDER messages
+  /// Only a change at the end of the transcript may scroll. Loading older messages
   /// inserts at index 0 and must leave the viewport exactly where it was — a chat that
-  /// throws you back to the bottom the moment you reach for history is unusable. The
+  /// throws the view back to the bottom the moment history is scrolled to is unusable. The
   /// tail id is the whole test: it changes when a bubble is appended and does not when
   /// a page is prepended.
   void _syncScroll() {
@@ -154,7 +154,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
     }
   }
 
-  // ── conversation moves ────────────────────────────────────────────────────
+  // Conversation moves
 
   void _send() {
     final text = _input.text.trim();
@@ -171,7 +171,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
     _c!.sendChip(chip);
   }
 
-  // ── client moves ──────────────────────────────────────────────────────────
+  // Client moves
 
   /// Leave the chat for a screen named by the backend's `meta.screen`.
   void _goScreen(String screen) {
@@ -182,7 +182,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
       return;
     }
     if (_tabScreens.containsKey(key)) {
-      // The tabs live in the shell below us, so the shell has to do the switching.
+      // The tabs live in the shell below this screen, so the shell has to do the switching.
       _leave(screen: key);
       return;
     }
@@ -212,7 +212,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
     if (mounted) _toast('No maps app could open this location.');
   }
 
-  // ── leaving ───────────────────────────────────────────────────────────────
+  // Leaving
 
   /// Pop with the two facts the shell needs. Called by the back button, the system
   /// gesture and `_goScreen` alike, so there is exactly one exit path.
@@ -233,7 +233,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
-  // ── build ─────────────────────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {
@@ -300,7 +300,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         ),
       );
 
-  // ── app bar ───────────────────────────────────────────────────────────────
+  // App bar
 
   /// A hand-built bar rather than an [AppBar], for one reason: the status line under
   /// the name. Knowing whether Scout is idle or working belongs next to the name, not
@@ -405,7 +405,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
-  // ── notice ────────────────────────────────────────────────────────────────
+  // Notice
 
   /// Errors that are about the app rather than about the conversation — a failed
   /// rename, a thread that would not delete. Conversation problems arrive as bubbles;
@@ -443,7 +443,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
-  // ── transcript ────────────────────────────────────────────────────────────
+  // Transcript
 
   Widget _body(AssistantController c) {
     if (c.booting) {
@@ -527,13 +527,13 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
-  // ── empty state ───────────────────────────────────────────────────────────
+  // Empty state
 
   /// The four seed chips.
   ///
   /// "My ELO" posts `team_stats`, not `elo_help`: in this app a rating belongs to a
   /// team, and with no team named the handler resolves the user's own — so the chip
-  /// answers "what is MY rating" rather than explaining the formula. The explanation
+  /// answers "what is my rating" rather than explaining the formula. The explanation
   /// is one chip further in, offered by the answer itself.
   static const List<ScoutChip> _seedChips = [
     ScoutChip(label: 'Find a ground', action: 'find_venue'),
@@ -608,7 +608,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         ),
       );
 
-  // ── jump bar ──────────────────────────────────────────────────────────────
+  // Jump bar
 
   /// When Scout's last answer was "that lives on the Wallet screen", the app should
   /// offer the trip rather than leave the user to find it. Slim, dismissible, and
@@ -662,7 +662,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
-  // ── composer ──────────────────────────────────────────────────────────────
+  // Composer
 
   /// The hint changes with the dialog state. When Scout has asked a question, an
   /// empty box that still says "Ask Scout anything" is a small lie about what is
@@ -715,7 +715,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   isDense: true,
                   border: InputBorder.none,
                   // The 500-char cap is the server's, not a style choice, so the
-                  // counter only appears when the user is actually near it.
+                  // counter only appears when the user is near it.
                   counterText: '',
                   hintText: _hint(c),
                   hintStyle: const TextStyle(color: ScoutTheme.inkFaint, fontSize: 13),

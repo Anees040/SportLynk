@@ -87,7 +87,7 @@ class _OwnerTournamentsScreenState extends State<OwnerTournamentsScreen> {
     await _load(silent: true);
   }
 
-  // ── Build ──────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {

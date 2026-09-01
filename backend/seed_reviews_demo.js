@@ -1,31 +1,31 @@
 /**
  * S.4 Wave D — reviews & trust demo seed.
  *
- * The reviews backend (Wave C) shipped with ZERO reviews in the database, so
+ * The reviews backend (Wave C) shipped with zero reviews in the database, so
  * every Wave D screen — venue reviews, the trust profile, the moderation queue —
  * renders empty until someone writes one. This script fills those screens with a
  * small, clearly-labelled, idempotent fixture so the app looks alive on first
- * launch and the demo has content to act on. It is NOT a substitute for the live
+ * launch and the demo has content to act on. It is not a substitute for the live
  * end-to-end test; the live sentiment chip, the abusive→queue path and the
  * two-captains-review-each-other trust bump are all still exercised by hand.
  *
- * WHAT IT LEAVES BEHIND
+ * What it leaves behind
  *   • Two demo teams — "Demo United" (captain = 1st player) and "Demo Rovers"
  *     (captain = 2nd player) — with a member, elo and W/L/D so the Team
  *     Reputation strip has something to show.
  *   • A handful of checked-in venue bookings and one venue review each, spanning
- *     positive / neutral / negative sentiment, INCLUDING one abusive review that
+ *     positive / neutral / negative sentiment, including one abusive review that
  *     is flagged and carries a manual report — so the admin moderation queue is
  *     not empty.
- *   • Opponent (captain-to-captain) reviews received by BOTH demo captains, so
+ *   • Opponent (captain-to-captain) reviews received by both demo captains, so
  *     each captain's Trust Profile shows a populated gauge, four live breakdown
  *     tiles and a reviews ledger.
- *   • ONE completed match between the two demo teams, deliberately LEFT
- *     UNREVIEWED, so the demo can log in as a captain and file the opponent review
+ *   • one completed match between the two demo teams, deliberately left
+ *     unreviewed, so the demo can log in as a captain and file the opponent review
  *     live (the "trust updates within seconds" moment) without hitting the
  *     one-review-per-booking guard.
  *
- * WHY IT WRITES REVIEWS DIRECTLY (not through POST /api/reviews)
+ * Why it writes reviews directly (not through POST /api/reviews)
  *   Seeded reviews carry pre-set sentiment labels/scores so the histogram and the
  *   sentiment summary have data with no ml-service round-trip, and so a re-run is
  *   deterministic. The database's own guards still apply — the one-per-author
@@ -33,7 +33,7 @@
  *   exactly as a bad request would at the route. Trust is then recomputed with the
  *   real utils/trustScore.recomputeTrust, so the stored breakdown is genuine.
  *
- * IDEMPOTENT. Teams are keyed by name, bookings by a stable notes marker, reviews
+ * Idempotent. Teams are keyed by name, bookings by a stable notes marker, reviews
  * by the (booking, author, type) unique index (ON CONFLICT DO NOTHING). Running it
  * twice changes nothing the first run did.
  *
@@ -56,13 +56,11 @@ const TEAM_B_NAME = 'Demo Rovers';
 
 const arg = process.argv[2];
 
-// ── tiny console helpers ─────────────────────────────────────────────────────
+// Tiny console helpers
 const log = (m) => console.log(`   ${m}`);
 const section = (t) => console.log(`\n── ${t} ${'─'.repeat(Math.max(0, 58 - t.length))}`);
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Idempotent builders
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** A demo team captained by `userId`. Keyed by name; stats reset on every run so
  *  the Team Reputation strip is stable rather than drifting with re-runs. */
@@ -179,9 +177,7 @@ async function refreshVenueAggregate(client, venueId) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Prerequisites
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function loadPrereqs(client) {
   const players = (await client.query(
@@ -194,9 +190,7 @@ async function loadPrereqs(client) {
   return { players, venue };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Seed
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function seed() {
   const client = await pool.connect();
@@ -222,7 +216,7 @@ async function seed() {
 
     await client.query('BEGIN');
 
-    // ── Teams ────────────────────────────────────────────────────────────────
+    // Teams
     section('Teams');
     const teamA = await ensureTeam(client, TEAM_A_NAME, sport, capA.id,
       { elo: 1185, wins: 8, losses: 3, draws: 2 });
@@ -231,7 +225,7 @@ async function seed() {
     await addMember(client, teamA, member?.id);
     log(`${TEAM_A_NAME} (elo 1185) vs ${TEAM_B_NAME} (elo 1072) — captains wired.`);
 
-    // ── Venue reviews (varied sentiment, one abusive→flagged) ─────────────────
+    // Venue reviews (varied sentiment, one abusive→flagged)
     section('Venue reviews');
     const venueReviewData = [
       { by: capA, stars: 5, text: 'Great turf, floodlights were perfect and the staff were super helpful. Highly recommended!', label: 'positive', score: 0.94 },
@@ -266,9 +260,9 @@ async function seed() {
     await refreshVenueAggregate(client, venue.id);
     log(`${venueReviewData.length} venue reviews (1 abusive, flagged + reported). Venue rating refreshed.`);
 
-    // ── Opponent (captain-to-captain) reviews → populate both trust profiles ──
+    // Opponent (captain-to-captain) reviews → populate both trust profiles
     section('Opponent reviews (captain-to-captain)');
-    // Received BY captain B (from A). A separate booking each — one review per booking.
+    // Received by captain B (from A). A separate booking each — one review per booking.
     const bReviews = [
       { stars: 5, text: 'Titan-level sportsmanship. Played clean, shook hands, great game.', label: 'positive', score: 0.90 },
       { stars: 4, text: 'Competitive match but all in good spirit. Respect.', label: 'positive', score: 0.58 },
@@ -287,7 +281,7 @@ async function seed() {
         sentimentLabel: d.label, sentimentScore: d.score,
       });
     }
-    // Received BY captain A (from B).
+    // Received by captain A (from B).
     const aReviews = [
       { stars: 5, text: 'Respectful opponents, well organised and on time. Would play again.', label: 'positive', score: 0.86 },
       { stars: 4, text: 'Good match, no issues at all.', label: 'positive', score: 0.50 },
@@ -312,7 +306,7 @@ async function seed() {
     });
     log(`${bReviews.length} reviews received by ${capB.name}, ${aReviews.length} by ${capA.name}, + 1 no-show.`);
 
-    // ── One completed match, LEFT UNREVIEWED for the live demo ────────────────
+    // One completed match, left unreviewed for the live demo
     section('Live-demo match');
     const liveBooking = await ensureBooking(client, {
       tag: 'liveMatch', playerId: capA.id, venueId: venue.id, price,
@@ -323,7 +317,7 @@ async function seed() {
     });
     log(`Completed match ${String(matchId).slice(0, 8)}… on booking ${String(liveBooking).slice(0, 8)}… — no opponent review yet.`);
 
-    // ── Recompute trust from the real engine ──────────────────────────────────
+    // Recompute trust from the real engine
     section('Trust recompute');
     for (const uid of [capA.id, capB.id, member?.id].filter(Boolean)) {
       const { trustScore } = await recomputeTrust(client, uid);
@@ -348,9 +342,7 @@ async function seed() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Undo — remove exactly what seed() created, in FK-safe order
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function undo() {
   const client = await pool.connect();
@@ -383,7 +375,6 @@ async function undo() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 
 (async () => {
   try {

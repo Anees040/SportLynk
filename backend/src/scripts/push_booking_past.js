@@ -2,8 +2,7 @@
  * push_booking_past.js — move one booking's slot time into the past so a match
  * result can be submitted without waiting for the pitch time to arrive.
  *
- * WHY THIS EXISTS
- * ---------------
+ * Why this exists
  * The match flow deliberately refuses a result before the slot has started
  * (routes/matches.js: "You can submit the result once the slot has started") —
  * otherwise a captain could file a scoreline for a game nobody played and the
@@ -14,8 +13,7 @@
  * run_match_flow_check.js solves this internally with pushBookingIntoPast(). This
  * script is the same operation as a command, for the manual run.
  *
- * WHY NOT JUST AN UPDATE IN THE SQL EDITOR
- * ----------------------------------------
+ * Why not just an UPDATE IN the SQL editor
  * Because of checked_in_at. A booking whose start time is in the past with
  * checked_in_at IS NULL is exactly what noShowJob.js sweeps: 30 minutes later it
  * auto-forfeits the booking and splits the escrow to the owner. A hand-written
@@ -24,8 +22,7 @@
  * script sets checked_in_at in the same statement, which is the flag that sweep
  * checks (noShowJob.js: `AND b.checked_in_at IS NULL`).
  *
- * THE HONEST CAVEAT
- * -----------------
+ * The honest CAVEAT
  * Setting checked_in_at is not a real QR check-in: it moves no money. The escrow
  * stays frozen in the player's wallet instead of transferring to the owner, so
  * /wallet/frozen will report a non-zero delta afterwards. That is drift, it is
@@ -34,15 +31,13 @@
  * money properly instead — the match result still submits either way, because that
  * gate reads the slot time and not the booking status.
  *
- * BOOKINGS, NOT SLOTS
- * -------------------
+ * Bookings, not SLOTS
  * `bookings` carries its own slot_date/start_time/end_time, denormalised at
  * booking time, and both the picker (GET /matches/linkable-bookings) and the
  * result gate read those columns. The `slots` row is left alone: it stays booked,
  * and nothing reads its time for this flow.
  *
  * USAGE
- * -----
  *   node src/scripts/push_booking_past.js                       # list candidates
  *   node src/scripts/push_booking_past.js --match <uuid>        # by match
  *   node src/scripts/push_booking_past.js --booking <uuid>      # by booking

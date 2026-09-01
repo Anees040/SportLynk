@@ -98,10 +98,10 @@ MODEL_KEY = "intent"
 #: row, but real users paste, ramble and dictate, and 160 would 422 a genuine
 #: message. 500 is the point past which the text is a paragraph rather than an
 #: utterance, and a paragraph needs a different product (see the escalation loop
-#: in PROGRESS.md), not a longer vectoriser.
+#: in progress.md), not a longer vectoriser.
 MAX_TEXT_CHARS = 500
 
-#: Used ONLY when the served artifact carries no `confidenceThreshold`. Set to the
+#: Used only when the served artifact carries no `confidenceThreshold`. Set to the
 #: trained value, and bounded below, because the failure it guards is silent: a
 #: threshold of 0 turns every guess into a confident answer, and 0.99 makes the
 #: assistant answer nothing at all. See the module docstring on why this is a
@@ -148,9 +148,7 @@ class CamelModel(BaseModel):
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Requests
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class ParseRequest(CamelModel):
@@ -178,19 +176,17 @@ class ParseRequest(CamelModel):
     )
 
 
-# The three contract identifiers every parse publishes, bound HERE rather than
+# The three contract identifiers every parse publishes, bound here rather than
 # read inside `ParseResponse`. A pydantic class body is executed top to bottom in
-# its own namespace, so the response model's `entities` FIELD shadows the
-# `entities` MODULE for every line after it — `entities.ENTITY_SPEC_VERSION` two
+# its own namespace, so the response model's `entities` field shadows the
+# `entities` module for every line after it — `entities.ENTITY_SPEC_VERSION` two
 # lines down resolves against a FieldInfo and raises at import time.
 INTENT_SPEC_VERSION = intent_spec.INTENT_SPEC_VERSION
 ENTITY_SPEC_VERSION = entities.ENTITY_SPEC_VERSION
 NLU_TEXT_SPEC_VERSION = nlu_text.NLU_TEXT_SPEC_VERSION
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Responses
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class ScoredIntent(CamelModel):
@@ -245,9 +241,7 @@ class ParseResponse(CamelModel):
     entity_ms: float
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _require_model() -> Any:
@@ -406,9 +400,7 @@ def _scored(entry: Any, labels: list[str], text: str) -> list[tuple[str, float]]
     return pairs
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Routes
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 @router.post("/nlu/parse", response_model=ParseResponse)

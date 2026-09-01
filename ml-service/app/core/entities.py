@@ -138,9 +138,7 @@ KARACHI = ZoneInfo(TZ_NAME)
 CURRENCY = "PKR"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 1. The extractor's view of the text
-# ─────────────────────────────────────────────────────────────────────────────
 # Keep: letters, digits, and the four characters that carry meaning inside a
 # slot -- "-" (f-11, 6-8pm), "/" (30/08, g-8/2), ":" (7:30) and "," (2,500).
 # Everything else becomes a space, so "f-11?" and "3000/-" stop hiding a match.
@@ -148,7 +146,7 @@ _KEEP = re.compile(r"[^0-9a-z\-/:.,\s]+")
 _EDGE_PUNCT = "-/:,."
 _ZW_CODEPOINTS = (0x200b, 0x200c, 0x200d, 0x200e, 0x200f, 0x2060, 0xfeff)
 _ZERO_WIDTH = re.compile("[" + "".join(map(chr, _ZW_CODEPOINTS)) + "]")
-# Elongation squeeze, DIGITS EXCLUDED. This is the one place this module must
+# Elongation squeeze, digits excluded. This is the one place this module must
 # not copy nlu_text: "3000" contains a run of three zeroes, so a general
 # one-character repeat rule rewrites it to "300" and every budget silently
 # loses a factor of ten. It is invisible in the classifier's view (both
@@ -205,16 +203,14 @@ def _has(prepped: str, *needles: str) -> bool:
     return any(f" {n} " in padded for n in needles)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 2. Sport
-# ─────────────────────────────────────────────────────────────────────────────
 # Canonical values are exactly SLOT_VOCAB["sport"] -- the vocabulary the
 # classifier was trained on and the values Node's venue filter understands.
-# futsal is NOT folded into football: they are different products with different
+# futsal is not folded into football: they are different products with different
 # venues, and telling them apart is the whole point of extracting a sport.
 #
 # Most surface variants are already handled upstream (nlu_text folds futbal,
-# fotball, krikat, ...). What is added here is words that are NOT spellings of
+# fotball, krikat, ...). What is added here is words that are not spellings of
 # the canonical term: the ball codes, and "5-a-side" style forms that name a
 # format rather than a sport.
 SPORT_WORDS: dict[str, tuple[str, ...]] = {
@@ -236,7 +232,7 @@ SPORT_VARIANTS: dict[str, str] = {
 }
 
 #: Formats that imply a pitch size, not a sport. Recorded so the extractor can
-#: SEE them without inventing a sport from them: "5v5" is played on futsal
+#: see them without inventing a sport from them: "5v5" is played on futsal
 #: courts and football turf alike, so guessing here would be a wrong answer.
 FORMAT_WORDS: tuple[str, ...] = ("5v5", "6v6", "7v7", "8v8", "11v11")
 
@@ -254,17 +250,15 @@ def extract_sport(prepped: str) -> dict[str, Any] | None:
     return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 3. Dates
-# ─────────────────────────────────────────────────────────────────────────────
 # The Roman Urdu pre-mapping the wave spec asks for. Offsets in days from
 # "today in Asia/Karachi".
 #
-# "kal" is ambiguous in Urdu -- it is BOTH yesterday and tomorrow, disambiguated
+# "kal" is ambiguous in Urdu -- it is both yesterday and tomorrow, disambiguated
 # by verb tense that this extractor does not parse. It resolves to +1 because
-# every intent that carries a date here is about a booking, and you cannot book
-# yesterday. Recorded as a known limitation rather than left as a surprise: an
-# utterance about a PAST booking ("kal ka refund") gets tomorrow's date, which
+# every intent that carries a date here is about a booking, and yesterday cannot
+# be booked. Recorded as a known limitation rather than left as a surprise: an
+# utterance about a past booking ("kal ka refund") gets tomorrow's date, which
 # the dialog manager ignores for refund intents because it does not ask for one.
 RELATIVE_DAYS: dict[str, int] = {
     "aaj": 0, "today": 0, "abhi": 0, "now": 0,
@@ -282,7 +276,7 @@ DAY_AND_TIME: dict[str, str] = {"tonight": "raat", "tonite": "raat"}
 #   * "sun" -- SLOT_VOCAB's opener list has "sun" as the Urdu imperative
 #     "listen" ("sun bhai"), so mapping it to Sunday would date every third
 #     greeting. "sunday" is unambiguous and stays.
-#   * "hafta" -- it means BOTH Saturday and week ("agle hafte" = next week).
+#   * "hafta" -- it means both Saturday and week ("agle hafte" = next week).
 #     Only the unambiguous Saturday words are mapped.
 WEEKDAYS: dict[str, int] = {
     "monday": 0, "mon": 0, "peer": 0, "somwar": 0,
@@ -294,7 +288,7 @@ WEEKDAYS: dict[str, int] = {
     "sunday": 6, "itwar": 6, "itwaar": 6, "aitwar": 6,
 }
 
-#: "next friday" / "agle jumma" -- forces the STRICTLY next occurrence, so on a
+#: "next friday" / "agle jumma" -- forces the strictly next occurrence, so on a
 #: Friday it means +7 and not today.
 NEXT_CUES: tuple[str, ...] = ("next", "agle", "agli", "aane", "aanay", "coming")
 
@@ -312,7 +306,7 @@ MONTHS: dict[str, int] = {
 _MONTH_ALT = "|".join(sorted(MONTHS, key=len, reverse=True))
 
 _RE_ISO_DATE = re.compile(r"\b(20[0-9]{2})-([01]?[0-9])-([0-3]?[0-9])\b")
-# Numeric day/month. "/" always; "-" ONLY with a 4-digit year, because "6-8pm"
+# Numeric day/month. "/" always; "-" only with a 4-digit year, because "6-8pm"
 # is a time range and would otherwise parse as the 6th of August.
 _RE_DMY_SLASH = re.compile(r"\b([0-3]?[0-9])/([01]?[0-9])(?:/((?:20)?[0-9]{2}))?\b")
 _RE_DMY_DASH = re.compile(r"\b([0-3]?[0-9])-([01]?[0-9])-(20[0-9]{2})\b")
@@ -494,7 +488,7 @@ def extract_date(
         rule = f"weekday:{word}{':next' if strict else ''}"
         return _date_hit(resolved, None, word, rule, match.span())
 
-    # 6. Last resort: hand a date-looking FRAGMENT to dateparser. Never the whole
+    # 6. Last resort: hand a date-looking fragment to dateparser. Never the whole
     #    utterance -- see the module docstring for what it does with one.
     match = _RE_DATE_FRAGMENT.search(prepped)
     if match and not _overlaps(match.span(), claimed):
@@ -505,9 +499,7 @@ def extract_date(
     return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 4. dateparser: optional, last, and warmed
-# ─────────────────────────────────────────────────────────────────────────────
 try:                                    # pragma: no cover - environment dependent
     import dateparser as _dateparser_mod
 
@@ -558,11 +550,9 @@ def warm() -> dict[str, Any]:
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 5. Times
-# ─────────────────────────────────────────────────────────────────────────────
 # The daypart windows the wave spec names, plus their English equivalents. These
-# are WINDOWS, not instants: "shaam" is a three-hour slot the action layer can
+# are Windows, not instants: "shaam" is a three-hour slot the action layer can
 # search, and collapsing it to 18:00 would silently drop 19:00 and 20:00 from a
 # result set the user would have accepted.
 #
@@ -588,7 +578,7 @@ _AM_DAYPARTS: tuple[str, ...] = ("subah", "morning")
 
 # Urdu clock fractions. "saade aath" is 8:30 and appears in SLOT_VOCAB, so it is
 # in the corpus and has to resolve. "dedh"/"dhai" are irregular: they are not
-# "half past N", they ARE 1:30 and 2:30.
+# "half past N", they are 1:30 and 2:30.
 URDU_FRACTIONS: dict[str, int] = {
     "saade": 30, "sade": 30, "sadhe": 30, "sarhe": 30,
     "sawa": 15, "sava": 15,
@@ -606,14 +596,14 @@ URDU_NUMBERS: dict[str, int] = {
     "barah": 12,
 }
 
-#: Words that make a number a DURATION, not a clock time. "2 hours" is how long,
+#: Words that make a number a duration, not a clock time. "2 hours" is how long,
 #: not when, and reading it as 14:00 would book the wrong slot.
 DURATION_WORDS: tuple[str, ...] = (
     "hour", "hours", "hr", "hrs", "ghanta", "ghante", "ghanto", "ghantay",
     "minute", "minutes", "min", "mins", "mint", "mints", "din", "days", "day",
 )
 
-#: A bare hour needs one of these to BE a time at all (precision over recall):
+#: A bare hour needs one of these to be a time at all (precision over recall):
 #: an explicit marker, a ":" , "baje", or a daypart word elsewhere in the
 #: utterance. nlu_text already folds bajay/bje/bajey to "baje", so one form
 #: covers the spellings.
@@ -766,11 +756,9 @@ def extract_time(
     return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 6. Budget
-# ─────────────────────────────────────────────────────────────────────────────
 # Cue-anchored, always. A bare "2000" is a price, a jersey number, a year and a
-# count; only a cue makes it a BUDGET, and inventing one from a naked number is
+# count; only a cue makes it a budget, and inventing one from a naked number is
 # how an extractor starts filtering the catalogue for reasons the user cannot
 # see. The magnitude split does the rest of the work: a budget needs three
 # digits (or a "k"), a clock hour is at most two, so time and money can never
@@ -883,9 +871,7 @@ def extract_budget(
     return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 7. Areas -- the gazetteer
-# ─────────────────────────────────────────────────────────────────────────────
 CITY_ALIASES: dict[str, str] = {
     "islamabad": "Islamabad", "isb": "Islamabad", "isl": "Islamabad",
     "isd": "Islamabad", "capital": "Islamabad",
@@ -896,10 +882,10 @@ _RE_CITY = _alt(CITY_ALIASES)
 
 # Islamabad/Rawalpindi sector token, for a sector nobody seeded ("g-13", "i-10").
 # The letter range matches reco_features._RE_SECTOR (A-I is what the twin cities
-# actually use). The SPACED form ("f 11") is accepted for every letter except "a"
+# use). The spaced form ("f 11") is accepted for every letter except "a"
 # and "i", which are English words: "i 8 baje" is "I ... 8 o'clock" far more often
 # than it is sector I-8, and "a 5" is never sector A-5. Dashed and joined forms
-# ("i-8", "i8") work for all letters, and that is how a sector is actually typed.
+# ("i-8", "i8") work for all letters, and that is how a sector is typed.
 _RE_SECTOR = re.compile(r"\b([a-i])\s*(-?)\s*([0-9]{1,2})(?:/[0-9]{1,2})?\b")
 _SPACED_SECTOR_BLOCKED: tuple[str, ...] = ("a", "i")
 
@@ -970,7 +956,7 @@ def load_venue_areas(model_path: Path | None = None) -> list[tuple[str, str | No
         address = str(venue.get("address") or "")
         if not address:
             continue
-        # The first comma-separated part of a seeded address IS the area as a
+        # The first comma-separated part of a seeded address is the area as a
         # user types it ("F-7 Markaz, Islamabad"), so it becomes a surface form.
         head = address.split(",")[0].strip()
         if head:
@@ -1126,9 +1112,7 @@ def _area_hit(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 8. The contract: five keys, in one pass
-# ─────────────────────────────────────────────────────────────────────────────
 def extract(
     text: Any,
     *,
@@ -1168,9 +1152,7 @@ def extract(
     return {key: resolved[key] for key in ENTITY_KEYS}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 9. Fingerprint, and what /nlu/spec publishes
-# ─────────────────────────────────────────────────────────────────────────────
 _FINGERPRINTED_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("keep", _KEEP), ("thousands", _THOUSANDS), ("elongation", _ELONG),
     ("iso_date", _RE_ISO_DATE), ("dmy_slash", _RE_DMY_SLASH),
@@ -1270,9 +1252,7 @@ def describe() -> dict[str, Any]:
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 10. Self-check
-# ─────────────────────────────────────────────────────────────────────────────
 #: Friday. Every date assertion below is relative to it, so the pinned answers
 #: are stable in 2027 -- a self-check whose answers move with the wall clock is
 #: not a check. A Friday on purpose: it makes "friday ko" (today) and "next
@@ -1280,7 +1260,7 @@ def describe() -> dict[str, Any]:
 FIXED_NOW = datetime(2026, 8, 28, 15, 0, tzinfo=KARACHI)
 
 #: (utterance, {dotted path: expected}). A path that is a bare key with value
-#: None asserts the whole slot stayed EMPTY -- the false-positive half of the
+#: None asserts the whole slot stayed empty -- the false-positive half of the
 #: check, which matters more than the hits: a wrong slot books a wrong ground, an
 #: empty one asks a question.
 _CASES: tuple[tuple[str, dict[str, Any]], ...] = (

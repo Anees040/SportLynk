@@ -8,8 +8,8 @@ const { recomputeTrust } = require('../utils/trustScore');
 // All admin routes require authentication + admin role
 router.use(auth, checkRole('admin'));
 
-// ── S.7 Wave D ───────────────────────────────────────────────────────────────
-// The Wave D surfaces are separate FILES but the SAME router, mounted here and
+// S.7 Wave D
+// The Wave D surfaces are separate files but the same router, mounted here and
 // therefore behind the single `auth + checkRole('admin')` line above. Splitting
 // them by concern keeps each one reviewable; mounting them here means a new admin
 // screen cannot accidentally ship without an authorisation check, which is the
@@ -26,7 +26,7 @@ const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * the aggregate in routes/reviews.js (visible venue reviews only), so hiding or
  * restoring a review moves the star average exactly the way posting one does.
  * COALESCE keeps the columns numeric when the last visible review is hidden
- * (AVG over zero rows is NULL) — the POST path never hits that, moderation can.
+ * (avg over zero rows is NULL) — the POST path never hits that, moderation can.
  */
 async function refreshVenueAggregate(client, venueId) {
   if (!venueId) return;
@@ -44,7 +44,7 @@ async function refreshVenueAggregate(client, venueId) {
   );
 }
 
-// ─── GET /api/admin/registrations ────────────────────────────────────────────
+// GET /api/admin/registrations
 // List all owner registration submissions, filtered by status
 // Query param: ?status=pending|approved|rejected  (default: pending)
 router.get('/registrations', async (req, res, next) => {
@@ -87,7 +87,7 @@ router.get('/registrations', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ─── PATCH /api/admin/registrations/:id/approve ──────────────────────────────
+// PATCH /api/admin/registrations/:id/approve
 // Approve a pending owner registration, create their venue + 14-day slots
 router.patch('/registrations/:id/approve', async (req, res, next) => {
   const client = await pool.connect();
@@ -196,7 +196,7 @@ router.patch('/registrations/:id/approve', async (req, res, next) => {
   }
 });
 
-// ─── PATCH /api/admin/registrations/:id/reject ───────────────────────────────
+// PATCH /api/admin/registrations/:id/reject
 // Reject a pending owner registration with a reason
 router.patch('/registrations/:id/reject', async (req, res, next) => {
   try {
@@ -232,7 +232,7 @@ router.patch('/registrations/:id/reject', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ─── GET /api/admin/stats ─────────────────────────────────────────────────────
+// GET /api/admin/stats
 // Dashboard summary counts
 router.get('/stats', async (req, res, next) => {
   try {
@@ -259,7 +259,7 @@ router.get('/stats', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ─── GET /api/admin/venues/pending ────────────────────────────────────────────
+// GET /api/admin/venues/pending
 // List venues pending approval
 router.get('/venues/pending', async (req, res, next) => {
   try {
@@ -274,7 +274,7 @@ router.get('/venues/pending', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ─── PATCH /api/admin/venues/:id/approve ──────────────────────────────────────
+// PATCH /api/admin/venues/:id/approve
 // Approve a pending venue
 router.patch('/venues/:id/approve', async (req, res, next) => {
   try {
@@ -289,11 +289,11 @@ router.patch('/venues/:id/approve', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ─── GET /api/admin/reviews/flagged ───────────────────────────────────────────
-// The moderation queue (FR9.9). A review needs an admin's eye for EITHER reason:
-//   • a participant reported it  → one or more open review_flags rows, OR
+// GET /api/admin/reviews/flagged
+// The moderation queue (FR9.9). A review needs an admin's eye for either reason:
+//   • a participant reported it  → one or more open review_flags rows, or
 //   • the sentiment model escalated it at creation → reviews.flagged = true with
-//     NO review_flags row (routes/reviews.js sets the bit directly for abuse /
+//     no review_flags row (routes/reviews.js sets the bit directly for abuse /
 //     strongly-negative text).
 // So the queue is `flagged = true OR hidden = true`, not just open flags — else the
 // auto-escalated abusive review the demo hinges on would never appear. Already-hidden
@@ -354,13 +354,13 @@ router.get('/reviews/flagged', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ─── PATCH /api/admin/reviews/:id ──────────────────────────────────────────────
+// PATCH /api/admin/reviews/:id
 // Act on a queued review. body { action: 'hide' | 'restore' | 'dismiss' }.
 //   hide    → reject the review: hidden=true, resolve its open flags. It stops
 //             counting toward the venue average / the captain's trust at once.
 //   restore → un-hide a previously hidden review: hidden=false, clear the flag,
 //             resolve open flags. It counts again.
-//   dismiss → reject the FLAG, keep the review visible: flagged=false, flags
+//   dismiss → reject the flag, keep the review visible: flagged=false, flags
 //             dismissed. Aggregates already ignore `flagged`, so no recompute.
 // Everything runs in one transaction with the review row locked (golden rule 4).
 router.patch('/reviews/:id', async (req, res, next) => {
@@ -407,7 +407,7 @@ router.patch('/reviews/:id', async (req, res, next) => {
       message = 'Flag dismissed; review kept.';
     }
 
-    // hide/restore change which reviews are VISIBLE, so refresh the aggregate that
+    // hide/restore change which reviews are visible, so refresh the aggregate that
     // reads visible rows: the venue's star average, or the reviewed captain's trust.
     if (action === 'hide' || action === 'restore') {
       if (review.venue_id) {

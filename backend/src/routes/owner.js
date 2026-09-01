@@ -23,17 +23,15 @@ const { TtlCache, ONE_HOUR_MS } = require("../utils/ttlCache");
 
 router.use(auth, checkRole("owner"));
 
-// S.7 Wave D - D4. The financial export lives in its own file but on THIS router,
+// S.7 Wave D - D4. The financial export lives in its own file but on this router,
 // so it inherits the owner check above and is scoped to req.user.id. See
 // routes/reports.js for why the owner filter is never optional.
 router.use(require("./reports").ownerReports);
 
-// ─────────────────────────────────────────────────────────────────────────────
 // AI pricing — S.3 Wave D
-// ─────────────────────────────────────────────────────────────────────────────
 //
 // Two read endpoints and one write endpoint, and the split between them is the
-// whole point of FR4.17: the model SUGGESTS and the owner APPLIES. There is no code
+// whole point of FR4.17: the model suggests and the owner applies. There is no code
 // path anywhere in this file that writes a model-suggested price to a slot without
 // an explicit, per-slot request from the owner. That is a product requirement, not a
 // missing feature — a venue owner whose prices moved on their own would stop
@@ -56,7 +54,7 @@ const forecastCache = new TtlCache({ name: "owner-forecast", ttlMs: ONE_HOUR_MS,
  * can never start with a bar that is already in the past.
  *
  * Pakistan is UTC+05:00 with no DST, so the shift is arithmetic and needs no tz
- * database. This must NOT use the server's local time: a container in UTC would roll
+ * database. This must not use the server's local time: a container in UTC would roll
  * the key over at 05:00 PKT and hand the dashboard yesterday's lead-day arithmetic.
  */
 function pktHourStamp(now = new Date()) {
@@ -143,7 +141,7 @@ router.get("/venues/:id/pricing", async (req, res, next) => {
           startTime,
           sport: venue.sport_type,
           city: venue.city,
-          // 0 is the schema default for an unreviewed venue, and 0 is NOT a rating —
+          // 0 is the schema default for an unreviewed venue, and 0 is not a rating —
           // features.py takes null for "unrated" and would otherwise be told this
           // venue scored zero out of five.
           venueRating: Number(venue.rating) > 0 ? Number(venue.rating) : null,
@@ -218,7 +216,7 @@ router.get("/venues/:id/forecast", async (req, res, next) => {
         venueId: venue.id,
         venueName: venue.name,
         hoursRequested: hours,
-        // Thresholds travel WITH the series so the chart's legend is generated from
+        // Thresholds travel with the series so the chart's legend is generated from
         // the same numbers that bucketed the bars. A legend hardcoded in Dart is a
         // legend that can disagree with its own chart.
         levels: {
@@ -249,13 +247,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // The APPLY half of FR4.17. Every constraint below exists because this endpoint
 // changes what a player will be charged:
 //
-//   * the price is clamped to the SAME [0.70, 1.50] x price_per_hour band that
+//   * the price is clamped to the same [0.70, 1.50] x price_per_hour band that
 //     mlClient guards, so a typo'd body cannot do what a bad model could not;
 //   * only `available` slots move — a booked slot's price is part of a booking, and
 //     a held slot has someone on the payment screen looking at the old number;
 //   * only future slots move, because repricing the past is meaningless and would
 //     desynchronise completed bookings from their slots;
-//   * every skipped slot comes back WITH ITS REASON, so the owner is told "3 of 8
+//   * every skipped slot comes back with its REASON, so the owner is told "3 of 8
 //     were already booked" rather than silently getting a partial write.
 router.patch("/venues/:id/slots/price", async (req, res, next) => {
   const client = await pool.connect();
@@ -303,10 +301,10 @@ router.patch("/venues/:id/slots/price", async (req, res, next) => {
     await client.query("BEGIN");
 
     // Eligibility is computed in SQL and read back per slot, rather than filtered in
-    // the UPDATE's WHERE clause, precisely so a skipped slot can be EXPLAINED. A bare
+    // the UPDATE's WHERE clause, precisely so a skipped slot can be explained. A bare
     // `UPDATE ... WHERE eligible` returns a count and loses the reason.
     // FOR UPDATE on the slot rows: without it, a player could take a lock between the
-    // eligibility read and the write, and we would reprice a slot mid-checkout.
+    // eligibility read and the write, and the slot would be repriced mid-checkout.
     const { rows: found } = await client.query(
       `SELECT s.id,
               s.status::text            AS status,
@@ -420,7 +418,7 @@ router.get("/dashboard", async (req, res, next) => {
     await autoGenerateVenueIfMissing(ownerId);
     const today = new Date().toLocaleDateString("en-CA");
 
-    // Run all queries in PARALLEL — reduces latency from ~5x to ~1x round-trip
+    // Run all queries in parallel — reduces latency from ~5x to ~1x round-trip
     const [venueRes, statsRes, upcomingRes, walletRes, escrowRes] = await Promise.all([
       pool.query(
         "SELECT * FROM venues WHERE owner_id=$1 AND is_active=true ORDER BY created_at ASC LIMIT 1",
@@ -474,7 +472,7 @@ router.get("/dashboard", async (req, res, next) => {
   }
 });
 
-// GET /api/owner/venues — returns ALL active venues owned by this owner (multi-venue)
+// GET /api/owner/venues — returns all active venues owned by this owner (multi-venue)
 router.get("/venues", async (req, res, next) => {
   try {
     await autoGenerateVenueIfMissing(req.user.id);
@@ -578,7 +576,7 @@ router.patch("/venues/:id", async (req, res, next) => {
       updates.push(`description=$${i++}`);
       values.push(description);
     }
-    // upfront_percent is deliberately NOT accepted from the client: the deposit is
+    // upfront_percent is deliberately not accepted from the client: the deposit is
     // a platform policy (POLICY.DEPOSIT_PERCENT) computed server-side only.
     if (price_per_hour !== undefined) {
       updates.push(`price_per_hour=$${i++}`);
@@ -671,7 +669,7 @@ router.patch("/bookings/:id/approve", async (req, res, next) => {
       body: `${check.rows[0].venue_name} approved your booking. Show your QR code at the venue to check in.`,
     });
 
-    // S.7 Wave B -- the booking room. Opened on CONFIRMED and not on the request:
+    // S.7 Wave B -- the booking room. Opened on confirmed and not on the request:
     // an unapproved request is not a conversation, and a room per rejected
     // request would bury the real ones. The other confirm path (autoApproveJob)
     // calls this identically, and `ux_chat_channels_type_ref` makes whichever
@@ -699,10 +697,10 @@ router.patch("/bookings/:id/approve", async (req, res, next) => {
 
 // PATCH /api/owner/bookings/:id/reject — full refund: player balance +P, frozen -P
 //
-// The money moved here is now ONE implementation shared with the admin
+// The money moved here is now one implementation shared with the admin
 // suspension cascade (`bookingService.rejectBooking`), which has to reject the
 // pending requests of a suspended owner's venues. The HTTP behaviour is
-// unchanged: same 404 wording when the booking is not pending or not yours, same
+// unchanged: same 404 wording when the booking is not pending or not the caller's, same
 // success message, same ledger row, same notification.
 router.patch("/bookings/:id/reject", async (req, res, next) => {
   const client = await pool.connect();
@@ -934,9 +932,9 @@ router.post("/scan-qr", async (req, res, next) => {
 
     const escrow = round2(booking.security_deposit);
 
-    // S.7 Wave D (FR10.9). The platform's commission, taken HERE and nowhere else.
+    // S.7 Wave D (FR10.9). The platform's commission, taken here and nowhere else.
     //
-    // WHY CHECK-IN IS THE RIGHT MOMENT
+    // Why check-in is the right moment
     // This is the instant the money stops being contingent: the player showed up,
     // the ground was used, and the escrow becomes the owner's earnings. Before this
     // the booking could still be rejected, cancelled or no-showed, each of which
@@ -944,7 +942,7 @@ router.post("/scan-qr", async (req, res, next) => {
     // unwound by every one of those paths. Taken here it is final by construction.
     //
     // The player is unaffected either way: they always release exactly the escrow
-    // they agreed to. The commission is deducted from the OWNER's credit, which is
+    // they agreed to. The commission is deducted from the owner's credit, which is
     // why the ledger gets two rows for one movement — `escrow_received` for the
     // gross so the owner can reconcile against the booking, and a negative
     // `platform_commission` for the cut. Netting them into one row would make the
@@ -954,7 +952,7 @@ router.post("/scan-qr", async (req, res, next) => {
       ? await supportsCommissionTxn(client)
       : false;
     if (commissionPct > 0 && !canLogCommission) {
-      // Loud, and NOT fatal: a player at the gate with a valid QR code is not the
+      // Loud, and not fatal: a player at the gate with a valid QR code is not the
       // person who should pay for an unrun migration.
       console.warn(
         `[checkin] commission ${commissionPct}% skipped — the 'platform_commission' `
@@ -976,9 +974,9 @@ router.post("/scan-qr", async (req, res, next) => {
     const playerAfter = await applyWallet(client, playerWallet.id, {
       frozen: -escrow,
     });
-    // Credited GROSS first, then debited the commission, rather than crediting the
+    // Credited gross first, then debited the commission, rather than crediting the
     // net in one movement. Two movements means each ledger row's `balance_after` is
-    // the balance that row actually produced -- so an owner (and D4's CSV export,
+    // the balance that row produced -- so an owner (and D4's CSV export,
     // which reads the ledger rather than recomputing from prices) can reconcile the
     // statement line by line. One netted movement would leave the `escrow_received`
     // row claiming a gross amount beside a net balance, which is the kind of small
@@ -1018,7 +1016,7 @@ router.post("/scan-qr", async (req, res, next) => {
         bookingId: booking.id,
         type: "platform_commission",
         amount: -split.commission,
-        // The balance the owner is actually left with, so the ledger's running
+        // The balance the owner is left with, so the ledger's running
         // balance column reconciles row by row.
         balanceAfter: ownerAfter.balance,
         description: `SportLynk commission (${split.pct}%)`,

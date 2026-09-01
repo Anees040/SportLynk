@@ -72,9 +72,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import pandas as pd
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The contract
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: Bumped whenever the feature list, their order, or any derivation below
 #: changes. train_pricing.py stamps this into the joblib artifact; the registry
@@ -90,14 +88,14 @@ PKT = timezone(timedelta(hours=5))
 #:
 #: This is a stated ASSUMPTION, not a measurement: hours 18–22 are when the slot
 #: seeders create "prime" inventory and when adult amateur football/cricket is
-#: actually played here. It is used two ways, and the distinction matters:
+#: played here. It is used two ways, and the distinction matters:
 #:   * as the `is_peak` feature — a domain prior the tree model is free to ignore
 #:     but a logistic baseline needs to be competitive at all;
 #:   * as the peak window in backend/src/services/mlClient.js's heuristic
 #:     fallback, which must mean the same thing as this or the two pricing paths
 #:     would disagree about which slots are valuable.
 #: Node cannot import Python, so that file re-declares these two numbers and
-#: names THIS module as the source of truth. If you change them here, change them
+#: names this module as the source of truth. If they change here, they change
 #: there in the same commit.
 PEAK_START_HOUR = 18
 PEAK_END_HOUR = 22
@@ -171,9 +169,7 @@ class FeatureError(ValueError):
     """
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Coercion helpers — permissive about the WIRE format, strict about the VALUE
-# ─────────────────────────────────────────────────────────────────────────────
+# Coercion helpers — permissive about the wire format, strict about the value
 #
 # Postgres via node-postgres, a CSV read by pandas, and a JSON body all spell the
 # same date three different ways ('2026-08-25', a datetime, a pandas Timestamp).
@@ -263,7 +259,7 @@ def _as_optional_rating(value: Any) -> float:
         return float("nan")
     if rating != rating or not 0.0 <= rating <= 5.0:
         return float("nan")
-    # 0 means "no reviews yet" everywhere in this schema (venues.rating DEFAULT
+    # 0 means "no reviews yet" everywhere in this schema (venues.rating default
     # NULL, but the owner auto-provision path in routes/owner.js writes 0), and
     # "unrated" is not the same statement as "rated zero".
     if rating == 0.0:
@@ -284,9 +280,7 @@ def _clamp(value: float, low: float, high: float) -> float:
     return low if value < low else high if value > high else value
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Derivations — the only place each feature is defined
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def now_pkt() -> datetime:
@@ -374,8 +368,8 @@ def build_feature_dict(ctx: Mapping[str, Any]) -> dict[str, Any]:
         "month": slot_day.month,
         "venue_rating": _as_optional_rating(ctx.get("venue_rating")),
         "base_price": base_price,
-        # NOT clamped here. features.py reports what was asked for; clamping the
-        # price band is a BUSINESS guardrail and lives in one place on the Node
+        # Not clamped here. features.py reports what was asked for; clamping the
+        # price band is a business guardrail and lives in one place on the Node
         # side (mlClient.js) so the same rule applies to the model path and the
         # heuristic path. Silently clamping here would make the service answer a
         # question it was not asked, and the caller would never know.
@@ -385,9 +379,7 @@ def build_feature_dict(ctx: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Frame builders — what training and serving actually call
-# ─────────────────────────────────────────────────────────────────────────────
+# Frame builders — what training and serving call
 
 
 def build_frame(rows: Iterable[Mapping[str, Any]]) -> pd.DataFrame:

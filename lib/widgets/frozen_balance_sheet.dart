@@ -188,7 +188,7 @@ class _FrozenBalanceSheetState extends State<FrozenBalanceSheet> {
               ),
               // Only appears when the itemised rows do not add up to the wallet's
               // own figure. Now that rows itemise security_deposit — the amount
-              // actually in escrow — this means genuine drift: frozen money no
+              // in escrow — this means genuine drift: frozen money no
               // active booking accounts for. Backend fix:
               // node src/scripts/reconcile_wallets.js --apply
               if (_delta.abs() >= 0.01) ...[

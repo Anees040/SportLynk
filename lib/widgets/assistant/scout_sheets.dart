@@ -5,11 +5,11 @@ import '../../providers/assistant_controller.dart';
 import 'scout_chips.dart';
 import 'scout_theme.dart';
 
-/// The two sheets the app bar opens: your chats, and what Scout can do.
+/// The two sheets the app bar opens: the user's chats, and what Scout can do.
 ///
 /// Both are bottom sheets rather than screens because they are lookups, not
-/// destinations — you come back to the same conversation either way, and a push/pop
-/// would lose the scroll position of a transcript you were reading.
+/// destinations — the same conversation is still there either way, and a push/pop
+/// would lose the scroll position of the transcript being read.
 
 /// Every chat this user has with Scout.
 ///

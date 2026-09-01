@@ -22,15 +22,13 @@ import 'match_widgets.dart' show TeamCrest;
 ///    every rupee of the waterfall arrive decided by the server. These widgets lay
 ///    out numbers; they do not derive them.
 /// 2. **A missing thing is drawn as a missing thing.** A bracket slot with no team is
-///    a TBD placeholder, not a skipped row — the shape of the draw IS the
+///    a TBD placeholder, not a skipped row — the shape of the draw is the
 ///    information, and a collapsed bracket would hide who plays whom next.
 ///
-/// Money is formatted through the app's ONE [formatPkr], so `PKR 2,400` never
+/// Money is formatted through the app's one [formatPkr], so `PKR 2,400` never
 /// appears as `Rs 2400.00` two screens later.
 
-// ═══════════════════════════════════════════════════════════════
 //  Pills
-// ═══════════════════════════════════════════════════════════════
 
 class _Pill extends StatelessWidget {
   final String text;
@@ -115,12 +113,10 @@ class EntryStatusPill extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Capacity and countdown — the two facts that decide "can I still enter?"
-// ═══════════════════════════════════════════════════════════════
 
 /// How full the draw is. The denominator is `maxTeams` and the numerator is every
-/// entry that HOLDS a spot — approved or awaiting approval — because a captain
+/// entry that holds a spot — approved or awaiting approval — because a captain
 /// deciding whether to register cares about the spot, not about the paperwork. That
 /// is the same count the server refuses on, so the bar filling up and the Register
 /// button refusing happen at the same moment instead of one lagging the other.
@@ -210,15 +206,13 @@ class CountdownChip extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  The browse row (SRS FE-2)
-// ═══════════════════════════════════════════════════════════════
 
 /// One tournament in a list.
 ///
 /// Four facts decide whether a captain taps this, so all four are on the card and
-/// none of them is behind a tap: what it costs to enter, what is on the table if you
-/// win, how many spots are left, and how long you have to decide. The prize is the
+/// none of them is behind a tap: what it costs to enter, what is on the table for a
+/// win, how many spots are left, and how long is left to decide. The prize is the
 /// server's [Tournament.prize] once the pool is settled and a projection
 /// before that — never a marketing number, which is exactly what the mock this
 /// replaces used to show.
@@ -397,9 +391,7 @@ class _MoneyFact extends StatelessWidget {
       );
 }
 
-// ===============================================================
 //  The money waterfall (SRS FE-1, FE-8)
-// ===============================================================
 
 /// One line of the waterfall: a label, an optional sub-label, and a rupee figure.
 class _MoneyLine extends StatelessWidget {
@@ -474,7 +466,7 @@ class _MoneyLine extends StatelessWidget {
 /// Where every rupee of the entry fees goes (SRS FE-1, FE-8).
 ///
 /// This is the waterfall spelled out in the order the server applies it: the pool
-/// comes in, the venue's real slot prices come out FIRST, and only the surplus is
+/// comes in, the venue's real slot prices come out first, and only the surplus is
 /// split into a prize and the organiser's margin. Showing it as a percentage pie
 /// would be a different, and wrong, story: the venue cost is fixed while the pool is
 /// variable, so a flat "30% commission" on a thin turnout would pay an owner less
@@ -716,9 +708,7 @@ class OwnerUpliftNote extends StatelessWidget {
   }
 }
 
-// ===============================================================
 //  Fixtures and the bracket (SRS FE-6, FE-7)
-// ===============================================================
 
 /// One side of a fixture: crest, name, seed, and the score if there is one.
 ///
@@ -1068,10 +1058,10 @@ class _BracketCell extends StatelessWidget {
   }
 }
 
-/// The draw, as columns you scroll sideways through (SRS FE-6, FE-8).
+/// The draw, as columns that scroll sideways (SRS FE-6, FE-8).
 ///
 /// One column per round, left to right, so the shape of the knockout is visible at a
-/// glance and the champion's path can be traced by eye. Rounds are NOT centred
+/// glance and the champion's path can be traced by eye. Rounds are not centred
 /// against their parents with connector lines: on a phone that costs most of the
 /// width to whitespace, and the round header plus the seeded ordering already say who
 /// meets whom. The final column is the one with a single cell.
@@ -1181,9 +1171,7 @@ class _RoundHeader extends StatelessWidget {
   }
 }
 
-// ===============================================================
 //  Standings, records, provenance, empties
-// ===============================================================
 
 /// The round-robin table (SRS FE-7: "refresh live standings").
 ///
@@ -1191,7 +1179,7 @@ class _RoundHeader extends StatelessWidget {
 /// head-to-head result — so the app never re-sorts. Two teams level on points and
 /// goal difference are separated by the game they played against each other, and only
 /// the server knows that; re-sorting here on points alone would silently disagree with
-/// the champion the server actually crowns.
+/// the champion the server crowns.
 class StandingsTable extends StatelessWidget {
   final List<Standing> standings;
   final String? highlightTeamId;
@@ -1365,7 +1353,7 @@ class _StandingRow extends StatelessWidget {
 
 /// The empty state, in the module's own words.
 ///
-/// Every empty here explains WHY it is empty and what happens next — "fixtures are
+/// Every empty here explains why it is empty and what happens next — "fixtures are
 /// generated when registration closes", "the table fills in as fixtures are played" —
 /// because in a tournament an empty list is usually a stage of the process rather
 /// than a dead end, and "Nothing here" would make a working tournament look broken.
@@ -1538,7 +1526,7 @@ class TeamRecordLine extends StatelessWidget {
 /// Remove. Keeping them one widget is why an organiser's list can never disagree with
 /// what a captain sees about their own entry.
 ///
-/// The fee is shown as HELD, not paid, while the entry is pending. That distinction is
+/// The fee is shown as held, not paid, while the entry is pending. That distinction is
 /// the whole point of the escrow: the money has left the captain's spendable balance
 /// but nobody has earned it yet, and a row that said "paid" would be describing a
 /// transfer that has not happened.
@@ -1730,7 +1718,7 @@ class TournamentActionButton extends StatelessWidget {
 
 /// The champion, and the runner-up beside them.
 ///
-/// The runner-up is on the banner and not in a footnote because they are PAID — 30% of
+/// The runner-up is on the banner and not in a footnote because they are paid — 30% of
 /// the prize by default — and a screen that celebrated only the winner would leave the
 /// second cheque unexplained. Renders nothing until a champion exists.
 class ChampionBanner extends StatelessWidget {

@@ -296,7 +296,7 @@ def main() -> int:
     )
 
     # Every one of these normalises to placeholders only ("..." -> "<sep> <sep>"),
-    # which is NOT the same as normalising to empty -- see routers/sentiment._scoreable.
+    # which is not the same as normalising to empty -- see routers/sentiment._scoreable.
     for bad in ("...", "___", "?!", "!!!", "2500"):
         r = client.post("/predict/sentiment", json={"text": bad}, headers=key)
         check(
@@ -305,7 +305,7 @@ def main() -> int:
             f"{r.status_code} {r.json().get('code')}",
         )
 
-    # The deliberate exception: emoji ARE evidence, so an emoji-only review is scored.
+    # The deliberate exception: emoji are evidence, so an emoji-only review is scored.
     r = client.post("/predict/sentiment", json={"text": "\U0001f389\U0001f389"}, headers=key)
     check(
         "emoji-only review IS scored (emoji carry polarity)",

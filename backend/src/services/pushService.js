@@ -2,9 +2,9 @@
  * pushService.js — the only place in the backend that talks to Firebase Cloud
  * Messaging.
  *
- * ─── WHY THIS SHIPS DORMANT ───────────────────────────────────────────────────
+ * Why this ships dormant
  * FCM needs a service-account JSON that cannot go in git (it is a private key for
- * the whole Firebase project). So this module is written to be COMPLETELY ABSENT
+ * the whole Firebase project). So this module is written to be completely absent
  * until `FIREBASE_SERVICE_ACCOUNT` points at a real file: `isConfigured()` answers
  * false, `sendToUser()` returns `{skipped:'unconfigured'}`, and one warning is
  * printed at boot instead of one per notification.
@@ -17,22 +17,22 @@
  *
  * `require('firebase-admin')` is also lazy and caught, so a tree where
  * `npm install` has not been run yet degrades exactly like a missing key rather
- * than crashing at import time. A backend that cannot boot because an OPTIONAL
+ * than crashing at import time. A backend that cannot boot because an optional
  * push dependency is missing is a worse failure than a phone that does not buzz.
  *
- * ─── WHY THE CALLER PASSES A `client` ─────────────────────────────────────────
+ * Why the caller passes A `client`
  * Sending a push has a database side effect: FCM answers
  * `registration-token-not-registered` for a token belonging to an app that was
- * uninstalled, and that answer is the ONLY way to learn a device is gone. If it is
+ * uninstalled, and that answer is the only way to learn a device is gone. If it is
  * not written down, every future send retries a token that can never succeed. So
  * this module reads `user_devices` and revokes dead rows through the client it is
  * given — the pushJob's, outside the money path, where a slow network call is
  * harmless.
  *
- * ─── WHY BOTH A `notification` AND A `data` BLOCK ─────────────────────────────
+ * Why both A `notification` and A `data` block
  * `notification` is what the OS renders when the app is killed — without it, a
  * data-only message is delivered to a background handler that cannot draw a tray
- * banner on Android. `data` is what the app needs when the user TAPS it: the deep
+ * banner on Android. `data` is what the app needs when the user taps it: the deep
  * link route and args, computed server-side by notificationTypes.js, so the client
  * never re-derives a route from a type string. Both, always.
  *
@@ -44,7 +44,7 @@
 const path = require('path');
 const fs = require('fs');
 
-// ─── Module state ────────────────────────────────────────────────────────────
+// Module state
 // Resolved once, on first use. 'unknown' means init() has not run yet; after it
 // runs the answer never changes for the life of the process, because a key that
 // appears on disk mid-run is not a case worth reloading for.
@@ -101,13 +101,13 @@ function init() {
     return false;
   }
 
-  // firebase-admin v13+ is MODULAR: `require('firebase-admin')` re-exports only the
+  // firebase-admin v13+ is modular: `require('firebase-admin')` re-exports only the
   // app namespace, and the old namespaced surface (admin.credential.cert,
   // admin.apps, admin.messaging()) is gone. Requiring the two subpaths explicitly is
   // the supported shape for the pinned 14.3.0 in package.json — and the reason this
   // is worth a comment is that the legacy form fails at *first send*, which with a
-  // dormant-by-default service means the day you add the key, not the day you write
-  // the code.
+  // dormant-by-default service means the day the key is added, not the day the
+  // code is written.
   let appNs;
   let msgNs;
   try {
@@ -122,7 +122,7 @@ function init() {
   }
 
   try {
-    // A NAMED app, so a second require of this module in the same process (a check
+    // A named app, so a second require of this module in the same process (a check
     // script importing both the job and the service) reuses it instead of colliding
     // with the default app.
     _app = appNs.getApps().find((a) => a && a.name === APP_NAME)
@@ -166,14 +166,12 @@ function warnOnce() {
     + 'delivered in-app; only the tray banner is off.');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DEVICES
-// ═══════════════════════════════════════════════════════════════════════════
+// Devices
 //
 // `users.fcm_token` (migration 012) is one token per user — "last login wins" —
-// which breaks the moment you use a phone and an emulator, and has nowhere to
+// which breaks the moment one account signs in on a phone and an emulator, and has nowhere to
 // record that a token is dead. 020's `user_devices` fixes both. The old column is
-// still written by auth.js for backward compatibility, and is read here ONLY as a
+// still written by auth.js for backward compatibility, and is read here only as a
 // fallback for a user who has not opened the app since 020, so an existing tester's
 // phone keeps working without re-login.
 
@@ -200,13 +198,13 @@ async function liveTokens(client, userId) {
 /**
  * Register or refresh one device token.
  *
- * The UNIQUE index is on `fcm_token` ALONE, not on (user_id, fcm_token), and that is
- * deliberate: FCM issues a token per app INSTALL, so the same token appearing for a
+ * The UNIQUE index is on `fcm_token` alone, not on (user_id, fcm_token), and that is
+ * deliberate: FCM issues a token per app install, so the same token appearing for a
  * second user means the phone was handed over or a second account logged in on it.
- * The token must MOVE, or the previous owner keeps receiving the new owner's
+ * The token must move, or the previous owner keeps receiving the new owner's
  * notifications — a privacy leak, not a bookkeeping detail. Hence `user_id` is in
  * the DO UPDATE set, and `revoked_at` is cleared: re-registering a token that FCM
- * previously reported dead is the app telling us it is alive again.
+ * previously reported dead is the app reporting it alive again.
  */
 async function registerDevice(client, {
   userId, token, platform = null, appVersion = null, label = null,
@@ -233,7 +231,7 @@ async function registerDevice(client, {
  * Mark one device dead. Called on logout (reason 'logout') and by the send path when
  * FCM says the token is gone.
  *
- * Revoked rather than deleted: `revoke_reason` + `revoked_at` are how you answer
+ * Revoked rather than deleted: `revoke_reason` + `revoked_at` are what answer
  * "this phone stopped getting notifications last Tuesday" without guessing.
  */
 async function revokeDevice(client, token, reason = 'unregistered') {
@@ -257,9 +255,7 @@ async function revokeAllForUser(client, userId, reason = 'logout') {
   return rowCount;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THE MESSAGE
-// ═══════════════════════════════════════════════════════════════════════════
+// The message
 
 /** The Android notification channel the Flutter side creates at startup. */
 const ANDROID_CHANNEL = 'sportlynk_default';
@@ -287,13 +283,13 @@ function strData(obj) {
  * `row` is a `notifications` record as the job read it, so the shape here is the
  * database's, not a hand-assembled DTO — one fewer place for the two to drift.
  *
- * WHY `android.notification.tag` AND `collapseKey` ARE BOTH SET
+ * Why `android.notification.tag` and `collapseKey` are both set
  * They solve different halves of the same problem. `collapseKey` tells FCM to
  * discard an undelivered earlier message for the same key (the phone was offline);
- * `tag` tells Android to REPLACE the banner already on screen. Without the tag,
+ * `tag` tells Android to replace the banner already on screen. Without the tag,
  * "2 new messages" and "3 new messages" stack as two banners about the same thread.
  *
- * WHY `ttl` COMES FROM expires_at
+ * Why `ttl` comes from expires_at
  * A challenge alert that has expired must not be delivered by FCM after the phone
  * comes back online — it would open a screen where the action no longer exists. The
  * job already skips a row that is expired at send time; ttl covers the gap between
@@ -365,9 +361,7 @@ function parseLink(v) {
   try { return JSON.parse(v); } catch (e) { return null; }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THE SEND
-// ═══════════════════════════════════════════════════════════════════════════
+// The send
 
 /** FCM's way of saying "this token belongs to an app that is gone". */
 const DEAD_TOKEN_CODES = new Set([

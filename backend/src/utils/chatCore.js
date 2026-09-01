@@ -59,13 +59,13 @@ async function insertMessage(client, {
 
   const { rows } = await client.query(
     // created_at is clock_timestamp(), not the column default now(). now() is the
-    // TRANSACTION's timestamp, so two messages written inside one transaction get a
+    // transaction's timestamp, so two messages written inside one transaction get a
     // byte-identical created_at -- and the assistant writes exactly that: the user's
     // question and Scout's answer, in one turn, in one transaction. With now() the
     // pair could only be ordered by the (kind = 'assistant') tiebreaker, which holds
     // for one turn but collapses across two: every question in the thread sorted
     // above every answer. clock_timestamp() advances per statement, so the rows are
-    // ordered by when they were actually written, and the tiebreaker goes back to
+    // ordered by when they were written, and the tiebreaker goes back to
     // covering only a genuine same-microsecond tie. Team chat writes one message per
     // transaction, where the two functions are indistinguishable.
     `INSERT INTO chat_messages
@@ -112,8 +112,8 @@ async function hydrateMessage(clientOrPool, messageId) {
 }
 
 async function emitPersistedMessage(client, channelId, messageId, event = 'chat:message') {
-  // SEQUENTIAL, not Promise.all. Every caller but emitPills passes a transaction
-  // CLIENT, and a single pg client executes one query at a time -- issuing two
+  // Sequential, not Promise.all. Every caller but emitPills passes a transaction
+  // client, and a single pg client executes one query at a time -- issuing two
   // concurrently only queues them behind a deprecation warning today and throws in
   // pg@9. Two reads that must both finish before the emit gain nothing from being
   // started together on a connection that will serialise them anyway.
@@ -124,23 +124,20 @@ async function emitPersistedMessage(client, channelId, messageId, event = 'chat:
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════
-// THE OTHER TWO CHANNEL TYPES  (S.7 Wave B)
-// ═══════════════════════════════════════════════════════════════════════════
+// The other two channel TYPES  (S.7 Wave B)
 //
 // `chk_chat_channels_type` has allowed 'booking' and 'captain' since migration
 // 015, and until now nothing in the codebase created either one: the constraint
 // described an intention, not a feature. These two creators are what turn a
-// confirmed booking and an accepted challenge into a room people can actually
-// talk in.
+// confirmed booking and an accepted challenge into a room people can talk in.
 //
-// BOTH ARE IDEMPOTENT, and that is not a nicety. A booking can be confirmed by
+// Both are idempotent, and that is not a nicety. A booking can be confirmed by
 // the owner or by autoApproveJob, and a challenge response can be retried after
 // a dropped connection; `ux_chat_channels_type_ref` makes the second attempt an
 // UPDATE instead of a duplicate room, so neither path has to know whether the
 // other already ran.
 //
-// WHY THE MEMBER ROLE IS 'admin' FOR THE OWNER AND THE CAPTAINS
+// Why the member role is 'admin' for the owner and the captains
 // `chk_chat_member_role` allows only 'admin' | 'member', and the group role is
 // what authorises deleting somebody else's message (routes/chat.js). In a booking
 // room the venue owner is the moderator; in a coordination room both captains
@@ -161,7 +158,7 @@ async function addMember(client, channelId, userId, role = 'member') {
 
 /**
  * The room for one booking: the player and the venue owner, opened the moment the
- * booking is CONFIRMED.
+ * booking is confirmed.
  *
  * Deliberately not created on request. An unapproved request is not a
  * conversation — it is a form waiting for an answer — and opening a room for
@@ -195,7 +192,7 @@ async function ensureBookingChannel(client, {
  * The room for one match: both captains and both vice-captains, opened when the
  * challenge is ACCEPTED.
  *
- * WHY VICE-CAPTAINS TOO
+ * Why vice-captains too
  * FR8.5 calls this the captains' room, but a vice-captain is exactly the person
  * who runs the team when the captain is unreachable — and "unreachable captain"
  * is the failure this room exists to prevent. Including them costs two rows and
@@ -245,13 +242,13 @@ async function bookingChannelId(client, bookingId) {
 
 /**
  * "This booking is now a conversation", in one call: room, both members, opening
- * pill. Returns `{ channelId, messageId }` for the caller to emit AFTER its
+ * pill. Returns `{ channelId, messageId }` for the caller to emit after its
  * COMMIT, or null when there was nothing to open.
  *
  * SAVEPOINT-wrapped for the same reason matchCore.announceToTeam is: approving a
  * booking moves money and frees a slot, and a chat table that is missing or a
  * title that trips a constraint must never be able to undo that. A booking with
- * no room is a booking you cannot message about; a rolled-back approval is a
+ * no room is a booking nobody can message about; a rolled-back approval is a
  * player who paid and got nothing.
  *
  * There are exactly two confirm paths -- the owner tapping approve and
@@ -285,7 +282,7 @@ async function openBookingRoom(client, {
 }
 
 /**
- * Post one pill into an EXISTING room, or do nothing if the room was never
+ * Post one pill into an existing room, or do nothing if the room was never
  * created (a booking confirmed before Wave B shipped has no channel, and that
  * must read as "no pill", not as an error).
  */
@@ -306,7 +303,7 @@ async function announceInRoom(client, channelId, event, opts = {}) {
 }
 
 /**
- * Emit a batch of `{channelId, messageId}` pills. Call this AFTER COMMIT and
+ * Emit a batch of `{channelId, messageId}` pills. Call this after COMMIT and
  * never before: a socket event that arrives while the transaction is open tells
  * the app to re-read a row it cannot see yet, and it renders the old one.
  * Swallows its own failures -- the write is already durable, and a dropped
@@ -323,15 +320,13 @@ async function emitPills(clientOrPool, pills) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CHAT → NOTIFICATION  (S.7 Wave C)
-// ═══════════════════════════════════════════════════════════════════════════
+// CHAT → notification  (S.7 Wave C)
 //
-// A message is the one notification whose correctness is decided by PRESENCE, not
+// A message is the one notification whose correctness is decided by presence, not
 // by the message. Every other alert in SportLynk is about something that happened
-// to you while you were elsewhere; a chat message is frequently about something on
-// the screen you are looking at right now, and buzzing a phone about a line of text
-// already visible on it is the single most irritating thing a chat app does.
+// to the user while they were elsewhere; a chat message is frequently about what is
+// already on screen, and buzzing a phone about a line of text already visible on it
+// is the single most irritating thing a chat app does.
 //
 // So three separate mutes are consulted, in order of how specific they are:
 //
@@ -339,21 +334,21 @@ async function emitPills(clientOrPool, pills) {
 //      screen. No row at all: writing one would leave a permanent unread badge for
 //      a message they demonstrably read, and the badge is only useful while it is
 //      trustworthy.
-//   2. `chat_channel_members.muted_until` — they muted THIS conversation. Also no
+//   2. `chat_channel_members.muted_until` — they muted this conversation. Also no
 //      row: a muted group that still moved the bell would not be muted.
 //   3. Everything else (offline, or in the app but on another screen) gets a row.
 //      The tray banner is then pushJob's decision, where the per-category
-//      preference and quiet hours live. That split is deliberate: whether you are
-//      TOLD is a chat concern, whether your phone BUZZES is a notification concern.
+//      preference and quiet hours live. That split is deliberate: whether the user
+//      is told is a chat concern, whether the phone buzzes is a notification concern.
 //
-// GROUP WORDING. `chatGroup` in the registry leaves `title` alone and rewrites only
+// Group wording. `chatGroup` in the registry leaves `title` alone and rewrites only
 // `body` to "N new messages", so the title must carry the thread's identity: the
 // sender for a two-person room, the channel for a group. A collapsed team row then
 // reads "Lightning XI" / "3 new messages" and a collapsed booking room reads
 // "Ali Raza" / "3 new messages", which is what the tray of every messaging app
 // shows.
 //
-// SAVEPOINT-WRAPPED, and this is the load-bearing part: this runs inside the same
+// Savepoint-wrapped, and this is the load-bearing part: this runs inside the same
 // transaction as the message INSERT. A notifications table one migration behind, a
 // CHECK the registry trips, a member row with a column that does not exist — none of
 // them may be allowed to roll back somebody's message. A sent message with no alert
@@ -401,7 +396,7 @@ async function notifyNewMessage(client, { channelId, message }) {
     const channelTitle = rows[0].channel_title || null;
     const senderName = rows[0].sender_name || 'Someone';
     const preview = messagePreview(message);
-    // Group by MEMBER COUNT, not by channel type: a booking room is always two
+    // Group by member count, not by channel type: a booking room is always two
     // people, a captain room is two-to-four, and a team of two would read wrong if
     // the type alone decided it.
     const isGroup = rows.length > 2;

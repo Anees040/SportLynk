@@ -6,21 +6,19 @@ import 'api_service.dart';
 
 /// Every call Scout's chat screen makes, and nothing else.
 ///
-/// ONE ENDPOINT FOR TWO INPUT MODES
-/// --------------------------------
+/// One endpoint for two input modes
 /// [send] is used for both a typed sentence and a tapped chip, because the
 /// backend deliberately has one `POST /message`. Passing [action] makes the turn a
 /// chip press — the server skips the classifier entirely and executes the action —
 /// while passing only [text] runs the intent model. The screen therefore has no
 /// branch for "is this a button or a sentence"; the body shape says it.
 ///
-/// WHY [clientId] IS NOT OPTIONAL
-/// ------------------------------
+/// Why [clientId] is not optional
 /// A booking turn moves money. On a flaky connection the app cannot tell "the
 /// request never arrived" from "the reply never came back", and a retry of the
 /// second case would book twice. `client_id` makes the write idempotent: the
 /// server recognises the repeat and returns the original turn. Callers must reuse
-/// the SAME id when retrying, which is why generating it is [newClientId]'s job
+/// the same id when retrying, which is why generating it is [newClientId]'s job
 /// and not this method's.
 ///
 /// Like every other service here, nothing throws. [ApiClient] turns a socket

@@ -7,7 +7,7 @@
  * and what a legal team name is), and a rule that lives in two route handlers
  * eventually disagrees with itself.
  *
- * SECURITY NOTE — none of these helpers trust the request body for authority.
+ * Security NOTE — none of these helpers trust the request body for authority.
  * `req.user.id` comes from the verified JWT; the caller's role is always re-read
  * from team_members inside the same transaction as the write it authorises, so a
  * client cannot send `{"role":"captain"}` and be believed, and cannot win a race
@@ -16,7 +16,7 @@
 
 const pool = require('../db/pool');
 
-// ─── Vocabulary ───────────────────────────────────────────────────────────────
+// Vocabulary
 
 // Mirrors the `team_sport` ENUM (schema.sql:210). Kept here so a bad value is a
 // readable 400 instead of a 500 from Postgres error 22P02 ("invalid input value
@@ -44,7 +44,7 @@ const ROLE_LABEL = { captain: 'Captain', vice_captain: 'Vice Captain', member: '
  *   vice_captain  — invite, approve/reject join requests, remove plain members
  *   member        — read, chat, leave
  *
- * A vice captain deliberately CANNOT promote, demote, or remove another admin:
+ * A vice captain deliberately cannot promote, demote, or remove another admin:
  * that is the one power that could be used to take a team from its captain.
  */
 const ADMIN_ROLES = ['captain', 'vice_captain'];
@@ -65,7 +65,7 @@ const INVITE_TTL_HOURS = 48;   // FR2.11
 // stops an automated account from spamming join requests across the platform.
 const MAX_TEAMS_PER_USER = 10;
 
-// ─── Text hygiene ─────────────────────────────────────────────────────────────
+// Text hygiene
 
 /**
  * Characters that have no business in a display string.
@@ -199,15 +199,15 @@ function validateVisibility(raw, fallback = 'public') {
 }
 
 /**
- * Accept a media URL only if it is one of ours.
+ * Accept a media URL only if it points at the app's own media host.
  *
  * A `logo_url` is echoed back to every member and rendered by the app, so an
  * arbitrary attacker-supplied URL is a real problem: it turns every roster view
  * into a request to a host of their choosing (IP/User-Agent harvesting, and a
  * tracking pixel that reports exactly who opened a team), and `http://` targets
  * would also break the release build's cleartext policy. Pinning to Cloudinary —
- * the only uploader the app has — makes the field a reference to something we
- * host rather than a redirect to anywhere.
+ * the only uploader the app has — makes the field a reference to media the app
+ * hosts rather than a redirect to anywhere.
  */
 const MEDIA_HOSTS = ['res.cloudinary.com'];
 function validateMediaUrl(raw, { label = 'Image', required = false } = {}) {
@@ -233,13 +233,13 @@ function validateMediaUrl(raw, { label = 'Image', required = false } = {}) {
   return { ok: true, value: url.toString() };
 }
 
-// ─── Membership reads ─────────────────────────────────────────────────────────
+// Membership reads
 
 /**
  * Lock the team row for the duration of a membership change.
  *
  * FOR UPDATE, not a plain SELECT, and this is not decoration. "A team always has
- * at least one captain" (FR2.10) is a rule about a COUNT, and a count is only
+ * at least one captain" (FR2.10) is a rule about a count, and a count is only
  * safe if concurrent writers are serialised. Two captains hitting "leave" at the
  * same moment would otherwise both read `captains = 2`, both decide they are not
  * the last one, and both commit — leaving a team nobody can administer, with no
@@ -320,7 +320,7 @@ async function requireRole(client, teamId, userId, need = 'captain') {
   return { team, me };
 }
 
-// ─── Shared SQL ───────────────────────────────────────────────────────────────
+// Shared SQL
 
 /**
  * The public shape of a team, used by /teams/mine, /teams/:id, browse and

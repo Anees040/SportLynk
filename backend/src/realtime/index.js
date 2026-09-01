@@ -2,26 +2,27 @@
  * The Socket.IO server — the live half of the chat, bolted onto the same HTTP
  * server Express already runs on (server.js calls initRealtime with it).
  *
- * WHAT LIVES HERE vs in bus.js
+ * What lives here vs in bus.js
  *   bus.js is the write side: any REST route can `bus.emitMessage(...)` without
- *   importing this file, and it is a silent no-op until `attach()` runs. THIS
+ *   importing this file, and it is a silent no-op until `attach()` runs. This
  *   file is the read side: it owns the socket lifecycle — who connected, which
  *   rooms they are in, presence, and the inbound events (typing, receipts). Once
  *   built, it registers itself with bus so the two halves meet.
  *
- * AUTH — identical trust model to authMiddleware.js
+ * Auth — identical trust model to authMiddleware.js
  *   A socket proves who it is exactly once, in the handshake, with the same JWT
  *   and the same secret as every REST call. `socket.userId` is then as
  *   trustworthy as `req.user.id`, and every room and every DB write below keys
  *   off it — never off anything the client sends in an event payload.
  *
- * THE TICK SYSTEM (single / double / blue), end to end
+ * The tick system (single / double / blue), end to end
  *   ✓   sent       chat_messages row exists (REST created it, bus emitted it)
- *   ✓✓  delivered  the recipient's socket connected and we stamped
+ *   ✓✓  delivered  the recipient's socket connected and the server stamped
  *                  last_delivered_at = now() (see markDeliveredOnConnect)
- *   ✓✓  read       the recipient opened the thread and we stamped last_read_at
- *   Both marks live on chat_channel_members (migration 015). When a mark moves we
- *   broadcast a `receipt` into the channel room so the SENDER, if they are
+ *   ✓✓  read       the recipient opened the thread and the server stamped
+ *                  last_read_at
+ *   Both marks live on chat_channel_members (migration 015). When a mark moves the
+ *   server broadcasts a `receipt` into the channel room so the sender, if they are
  *   looking, watches their ticks turn grey→grey-grey→blue in real time.
  */
 
@@ -34,9 +35,9 @@ const { registerChatEvents } = require('./chatEvents');
 /**
  * A tiny per-socket token bucket: ~30 events / 10s.
  *
- * A socket is an open pipe into our event loop; without a ceiling one misbehaving
- * or compromised client can spin typing/read events fast enough to saturate the
- * DB. This is the socket-side echo of middleware/rateLimit.js — cheap, in memory,
+ * A socket is an open pipe into the server's event loop; without a ceiling one
+ * misbehaving or compromised client can spin typing/read events fast enough to
+ * saturate the DB. This is the socket-side echo of middleware/rateLimit.js — cheap,
  * and applied to every inbound handler in chatEvents.js.
  */
 function makeFloodLimiter({ capacity = 30, refillMs = 10000 } = {}) {
@@ -93,7 +94,7 @@ function broadcastPresence(io, channelIds, userId, online, lastSeenAt = null) {
 
 function initRealtime(httpServer) {
   const io = new Server(httpServer, {
-    // A phone app, not a browser on our domain — there is no cookie to protect
+    // A phone app, not a browser on the app's own domain — there is no cookie to
     // and the JWT in the handshake is the real gate, so any origin may attempt
     // to connect but only a valid token gets past `io.use` below.
     cors: { origin: '*', methods: ['GET', 'POST'] },
@@ -103,7 +104,7 @@ function initRealtime(httpServer) {
     maxHttpBufferSize: 1e6, // 1 MB — events carry ids and short text, never media
   });
 
-  // ─── Handshake auth ───────────────────────────────────────────────────────
+  // Handshake auth
   io.use((socket, next) => {
     try {
       // Accept the token from auth (socket_io_client's `auth:`) or the query
@@ -116,14 +117,14 @@ function initRealtime(httpServer) {
       socket.userRole = decoded.role;
       return next();
     } catch {
-      // Same posture as authMiddleware: any bad/expired token is just refused,
+      // Same posture as authMiddleware: any bad/expired token is refused outright,
       // with no detail about which, and nothing is logged as an error (a stale
       // token reconnecting is routine, not a fault).
       return next(new Error('unauthorized'));
     }
   });
 
-  // ─── Connection lifecycle ───────────────────────────────────────────────────
+  // Connection lifecycle
   io.on('connection', async (socket) => {
     const userId = socket.userId;
     socket.join(bus.userRoom(userId));           // every device this user has open
@@ -152,7 +153,7 @@ function initRealtime(httpServer) {
     }
 
     socket.on('disconnect', async () => {
-      // Only the LAST socket going means the user is truly offline — a second
+      // Only the last socket going means the user is truly offline — a second
       // device or a reconnect race must not flip them to "offline" prematurely.
       if (bus.isUserOnline(userId)) return;
       const lastSeenAt = new Date().toISOString();

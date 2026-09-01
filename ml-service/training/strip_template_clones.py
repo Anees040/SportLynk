@@ -63,7 +63,7 @@ from pathlib import Path
 #: Longest suffix (in words, excluding the "at") that may be treated as a venue
 #: tag. Belt-and-braces only: the prefix-existence test below is the real guard.
 #: A cap keeps the rule readable -- it says "a short trailing tag", which is what
-#: the generator actually appended, rather than "any amount of extra text".
+#: the generator appended, rather than "any amount of extra text".
 MAX_TAG_WORDS = 4
 
 #: The separator the generator used. Spaces on both sides on purpose: it must not

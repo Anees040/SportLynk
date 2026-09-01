@@ -24,7 +24,6 @@ const elo = require('../src/utils/elo');
 
 const K = 32;
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('1 — expected(): equal ratings are an exact coin flip, and expectations sum to 1', () => {
   assert.equal(elo.expected(1000, 1000), 0.5);
   assert.equal(elo.expected(1543, 1543), 0.5);
@@ -36,7 +35,6 @@ test('1 — expected(): equal ratings are an exact coin flip, and expectations s
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('2 — expected(): a 400-point lead is ~10:1, and the curve is monotonic', () => {
   // The defining property of the 400-point scale.
   const favourite = elo.expected(1400, 1000);
@@ -52,7 +50,6 @@ test('2 — expected(): a 400-point lead is ~10:1, and the curve is monotonic', 
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('3 — SYMMETRIC EXCHANGE: what one team gains, the other loses, exactly', () => {
   const pairs = [
     [1000, 1000], [1000, 1200], [1400, 1000], [1013, 987],
@@ -83,7 +80,6 @@ test('3 — SYMMETRIC EXCHANGE: what one team gains, the other loses, exactly', 
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('4 — UPSET: beating a stronger team is worth more than beating an equal one', () => {
   const win = (rc, ro) => elo.rate({
     ratingChallenger: rc, ratingOpponent: ro, scoreChallenger: elo.OUTCOME.WIN, kFactor: K,
@@ -111,7 +107,6 @@ test('4 — UPSET: beating a stronger team is worth more than beating an equal o
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('5 — DRAW shifts rating toward the lower-rated team', () => {
   // Favourite is the challenger: it drops, the underdog climbs.
   const a = elo.rate({
@@ -138,7 +133,6 @@ test('5 — DRAW shifts rating toward the lower-rated team', () => {
   assert.equal(even.opponent.delta, 0);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('6 — K-FACTOR is respected: it scales the swing, and K=0 freezes it', () => {
   const deltaAt = (k) => elo.rate({
     ratingChallenger: 1000, ratingOpponent: 1200, scoreChallenger: elo.OUTCOME.WIN, kFactor: k,
@@ -163,7 +157,6 @@ test('6 — K-FACTOR is respected: it scales the swing, and K=0 freezes it', () 
   assert.equal(elo.newRating(1000, 0.5, 0.5, 999), 1000, 'S===E must move nothing at any K');
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('7 — newRating() always returns an integer rating', () => {
   for (const r of [1000, 1013, 877]) {
     for (const s of [0, 0.5, 1]) {
@@ -175,7 +168,6 @@ test('7 — newRating() always returns an integer rating', () => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('8 — FR2.6: a team is Unranked until it has one verified match', () => {
   const fresh = { elo: 1000, wins: 0, losses: 0, draws: 0 };
   const played = { elo: 1016, wins: 1, losses: 0, draws: 0 };
@@ -192,14 +184,13 @@ test('8 — FR2.6: a team is Unranked until it has one verified match', () => {
   assert.equal(elo.displayElo(fresh), null);
   assert.equal(elo.displayElo(played), 1016);
 
-  // Postgres hands DECIMAL/BIGINT back as strings; the helpers must survive it.
+  // Postgres hands decimal/BIGINT back as strings; the helpers must survive it.
   assert.equal(elo.isRanked({ elo: '1016', wins: '1', losses: '0', draws: '0' }), true);
   assert.equal(elo.displayElo({ elo: '1016', wins: '1', losses: '0', draws: '0' }), 1016);
   assert.equal(elo.playedCount({ wins: '2', losses: '3', draws: '1' }), 6);
   assert.equal(elo.playedCount(null), 0, 'a missing team is not ranked, not a crash');
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('9 — competitiveness(): 100 when even, floors at 5, never leaves the band', () => {
   assert.equal(elo.competitiveness(1200, 1200), 100);
   assert.equal(elo.competitiveness(1000, 1400), 5, 'a 400 gap is the floor');
@@ -224,7 +215,6 @@ test('9 — competitiveness(): 100 when even, floors at 5, never leaves the band
   assert.equal(elo.competitivenessFor(played, { elo: 1200, wins: 1, losses: 0, draws: 0 }), 95);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('10 — outcomeFor(): winner id maps to S, null is a draw, a stranger throws', () => {
   const C = '11111111-1111-1111-1111-111111111111';
   const O = '22222222-2222-2222-2222-222222222222';

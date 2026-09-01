@@ -15,11 +15,11 @@ import 'notification_prefs_screen.dart';
 /// deep link whose route no longer exists -- so it is also the fallback screen, which
 /// is why it is a plain route rather than a tab.
 ///
-/// WHY CATEGORY CHIPS AND NOT SECTIONS
+/// Why CATEGORY chips and not SECTIONS
 /// The chat inbox is sectioned (Bookings / Matches / Teams) because a conversation
-/// belongs to exactly one of three places and you go looking for it. A notification
-/// feed is read newest-first: the useful axis is time, and the category is a FILTER
-/// you reach for when you already know what you are hunting. Sectioning here would
+/// belongs to exactly one of three places and the user goes looking for it. A notification
+/// feed is read newest-first: the useful axis is time, and the category is a filter
+/// reached for when the target is already known. Sectioning here would
 /// bury a booking rejection from four minutes ago under nine tournament alerts.
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -31,7 +31,7 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final ScrollController _scroll = ScrollController();
 
-  /// Chip labels. `system` is included and is deliberately NOT mutable in the prefs
+  /// Chip labels. `system` is included and is deliberately not mutable in the prefs
   /// screen -- a suspension notice is not something a user gets to opt out of -- but
   /// it is still filterable here, which is a different question.
   static const List<List<String>> _chips = [
@@ -91,7 +91,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return;
     }
     if (!DeepLink.open(n.deepLink)) return;
-    // The badge is re-read when we come back: the screen we just opened may itself
+    // The badge is re-read on return: the screen just opened may itself
     // have marked things read (opening a chat clears its unread notifications).
     if (mounted) p.refreshSummary();
   }
@@ -308,7 +308,7 @@ class _NotificationRow extends StatelessWidget {
       onDismissed: (_) => onDismiss(),
       child: Material(
         // The unread tint is very light on purpose: on a feed where most rows are
-        // unread, a strong wash makes the READ ones look like the exception.
+        // unread, a strong wash makes the read ones look like the exception.
         color: unread ? AppColors.accentLight.withValues(alpha: 0.35) : AppColors.cardBg,
         child: InkWell(
           onTap: onTap,

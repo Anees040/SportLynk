@@ -6,28 +6,25 @@
  *         node src/scripts/check_chat.js --evidence (writes doc/chat_evidence.md)
  *         node src/scripts/check_chat.js --verify-clean
  *
- * WHY THIS SCRIPT EXISTS
- * ----------------------
+ * Why this script exists
  * The unit tests prove the sentences and the payload shapes with the database
- * down. What they cannot prove is the thing S.7 Wave B actually added: that
- * confirming a booking OPENS A ROOM, that accepting a challenge opens a DIFFERENT
+ * down. What they cannot prove is the thing S.7 Wave B added: that
+ * confirming a booking opens a room, that accepting a challenge opens a different
  * room containing four specific people, that doing either twice does not open a
  * second one, and that the inbox those rooms appear in counts unread the same way
  * the badge does. Every one of those is a claim about rows in three tables at
  * once, and the only honest way to check it is to write the rows.
  *
- * NOTHING SURVIVES IT
- * -------------------
+ * Nothing survives it
  * Every function under test takes a caller-owned `client` and writes no BEGIN of
  * its own — that is why routes/owner.js can compose them inside a booking
- * approval, and it is why this script can hold ONE transaction across the whole
+ * approval, and it is why this script can hold one transaction across the whole
  * run and ROLLBACK at the end. Rows are prefixed `zzchat-` so a run interrupted
  * before its rollback is trivially identifiable, and `--verify-clean` re-checks
  * that none exist.
  *
- * WHAT IT DOES NOT PROVE
- * ----------------------
- * It drives the CORE functions, not HTTP. So Block 6 closes the remaining gap the
+ * What it does not prove
+ * It drives the core functions, not HTTP. So Block 6 closes the remaining gap the
  * only way a rolled-back script can: it reads the source of every confirm,
  * cancel and no-show path and asserts each one calls the opener. A function that
  * works and is never called is the exact failure mode this wave was written to
@@ -113,14 +110,14 @@ function eq(got, want, label) {
   return check(got === want, label, `got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
 }
 
-/** A substring assertion that prints what it actually got when it fails. */
+/** A substring assertion that prints what it got when it fails. */
 function has(haystack, needle, label) {
   const h = String(haystack || '');
   return check(h.includes(needle), label, `"${h.slice(0, 120)}" does not contain "${needle}"`);
 }
 
 /**
- * Run something that MIGHT fail without poisoning the outer transaction. Postgres
+ * Run something that might fail without poisoning the outer transaction. Postgres
  * aborts the whole transaction on any error, so one bad query would turn every
  * later check into "current transaction is aborted" and hide the real result.
  */
@@ -165,14 +162,12 @@ async function channelCount(client, type, refId) {
   return rows[0].n;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE CAST
-// ════════════════════════════════════════════════════════════════════════════
+// The CAST
 
 /**
- * The venue is CHOSEN, never created: a booking room's title and image come off a
+ * The venue is chosen, never created: a booking room's title and image come off a
  * real venue row, and a fabricated venue would prove the join rather than the
- * data. Everything with a person in it is CREATED, because the assertions are
+ * data. Everything with a person in it is created, because the assertions are
  * about exactly who is in a room and a seeded team's roster is not known here.
  */
 async function pickVenue(client) {
@@ -200,7 +195,7 @@ async function makeUser(client, who, role = 'player') {
 
 /**
  * A team with a captain, a vice-captain and a plain member — three roles because
- * the coordination room must contain the first two and NOT the third, and a team
+ * the coordination room must contain the first two and not the third, and a team
  * with only a captain could not tell those two rules apart.
  */
 async function makeTeam(client, { label, sport, city }) {
@@ -208,7 +203,7 @@ async function makeTeam(client, { label, sport, city }) {
   const vice = await makeUser(client, `${label}-vice`);
   const plain = await makeUser(client, `${label}-member`);
   const { rows: t } = await client.query(
-    // $5 AND $6 both carry the rating, on purpose: teams.elo is integer and the
+    // $5 and $6 both carry the rating, on purpose: teams.elo is integer and the
     // legacy teams.elo_rating is numeric(8,2), and one placeholder feeding both
     // makes Postgres deduce two conflicting types for one parameter (42P08).
     `INSERT INTO teams (name, sport, captain_id, city, elo, elo_rating, visibility)
@@ -251,9 +246,7 @@ async function makeBooking(client, { venue, playerId }) {
   return rows[0];
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 1 — THE BOOKING ROOM (FR8.4): confirmation opens a conversation
-// ════════════════════════════════════════════════════════════════════════════
+// Block 1 — the BOOKING room (FR8.4): confirmation opens a conversation
 
 async function blockBookingRoom(client, ctx) {
   section('Block 1 — a confirmed booking becomes a room');
@@ -322,12 +315,12 @@ async function blockIdempotent(client, ctx) {
   eq((await membersOf(client, ctx.bookingChannel)).length, 2,
     'the membership was not duplicated either');
 
-  // The pill IS posted twice, and that is correct: the room is idempotent, a
+  // The pill is posted twice, and that is correct: the room is idempotent, a
   // sentence is an event. Two identical pills means somebody confirmed twice.
   const thread = await threadOf(client, ctx.bookingChannel);
   eq(thread.length, 2, 'the pill is posted again — a room is a thing, a sentence is an event');
 
-  // Cancellation. The room is NOT deleted: the refund argument still has to happen
+  // Cancellation. The room is not deleted: the refund argument still has to happen
   // somewhere, and an admin ruling a dispute needs the archive.
   const cancelled = await chat.announceInRoom(client, ctx.bookingChannel, 'booking_cancelled', {
     value: 'late cancellation',
@@ -349,9 +342,7 @@ async function blockIdempotent(client, ctx) {
   eq(none, null, 'a booking that predates this wave has no room, and that is not an error');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 3 — THE COORDINATION ROOM (FR8.5)
-// ════════════════════════════════════════════════════════════════════════════
+// Block 3 — the coordination room (FR8.5)
 
 async function blockCaptainRoom(client, ctx) {
   section('Block 3 — an accepted challenge opens the captains’ room');
@@ -396,8 +387,8 @@ async function blockCaptainRoom(client, ctx) {
 }
 
 /**
- * Every match-lifecycle event now writes THREE sentences: one per team, in that
- * team's own voice, plus ONE neutral sentence in the shared room. The per-team
+ * Every match-lifecycle event now writes three sentences: one per team, in that
+ * team's own voice, plus one neutral sentence in the shared room. The per-team
  * wording is written from one side's point of view — "you challenged them" — and a
  * room holding both captains would tell half its readers the opposite of what
  * happened. This block drives the real fan-out and reads all three back.
@@ -455,7 +446,7 @@ async function blockNeutralPills(client, ctx) {
   ev.addFact('sentences in the coordination room', String(all.length));
   ev.note(all.map((m) => `- ${m.body}`).join('\n'));
 
-  // The other half of the same rule: the per-team sentences DO take a side, and
+  // The other half of the same rule: the per-team sentences do take a side, and
   // that is correct. If these ever stopped differing, the neutral set would be
   // pointless.
   const sideA = sys.sentenceFor('match_challenge_sent', { a: 'Ali', v: B.teamName });
@@ -478,9 +469,7 @@ async function blockNeutralPills(client, ctx) {
     'while a null channelId still resolves the room by match id, the way fanOut’s callers rely on');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 5 — THE INBOX: what the list says, and what the badge says
-// ════════════════════════════════════════════════════════════════════════════
+// Block 5 — the inbox: what the list says, and what the badge says
 
 async function blockInbox(client, ctx) {
   section('Block 5 — the inbox, its unread count and its badge');
@@ -517,7 +506,7 @@ async function blockInbox(client, ctx) {
   ev.addFact('booking row subtitle', String(bookingRow.context.subtitle));
   ev.addFact('coordination row title', String(coordRow.context.title));
 
-  // ── The unread count, against a number computed by hand ──────────────────
+  // The unread count, against a number computed by hand
   //
   // Every pill in the coordination room was written by nobody (sender_id NULL) and
   // team A's captain has never marked it read, so all of them are unread. Counting
@@ -532,7 +521,7 @@ async function blockInbox(client, ctx) {
   eq(coordRow.unread, byHand[0].n,
     `the list’s unread count for the shared room is the hand-computed ${byHand[0].n}`);
 
-  // A message from ME is never unread to me, and a tombstone leaves no permanent +1.
+  // A message from me is never unread to me, and a tombstone leaves no permanent +1.
   const mine = await chat.insertMessage(client, {
     channelId: ctx.coordChannel, senderId: uid, kind: 'text', body: 'On my way',
   });
@@ -550,9 +539,9 @@ async function blockInbox(client, ctx) {
   // Reading the room clears it — the same column POST /:channelId/read moves, which
   // is what makes the badge and the thread agree.
   //
-  // clock_timestamp(), NOT now(), and only because this script is one long
-  // transaction. now() is the TRANSACTION's timestamp, fixed at the BEGIN above,
-  // so it is EARLIER than the clock_timestamp() insertMessage stamped on every
+  // clock_timestamp(), not now(), and only because this script is one long
+  // transaction. now() is the transaction's timestamp, fixed at the BEGIN above,
+  // so it is earlier than the clock_timestamp() insertMessage stamped on every
   // message this run wrote — a watermark set with it would clear nothing and the
   // failure would look like a bug in the count. In production each read is its own
   // statement on the pool, so its now() is genuinely later than every committed
@@ -566,7 +555,7 @@ async function blockInbox(client, ctx) {
   eq(p3.items.find((i) => i.id === ctx.coordChannel).unread, 0,
     'marking it read clears the count to zero');
 
-  // ── The badge ────────────────────────────────────────────────────────────
+  // The badge
   const badge = await list.unreadCounts(client, uid);
   const listTotal = p3.items.reduce((s, i) => s + i.unread, 0);
   eq(badge.total, listTotal, 'the badge total equals the sum of the rows it summarises');
@@ -608,7 +597,7 @@ async function blockInbox(client, ctx) {
   // Assistant channels are excluded everywhere. Scout has its own screen and its
   // own entry point; a robot at the top of a human inbox is the wrong default.
   //
-  // A REAL Scout thread carries no chat_channel_members row at all — it is keyed by
+  // A real Scout thread carries no chat_channel_members row at all — it is keyed by
   // created_by — so the inner join alone would already hide it. One is added here on
   // purpose, so that the `type <> 'assistant'` filter is the only thing left doing
   // the work and the test cannot pass for the wrong reason.
@@ -625,11 +614,11 @@ async function blockInbox(client, ctx) {
   eq(badge5.byType.assistant, undefined,
     'and the badge has no bucket for Scout at all — three human types, nothing else');
 
-  // ── The index the unread count depends on ────────────────────────────────
+  // The index the unread count depends on
   //
   // Migration 013 already ships idx_chat_messages_channel (channel_id, created_at
   // DESC), which is exactly the shape the LATERAL count and every history page need.
-  // This asserts it is still there and that the planner actually chooses it — an
+  // This asserts it is still there and that the planner chooses it — an
   // index nobody uses is a line in a migration, not a fast query.
   const { rows: ix } = await client.query(
     `SELECT indexdef FROM pg_indexes
@@ -659,14 +648,12 @@ async function blockInbox(client, ctx) {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 6 — FR8.10: the reply suggestions
-// ════════════════════════════════════════════════════════════════════════════
+// Block 6 — FR8.10: the reply suggestions
 
 async function blockQuickReplies(client, ctx) {
   section('Block 6 — FR8.10 reply suggestions, model and fallback');
 
-  // Every key in the table must be a label the model can actually emit. A key that
+  // Every key in the table must be a label the model can emit. A key that
   // is not in the frozen 23-label spec is a branch that can never run — the same
   // guard mlClient.assertNluLabels applies to Scout's routing.
   const labels = new Set(actions.intentLabels());
@@ -731,7 +718,7 @@ async function blockQuickReplies(client, ctx) {
   eq(asCaptain.data.audience, 'captain',
     'a coordination room is its own audience regardless of the caller’s app role');
 
-  // {venue} is READ from the booking this room points at. This is the only fact a
+  // {venue} is read from the booking this room points at. This is the only fact a
   // canned reply is allowed to contain, and it is the reason none of them can lie.
   const info = await qr.suggestFor(client, {
     channel: ownerChannel, userId: ctx.owner.id, userRole: 'owner',
@@ -763,10 +750,10 @@ async function blockQuickReplies(client, ctx) {
   eq(elsewhere.error && elsewhere.error.status, 404,
     'and a messageId from a different channel — the id alone is never enough');
 
-  // ── The down-path, proven by taking the model away ────────────────────────
+  // The down-path, proven by taking the model away
   //
   // ml-service being reachable during a check run is exactly when the fallback is
-  // NOT exercised, so parseNlu is swapped for the shape it returns when the service
+  // not exercised, so parseNlu is swapped for the shape it returns when the service
   // is unreachable. That is the same object the real failure path produces
   // (mlClient.nluUnavailable), so this proves the branch rather than a mock of it.
   const realParse = ml.parseNlu;
@@ -798,18 +785,16 @@ async function blockQuickReplies(client, ctx) {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 7 — IS IT WIRED? the check a rolled-back script can still make
-// ════════════════════════════════════════════════════════════════════════════
+// Block 7 — is it wired? the check a rolled-back script can still make
 
 /**
- * Everything above proves the openers WORK. None of it proves anything CALLS them,
+ * Everything above proves the openers work. None of it proves anything calls them,
  * and "the machinery exists and is not wired to anything" is the exact failure this
  * whole sprint is repairing. So this block reads the source of every path that
  * should open or annotate a room and asserts the call is there.
  *
  * A string match is a weak proof of behaviour and a strong proof of absence: it
- * cannot tell you the call is correct, but it fails loudly the day somebody adds a
+ * cannot prove the call is correct, but it fails loudly the day somebody adds a
  * third confirm path and forgets the room. That is the failure worth catching here.
  */
 function blockWiring() {
@@ -834,7 +819,7 @@ function blockWiring() {
     check(read(file).includes(needle), label, `${file} has no "${needle}"`);
   }
 
-  // Every emit is AFTER the commit. A socket frame that arrives while the
+  // Every emit is after the commit. A socket frame that arrives while the
   // transaction is open tells the app to re-read a row it cannot see yet, and it
   // renders the old one — the single most confusing bug class in a live chat.
   for (const file of ['routes/owner.js', 'jobs/autoApproveJob.js', 'jobs/noShowJob.js']) {
@@ -853,9 +838,7 @@ function blockWiring() {
   ev.addFact('coord pill call sites in routes/matches.js', String(coordSites));
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE RUN
-// ════════════════════════════════════════════════════════════════════════════
+// The run
 
 /** No row this script writes may ever be found outside its own transaction. */
 async function verifyClean(client) {
@@ -899,7 +882,7 @@ async function main() {
     ctx.booking = await makeBooking(client, { venue: ctx.venue, playerId: ctx.player.id });
     ctx.teamA = await makeTeam(client, { label: 'A', sport, city: ctx.venue.city });
     ctx.teamB = await makeTeam(client, { label: 'B', sport, city: ctx.venue.city });
-    // `matches` has NO match_date: the fixture's when-and-where IS `booking_id`,
+    // `matches` has no match_date: the fixture's when-and-where is `booking_id`,
     // and a friendly challenge carries only `challenge_expires_at`. The challenged
     // match is the one every room and pill assertion runs against; `orphanMatch`
     // deliberately never gets a room, so block 4 can prove that a lifecycle event

@@ -2,32 +2,32 @@ const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 
 /**
- * Authentication, and — since S.7 Wave D — SUSPENSION ENFORCEMENT.
+ * Authentication, and — since S.7 Wave D — suspension enforcement.
  *
- * WHY THIS FILE TOUCHES THE DATABASE AT ALL
+ * Why this file touches the database at all
  * Until this wave it was pure `jwt.verify`: 43 lines, no I/O. That made
- * suspension cosmetic. `routes/auth.js` refuses to LOG IN an inactive user, but a
+ * suspension cosmetic. `routes/auth.js` refuses to log in an inactive user, but a
  * suspended user who was already logged in kept a valid signed token, and every
  * request it carried sailed through until the token expired on its own. Banning
- * somebody who is currently holding a token did nothing you could observe. A JWT
+ * somebody who is currently holding a token had no observable effect. A JWT
  * cannot be un-issued, so the only place that fact can be re-checked is here.
  *
- * WHY A 30-SECOND CACHE AND NOT A LOOKUP PER REQUEST
+ * Why A 30-second cache and not a lookup per request
  * A lookup per request would put one round trip in front of every authenticated
  * call in the app — the home screen alone fires several. A 30 s TTL costs one
  * indexed primary-key read per active user per 30 s, and `invalidate()` is called
  * by the suspend route inside the same process, so the real latency of a ban is
  * ~0 ms rather than 30 s. The window only ever matters for a suspension applied
- * by a DIFFERENT process (a second server instance), where it is 30 s.
+ * by a different process (a second server instance), where it is 30 s.
  *
- * WHY A DATABASE ERROR MUST NOT LOG EVERYBODY OUT
- * This is the same rule `utils/globalSettings.js` states for itself: NEVER THROW.
- * If Supabase blips, the honest failure mode is "we could not re-check, so we
- * trust the signature we already verified" — the pre-Wave-D behaviour. The
+ * Why a database error must not log everybody out
+ * This is the same rule `utils/globalSettings.js` states for itself: never throw.
+ * If Supabase blips, the honest failure mode is "the re-check did not happen, so
+ * the already-verified signature stands" — the pre-Wave-D behaviour. The
  * alternative is an outage that locks out every user of the app because one query
  * timed out, which trades a rare authorisation gap for a total loss of service.
  *
- * WHY THE ROLE COMES FROM THE ROW WHEN WE HAVE IT
+ * Why the role comes from the row when the row is available
  * The token carries a role claim from login time. A user demoted from admin an
  * hour ago still presents `role: 'admin'` in a token that is cryptographically
  * valid. Since the row is in hand anyway, the row wins.
@@ -37,7 +37,7 @@ const pool = require('../db/pool');
 const TTL_MS = 30 * 1000;
 
 /**
- * Bound on the cache. Entries are one small object per USER, not per token, so
+ * Bound on the cache. Entries are one small object per user, not per token, so
  * this is generous for a phone app; the cap exists so that a flood of tokens for
  * random ids cannot grow the map without limit. Eviction is oldest-first by
  * insertion order, which is what a JS Map iterates in.
@@ -68,9 +68,9 @@ function cacheSize() {
 /**
  * The account state behind a token, from cache or from one indexed read.
  *
- * Returns `null` when we could not find out (no id in the token, or the database
- * refused). `null` means "carry on with the token's claims" — see NEVER THROW
- * above. It never returns a partially-filled object, so the caller has exactly
+ * Returns `null` when the state could not be read (no id in the token, or the
+ * database refused). `null` means "carry on with the token's claims" — see never
+ * throw above. It never returns a partially-filled object, so the caller has exactly
  * two cases to handle rather than three.
  */
 async function accountState(id) {
@@ -141,9 +141,9 @@ const authMiddleware = async (req, res, next) => {
       .json({ success: false, message: 'Unauthorized' });
   }
 
-  // Signature is good. Everything from here on is the account STATE, and its
-  // failures are 403s (you are who you say you are, and you may not) rather
-  // than 401s (we do not know who you are).
+  // Signature is good. Everything from here on is the account state, and its
+  // failures are 403s (the identity holds, the permission does not) rather
+  // than 401s (the identity itself is unknown).
   const state = await accountState(decoded.id);
 
   if (state && state.missing) {
@@ -155,7 +155,7 @@ const authMiddleware = async (req, res, next) => {
   if (state && state.active === false) {
     // Worded to match the login refusal in `routes/auth.js` so a suspended user
     // is told the same thing whichever door they try. 403, not 401: the app must
-    // NOT treat this as an expired session and silently bounce to the login
+    // not treat this as an expired session and silently bounce to the login
     // screen, where the same message would appear with no explanation.
     return res.status(403).json({
       success: false,
@@ -166,7 +166,7 @@ const authMiddleware = async (req, res, next) => {
   req.user = {
     id: decoded.id,
     email: decoded.email,
-    // The row wins when we have it; the claim is the fallback.
+    // The row wins when it is available; the claim is the fallback.
     role: (state && state.role) || decoded.role,
   };
 

@@ -5,17 +5,17 @@ import 'package:flutter/foundation.dart';
 import '../models/assistant.dart';
 import '../services/assistant_service.dart';
 
-/// Owns the live state of ONE Scout conversation.
+/// Owns the live state of one Scout conversation.
 ///
 /// Instantiated by the assistant screen and disposed with it, the same shape
 /// [ChatController] uses for a person-to-person chat — a global provider would keep a
 /// stale transcript alive after logout, and Scout's history is per-user by JWT.
 ///
-/// THREE RULES SHAPE EVERYTHING BELOW.
+/// Three rules shape everything below.
 ///
 /// 1. **A typed sentence is never lost.** The user bubble is appended before the POST
 ///    leaves, and a failure marks it `failed` rather than removing it. Retry re-sends
-///    the SAME `client_id`, which is what makes a retried booking one booking: the
+///    the same `client_id`, which is what makes a retried booking one booking: the
 ///    server's idempotency key is that id, so the second attempt returns the first
 ///    attempt's answer instead of charging a wallet twice.
 ///
@@ -60,7 +60,7 @@ class AssistantController extends ChangeNotifier {
   /// in My Bookings", and the reason that claim is cheap to make.
   bool _bookingsChanged = false;
 
-  // ── What the screen reads ─────────────────────────────────────────────────
+  // What the screen reads
   List<ScoutMessage> get messages => List.unmodifiable(_messages);
   List<ScoutCapability> get capabilities => _capabilities;
   String? get threadId => _threadId;
@@ -94,14 +94,14 @@ class AssistantController extends ChangeNotifier {
     super.dispose();
   }
 
-  // ── Boot ──────────────────────────────────────────────────────────────────
+  // Boot
 
   /// Open the conversation the user was last in, or start a blank one.
   ///
   /// A blank one is genuinely blank: no thread row is created until the first message,
   /// because the backend caps threads per user and opening the screen is not a decision
-  /// to start a chat. The first POST with no `session_id` creates the thread and tells
-  /// us its id.
+  /// to start a chat. The first POST with no `session_id` creates the thread and
+  /// returns its id.
   Future<void> start() async {
     _booting = true;
     _emit();
@@ -147,7 +147,7 @@ class AssistantController extends ChangeNotifier {
     }
   }
 
-  /// One page older, appended at the FRONT.
+  /// One page older, appended at the front.
   ///
   /// The cursor is opaque and points at the next older page, so paging never
   /// re-reads or skips a row even when two messages share a timestamp — the server
@@ -170,7 +170,7 @@ class AssistantController extends ChangeNotifier {
     _emit();
   }
 
-  // ── Sending ───────────────────────────────────────────────────────────────
+  // Sending
 
   /// A typed sentence. This is the only path that reaches the intent classifier.
   Future<void> sendText(String text) {
@@ -206,7 +206,7 @@ class AssistantController extends ChangeNotifier {
     while (_messages.isNotEmpty && _messages.last.isScout && _messages.last.isLocal) {
       _messages.removeLast();
     }
-    // A failed CHIP has to be retried as that chip, not as its label typed out —
+    // A failed chip has to be retried as that chip, not as its label typed out —
     // otherwise a retry would route a button press through the classifier and could
     // land on a different action than the one the user pressed.
     final was = _inFlight[cid];
@@ -259,7 +259,7 @@ class AssistantController extends ChangeNotifier {
     if (turn.threadId.isNotEmpty) _threadId = turn.threadId;
     _fsm = turn.fsm;
 
-    // A 500 still carries a reply, and the server deliberately did NOT persist it —
+    // A 500 still carries a reply, and the server deliberately did not persist it —
     // so it is shown, and it disappears on reload, which is the honest behaviour for
     // a turn whose transaction rolled back.
     _messages.add(ScoutMessage.scout(turn.reply, id: turn.messageId, nlu: turn.nlu));
@@ -278,16 +278,16 @@ class AssistantController extends ChangeNotifier {
 
   int _indexOf(String id) => _messages.indexWhere((m) => m.id == id);
 
-  /// `client_id` → what was actually sent, kept only until the turn succeeds. It is
+  /// `client_id` → what was sent, kept only until the turn succeeds. It is
   /// what lets a retry repeat a chip press faithfully.
   final Map<String, ({String? action, Map<String, dynamic>? args})> _inFlight = {};
 
-  // ── Threads ───────────────────────────────────────────────────────────────
+  // Threads
 
   /// Start a fresh conversation.
   ///
   /// Nothing is created server-side here. A thread row appears when the first message
-  /// is sent, so tapping "new chat" and changing your mind does not consume one of the
+  /// is sent, so tapping "new chat" and then changing course does not consume one of the
   /// user's capped thread slots — and the empty state is a real empty state.
   void newChat() {
     if (_busy) return;
@@ -342,7 +342,7 @@ class AssistantController extends ChangeNotifier {
     return ok;
   }
 
-  // ── Feedback ──────────────────────────────────────────────────────────────
+  // Feedback
 
   /// Rate one of Scout's answers, optimistically.
   ///

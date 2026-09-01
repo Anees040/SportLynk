@@ -12,8 +12,8 @@ import 'admin_dispute_detail_screen.dart';
 /// The dispute queue (FR10.6). Every match whose two captains filed different
 /// results, newest stake first.
 ///
-/// THE ORDER IS THE SERVER'S AND SO IS THE SEVERITY. `severityElo` is the rating
-/// that actually moves if this case is ruled — computed by the backend with the
+/// The order is the server's and so is the severity. `severityElo` is the rating
+/// that moves if this case is ruled — computed by the backend with the
 /// same pure `elo.rate()` the match engine uses, at the live K factor. The queue is
 /// sorted by it and only then by age, which is why the cursor is a
 /// `"<severityElo>~<createdAt>~<id>"` triple and is passed back untouched. Nothing
@@ -95,7 +95,7 @@ class _AdminDisputesScreenState extends State<AdminDisputesScreen> {
       ),
     );
     if (!mounted) return;
-    // A ruling closes the case AND every sibling dispute on the same match, so the
+    // A ruling closes the case and every sibling dispute on the same match, so the
     // queue is re-read rather than patched in place.
     if (ruled == true) await _load();
   }
@@ -217,7 +217,7 @@ class _AdminDisputesScreenState extends State<AdminDisputesScreen> {
   }
 
   /// Red / amber / grey by what is at stake. The thresholds are display-only — the
-  /// ORDER already came from the server, this just makes the top of the list look
+  /// order already came from the server, this just makes the top of the list look
   /// like the top of the list.
   static Color _severityColor(int elo) {
     if (elo >= 24) return AppColors.error;
@@ -385,7 +385,7 @@ class _AdminDisputesScreenState extends State<AdminDisputesScreen> {
               Icons.emoji_events_outlined, AppColors.primary),
         if (d.bothSidesDisputed)
           chip('Both sides disputed', Icons.people_alt_outlined, AppColors.error),
-        // An already-rated match needs the ruling to CORRECT points rather than
+        // An already-rated match needs the ruling to correct points rather than
         // award them. Flagged here so the admin knows before they open the case.
         if (d.match.eloApplied)
           chip('Already rated', Icons.history_rounded, AppColors.warning),

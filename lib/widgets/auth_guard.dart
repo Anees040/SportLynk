@@ -11,8 +11,8 @@ import '../providers/auth_provider.dart';
 /// the screen behind the guard must not build, and two of them navigate away on the next
 /// frame.
 ///
-/// NOTE ON THE REDIRECT, because it decides how routes are registered: a role mismatch
-/// answers with `pushNamedAndRemoveUntil`, which WIPES the stack and sends the user to
+/// NOTE on the redirect, because it decides how routes are registered: a role mismatch
+/// answers with `pushNamedAndRemoveUntil`, which wipes the stack and sends the user to
 /// their own home. That is right for a mis-tap and wrong for a notification tap, which is
 /// why a route reachable by more than one role is registered in `AppRoutes` with no
 /// `requiredRole` at all rather than with a tighter one.

@@ -8,12 +8,12 @@ import 'package:flutter/material.dart';
 /// file that also imports material.dart produces an error message pointing at
 /// something else entirely.
 ///
-/// WHAT IS *NOT* DECIDED HERE
+/// What is *not* decided here
 /// The icon, the route and the collapse wording all arrive from the server's
 /// `utils/notificationTypes.js` registry. That is deliberate: a notification type
 /// is added in one file, and a client that guessed its own icon would render a
 /// blank square for every type shipped after its own release. This class
-/// translates the registry's icon NAME to an `IconData` and does nothing else.
+/// translates the registry's icon name to an `IconData` and does nothing else.
 class AppNotification {
   final String id;
   final String type;
@@ -52,7 +52,7 @@ class AppNotification {
   final DateTime? expiresAt;
 
   /// Server-computed, not derived here: `expires_at` is compared against the
-  /// DATABASE clock, and a phone whose clock is twenty minutes fast must not grey
+  /// database clock, and a phone whose clock is twenty minutes fast must not grey
   /// out a challenge that is still live.
   final bool isExpired;
 
@@ -149,7 +149,7 @@ class AppNotification {
   /// The registry's 37 icon names, resolved.
   ///
   /// This map is the one place a client-side guess is unavoidable, so it fails
-  /// SAFE: an unmapped name falls back to a bell rather than throwing. Keep it in
+  /// safe: an unmapped name falls back to a bell rather than throwing. Keep it in
   /// step with `notificationTypes.js` -- a type added there with a new icon name
   /// renders a bell until its name is added here, which is a blemish and not a
   /// bug.
@@ -224,7 +224,7 @@ class NotificationActor {
 /// phone is quiet.
 ///
 /// `pushConfigured` is the honest answer to "why didn't I get a push?": an
-/// unconfigured SERVER (no Firebase service account), a denied OS permission and a
+/// unconfigured server (no Firebase service account), a denied OS permission and a
 /// muted category are three different problems with three different fixes, and the
 /// prefs screen says which one applies instead of leaving the user to guess.
 class NotificationSummary {

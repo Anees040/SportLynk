@@ -9,14 +9,14 @@ import '../services/realtime_service.dart';
 /// The notification feed, the unread badge, and the socket subscription that keeps
 /// both honest.
 ///
-/// WHY THIS IS A PROVIDER AND THE CHAT BADGE IS NOT
+/// Why this is A Provider and the CHAT badge is not
 /// The chat badge lives in each home screen's State because it is one integer read
 /// from one endpoint. The bell is not: the count on the header, the list behind it,
 /// the filter chips and the foreground banner are four views of the same rows, and
 /// three of them can be on screen at once. A single ChangeNotifier is what keeps a
 /// swipe-to-dismiss in the list from leaving a stale number in the header.
 ///
-/// WHY THE COUNT IS RE-READ AND NOT INCREMENTED
+/// Why the count is re-read and not incremented
 /// `notification:new` could just do `_unread++`, and that would be wrong within a
 /// day: the server decides what counts (dismissed rows out, a collapsed row counted
 /// once no matter how many messages it represents), and a second copy of that rule
@@ -69,8 +69,8 @@ class NotificationProvider extends ChangeNotifier {
   /// Bind to a signed-in session. Idempotent for the same token, so calling it from
   /// every home screen's `initState` costs one subscription, not three.
   ///
-  /// The socket is opened HERE rather than inside the notifications screen: a badge
-  /// that only moves while you are already looking at the list is not a badge.
+  /// The socket is opened here rather than inside the notifications screen: a badge
+  /// that only moves while the list is already on screen is not a badge.
   void attach(String? token) {
     if (token == null || token.isEmpty) {
       detach();
@@ -108,7 +108,7 @@ class NotificationProvider extends ChangeNotifier {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 900), () {
       refreshSummary();
-      // Only refresh the LIST if the user is looking at it. Rebuilding a list nobody
+      // Only refresh the list if the user is looking at it. Rebuilding a list nobody
       // has open is a wasted request on a metered connection, and the screen reloads
       // on open anyway.
       if (_items.isNotEmpty) refresh();
@@ -125,8 +125,8 @@ class NotificationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Change the filter and reload. Passing the same category twice CLEARS it, which
-  /// is what a chip row is expected to do when you tap the selected chip.
+  /// Change the filter and reload. Passing the same category twice clears it, which
+  /// is what a chip row is expected to do when the selected chip is tapped.
   Future<void> setCategory(String? c) async {
     _category = (_category == c) ? null : c;
     await refresh();
@@ -195,11 +195,11 @@ class NotificationProvider extends ChangeNotifier {
     }
   }
 
-  // ── Optimistic writes ──────────────────────────────────────────────────────
+  // Optimistic writes
   //
   // These three move the UI first and reconcile after. That is the right trade for a
   // tap the user made: the row is already under their thumb, the server is the
-  // authority on the COUNT (which is re-read from /summary once the call returns), and
+  // authority on the count (which is re-read from /summary once the call returns), and
   // a 200 ms wait before a dot disappears reads as a broken app. A failure is
   // reconciled by the same /summary read, so the worst case is a dot that comes back.
 
@@ -235,7 +235,7 @@ class NotificationProvider extends ChangeNotifier {
       n.isRead = true;
     }
     notifyListeners();
-    // Scoped to the CURRENT filter, so "mark all read" inside the Wallet chip does
+    // Scoped to the current filter, so "mark all read" inside the Wallet chip does
     // not silently clear the tournament alerts the user has not looked at.
     await _svc.readAll(t, category: _category);
     await refresh();

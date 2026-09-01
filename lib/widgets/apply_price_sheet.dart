@@ -14,7 +14,7 @@ import '../services/pricing_service.dart';
 /// they pick a day, they pick the slots, they see the exact rupee change on each
 /// one, and only then does the PATCH go out.
 ///
-/// It is deliberately picky about what it OFFERS to reprice. A booked slot's price
+/// It is deliberately picky about what it offers to reprice. A booked slot's price
 /// is what a player already agreed to pay and must never move; a held slot is
 /// mid-checkout; a past slot is history. Those are shown, greyed, with the reason —
 /// rather than hidden — because an owner who selected "all" and got 6 of 9 needs to
@@ -145,7 +145,7 @@ class _ApplyPriceSheetState extends State<_ApplyPriceSheet> {
         .toList()
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
-    // Pre-select the hour the suggestion was actually computed for. Everything else
+    // Pre-select the hour the suggestion was computed for. Everything else
     // is an extrapolation the owner should opt into deliberately: the model priced
     // 20:00 on a Saturday, not the whole day.
     final target = widget.suggestion.hour;
@@ -193,7 +193,7 @@ class _ApplyPriceSheetState extends State<_ApplyPriceSheet> {
       final detail = skipped.isEmpty
           ? ''
           : ' (${skipped.length} skipped — ${_skipWord(skipped)})';
-      // Captured BEFORE the pop: after it, this sheet's context is defunct and
+      // Captured before the pop: after it, this sheet's context is defunct and
       // `ScaffoldMessenger.of(context)` would look up a dead element.
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context, true);
@@ -418,7 +418,7 @@ class _ApplyPriceSheetState extends State<_ApplyPriceSheet> {
                           GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary)),
               ]),
             ),
-            // The exact rupee change on THIS slot, not the card's headline delta.
+            // The exact rupee change on this slot, not the card's headline delta.
             // Slots can sit at different prices after an earlier partial apply, so
             // one global "+30%" would be wrong on some rows.
             if (s.selectable)

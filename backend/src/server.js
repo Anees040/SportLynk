@@ -10,11 +10,11 @@ const { initRealtime } = require("./realtime");
 
 const app = express();
 
-// ─── Proxy trust (deployment only) ────────────────────────────
+// Proxy trust (deployment only)
 // Render terminates TLS in its own proxy and forwards the request, so `req.ip`
 // is the proxy's address unless Express is told how many hops to trust. That
 // breaks the anonymous tier of the rate limiter in the worst way: every phone on
-// the internet lands in ONE 20-req/min bucket, so two people using the app at
+// the internet lands in one 20-req/min bucket, so two people using the app at
 // once can 429 each other. express-rate-limit also logs a validation error for
 // exactly this case.
 //
@@ -28,17 +28,17 @@ if (process.env.RENDER || process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
-// ─── Middleware ───────────────────────────────────────────────
+// Middleware
 app.use(cors({ origin: "*" }));
 app.use(helmet());
 // Request log. Sits above the rate limiter so throttled requests still show up
 // as 429s — those lines are the signal that a client is misbehaving.
 app.use(morgan("dev"));
-// Rate limit BEFORE body parsing, so a flood costs us no JSON parsing (SEC-6).
+// Rate limit before body parsing, so a flood costs no JSON parsing (SEC-6).
 app.use(apiRateLimit);
 app.use(express.json());
 
-// ─── Routes ──────────────────────────────────────────────────
+// Routes
 const authRoutes = require("./routes/auth");
 const venueRoutes = require("./routes/venues");
 const bookingRoutes = require("./routes/bookings");
@@ -68,8 +68,8 @@ const settings = require("./utils/globalSettings");
 const escrow = require("./utils/escrow");
 const { ACTIVE_TEST_OVERRIDES } = require("./utils/escrow");
 
-// ─── Notification registry (S.7 Wave C) ──────────────────────
-// Runs at LOAD, before a single route is mounted, and THROWS on an inconsistent
+// Notification registry (S.7 Wave C)
+// Runs at load, before a single route is mounted, and throws on an inconsistent
 // registry — a category the CHECK constraint would reject, a priority that is not
 // high|normal|low, a missing icon, an entity with no id resolver. Same shape as
 // services/assistantActions' assertRoutable(): the failure a registry mistake causes
@@ -89,29 +89,29 @@ app.use("/api/slots", slotRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/chat", chatRoutes);
 // Notifications (S.7 Wave C). routes/notifications.js declares /summary,
-// /preferences, /devices, /read-all, /test and /types BEFORE /:id, for the same
+// /preferences, /devices, /read-all, /test and /types before /:id, for the same
 // declaration-order reason as tournaments below.
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/matches", matchRoutes);
 // Tournaments (S.7 Wave A). routes/tournaments.js declares /mine and /preview
-// BEFORE /:id — Express matches in declaration order, so the reverse would send
+// before /:id — Express matches in declaration order, so the reverse would send
 // GET /api/tournaments/mine to the detail handler as id="mine".
 app.use("/api/tournaments", tournamentRoutes);
 app.use("/api/internal", internalRoutes);
 // Scout (S.6). Requiring routes/assistant also requires services/assistantActions,
-// whose assertRoutable() THROWS at load time if any trained intent label has no
+// whose assertRoutable() throws at load time if any trained intent label has no
 // handler -- so a mismatch between model #4's labels and the action registry fails
-// the BOOT rather than one unlucky user's message.
+// the boot rather than one unlucky user's message.
 app.use("/api/assistant", assistantRoutes);
 // Reviews own four paths across three resources — /api/reviews, /api/reviews/:id/flag,
 // /api/venues/:id/reviews, /api/users/:id/reviews — so this router mounts at the bare
-// /api root and each handler declares `auth` itself (it does NOT use router.use(auth),
-// which at /api would gate every sibling route). It is mounted AFTER the venue and user
+// /api root and each handler declares `auth` itself (it does not use router.use(auth),
+// which at /api would gate every sibling route). It is mounted after the venue and user
 // routers: those own /api/venues/:id and /api/users/me, and a request for the deeper
 // .../:id/reviews path they don't define simply falls through to here.
 app.use("/api", reviewRoutes);
 
-// ─── Health check ────────────────────────────────────────────
+// Health check
 app.get("/api/health", (req, res) => {
   res.json({
     success: true,
@@ -120,7 +120,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// ─── 404 ─────────────────────────────────────────────────────
+// 404
 // Must sit after every route. Without it an unknown path falls through to
 // Express's built-in handler, which answers with an HTML error page and breaks
 // the { success, message } contract every Flutter client parses against.
@@ -128,7 +128,7 @@ app.use((req, res) => {
   res.status(404).json({ success: false, message: "Route not found" });
 });
 
-// ─── Global error handler ────────────────────────────────────
+// Global error handler
 // The last line of defence for USE-3: the full error (including any SQL text,
 // constraint names and stack) is logged server-side, and the client only ever
 // receives one of the fixed sentences below. Nothing derived from `err.message`
@@ -151,7 +151,7 @@ app.use((err, req, res, next) => {
   res.status(status).json({ success: false, message });
 });
 
-// ─── Start server ────────────────────────────────────────────
+// Start server
 const PORT = process.env.PORT || 3000;
 
 // Socket.IO needs the raw HTTP server, not the Express `app`, so the WebSocket
@@ -184,10 +184,10 @@ server.listen(PORT, () => {
   // S.7 Wave D. Pull the admin's configured deposit percent into
   // `escrow.POLICY.DEPOSIT_PERCENT` once, at boot.
   //
-  // ~30 call sites read that constant to DESCRIBE the policy ("20% of the total is
+  // ~30 call sites read that constant to describe the policy ("20% of the total is
   // your at-risk deposit") from synchronous code that cannot await a settings row.
   // `bookingService` reads the setting itself and stamps the amount it holds onto
-  // the booking, so money is already correct without this; what this fixes is COPY
+  // the booking, so money is already correct without this; what this fixes is copy
   // — a quote screen that says 20% while the next booking holds 25%. Fire-and-forget
   // and silent on failure: a settings read must never be the reason the API does not
   // come up, and the documented default is a safe thing to be describing.

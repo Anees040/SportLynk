@@ -1,5 +1,5 @@
 /**
- * policyText.js — Scout's policy answers, rendered from the ONE source of truth.
+ * policyText.js — Scout's policy answers, rendered from the one source of truth.
  *
  * Golden rule 3: utils/escrow.js POLICY is the only authority on money and timing.
  * global_settings is a convenience layer and must never silently become
@@ -9,15 +9,15 @@
  * deploy. The collision is resolved by splitting the two things a policy answer
  * is made of:
  *
- *   the SENTENCE  editable text, stored in global_settings.assistant.policy_text
- *   the NUMBERS   never stored; substituted here from escrow.js POLICY at render
+ *   the sentence  editable text, stored in global_settings.assistant.policy_text
+ *   the numbers   never stored; substituted here from escrow.js POLICY at render
  *
  * So a seeded template reads
  *
  *   "Cancel {window_hours}h or more before your slot starts and you get a full
  *    refund. Cancel later and {refund_pct}% comes back to your wallet..."
  *
- * and the only way for Scout to quote 24h and 80% is for those to BE the policy.
+ * and the only way for Scout to quote 24h and 80% is for those to be the policy.
  * Change CANCELLATION_WINDOW_HOURS and every answer changes with it, in every
  * language, with no second place to remember to edit. run_migration_018.js
  * asserts no seeded template contains a literal money or timing number, and
@@ -72,7 +72,7 @@ function placeholdersIn(template) {
 /**
  * Substitute POLICY values into one template.
  *
- * An unknown placeholder is left EXACTLY as written rather than replaced with an
+ * An unknown placeholder is left exactly as written rather than replaced with an
  * empty string: "you get a % refund" is a sentence a user would believe, and
  * "you get a {refund_pctt}% refund" is one they would report.
  */

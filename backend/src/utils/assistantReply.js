@@ -1,5 +1,5 @@
 /**
- * assistantReply.js — the ONE definition of what Scout sends back.
+ * assistantReply.js — the one definition of what Scout sends back.
  *
  * Every reply is `{ text, chips, cards, source, ... }` and Flutter renders by
  * `card.type`. That makes this file a wire contract shared by three producers
@@ -7,20 +7,18 @@
  * screen), so it is built here and nowhere else — a card assembled inline in a
  * service is a card the Flutter switch has never heard of.
  *
- * TWO RULES THAT ARE ENFORCED, NOT ADVISED
- * ----------------------------------------
- * 1. NO FREE-TEXT-ONLY DEAD ENDS. Every reply that ends a turn without an obvious
+ * Two rules that are enforced, not advised
+ * 1. No free-text-only dead ends. Every reply that ends a turn without an obvious
  *    next step carries chips. `reply()` therefore takes chips as a first-class
- *    argument and `menu()` exists so "I did not understand" always arrives WITH
+ *    argument and `menu()` exists so "I did not understand" always arrives with
  *    the list of things Scout can do (ER2.6).
- * 2. EVERY CHIP CARRIES AN EXPLICIT `action`. A chip press posts the action, not
+ * 2. Every chip carries an explicit `action`. A chip press posts the action, not
  *    its label, so a button never goes through the classifier. That is what makes
  *    capabilities the trained label set does not cover — navigate, find_players,
  *    picking slot #2 — fully operational, and it is why a chip is not just a
  *    suggested phrase to type.
  *
- * `source` IS PART OF THE CONTRACT
- * --------------------------------
+ * `source` is part of the contract
  * Six values, one per reply, mirrored into assistant_turns.answer_source and
  * checked there by chk_assistant_turns_src. It answers the committee's first
  * question about any AI feature — "did the model do this, or did you hard-code
@@ -120,7 +118,7 @@ function reply(text, {
 }
 
 /**
- * WHAT SCOUT CAN DO — the single source for the help menu, the chips on it and
+ * What Scout can do — the single source for the help menu, the chips on it and
  * `GET /api/assistant/capabilities`.
  *
  * `action` is the executable key, so this table is also the answer to "can a user
@@ -174,7 +172,7 @@ const MENU_CHIP_ACTIONS = Object.freeze([
  * The capability menu — Scout's answer to "I did not understand that".
  *
  * ER2.6 asks for a friendly help menu on low confidence, and this is it. It is
- * NEVER text alone: the chips are the recovery path, so a user whose sentence the
+ * never text alone: the chips are the recovery path, so a user whose sentence the
  * model could not place is one tap from the thing they wanted.
  */
 function menu(text, { name = 'Scout', groups = true } = {}) {

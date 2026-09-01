@@ -1,32 +1,30 @@
 /**
- * check_assistant_http.js — Scout over REAL HTTP. The half check_assistant.js cannot reach.
+ * check_assistant_http.js — Scout over real HTTP. The half check_assistant.js cannot reach.
  *
  * Usage:  node src/scripts/check_assistant_http.js        (ml-service must be running)
  *         node src/scripts/check_assistant_http.js --keep  (leave the fixtures behind)
  *
- * WHY A SECOND SCRIPT
- * -------------------
- * check_assistant.js is affordable because it calls the SERVICES with a client it owns
+ * Why a second script
+ * check_assistant.js is affordable because it calls the services with a client it owns
  * and rolls the whole run back. That is also its blind spot: it never goes through
  * Express, so `router.use(auth)`, the JSON envelope, the four accepted spellings of
  * `session_id`, the opaque message cursor and every status code in the router are
  * asserted nowhere. TESTING.md steps 196, 197 and 200 are that gap written out as
  * curl commands — a page nobody runs twice. This is those three steps as one command.
  *
- * THESE WRITES ARE REAL, AND THEY ARE CLEANED UP
- * ----------------------------------------------
+ * These writes are real, and they are cleaned up
  * There is no transaction to roll back: the server owns its own connections, which is
  * the entire point. So the script keeps a ledger of everything it creates — threads,
  * KB rows, escalations, feedback, notifications — and deletes it in a `finally`, then
- * COUNTS what is left and prints the census. `--keep` skips the delete for when you
- * want to look at the rows.
+ * counts what is left and prints the census. `--keep` skips the delete so the rows
+ * can be inspected afterwards.
  *
- * What it deliberately does NOT do is spend money. It drives the booking flow up to
- * the confirmation card and then DENIES it, because a real booking over real HTTP
+ * What it deliberately does not do is spend money. It drives the booking flow up to
+ * the confirmation card and then denies it, because a real booking over real HTTP
  * against the committee's demo wallet is not a test, it is a purchase. The booking
  * itself is proven by check_assistant.js (rolled back) and check_booking_service.js.
  *
- * WHAT A FAILURE MEANS
+ * What a failure means
  *   x  the HTTP surface disagrees with the services. The line names it.
  *   ~  the data could not supply the case. A skip, counted separately.
  */
@@ -115,7 +113,7 @@ async function api(method, p, { token, body, raw } = {}) {
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { json = null; }
   const out = { status: res.status, headers: res.headers, json, text, data: json && json.data };
-  // Every turn is recorded HERE rather than at each call site: there are forty of them,
+  // Every turn is recorded here rather than at each call site: there are forty of them,
   // and a transcript that misses the ones somebody forgot to annotate is worse than none.
   if (ev.on && p === '/assistant/message' && out.data && out.data.reply) {
     const n = out.data.nlu || {};
@@ -179,9 +177,7 @@ async function ensureServer() {
   return { up: false, spawned: true };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// FIXTURES AND TOKENS
-// ════════════════════════════════════════════════════════════════════════════
+// FIXTURES and tokens
 
 /**
  * Chosen from the real database, never inserted — same rule as check_assistant.js.
@@ -246,12 +242,10 @@ async function tokenFor(user, role) {
   return { token: mint(who), via: 'minted', user: who };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE LEDGER — everything this run creates, so the finally block can undo it
-// ════════════════════════════════════════════════════════════════════════════
+// The ledger — everything this run creates, so the finally block can undo it
 //
 // Migration 018 does most of the work: deleting a thread CASCADEs its messages and
-// their feedback. What it does NOT take with it is the escalation (channel_id is ON
+// their feedback. What it does not take with it is the escalation (channel_id is on
 // DELETE SET NULL, deliberately — the telemetry outlives the conversation) or the KB
 // row it produced, so those two are deleted explicitly and by id.
 const made = { threads: [], kb: [], escalations: [], notifications: [] };
@@ -291,9 +285,7 @@ async function cleanup() {
   return { gone };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// 0 — PREFLIGHT
-// ════════════════════════════════════════════════════════════════════════════
+// 0 — Preflight
 
 async function preflight(cast) {
   section('0  preflight — the server, the model, and a cast to act with');
@@ -325,12 +317,10 @@ async function preflight(cast) {
   return !!(cast.player && cast.stranger);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// A — THE DOOR  (TESTING.md step 197, first sentence)
-// ════════════════════════════════════════════════════════════════════════════
+// A — the door  (testing.md step 197, first sentence)
 
 /**
- * `router.use(auth)` is ONE line, and the claim it makes is about all sixteen
+ * `router.use(auth)` is one line, and the claim it makes is about all sixteen
  * endpoints. So all sixteen are asked without a token, by method and path, rather
  * than one of them being asked and the other fifteen being assumed. The ids in the
  * paths are random uuids: auth runs before any handler, so a 401 here also proves
@@ -360,9 +350,9 @@ const OWNER_ENDPOINTS = [
 
 async function sectionA(cast) {
   section('A  the door — four bad headers, then all sixteen with none at all');
-  // ORDER MATTERS, and the reason is SEC-6. The anonymous quota is 20 requests per
+  // Order matters, and the reason is SEC-6. The anonymous quota is 20 requests per
   // minute per IP, and a token that fails to verify counts as anonymous (rateLimit.js
-  // identifyUser), so EVERY request in this section lands in that one bucket: 4 bad
+  // identifyUser), so every request in this section lands in that one bucket: 4 bad
   // headers + 16 endpoints = exactly 20. The first run of this script did the logins
   // first and the four message assertions came back 429 instead of 401 — the door was
   // shut, but by the wrong doorman. So the cast's tokens are minted here (an
@@ -431,9 +421,7 @@ async function sectionA2() {
   note(`spent the anonymous quota on purpose and waited ${wait}s for it to reset`);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// B — A REAL TURN OVER REAL HTTP  (step 196's first curl, plus the milestone line)
-// ════════════════════════════════════════════════════════════════════════════
+// B — A real turn over real HTTP  (step 196's first curl, plus the milestone line)
 
 async function sectionB(cast, tok) {
   section('B  a turn through Express — the envelope, the cards, the parse');
@@ -502,11 +490,9 @@ async function sectionB2(cast, tok, ctx) {
     `a graceful decline, not a failure: "${(pizza.data.reply || {}).text.slice(0, 64)}"`);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// C — THE FOUR BODY RULES  (step 196's "four things to check while you are in here")
-// ════════════════════════════════════════════════════════════════════════════
+// C — the four body rules  (step 196's "four things to check while you are in here")
 
-// team_stats and NOT my_elo: SportLynk rates teams, so my_elo is not an action and an
+// team_stats and not my_elo: SportLynk rates teams, so my_elo is not an action and an
 // entry for it would be an allowlist line that can never match.
 const SAFE_CHIPS = new Set(['capability_menu', 'my_bookings', 'wallet_balance', 'team_stats',
   'tournament_list', 'venue_info', 'check_availability', 'find_venue', 'find_teams',
@@ -541,7 +527,7 @@ async function sectionC(cast, tok, ctx) {
     const tapped = await api('POST', '/assistant/message',
       { token: t, body: { action: chip.action, args: chip.args || {}, session_id: ctx.thread } });
     eq(tapped.status, 200, `a tapped chip posts {action:"${chip.action}"} with NO text → 200`);
-    // The nlu block IS present on a chip turn -- it has to be, because `intent` is what
+    // The nlu block is present on a chip turn -- it has to be, because `intent` is what
     // the client shows and what telemetry files the turn under. What must be absent is
     // the pair that could enter a measurement: a confidence and a model version. A chip
     // is a certainty, so both are NULL and `via` names the door it came through. This is
@@ -561,7 +547,7 @@ async function sectionC(cast, tok, ctx) {
  *
  * `created_at` is truncated to the millisecond by node-postgres, so two messages
  * written in the same millisecond cannot be ordered by a timestamp alone — which is
- * why the cursor carries an id and why passing it back VERBATIM is the contract. Two
+ * why the cursor carries an id and why passing it back verbatim is the contract. Two
  * pages that overlap or skip a row would both still "work" on a screen, quietly.
  */
 async function sectionC2(cast, tok, ctx) {
@@ -593,9 +579,7 @@ async function sectionC2(cast, tok, ctx) {
     'and the page names its own thread, so a late response cannot render into the wrong chat');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// D — THE CHAT LIST  (new chat, rename, archive, delete, thumbs)
-// ════════════════════════════════════════════════════════════════════════════
+// D — the CHAT list  (new chat, rename, archive, delete, thumbs)
 
 async function sectionD(cast, tok, ctx) {
   section('D  new chat → rename → archive → restore → thumbs → delete');
@@ -662,14 +646,12 @@ async function sectionD2(cast, tok, ctx) {
   eq(notUuid.status, 404, 'a non-uuid message id is a 404, not a 500 from Postgres');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// E — SOMEBODY ELSE'S CHAT  (step 197: 404, never 403, never a leaked title)
-// ════════════════════════════════════════════════════════════════════════════
+// E — somebody else's CHAT  (step 197: 404, never 403, never a leaked title)
 
 /**
- * A 403 on a stranger's thread would confirm the thread EXISTS, which is a fact about
+ * A 403 on a stranger's thread would confirm the thread exists, which is a fact about
  * another person's account. Every ownership check in this router is inside the SELECT
- * for that reason: a row that is not yours matches nothing, so the answer is 404 and
+ * for that reason: a row belonging to somebody else matches nothing, so the answer is 404 and
  * it is the same 404 an invented id gets.
  */
 async function sectionE(cast, tok, ctx) {
@@ -704,14 +686,12 @@ async function sectionE(cast, tok, ctx) {
     'but a non-uuid session_id on /message means "no id given" — a bad id must not lock a user out of chatting');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// F — TOO LONG, AND THE ROLE GATE
-// ════════════════════════════════════════════════════════════════════════════
+// F — too long, and the role gate
 
 /**
  * ParseRequest.text has max_length=500, so a 501-character message is a 422 from
  * FastAPI — and a 422 is not something a chat screen can render. mlClient refuses it
- * BEFORE the HTTP call and returns an abstention, so the user gets a bubble.
+ * before the HTTP call and returns an abstention, so the user gets a bubble.
  */
 async function sectionF(cast, tok, ctx) {
   section('F  a 501-character message, and the 500-character boundary');
@@ -724,7 +704,7 @@ async function sectionF(cast, tok, ctx) {
   eq(over.status, 200, `${limit + 1} chars → 200 with a bubble, never a 422 forwarded to the screen`);
   // routes/assistant.js projects the parse as {intent,confidence,via,abstained,reason,…}
   // -- `reason` over the wire is dialogManager's `abstainReason`. The refusal is decided
-  // in mlClient BEFORE the HTTP call to FastAPI, which would have answered 422.
+  // in mlClient before the HTTP call to FastAPI, which would have answered 422.
   eq(over.data.nlu && over.data.nlu.reason, 'text_too_long', 'the abstention names its reason');
   eq(over.data.nlu && over.data.nlu.abstained, true, 'and says plainly that it abstained');
   eq(over.data.reply && over.data.reply.source, 'menu', 'and the answer is the capability menu');
@@ -752,9 +732,7 @@ async function sectionF(cast, tok, ctx) {
     'all 8 owner endpoints answer 403 Access denied to a player token', leaks.join('; '));
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// G — THE 51st CHAT  (step 197's last sentence)
-// ════════════════════════════════════════════════════════════════════════════
+// G — the 51st CHAT  (step 197's last sentence)
 
 /**
  * MAX_THREADS is 50 OPEN chats — archived ones do not count, which is why the message
@@ -793,9 +771,7 @@ async function sectionG(cast, tok) {
   if (freed) made.threads.push({ id: freed, token: s });
 }
 
-// ════════════════════════════════════════════════════════════════════════════
 // H — GET /capabilities  (ER2.6 as data, so two screens cannot disagree)
-// ════════════════════════════════════════════════════════════════════════════
 
 async function sectionH(cast, tok) {
   section('H  the capability list — one source for the help sheet and the abstain menu');
@@ -821,9 +797,7 @@ async function sectionH(cast, tok) {
   check(groups.length >= 3, `grouped for rendering (${groups.join(' · ')})`);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// I — THE OWNER SIDE  (TESTING.md step 200, the wave's most demo-able feature)
-// ════════════════════════════════════════════════════════════════════════════
+// I — the owner side  (testing.md step 200, the wave's most demo-able feature)
 
 /**
  * A player asks something no query can answer; the owner answers it once; every later
@@ -994,19 +968,17 @@ async function sectionI4(cast, tok, ctx, kb) {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// J — THE MONEY GATE, OVER HTTP  (the rule the whole wave hangs on)
-// ════════════════════════════════════════════════════════════════════════════
+// J — the money gate, over HTTP  (the rule the whole wave hangs on)
 
 /**
- * USE-6's chain up to the confirmation card, and then NOT through it.
+ * USE-6's chain up to the confirmation card, and then not through it.
  *
  * check_assistant.js books for real and rolls back; this script has no transaction, so
  * a booking here would be a purchase from the committee's demo wallet. What it asserts
  * instead is the thing a rollback cannot: that the confirm gate holds over HTTP.
  *
  * "haan lekin 7 baje" — "yes, but 7 o'clock" — parses as `affirm` at 0.6112, above the
- * 0.45 floor. It is a CORRECTION, and a model that spends money on it would book the
+ * 0.45 floor. It is a correction, and a model that spends money on it would book the
  * hour the user was fixing. `decisive` is `via === 'chip' || via === 'lexicon'`, so the
  * model's own confident affirm is not a door. That is asserted here through Express,
  * against the real classifier, with a wallet balance read before and after.
@@ -1037,7 +1009,7 @@ async function sectionJ(cast, tok, ctx) {
   const conf = (((picked.data || {}).reply || {}).cards || []).find((c) => c.type === 'confirm');
   if (!conf) return skip('the money gate', `pick_slot did not arm a confirm: "${picked.data.reply.text}"`);
   eq(conf.data.what, 'book_venue', 'the confirm card knows which action it is arming');
-  // The HTTP route projects state to {fsm,pending,intent,slots} -- `confirm` is NOT
+  // The HTTP route projects state to {fsm,pending,intent,slots} -- `confirm` is not
   // exposed, on purpose, so a client cannot read what is armed. `fsm` is the flag.
   eq(picked.data.state && picked.data.state.fsm, 'awaiting_confirm',
     'and the FSM says money is next');
@@ -1074,7 +1046,7 @@ async function sectionJ2(cast, tok, ctx, j) {
   eq(String(w1.f), String(j.w0.f), 'and nothing was frozen into escrow');
 
   // Yesterday's yes cannot buy today's slot: the confirm block died with the
-  // correction, so a BARE "haan" now — lexicon-decisive, the one word that does spend
+  // correction, so a bare "haan" now — lexicon-decisive, the one word that does spend
   // money — has nothing armed to spend it on. This is the second half of the gate, and
   // it is the half that can only be checked by trying it.
   const late = await api('POST', '/assistant/message', { token: t,
@@ -1089,14 +1061,12 @@ async function sectionJ2(cast, tok, ctx, j) {
   return j;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// K — THE RESIDUE  (what a real HTTP run leaves behind, stated rather than hoped)
-// ════════════════════════════════════════════════════════════════════════════
+// K — the residue  (what a real HTTP run leaves behind, stated rather than hoped)
 
 /**
  * check_assistant.js rolls back; this script cannot, so it must account for itself.
  *
- * Two kinds of row survive the cleanup on purpose. `assistant_turns.channel_id` is ON
+ * Two kinds of row survive the cleanup on purpose. `assistant_turns.channel_id` is on
  * DELETE SET NULL, so the telemetry for every turn above stays — orphaned, by design,
  * because metrics outlive conversations. And a declined escalation's row is the record
  * of the decline. Both are counted here so the number is a claim, not a surprise.
@@ -1127,7 +1097,7 @@ async function sectionK(cast, tok, ranAt) {
 /**
  * The one assertion that can only be made after the delete.
  *
- * `assistant_turns.channel_id` is ON DELETE SET NULL, not CASCADE, and the reason is in
+ * `assistant_turns.channel_id` is on DELETE SET NULL, not CASCADE, and the reason is in
  * migration 018: metrics outlive conversations. Deleting the threads this run created is
  * therefore a live test of that choice — if the FK were CASCADE, the cleanup above would
  * have silently erased the evidence for model #4's accuracy along with the chat. So the
@@ -1150,9 +1120,7 @@ async function afterCleanup() {
     + `the next model is trained on.`);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// MAIN — one command, in the order a reviewer reads the spec
-// ════════════════════════════════════════════════════════════════════════════
+// Main — one command, in the order a reviewer reads the spec
 
 async function main() {
   const ranAt = new Date(Date.now() - 1000).toISOString();
@@ -1171,7 +1139,7 @@ async function main() {
   const ok = await preflight(cast);
   if (!ok) { failures.push('preflight'); return; }
 
-  // A and A2 run BEFORE any login: they spend the whole anonymous quota by design.
+  // A and A2 run before any login: they spend the whole anonymous quota by design.
   await sectionA(cast);
   await sectionA2();
 
@@ -1207,7 +1175,7 @@ async function main() {
 /**
  * The footer, and the two things that must happen even when an assertion throws:
  * the rows this run created are deleted, and a spawned server is killed. A crashed
- * run that leaves 50 threads in the drawer would make the NEXT run fail at the cap.
+ * run that leaves 50 threads in the drawer would make the next run fail at the cap.
  */
 (async () => {
   let child = null;

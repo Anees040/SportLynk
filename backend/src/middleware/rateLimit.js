@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
  * Two tiers in one limiter, because the bucket a request lands in depends on
  * whether it carries a usable token:
  *
- *   authenticated → 100 req/min, counted per USER id
+ *   authenticated → 100 req/min, counted per user id
  *   anonymous     →  20 req/min, counted per IP
  *
  * Counting logged-in traffic per user rather than per IP matters here: a whole
@@ -16,7 +16,7 @@ const jwt = require('jsonwebtoken');
  *
  * NOTE for deployment: the anonymous tier keys off `req.ip`, which is the socket
  * address unless Express is told to trust a proxy. Behind a load balancer, set
- * `app.set('trust proxy', <hops>)` in server.js — deliberately NOT set here,
+ * `app.set('trust proxy', <hops>)` in server.js — deliberately not set here,
  * since trusting X-Forwarded-For blindly lets any client forge its own IP and
  * walk straight past this limiter.
  */
@@ -27,7 +27,7 @@ const ANONYMOUS_MAX = 20;
 /**
  * Which user is this, if any?
  *
- * This runs BEFORE authMiddleware, so `req.user` does not exist yet and the
+ * This runs before authMiddleware, so `req.user` does not exist yet and the
  * token has to be read here. A token that fails verification counts as
  * anonymous — rejecting it is still authMiddleware's job, this only decides how
  * many attempts the caller is allowed. Memoised because both `limit` and

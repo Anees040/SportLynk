@@ -30,7 +30,7 @@ import 'rate_experience_screen.dart';
 class MatchCenterScreen extends StatefulWidget {
   final String teamId;
   /// Nullable since S.7 Wave C: a notification deep link carries the match's
-  /// `teamId` but not always a NAME (`notificationTypes.matchLink` only forwards
+  /// `teamId` but not always a name (`notificationTypes.matchLink` only forwards
   /// what the emitting call site put in its payload). The screen loads the team
   /// anyway, so the name is a header nicety, not a prerequisite -- and requiring it
   /// would have forced the deep-link route to invent a placeholder like "My team"
@@ -87,7 +87,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
     });
   }
 
-  // ── Actions ────────────────────────────────────────────────
+  // Actions
 
   Future<void> _respond(MatchModel m, String action) async {
     if (_busy.contains(m.id)) return;
@@ -160,7 +160,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
     if (mounted) _load(silent: true);
   }
 
-  // ── Frame ──────────────────────────────────────────────────
+  // Frame
 
   @override
   Widget build(BuildContext context) {
@@ -288,7 +288,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
               ),
       );
 
-  // ── Tab 1 · Challenges ─────────────────────────────────────
+  // Tab 1 · Challenges
 
   Widget _challengesTab() {
     final incoming = _data.incoming;
@@ -440,7 +440,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
         ),
       );
 
-  // ── Tab 2 · Upcoming ───────────────────────────────────────
+  // Tab 2 · Upcoming
 
   /// Open the match's coordination room.
   ///
@@ -485,10 +485,10 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
           ),
           const SizedBox(height: 12),
 
-          // ── Coordinate ──
+          // Coordinate
           // Where "which gate?" and "we're ten minutes out" belong. Shown only to
-          // the people the room actually admits — both teams' captains and
-          // vice-captains — so it is never a tap into a room you are not in.
+          // the people the room admits — both teams' captains and
+          // vice-captains — so it is never a tap into a room the viewer is not in.
           if (_data.isTeamOfficial) ...[
             SizedBox(
               width: double.infinity,
@@ -540,7 +540,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
     );
   }
 
-  // ── Tab 3 · History ────────────────────────────────────────
+  // Tab 3 · History
 
   Widget _historyCard(MatchModel m) {
     final won = m.iWon;
@@ -678,7 +678,7 @@ class _MatchCenterScreenState extends State<MatchCenterScreen>
     return [?m.slotDateLabel, ?m.venueName, ?stage].join('  ·  ');
   }
 
-  // ── Shared bits ────────────────────────────────────────────
+  // Shared bits
 
   Widget _shell({required Widget child, Color? accent}) => Container(
         margin: const EdgeInsets.only(bottom: 12),

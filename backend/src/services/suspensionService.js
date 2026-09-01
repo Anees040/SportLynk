@@ -2,26 +2,26 @@
  * suspensionService.js — S.7 Wave D · FR10.8. Suspending an account, and putting
  * it back.
  *
- * WHY A SERVICE AND NOT TWENTY LINES IN THE ROUTE
+ * Why a service and not twenty lines in the route
  * Suspension is not one UPDATE. A banned player is a player who is holding slots
  * other people want to book, sitting in tournament brackets that are about to be
  * drawn, and carrying open challenges other captains are waiting on. A banned
- * OWNER is worse: their venues stay listed and players keep paying money into
+ * owner is worse: their venues stay listed and players keep paying money into
  * them. Flipping `is_active` alone produces an account that cannot log in while
  * still occupying everybody else's Saturday.
  *
  * So this file is the cascade, and every step of it delegates:
  *
- *   bookings      -> bookingService.cancelBooking   (the CORE, in our transaction)
+ *   bookings      -> bookingService.cancelBooking   (the core, in this transaction)
  *   requests      -> bookingService.rejectBooking   (same, shared with owner.js)
  *   tournaments   -> tournamentService.withdraw     (refund + seed release)
  *   challenges    -> matchCore.fanOut               (pills + notifications)
  *
  * Nothing here re-implements a refund. That is the whole point of the file: it
- * decides WHAT must be undone, and the modules that already own each piece of
- * money decide HOW.
+ * decides what must be undone, and the modules that already own each piece of
+ * money decide how.
  *
- * WHAT IT DELIBERATELY WILL NOT TOUCH
+ * What it deliberately will not touch
  * A booking that a LIVE MATCH is played on. Once a challenge is accepted, the
  * fixture involves a second team who did nothing wrong, whose own escrow is on
  * the line, and possibly a tournament bracket. Force-cancelling that from a ban
@@ -29,7 +29,7 @@
  * bookings are reported back to the admin as needing a decision rather than
  * silently destroyed. An honest count in the response beats a hidden cascade.
  *
- * THE LATE-CANCELLATION PENALTY IS NOT WAIVED
+ * The late-cancellation penalty is not WAIVED
  * `cancelBooking` applies the ordinary 24-hour rule, so a suspended player whose
  * slot is tomorrow forfeits the 20% deposit to the venue owner exactly as if they
  * had cancelled it themselves. That is deliberate: the owner is inside their
@@ -88,7 +88,7 @@ async function expireOpenChallenges(client, { userId, teamIds }) {
     const features = await mc.teamFeatures(client, [m.challenger_team, m.opponent_team]);
     const nameOf = (id) => features.get(String(id))?.name || 'the other team';
     const mine = teamIds.map(String);
-    // The OTHER captain is the one who needs telling: they are waiting on a reply
+    // The other captain is the one who needs telling: they are waiting on a reply
     // that is never coming. The suspended user gets one `account_suspended`
     // notification for the whole cascade, not one per side-effect.
     const sides = [m.challenger_team, m.opponent_team].map((teamId) => {
@@ -137,7 +137,7 @@ async function cancelUpcomingBookings(client, { userId }) {
 
   const cancelled = [];
   const skipped = [];
-  // `cancelBooking` returns its chat pill on the ENVELOPE rather than in `data`,
+  // `cancelBooking` returns its chat pill on the envelope rather than in `data`,
   // to be emitted after the caller commits. Collected here and handed back so the
   // route can flush them all in one pass once the transaction is durable.
   const pills = [];
@@ -203,12 +203,12 @@ async function withdrawFromTournaments(client, { userId, teamIds }) {
  * Take a suspended owner's venues off the market and refund the requests nobody
  * is going to answer.
  *
- * The order matters: venues go inactive FIRST so that no new request can be
+ * The order matters: venues go inactive first so that no new request can be
  * created against them while the refunds are still being written, and only then
  * are the pending ones cleared. Doing it the other way round leaves a race in
  * which a player books the last free slot of a venue that is being closed.
  *
- * CONFIRMED bookings are counted but NOT cancelled. A confirmed booking is money
+ * Confirmed bookings are counted but not cancelled. A confirmed booking is money
  * already in escrow against a slot the player still expects to play, and undoing
  * it is a refund decision with a counterparty (the owner, who may be reinstated
  * tomorrow). The count is returned so the admin can act on it deliberately.
@@ -257,11 +257,11 @@ async function closeOwnerVenues(client, { userId }) {
  * transaction; nothing here BEGINs or COMMITs.
  *
  * Returns `{ ok, data }` where `data.cascade` is the full report — every booking
- * cancelled, every refund, every thing that could NOT be undone and why. The
+ * cancelled, every refund, every thing that could not be undone and why. The
  * route echoes it to the admin and the same object is stored as the audit row's
  * `after`, so a month later "what did this ban actually do?" is one SELECT.
  *
- * `authMiddleware.invalidate(userId)` is the caller's job, AFTER COMMIT. Calling
+ * `authMiddleware.invalidate(userId)` is the caller's job, after COMMIT. Calling
  * it here would re-populate the cache from the still-uncommitted row and hand the
  * suspended user another 30 seconds of access.
  */
@@ -352,7 +352,7 @@ async function suspend(client, { adminId, userId, reason }) {
     cascade,
   }, 'Account suspended');
   // Socket work rides on the envelope, never in `data`: both of these must be
-  // flushed by the caller AFTER COMMIT, because a live pill for a suspension that
+  // flushed by the caller after COMMIT, because a live pill for a suspension that
   // then rolled back is a message about something that did not happen.
   result.pills = bookings.pills;
   result.fans = challenges.map((c) => ({ matchId: c.matchId, fan: c.fan }));
@@ -362,14 +362,14 @@ async function suspend(client, { adminId, userId, reason }) {
 /**
  * Lift a suspension.
  *
- * WHAT COMES BACK AND WHAT DOES NOT
+ * What comes back and what does not
  * The account does. The cascade does not: a refunded booking has been refunded,
  * a withdrawn tournament entry has released its seed and may have been filled by
  * somebody else, and an expired challenge belongs to a slot that is probably gone.
  * Re-creating any of that from a reinstatement would be inventing bookings.
  *
  * Venues are the one exception, and they are handled precisely rather than
- * broadly: the suspension's own audit row lists exactly which venues IT
+ * broadly: the suspension's own audit row lists exactly which venues it
  * deactivated, so only those come back. A blanket `is_active = true` would also
  * revive a venue an admin had rejected for its own reasons, which is why the audit
  * trail is read here instead of guessed at.

@@ -90,9 +90,7 @@ from .reco_features import (
     zone_of,
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The frozen contract
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: Bumped whenever any number below changes meaning. The fingerprint catches the
 #: case where someone changes one and forgets to bump this.
@@ -118,7 +116,7 @@ PLAYER_WEIGHTS: dict[str, float] = {
 }
 
 #: FR5.3 — opponent ranking weights. Replaces the v1 |ELO gap| sort as the number
-#: ON the card; utils/elo.js keeps the v1 formula as the fallback when this service
+#: on the card; utils/elo.js keeps the v1 formula as the fallback when this service
 #: is unreachable, so the bar never goes blank because Python is down.
 OPPONENT_WEIGHTS: dict[str, float] = {
     C_ELO: 0.60,
@@ -136,20 +134,20 @@ ELO_GAP_CAP = 400.0
 #: trust_score is already 0..100 (ER2.5), so normalising is a division.
 TRUST_MAX = 100.0
 
-#: Activity saturation. Bookings/matches are counted over the SAME 30-day window
+#: Activity saturation. Bookings/matches are counted over the same 30-day window
 #: teamStats.ACTIVITY_WINDOW_DAYS uses, then divided by these caps and clipped.
 #:
-#: A FIXED cap, deliberately, not a pool-relative max. Normalising against the
+#: a fixed cap, deliberately, not a pool-relative max. Normalising against the
 #: busiest candidate in the list would make one player's percentage depend on who
 #: else happens to be in it — the same player would score 78% in one team's rail
 #: and 41% in another's, and neither number could be explained to them. A fixed
 #: cap is stable, reproducible, and means "active enough", which is what the
-#: component is actually asking.
+#: component is asking.
 PLAYER_ACTIVITY_CAP = 8.0   # 8 bookings in 30 days ≈ twice a week
 TEAM_ACTIVITY_CAP = 4.0     # 4 terminal matches in 30 days ≈ one a week
 ACTIVITY_WINDOW_DAYS = 30
 
-#: What an absent component contributes to the AGGREGATE. Never to the published
+#: What an absent component contributes to the aggregate. Never to the published
 #: component value, which stays null. Mirrors trustScore.js NEUTRAL_PRIOR.
 NEUTRAL_PRIOR = 0.5
 
@@ -179,9 +177,7 @@ class RankInputError(ValueError):
     """A candidate row that cannot be scored at all (no id). Never a bad value."""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Component maths
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _clip01(value: float) -> float:
@@ -374,9 +370,7 @@ def _order_key(id_field: str):
     return key
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Reasons — the "Why this match?" row
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _reasons(pairs: Iterable[tuple[str | None, float | None]]) -> list[str]:
@@ -392,9 +386,7 @@ def _reasons(pairs: Iterable[tuple[str | None, float | None]]) -> list[str]:
     return [text for text, _ in scored[:REASON_MAX]]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Player-for-team  (FR2.8)
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def score_player(candidate: Mapping[str, Any], team: Mapping[str, Any]) -> dict[str, Any]:
@@ -486,9 +478,7 @@ def rank_players(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Opponent ranking  (FR5.3 – FR5.5, upgrading S.2's deterministic sort)
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def score_opponent(candidate: Mapping[str, Any], me: Mapping[str, Any]) -> dict[str, Any]:
@@ -556,9 +546,7 @@ def rank_opponents(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Published contract
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def rank_spec_fingerprint() -> str:

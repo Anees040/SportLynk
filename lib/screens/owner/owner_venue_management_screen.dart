@@ -25,7 +25,7 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
   late TextEditingController _priceCtrl;
   bool _isSaving = false;
 
-  // ── 72-hour demand forecast (FR4.18) ──────────────────────
+  // 72-hour demand forecast (FR4.18)
   // Read-only and independent of the form: the owner is looking at it precisely to
   // decide what to type into the price field, so a failure here must leave the form
   // fully usable.

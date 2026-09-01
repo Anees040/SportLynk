@@ -16,9 +16,7 @@ import '../models/review.dart';
 /// fresh install, never an afterthought. Nothing here paints a zero where the truth
 /// is "unknown": an empty bar and a genuine 0% must never look alike.
 
-// ═══════════════════════════════════════════════════════════════
 //  Trust tone — the one place bands map to words + colour
-// ═══════════════════════════════════════════════════════════════
 
 /// How a 0–100 trust score reads to a human. Bands match the server's
 /// `matchCore.trustBadge` vocabulary (excellent/good/fair/low) so the gauge, the
@@ -39,9 +37,7 @@ class TrustTone {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  TrustGauge — the M25 centrepiece (full ring)
-// ═══════════════════════════════════════════════════════════════
 
 /// A full-ring trust gauge: the score fills a complete circle, band label beneath
 /// the number in the middle.
@@ -183,9 +179,7 @@ class _TrustRingPainter extends CustomPainter {
       old.fraction != fraction || old.color != color;
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  TrustMetricTile — one of the four breakdown cards
-// ═══════════════════════════════════════════════════════════════
 
 /// One weighted component of the trust score (⭐ rating · 📅 attendance ·
 /// ⚖️ dispute-free · 🤖 AI sentiment). Shows the value, a fill bar, and the points
@@ -299,9 +293,7 @@ class TrustMetricTile extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  SentimentChip — the live-demo moment
-// ═══════════════════════════════════════════════════════════════
 
 /// The trained model's verdict on a review, as a chip. This is the demo's payoff:
 /// type a review, and this animates in reading "😊 Positive (92%)".
@@ -437,9 +429,7 @@ class SentimentChip extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Stars — input, display, histogram
-// ═══════════════════════════════════════════════════════════════
 
 /// A tappable 1–5 star input. [value] is 0 (nothing chosen yet) through 5; tapping a
 /// star sets that many. Tapping the current highest star again clears to 0, so a
@@ -684,9 +674,7 @@ class SentimentSummaryBar extends StatelessWidget {
       );
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  ReviewCard — one review, everywhere it's listed
-// ═══════════════════════════════════════════════════════════════
 
 /// One review row: who, when, how many stars, the text, and the model's sentiment.
 /// [onFlag] adds a report affordance (omitted where the viewer can't flag, e.g. a
@@ -827,9 +815,7 @@ class ReviewCard extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  TeamReputationStrip — the read-only team view
-// ═══════════════════════════════════════════════════════════════
 
 /// A compact team standing: ELO, W-L-D, and the captain's trust band. Read-only —
 /// the team view onto reputation that stays skill=team, conduct=captain. Every field

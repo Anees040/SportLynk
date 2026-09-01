@@ -4,8 +4,8 @@ import 'api_service.dart';
 
 /// One page of a cursor-paginated admin list.
 ///
-/// `nextCursor` is passed back to the server VERBATIM. The dispute cursor is a
-/// `"<severityElo>~<createdAt>~<id>"` TRIPLE — the queue is ordered by what is at
+/// `nextCursor` is passed back to the server verbatim. The dispute cursor is a
+/// `"<severityElo>~<createdAt>~<id>"` triple — the queue is ordered by what is at
 /// stake and only then by age, so a cursor built from a timestamp alone would page
 /// wrong and silently skip rows at a page boundary. Nothing on this side parses
 /// one or builds one; that is the whole reason it is opaque.
@@ -26,13 +26,13 @@ class AdminPage<T> {
 /// REST for the admin surface: the dispute queue and its case files, the user
 /// list with suspend/reinstate, and the platform settings.
 ///
-/// EVERY DECISION HERE IS THE SERVER'S. This class carries no policy: it does not
+/// Every DECISION here is the server's. This class carries no policy: it does not
 /// compute severity, does not decide which ruling actions are legal, does not hold
 /// a copy of the settings catalogue, and does not derive whether a user is
 /// suspended. An admin screen that disagrees with the backend about what is
 /// allowed offers a button that fails on submit, which is worse than no button.
 ///
-/// Reads return a safe empty value on failure. WRITES return the raw envelope —
+/// Reads return a safe empty value on failure. Writes return the raw envelope —
 /// `{success, message, data}` — because an admin action that fails must show the
 /// server's own message (a 409 `sport_has_bookings`, a refused self-suspension, a
 /// ruling blocked by `elo_applied`), and swallowing it into `null` would leave the
@@ -40,7 +40,7 @@ class AdminPage<T> {
 class AdminService {
   final ApiClient _api = ApiClient();
 
-  // ── Disputes (FR10.6, FR10.7) ─────────────────────────────────────────────
+  // Disputes (FR10.6, FR10.7)
 
   /// `status` is one of `open` · `resolved` · `dismissed` · `all`; anything else
   /// is normalised to `open` server-side.
@@ -66,7 +66,7 @@ class AdminService {
     return AdminPage<DisputeRow>(
       items: items,
       // The queue reports `count` and a cursor; "more" is the cursor's presence,
-      // which is the only thing that can actually continue the page.
+      // which is the only thing that can continue the page.
       hasMore: next != null && next.isNotEmpty,
       nextCursor: next,
     );
@@ -81,7 +81,7 @@ class AdminService {
   }
 
   /// `action` is one of `rule_challenger` · `rule_opponent` · `rule_draw` ·
-  /// `rule_custom` · `dismiss`. The two scores are sent ONLY for `rule_custom`
+  /// `rule_custom` · `dismiss`. The two scores are sent only for `rule_custom`
   /// (and for a `rule_draw` that needs a scoreline the submissions do not supply)
   /// — the server adopts a team's own submission for the two `rule_*` team forms,
   /// so sending scores there would be the client deciding the result.
@@ -108,7 +108,7 @@ class AdminService {
         token: token,
       );
 
-  // ── Users, suspension (FR10.8) ────────────────────────────────────────────
+  // Users, suspension (FR10.8)
 
   /// `status` is `all` · `active` · `suspended`; `role` filters to one role.
   Future<AdminPage<AdminUserRow>> users(
@@ -139,7 +139,7 @@ class AdminService {
     );
   }
 
-  /// Suspend. `reason` is REQUIRED by the server and is shown to the user in the
+  /// Suspend. `reason` is required by the server and is shown to the user in the
   /// notification they receive, so it is written for them, not for the audit log.
   ///
   /// One transaction on the far side: the flag, the cascade (bookings refunded,
@@ -157,7 +157,7 @@ class AdminService {
         token: token,
       );
 
-  /// Lift a suspension. Venues come back; cancelled bookings do NOT — they were
+  /// Lift a suspension. Venues come back; cancelled bookings do not — they were
   /// refunded and their slots may already belong to someone else.
   Future<Map<String, dynamic>> reinstate(
     String token,
@@ -170,7 +170,7 @@ class AdminService {
         token: token,
       );
 
-  // ── Global settings (FR10.9–10.11) ────────────────────────────────────────
+  // Global settings (FR10.9–10.11)
 
   /// The catalogue: sections, fields, bounds, units, effective values. Rendered
   /// as sent — see [SettingsField].
@@ -182,7 +182,7 @@ class AdminService {
 
   /// Save a partial map of `key -> value`, exactly the keys that changed.
   ///
-  /// The server validates against the SAME clamps the accessor applies, so a
+  /// The server validates against the same clamps the accessor applies, so a
   /// value out of range comes back as a 400 with the range named rather than
   /// being silently clamped — and disabling a sport with future confirmed
   /// bookings comes back as a 409 `sport_has_bookings` with the counts. Both are

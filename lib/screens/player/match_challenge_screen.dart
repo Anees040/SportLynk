@@ -206,7 +206,7 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
     );
   }
 
-  // ── Header ─────────────────────────────────────────────────
+  // Header
 
   Widget _versusHeader() {
     final me = _preview?.challenger ?? widget.myTeam;
@@ -301,7 +301,7 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
         : '$gap rating points apart — outside the recommended ±400 range, so expect a lopsided game.';
   }
 
-  // ── Side-by-side stats ─────────────────────────────────────
+  // Side-by-side stats
 
   Widget _comparison() {
     final me = _preview?.challenger ?? widget.myTeam;
@@ -380,7 +380,7 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
         ),
       );
 
-  // ── Which booking (FR5.11) ─────────────────────────────────
+  // Which booking (FR5.11)
 
   Widget _bookingPicker() {
     return Column(

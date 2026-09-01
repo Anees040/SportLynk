@@ -88,7 +88,7 @@ class ChatService {
   Future<Map<String, dynamic>> deleteMessage(String token, String channelId, String messageId) =>
       _api.delete(ApiConstants.chatMessage(channelId, messageId), token: token);
 
-  // ── The inbox and the other two channel types (S.7 Wave B) ──────────
+  // The inbox and the other two channel types (S.7 Wave B)
 
   /// One page of the inbox, newest activity first. Pass [cursor] back exactly as
   /// the previous page returned it.
@@ -137,7 +137,7 @@ class ChatService {
 
   /// FR8.10 — three suggested replies for the other side's last message.
   ///
-  /// ADVISORY: the result fills the composer and nothing is sent. Pass either the
+  /// Advisory: the result fills the composer and nothing is sent. Pass either the
   /// [messageId] of the message being replied to (preferred — the server reads the
   /// body itself and refuses one from another channel) or raw [text].
   Future<QuickReplySet> quickReplies(

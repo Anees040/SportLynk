@@ -5,8 +5,7 @@ import '../../models/assistant.dart';
 
 /// Scout's visual language — one dark surface, defined once.
 ///
-/// WHY THIS SCREEN IS DARK WHEN THE APP IS LIGHT
-/// --------------------------------------------
+/// Why this screen is dark when the app is light
 /// The rest of SportLynk is a light utility app: lists, forms, a booking flow. A
 /// conversation is a different kind of thing, and giving it the brand's own deep
 /// green as a full canvas makes "I am talking to the assistant" legible before a
@@ -16,15 +15,14 @@ import '../../models/assistant.dart';
 /// on white they compete. On dark, an accent-bordered card recedes until it
 /// matters.
 ///
-/// ACCESSIBILITY IS A CONSTRAINT HERE, NOT A REVIEW STEP
-/// ----------------------------------------------------
+/// Accessibility is a constraint here, not a review step
 /// Every foreground in this file was checked against the surface it sits on. The
 /// notable consequence: the accent `#22C55E` is used for borders, icons and small
-/// glyphs on dark (7.8:1 against the canvas) but NEVER as a fill under white text,
+/// glyphs on dark (7.8:1 against the canvas) but never as a fill under white text,
 /// where it manages only ~2.3:1. The user bubble is therefore the deeper
 /// [userBubbleTop]/[userBubbleBottom] pair, both above 5:1 with white.
 abstract final class ScoutTheme {
-  // ── Canvas and surfaces ────────────────────────────────────
+  // Canvas and surfaces
   /// The page. Slightly deeper than `AppColors.primary` so brand-green cards can
   /// still sit *above* it.
   static const Color canvas = Color(0xFF071B10);
@@ -42,12 +40,12 @@ abstract final class ScoutTheme {
   static const Color line = Color(0xFF1E4630);
   static const Color lineSoft = Color(0xFF163524);
 
-  // ── Ink ────────────────────────────────────────────────────
+  // Ink
   static const Color ink = Color(0xFFEAF6EE);      // 15.8:1 on canvas
   static const Color inkSoft = Color(0xFFA0BDAB);  //  8.8:1
   static const Color inkFaint = Color(0xFF6C8A79); //  4.7:1 — secondary only
 
-  // ── Accents ────────────────────────────────────────────────
+  // Accents
   static const Color accent = Color(0xFF22C55E);
   static const Color accentDim = Color(0xFF166534);
   static const Color userBubbleTop = Color(0xFF0F6B33);
@@ -59,7 +57,7 @@ abstract final class ScoutTheme {
   static const Color danger = Color(0xFFF87171);
   static const Color good = Color(0xFF4ADE80);
 
-  // ── Metrics ────────────────────────────────────────────────
+  // Metrics
   static const double cardRadius = 16;
   static const double bubbleRadius = 20;
   static const double gap = 8;

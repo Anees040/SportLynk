@@ -6,50 +6,47 @@
  *         node src/scripts/check_admin.js --evidence   (writes doc/admin_evidence.md)
  *         node src/scripts/check_admin.js --verify-clean
  *
- * WHY THIS SCRIPT EXISTS
- * ----------------------
+ * Why this script exists
  * Wave D added four powers an admin did not have, and every one of them is a claim
  * about rows in several tables at once:
  *
  *   a RULING     reverses or applies a rating exchange, closes both sides'
  *                disputes, unfreezes what the freeze was waiting on, advances a
  *                bracket, tells both captains and writes an audit row — and it must
- *                move the ladder EXACTLY ONCE, which is the one mistake nobody can
+ *                move the ladder exactly once, which is the one mistake nobody can
  *                detect after the fact;
- *   a SUSPENSION cancels and refunds upcoming bookings, withdraws entries, closes an
+ *   a suspension cancels and refunds upcoming bookings, withdraws entries, closes an
  *                owner's venues, and — the part that was cosmetic before this wave —
- *                makes an ALREADY-ISSUED token stop working;
- *   a SETTING    has to reach the next booking with no restart, or FR10.11 is a
+ *                makes an already-issued token stop working;
+ *   a setting    has to reach the next booking with no restart, or FR10.11 is a
  *                sentence in a document rather than a behaviour;
- *   an EXPORT    has to survive being opened in Excel by the owner whose venue is
+ *   an export    has to survive being opened in Excel by the owner whose venue is
  *                called `=1+1`.
  *
  * `npm test` proves the arithmetic with the database down. It cannot prove any of
  * the five sentences above, because each of them is only true of ROWS. So this
  * script writes the rows.
  *
- * NOTHING SURVIVES IT — WITH ONE NAMED EXCEPTION
- * ---------------------------------------------
+ * Nothing survives it — with one named exception
  * Every service under test takes a caller-owned `client` and opens no transaction
- * of its own, so the whole run is ONE transaction and ends in ROLLBACK. Rows are
+ * of its own, so the whole run is one transaction and ends in ROLLBACK. Rows are
  * prefixed `zzadmin-` and `--verify-clean` re-checks that none exist.
  *
  * The exception is Block 7. `authMiddleware` re-checks the account through the
- * POOL (its `accountState` is not exported and takes its own connection), so a user
- * that exists only inside this transaction is INVISIBLE to it — the block would
+ * pool (its `accountState` is not exported and takes its own connection), so a user
+ * that exists only inside this transaction is invisible to it — the block would
  * assert nothing. It therefore commits one user of its own, proves the 403, and
  * hard-deletes it in a `finally`. That is stated out loud in the block's own output
  * rather than hidden, because a script that quietly writes outside its transaction
  * is worse than one that does not run.
  *
- * TWO PIECES OF PROCESS-GLOBAL STATE A ROLLBACK CANNOT UNDO
- * --------------------------------------------------------
+ * Two pieces of process-global state A ROLLBACK cannot undo
  *   `escrow.POLICY.DEPOSIT_PERCENT` — a module variable that `createBooking` pushes
  *   the configured percent into, and
  *   the `globalSettings` 60 s cache — which holds whatever was last read, including
  *   values read from inside this transaction.
  * Both are saved and restored in a `finally`. Leaving either behind would make the
- * NEXT script in a chained verification run read this one's fixtures as policy.
+ * next script in a chained verification run read this one's fixtures as policy.
  *
  *   ✗  a rule broke. The line names it.
  *   ~  the data could not supply the case. A skip is not a pass.
@@ -137,14 +134,14 @@ function eq(got, want, label) {
   return check(got === want, label, `got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
 }
 
-/** A substring assertion that prints what it actually got when it fails. */
+/** A substring assertion that prints what it received when it fails. */
 function has(haystack, needle, label) {
   const h = String(haystack || '');
   return check(h.includes(needle), label, `"${h.slice(0, 140)}" does not contain "${needle}"`);
 }
 
 /**
- * Run something that MIGHT fail without poisoning the outer transaction. Postgres
+ * Run something that might fail without poisoning the outer transaction. Postgres
  * aborts the whole transaction on any error, so one bad query would turn every
  * later check into "current transaction is aborted" and hide the real result.
  */
@@ -198,14 +195,12 @@ async function auditRows(client, adminId, action) {
   return rows;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE CAST
-// ════════════════════════════════════════════════════════════════════════════
+// The CAST
 
 /**
- * The venue is CHOSEN, never created: the export, the sport toggle and the booking
+ * The venue is chosen, never created: the export, the sport toggle and the booking
  * room all read a real venue row, and a fabricated venue would prove the join
- * rather than the data. Everything with a PERSON in it is created, because every
+ * rather than the data. Everything with a person in it is created, because every
  * assertion here is about what happened to a specific account.
  */
 async function pickVenue(client) {
@@ -243,7 +238,7 @@ async function makeWallet(client, userId, balance) {
 }
 
 /**
- * A team with a captain, a vice and a plain member, at a KNOWN rating so the ELO
+ * A team with a captain, a vice and a plain member, at a known rating so the ELO
  * assertions can be arithmetic rather than "it moved". The two placeholders for one
  * rating are deliberate: `teams.elo` is integer, the legacy `teams.elo_rating` is
  * numeric(8,2), and one parameter feeding both makes Postgres deduce two conflicting
@@ -312,7 +307,7 @@ async function makeMatch(client, { challenger, opponent, bookingId, sport = 'foo
 }
 
 /**
- * The two CONFLICTING submissions that are the whole reason a dispute exists: each
+ * The two conflicting submissions that are the whole reason a dispute exists: each
  * captain reports their own team winning. UNIQUE (match_id, submitted_by_team) means
  * one row per side, which is what lets the case file put them side by side.
  */
@@ -368,7 +363,7 @@ async function makeSemiFinal(client, { venue, teamA, teamB }) {
       [tournamentId, teamId],
     );
   }
-  // `match_id` is wired by the CALLER, after it creates the match. The match cannot
+  // `match_id` is wired by the caller, after it creates the match. The match cannot
   // exist yet: a fixture match carries `tournament_id` and no booking, so it needs
   // this tournament's id to be insertable at all (see block6Bracket's comment on
   // chk_matches_one_context).
@@ -387,21 +382,19 @@ async function makeSemiFinal(client, { venue, teamA, teamB }) {
   return { tournamentId, semiId: semi[0].id, finalId: final[0].id };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 0 · The settings catalog's own invariants  (pure, no database)
-// ════════════════════════════════════════════════════════════════════════════
+// Block 0 · The settings catalog's own invariants  (pure, no database)
 
 /**
  * `settingsCatalog.js` is the contract between the admin screen and
  * `globalSettings.js`, and it is a hand-written table — exactly the kind of file
  * that rots quietly. Four invariants have to hold or the screen lies:
  *
- *   1. every field's `row` is a key `globalSettings` actually reads,
- *   2. every WRITE band is INSIDE the accessor's own read clamp. If the screen
+ *   1. every field's `row` is a key `globalSettings` reads,
+ *   2. every write band is inside the accessor's own read clamp. If the screen
  *      accepted a k_factor of 500 the accessor would silently substitute 32, and
  *      the admin would be told the save succeeded while nothing changed,
- *   3. every documented DEFAULT is inside the write band. A default the screen
- *      renders but refuses to accept back is a form you cannot save without
+ *   3. every documented default is inside the write band. A default the screen
+ *      renders but refuses to accept back is a form that cannot be saved without
  *      editing an unrelated field,
  *   4. every field belongs to a section the screen renders, or it is invisible.
  *
@@ -426,7 +419,7 @@ function block0Catalog() {
     'every field belongs to a section the screen renders',
     straySection.length ? `homeless: ${straySection.join(', ')}` : sectionKeys.join(' · '));
 
-  // INVARIANT 2 — the subset relationship, asserted rather than commented.
+  // Invariant 2 — the subset relationship, asserted rather than commented.
   const escapes = [];
   for (const k of keys) {
     const f = catalog.FIELDS[k];
@@ -438,7 +431,7 @@ function block0Catalog() {
     'every write band sits INSIDE the accessor read clamp (no silently-clamped save)',
     escapes.length ? escapes.join(' · ') : 'checked ' + keys.filter((k) => catalog.FIELDS[k].readClamp).length + ' bounded fields');
 
-  // INVARIANT 3 — the default the screen shows is a value the screen will accept.
+  // Invariant 3 — the default the screen shows is a value the screen will accept.
   const badDefault = [];
   for (const k of keys) {
     const f = catalog.FIELDS[k];
@@ -456,18 +449,16 @@ function block0Catalog() {
     badDefault.length ? badDefault.join(' · ') : `${keys.length} defaults inside their own bounds`);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 1 · The refusals  (pure, no database)
-// ════════════════════════════════════════════════════════════════════════════
+// Block 1 · The refusals  (pure, no database)
 
 /**
- * What the admin screen must REFUSE, and with which sentence.
+ * What the admin screen must refuse, and with which sentence.
  *
- * The message text is asserted verbatim, not just the refusal, because these
+ * The message text is asserted verbatim, not the refusal alone, because these
  * strings are the entire user interface for a rejected save — a 400 whose message
  * says "invalid" leaves an admin guessing which of eleven fields it meant. The
  * plan names four refusals; `rawByRow` is the live-defaults shape so the
- * cross-field rules see the values the patch does NOT carry.
+ * cross-field rules see the values the patch does not carry.
  */
 function block1Refusals() {
   section('Block 1 · The settings screen refuses what the accessor would quietly clamp');
@@ -512,7 +503,7 @@ function block1Refusals() {
   check(!allOff.ok, 'switching every sport off is refused');
   has(msg(allOff, 'sports_enabled'), 'nothing on SportLynk can be booked', 'with the consequence spelled out');
 
-  // And the mirror image: a legal patch MERGES rather than replaces its row.
+  // And the mirror image: a legal patch merges rather than replaces its row.
   const ok = catalog.validate({ 'elo.k_factor': 40 }, RAW);
   check(ok.ok, 'a legal single-field patch validates');
   eq(ok.rows.elo && ok.rows.elo.k_factor, 40, 'the row carries the new k_factor');
@@ -524,25 +515,23 @@ function block1Refusals() {
     'saving an unchanged value writes no row (and therefore no audit entry)');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 2 · FR10.11 — a settings change applies to the NEXT operation, no restart
-// ════════════════════════════════════════════════════════════════════════════
+// Block 2 · FR10.11 — a settings change applies to the next operation, no restart
 
 /**
  * The load-bearing claim of D3, and the one that cannot be proved by reading code:
  * writing a `global_settings` row and dropping the accessor's cache changes what the
- * NEXT booking charges, in the same process, with nothing restarted.
+ * next booking charges, in the same process, with nothing restarted.
  *
  * Three numbers are followed all the way through:
  *
  *   deposit_pct 20 → 35   a booking on a PKR 2000 slot must stamp
  *                         `deposit_amount = 700`, because `createBooking` reads the
- *                         percent per booking and STAMPS it (the column, not a
+ *                         percent per booking and stamps it (the column, not a
  *                         formula, is what every later refund works from).
  *   commission_pct 0 → 7.5  the accessor must return 7.5 and `commissionSplit` must
  *                         split 2000 into 150 + 1850 with nothing lost to rounding.
  *
- * The `{ client }` is what makes this honest: the row was written inside THIS
+ * The `{ client }` is what makes this honest: the row was written inside this
  * transaction, so a read on another pool connection would not see it. Passing the
  * same client is exactly what `adminSettings.js` does not have to do — it commits
  * first — but it is what lets this block assert the behaviour without committing.
@@ -609,7 +598,7 @@ async function block2Live(client, ctx) {
   check(await settings.isSportEnabled('cricket', { client }), 'cricket is still on');
 
   const blockedSlot = await makeSlot(client, { venueId: ctx.venue.id, price: 2000, hour: 20 });
-  // A savepoint, not `probe`: a refusal does not THROW, it returns `ok:false` and
+  // A savepoint, not `probe`: a refusal does not throw, it returns `ok:false` and
   // leaves the slot row locked for the caller to undo. Rolling back to the savepoint
   // is that undo, and it is what a route does by ROLLBACKing the request.
   await client.query('SAVEPOINT sport_off');
@@ -631,13 +620,11 @@ async function block2Live(client, ctx) {
   check(await settings.isSportEnabled('football', { client }), 'football restored for the rest of the run');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 3 · FR10.6 — the case file an admin rules from
-// ════════════════════════════════════════════════════════════════════════════
+// Block 3 · FR10.6 — the case file an admin rules from
 
 /**
  * FR10.6 asks for the two submissions, the evidence and the chat log on one screen.
- * The submissions and the evidence are joins; the CHAT LOG is the part that only
+ * The submissions and the evidence are joins; the CHAT log is the part that only
  * exists because Wave B was built first, and it is the part worth asserting — a case
  * file that renders an empty conversation satisfies the requirement on paper and
  * nowhere else.
@@ -662,7 +649,7 @@ async function block3CaseFile(client, ctx) {
 
   // A sanity check on the sort contract rather than on this one row: the queue is
   // ordered by severity DESC, and an admin triaging by "what matters most" depends
-  // on that being true of the whole page, not of the row we happened to insert.
+  // on that being true of the whole page, not of the row this block inserted.
   const sev = q.items.map((i) => i.severityElo);
   check(sev.every((v, i) => i === 0 || sev[i - 1] >= v),
     'the page is sorted by severity descending', sev.slice(0, 6).join(' ≥ '));
@@ -692,16 +679,14 @@ async function block3CaseFile(client, ctx) {
     'and carries what the captains actually said');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 4 · FR10.7 — the ruling, applied ONCE
-// ════════════════════════════════════════════════════════════════════════════
+// Block 4 · FR10.7 — the ruling, applied once
 
 /**
  * The single most dangerous write in the admin panel. Applying a rating exchange
- * twice is the one mistake nobody can detect after the fact: the ratings are simply
- * wrong from then on, with an audit trail that looks correct.
+ * twice is the one mistake nobody can detect after the fact: the ratings are wrong
+ * from then on, with an audit trail that looks correct.
  *
- * So this block rules once and then rules AGAIN, and the second attempt must be
+ * So this block rules once and then rules again, and the second attempt must be
  * refused with every rating byte-identical to before it. That second half is the
  * assertion; the first half is only the setup for it.
  *
@@ -740,7 +725,7 @@ async function block4Ruling(client, ctx) {
   eq(out.bracket, 'not_tournament', 'a friendly reports no bracket to advance');
   check(out.severityElo > 0, `severity is stamped on the dispute (${out.severityElo})`);
 
-  // ── The match row ─────────────────────────────────────────────────────────
+  // The match row
   const m = await client.query(
     `SELECT status, winner_team, score_challenger, score_opponent, elo_applied,
             verified_by, verified_at FROM matches WHERE id = $1`, [ctx.match.id],
@@ -753,7 +738,7 @@ async function block4Ruling(client, ctx) {
   eq(Number(row.score_challenger), 3, 'the ruled scoreline is on the match: 3');
   eq(Number(row.score_opponent), 1, 'to 1');
 
-  // ── The exchange ──────────────────────────────────────────────────────────
+  // The exchange
   const after = {
     challenger: await eloOf(client, ctx.challenger.teamId),
     opponent: await eloOf(client, ctx.opponent.teamId),
@@ -775,7 +760,7 @@ async function block4Ruling(client, ctx) {
     'and before/after/delta agree inside the row');
   ev.addFact('Ruling exchange', `${before.challenger.elo}→${after.challenger.elo} vs ${before.opponent.elo}→${after.opponent.elo} at K=${kBefore}`);
 
-  // ── The dispute row ───────────────────────────────────────────────────────
+  // The dispute row
   const d = await client.query(
     `SELECT status, ruling, resolution_notes, resolved_by, resolved_at,
             ruled_score_challenger, ruled_score_opponent, severity_elo
@@ -789,7 +774,7 @@ async function block4Ruling(client, ctx) {
   eq(Number(dr.ruled_score_challenger), 3, 'the ruled score is stored on the dispute too');
   has(String(dr.resolution_notes), "check-in log", 'and the note the admin typed is kept verbatim');
 
-  // ── The audit row ─────────────────────────────────────────────────────────
+  // The audit row
   const audit = await auditRows(client, ctx.admin.id, 'dispute.rule');
   eq(audit.length, 1, 'exactly one admin_audit row for the ruling');
   if (audit.length) {
@@ -804,7 +789,7 @@ async function block4Ruling(client, ctx) {
       'AFTER carries the actual rating deltas, so "who changed this" is answerable');
   }
 
-  // ── Both captains were told, in the room where they argued ─────────────────
+  // Both captains were told, in the room where they argued
   check(out.memberIds.length >= 4,
     `the ruling names everyone to notify (${out.memberIds.length} members across both teams)`);
   check(Array.isArray(out.pills) && out.pills.length >= 1,
@@ -823,7 +808,7 @@ async function block4Ruling(client, ctx) {
   check(pill.rows.length > 0, 'and a neutral system pill landed in the captain channel',
     pill.rows.length ? String(pill.rows[0].body).slice(0, 80) : 'none');
 
-  // ══ THE ASSERTION THIS BLOCK EXISTS FOR ═══════════════════════════════════
+  // The assertion this block exists for
   const again = await disputes.rule(client, {
     disputeId: ctx.dispute.id,
     adminId: ctx.admin.id,
@@ -844,28 +829,26 @@ async function block4Ruling(client, ctx) {
     'and elo_history still holds two rows — the exchange happened exactly once');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 5 · The overturn — ruling on a match that was ALREADY rated
-// ════════════════════════════════════════════════════════════════════════════
+// Block 5 · The overturn — ruling on a match that was already rated
 
 /**
  * The plan said "refuse if `elo_applied` is already true". That was wrong, and this
  * block is the reason it was changed.
  *
  * A dispute can legitimately be filed inside the 24-hour window on a match the
- * owner already verified — that is the ORDINARY case, not an edge one. Refusing to
+ * owner already verified — that is the ordinary case, not an edge one. Refusing to
  * rule on it would mean the admin panel is powerless over exactly the disputes that
  * matter, and the ratings stay wrong forever with a "resolved" dispute next to them.
  *
- * So a ruling that CHANGES the winner corrects instead of refusing: `elo.correctResult`
+ * So a ruling that changes the winner corrects instead of refusing: `elo.correctResult`
  * writes an `admin_reversal` row undoing this match's contribution and an
  * `admin_ruling` row applying the new one. Four rows in `elo_history` for one match,
  * which is the point — a rating stays explainable. Migration 021 widened
  * `chk_elo_history_reason` to accept the two labels, and `supportsCorrection` is what
  * makes the button honest on a database without it.
  *
- * What must NOT happen is a double-apply: the net movement from 1200/1200 must be
- * the SAME magnitude as a single exchange, in the opposite direction.
+ * What must not happen is a double-apply: the net movement from 1200/1200 must be
+ * the same magnitude as a single exchange, in the opposite direction.
  */
 async function block5Overturn(client, ctx) {
   section('Block 5 · An already-rated match is CORRECTED, not double-applied');
@@ -929,8 +912,8 @@ async function block5Overturn(client, ctx) {
   eq(out.eloMode, 'corrected', "eloMode is 'corrected' — not 'applied', and not refused");
   eq(String(out.winnerTeam), String(teamD.teamId), 'the winner is now the opponent');
 
-  // SIX rows, not four. The two `match_verified` rows the owner's verification wrote
-  // are STILL THERE: a correction appends a reversal and a re-rating, it does not edit
+  // Six rows, not four. The two `match_verified` rows the owner's verification wrote
+  // are still there: a correction appends a reversal and a re-rating, it does not edit
   // or delete what happened. `SELECT * FROM elo_history WHERE match_id = …` therefore
   // reads as the whole story in order, which is the property migration 021's header
   // set out to protect — and migration 022 is what makes those six rows legal at all
@@ -946,7 +929,7 @@ async function block5Overturn(client, ctx) {
   eq(tally.admin_ruling, 2, "and a ruling row per team, labelled 'admin_ruling'");
 
   // The arithmetic that makes six rows honest rather than merely more rows: summed
-  // per team, they come to ONE exchange — the ruled one. The reversal cancels the
+  // per team, they come to one exchange — the ruled one. The reversal cancels the
   // verification exactly, so a team's rating cannot drift by being ruled on.
   const netFor = (teamId) => hist
     .filter((h) => String(h.team_id) === String(teamId))
@@ -962,9 +945,7 @@ async function block5Overturn(client, ctx) {
   ev.addFact('Overturn', `challenger ${rated.c} → ${now.c}, opponent ${rated.d} → ${now.d} (K=${kFactor})`);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 6 · A ruling on a FIXTURE advances the bracket
-// ════════════════════════════════════════════════════════════════════════════
+// Block 6 · A ruling on a fixture advances the bracket
 
 /**
  * A tournament fixture's dispute is not a friendly's dispute with a different label:
@@ -990,14 +971,14 @@ async function block6Bracket(client, ctx) {
   const teamE = await makeTeam(client, { label: 'cup-e', rating: 1200 });
   const teamF = await makeTeam(client, { label: 'cup-f', rating: 1200 });
 
-  // A FIXTURE MATCH HAS NO BOOKING, and the schema enforces it:
+  // A fixture MATCH has no BOOKING, and the schema enforces it:
   //   chk_matches_one_context  CHECK (booking_id IS NULL OR tournament_id IS NULL)
   // A match belongs to a friendly's booking or to a tournament, never both, which is
   // why tournamentService inserts fixture matches with `booking_id` NULL. The slot a
   // fixture is played on hangs off `fixtures.slot_id`, not off the match -- so staging
-  // this block with a booking AND a tournament id (the obvious way to write it) is
+  // this block with a booking and a tournament id (the obvious way to write it) is
   // rejected by the database rather than by a code path, and the tournament therefore
-  // has to exist BEFORE the match that belongs to it.
+  // has to exist before the match that belongs to it.
   const cup = await makeSemiFinal(client, {
     venue: ctx.venue, teamA: teamE.teamId, teamB: teamF.teamId,
   });
@@ -1032,7 +1013,7 @@ async function block6Bracket(client, ctx) {
 
   // `bracket` is `advanceAfterMatch`'s own code verbatim -- its vocabulary is
   // not_tournament | no_fixture | already_settled | no_scoreline | ok -- and 'ok' is
-  // what a fixture that really moved reports. The BOOLEAN is a separate field
+  // what a fixture that advanced reports. The boolean is a separate field
   // (`advanced`), which is what a caller switches on; asserting both here keeps the
   // two from drifting apart, since a code of 'ok' with advanced=false would mean the
   // bracket call succeeded and yet moved nothing.
@@ -1085,23 +1066,21 @@ async function block6Bracket(client, ctx) {
   eq(Number(rec.rows[0].tournament_wins), 1, "the winner's tournament record counts the win");
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 7 · FR10.8 — suspension that unwinds what the account was holding
-// ════════════════════════════════════════════════════════════════════════════
+// Block 7 · FR10.8 — suspension that unwinds what the account was holding
 
 /**
  * Flipping `is_active` is the easy half. The half that matters is the CASCADE: a
  * suspended player is holding other people's slots and other people's money, and a
  * suspended venue owner is still taking payments into a venue nobody will open.
  *
- * So this block asserts the money moved, not just that the flag flipped — the
+ * So this block asserts the money moved, not only that the flag flipped — the
  * refund lands back in the player's wallet, the slot returns to `available`, and the
  * whole thing is one audit row an admin can be held to.
  */
 async function block7Suspension(client, ctx) {
   section('Block 7 · Suspending an account unwinds what it was holding');
 
-  // ── The four refusals, first ──────────────────────────────────────────────
+  // The four refusals, first
   const noReason = await suspension.suspend(client, { adminId: ctx.admin.id, userId: ctx.victim.id, reason: '  ' });
   check(!noReason.ok && noReason.code === 'reason_required',
     'a suspension without a reason is refused (the user is told what it says)');
@@ -1113,7 +1092,7 @@ async function block7Suspension(client, ctx) {
   check(!onAdmin.ok && onAdmin.code === 'admin_protected', 'and cannot suspend another admin from the app');
   eq(onAdmin.status, 403, 'with 403');
 
-  // ── The state the cascade has to unwind ───────────────────────────────────
+  // The state the cascade has to unwind
   const walletBefore = await client.query('SELECT balance, frozen_balance FROM wallets WHERE user_id = $1', [ctx.victim.id]);
   const bk = ctx.suspendBooking.booking;
   eq((await client.query('SELECT status FROM bookings WHERE id = $1', [bk.id])).rows[0].status, 'pending',
@@ -1138,7 +1117,7 @@ async function block7Suspension(client, ctx) {
   eq(String(u.rows[0].suspended_by), String(ctx.admin.id), 'and suspended_by names the admin');
 
   // `suspend()` answers through the service's `done(data, message)` helper, so the
-  // envelope is { ok, status, code, message, data } and the cascade sits INSIDE
+  // envelope is { ok, status, code, message, data } and the cascade sits inside
   // `data` -- reading `out.cascade` gets undefined, which is how this block used to
   // die one line into its own assertions.
   const cascade = out.data.cascade;
@@ -1155,13 +1134,13 @@ async function block7Suspension(client, ctx) {
   const walletAfter = await client.query('SELECT balance, frozen_balance FROM wallets WHERE user_id = $1', [ctx.victim.id]);
   check(Number(walletAfter.rows[0].balance) > Number(walletBefore.rows[0].balance),
     `the refund reached the wallet (${walletBefore.rows[0].balance} → ${walletAfter.rows[0].balance})`);
-  // NOT zero -- and the reason is policy, not a leak. The victim is holding TWO
+  // Not zero -- and the reason is policy, not a leak. The victim is holding two
   // bookings: the one this block staged, and the one under the disputed match Blocks
-  // 3-5 ruled. `cancelUpcomingBookings` deliberately LEAVES ALONE any booking a
+  // 3-5 ruled. `cancelUpcomingBookings` deliberately leaves alone any booking a
   // COMMITTED match sits on, because refunding it would take a played and rated
   // fixture away from the opponent, who did nothing wrong. So the escrow that must
   // come back is exactly the cancelled booking's, what stays frozen is exactly the
-  // untouched one's, and the skip is REPORTED to the admin rather than being silent.
+  // untouched one's, and the skip is reported to the admin rather than being silent.
   const leftAlone = cascade.bookingsLeftAlone;
   eq(leftAlone.length, 1, 'one booking was deliberately left alone — the disputed match sits on it');
   has(String(leftAlone[0].reason), 'match has already been accepted',
@@ -1201,25 +1180,23 @@ async function block7Suspension(client, ctx) {
   ev.addFact('Suspension cascade', `1 booking cancelled, PKR ${cascade.refundedTotal} refunded, slot released`);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 8 · The security fix — a suspended user's EXISTING token stops working
-// ════════════════════════════════════════════════════════════════════════════
+// Block 8 · The security fix — a suspended user's existing token stops working
 
 /**
- * THE ONE BLOCK THAT COMMITS. Said out loud because everything else here is thrown
+ * The one block that commits. Said out loud because everything else here is thrown
  * away, and a reader is entitled to know which claim cost a real row.
  *
- * `authMiddleware.accountState` reads through the POOL — it is not exported and takes
+ * `authMiddleware.accountState` reads through the pool — it is not exported and takes
  * its own connection, deliberately, because middleware has no transaction to join. A
- * user that exists only inside this script's transaction is therefore INVISIBLE to
+ * user that exists only inside this script's transaction is therefore invisible to
  * it, and a block written the easy way would assert nothing at all while appearing to
  * pass. So this one commits one throwaway account, proves the 403 against it, and
  * hard-deletes it in a `finally` whether or not the assertions held.
  *
- * WHAT IS BEING PROVED, AND WHY IT IS NOT COSMETIC
+ * What is being proved, and why it is not cosmetic
  * Before Wave D the middleware was 43 lines of pure `jwt.verify` with no database
- * read, so suspension only took effect at the next LOGIN. A suspended user simply
- * kept using the app until their token expired — up to seven days of a banned account
+ * read, so suspension only took effect at the next login. A suspended user kept
+ * using the app until their token expired — up to seven days of a banned account
  * behaving normally. The fix is a 30-second-TTL cache in front of one indexed lookup,
  * invalidated the instant an admin suspends.
  *
@@ -1252,7 +1229,7 @@ async function block8Enforcement(ctx) {
     check(Boolean(token), 'a valid token is issued for the live account');
 
     // A stand-in for Express: enough of `req`/`res` for the middleware to do its job,
-    // and a promise that settles on WHICHEVER exit it takes — `next()` or a `.json()`.
+    // and a promise that settles on whichever exit it takes — `next()` or a `.json()`.
     // A rejection settles it too, so a thrown middleware fails the check instead of
     // hanging the script.
     const drive = (tok) => new Promise((resolve) => {
@@ -1271,7 +1248,7 @@ async function block8Enforcement(ctx) {
     eq(live.req.user && live.req.user.id, userId, 'and arrives at the route as req.user');
     eq(live.req.user && live.req.user.role, 'player', 'with the role the ROW says, not only the claim');
 
-    // Suspend in the database and deliberately do NOT invalidate. This is the cost of
+    // Suspend in the database and deliberately do not invalidate. This is the cost of
     // caching, asserted rather than glossed: for up to TTL_MS the old token still
     // works. It is why `suspend()` calls `invalidate()` instead of trusting the clock.
     await pool.query('UPDATE users SET is_active = FALSE WHERE id = $1', [userId]);
@@ -1281,7 +1258,7 @@ async function block8Enforcement(ctx) {
       'this is the documented cost of not reading the DB on every request');
     eq(authMiddleware.TTL_MS, 30000, 'and that window is 30 seconds, not a minute and not a request');
 
-    // What an admin suspension actually does.
+    // What an admin suspension does.
     authMiddleware.invalidate(userId);
     const banned = await drive(token);
     check(banned.allowed === false, 'after invalidate(), the SAME previously-valid token is rejected');
@@ -1297,8 +1274,8 @@ async function block8Enforcement(ctx) {
     const back = await drive(token);
     check(back.allowed === true, 'reinstating and invalidating lets the same token through again');
 
-    // And the third state, which is neither: the row is gone. 401, because we no
-    // longer know who this is — a deleted account must not read as a suspended one.
+    // And the third state, which is neither: the row is gone. 401, because the
+    // identity is unknown — a deleted account must not read as a suspended one.
     await pool.query('DELETE FROM users WHERE id = $1', [userId]);
     authMiddleware.invalidate(userId);
     const gone = await drive(token);
@@ -1316,23 +1293,21 @@ async function block8Enforcement(ctx) {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 9 · The financial export (FR4.16) — including the venue named `=1+1`
-// ════════════════════════════════════════════════════════════════════════════
+// Block 9 · The financial export (FR4.16) — including the venue named `=1+1`
 
 /**
- * THE ATTACK THIS BLOCK IS NAMED AFTER
+ * The attack this block is named after
  * Excel, LibreOffice and Sheets evaluate any cell whose text begins with `=`, `+`,
  * `-`, `@`, a tab or a CR. Every venue name, player name and note in this export was
  * typed by somebody else, so a venue registered as `=cmd|'/c calc'!A1` runs when the
- * owner opens the report their OWN dashboard produced. The defence is a leading
+ * owner opens the report their own dashboard produced. The defence is a leading
  * apostrophe, which those programs read as "the rest is literal text" and strip on
  * display — so the sheet shows the real name and the formula never runs.
  *
- * So the block registers a venue actually called `=1+1`, exports it, and reads the
- * bytes back. An assertion on `csv.cell` alone would not prove the export USES it.
+ * So the block registers a venue named `=1+1`, exports it, and reads the
+ * bytes back. An assertion on `csv.cell` alone would not prove the export uses it.
  *
- * THE SECOND CLAIM: the money is the LEDGER's, not the price list's
+ * The second claim: the money is the ledger's, not the price list's
  * Two bookings are made on that venue — one checked in with real `escrow_received` /
  * `platform_commission` / `escrow_release` rows, one still pending with none. If the
  * report recomputed money from `bookings.total_amount` the pending row would show a
@@ -1362,7 +1337,7 @@ async function block9Export(client, ctx) {
   check(csv.row(['a', 'b']).endsWith('\r\n'), 'rows end CRLF as RFC 4180 requires');
   eq(csv.safeFilename('rep";ort.csv'), 'rep__ort.csv', 'and a filename cannot carry a quote or a semicolon into a header');
 
-  // ── A venue whose NAME is the attack, and two bookings on it ────────────────
+  // A venue whose name is the attack, and two bookings on it
   const evilOwner = await makeUser(client, 'csvowner', 'owner');
   await makeWallet(client, evilOwner.id, 0);
   const player = await makeUser(client, 'csvplayer');
@@ -1390,13 +1365,13 @@ async function block9Export(client, ctx) {
   const pWallet = await escrow.lockWallet(client, player.id);
   const oWallet = await escrow.lockWallet(client, evilOwner.id);
   //
-  // THE SIGNS ARE THE PRODUCTION SIGNS, and they are the whole point of staging real
+  // The signs are the production signs, and they are the whole point of staging real
   // rows instead of convenient ones. `routes/owner.js`'s check-in writes
-  // `escrow_release` as `-escrow` (money LEAVING the player) and
-  // `platform_commission` as `-commission` (a DEBIT on the owner's wallet, which is
+  // `escrow_release` as `-escrow` (money leaving the player) and
+  // `platform_commission` as `-commission` (a debit on the owner's wallet, which is
   // why the owner's statement shows a gross credit and a separate deduction). The
   // export negates those two arms back into positive report columns, so a test that
-  // logged them positive would read a commission of -150 and a net ABOVE the gross --
+  // logged them positive would read a commission of -150 and a net above the gross --
   // and would have called a broken export correct.
   const pAfter = await escrow.applyWallet(client, pWallet.id, { frozen: -2000 });
   await escrow.logTxn(client, { walletId: pWallet.id, userId: player.id, bookingId: paid.booking.id,
@@ -1413,7 +1388,7 @@ async function block9Export(client, ctx) {
     [paid.booking.id],
   );
 
-  // ── The export itself ──────────────────────────────────────────────────────
+  // The export itself
   const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const range = { from: day(-2), to: day(10) };
   const sink = { out: '', write(s) { this.out += s; return true; } };
@@ -1448,7 +1423,7 @@ async function block9Export(client, ctx) {
   check(round2(Number(open.booking.deposit_amount)) > 0, 'and that deposit is a real number, not zero');
 
   // The totals, and the rule that makes the file trustworthy: the preview the owner
-  // reads on screen and the file they download are produced by the SAME walk, so
+  // reads on screen and the file they download are produced by the same walk, so
   // they cannot disagree. Asserted by comparing the two totals objects.
   eq(totals.rows, 2, 'the TOTAL counts both rows');
   eq(totals.bookings, 2, 'both of them bookings');
@@ -1468,7 +1443,7 @@ async function block9Export(client, ctx) {
   has(last, '2 rows (2 bookings, 0 tournament payouts)', 'and saying what it counted, in words');
 
   // The platform scope adds the Owner column and a per-owner subtotal. With one owner
-  // in range the subtotal must equal the TOTAL exactly — if it does not, no wider
+  // in range the subtotal must equal the total exactly — if it does not, no wider
   // export reconciles either.
   const sink2 = { out: '', write(s) { this.out += s; return true; } };
   const pTotals = await reports.streamCsv(client,
@@ -1481,7 +1456,7 @@ async function block9Export(client, ctx) {
   has(ownerTotal, csv.money(pTotals.commission), 'whose commission equals the platform TOTAL (a single owner reconciles exactly)');
   check(!sink2.out.includes(',=1+1,'), 'and the formula is defused in this export too');
 
-  // ── The range guard, which is what stops one export becoming an outage ──────
+  // The range guard, which is what stops one export becoming an outage
   const bad = (q) => reports.parseRange(q);
   eq(bad({}).message, 'from and to are required as YYYY-MM-DD dates.', 'a missing date range is refused by name');
   eq(bad({ from: '2026-08-31', to: '2026-01-01' }).message, 'to must not be earlier than from.',
@@ -1502,44 +1477,42 @@ async function block9Export(client, ctx) {
   ctx.csv = { venueId: evilVenue.id, ownerId: evilOwner.id, bookingIds: [paid.booking.id, open.booking.id] };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// BLOCK 10 · The wiring — what the sources must SAY, not what a request returns
-// ════════════════════════════════════════════════════════════════════════════
+// Block 10 · The wiring — what the sources must say, not what a request returns
 
 /**
  * Four facts that no request can demonstrate, because a request that works proves
  * only that it worked once, on this data, in this order.
  *
- * 1. AUTHORISATION IS STRUCTURAL. `routes/admin.js` puts one
- *    `router.use(auth, checkRole('admin'))` ABOVE every sub-router mount, so a new
+ * 1. Authorisation is structural. `routes/admin.js` puts one
+ *    `router.use(auth, checkRole('admin'))` above every sub-router mount, so a new
  *    admin screen physically cannot ship without an authorisation check. Asserted by
  *    byte offset: the gate must appear before the first mount.
- * 2. CACHE INVALIDATION IS AFTER COMMIT. `settings.invalidate()` and
+ * 2. Cache invalidation is after COMMIT. `settings.invalidate()` and
  *    `authMiddleware.invalidate(id)` drop caches that are then refilled from the
- *    database. Calling either BEFORE `COMMIT` refills them from the pre-write state
+ *    database. Calling either before `COMMIT` refills them from the pre-write state
  *    and the change appears to have silently failed — the exact class of "I changed
  *    it and nothing happened" bug this wave exists to remove. Asserted on both the
  *    first and the last occurrence in each file, because each has two handlers.
- * 3. SOCKETS FIRE AFTER COMMIT. `mc.emitAfterCommit` pushes a ruling to two phones;
+ * 3. Sockets fire after COMMIT. `mc.emitAfterCommit` pushes a ruling to two phones;
  *    doing it before COMMIT can show a player an outcome that then rolls back.
- * 4. THE OWNER EXPORT CANNOT BE UNSCOPED. `ownerReports` passes
+ * 4. The owner export cannot be unscoped. `ownerReports` passes
  *    `ownerId: req.user.id` — a literal, not a query parameter — so "export
  *    everything" is not reachable from the owner router at all.
  */
 /**
- * The same source with its COMMENT LINES blanked out, space for space, so every byte
+ * The same source with its comment lines blanked out, space for space, so every byte
  * offset below still points where it points in the real file.
  *
- * WHY THIS EXISTS. The assertions under it search for needles like
+ * Why this exists. The assertions under it search for needles like
  * `checkRole('admin')`, `authMiddleware.invalidate` and `mc.emitAfterCommit` -- and
- * every one of those needles is ALSO spelled out in the header comment that explains
+ * every one of those needles is also spelled out in the header comment that explains
  * the invariant it belongs to. Reading the prose as code made "exactly one role
  * check" count two, and made "the cache drop happens after COMMIT" fail because the
- * paragraph describing that ordering sits at the TOP of the file, thousands of bytes
+ * paragraph describing that ordering sits at the top of the file, thousands of bytes
  * ahead of the COMMIT it describes. Deleting good prose to satisfy a test would be
  * exactly backwards, so the test learns to read code instead.
  *
- * Only WHOLE comment lines are blanked -- a line whose first non-space characters
+ * Only whole comment lines are blanked -- a line whose first non-space characters
  * open a comment, and the body of a block until its terminator. A mid-line slash pair
  * is left alone, so one inside a string literal can never be mistaken for a comment,
  * and no line of code is ever shortened, moved or removed.
@@ -1621,9 +1594,7 @@ function block10Wiring() {
     'the route never calls elo.applyResult itself — the rating exchange has exactly one caller');
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE RUN
-// ════════════════════════════════════════════════════════════════════════════
+// The run
 
 /** No row this script writes may ever be found outside its own transaction. */
 async function verifyClean(client) {
@@ -1648,7 +1619,7 @@ async function main() {
   const ctx = {};
   let rolled = false;
 
-  // Two pieces of PROCESS state that a ROLLBACK cannot undo, saved before anything
+  // Two pieces of process state that a ROLLBACK cannot undo, saved before anything
   // touches them. `escrow.POLICY.DEPOSIT_PERCENT` is a module-level number that
   // `createBooking` pushes on every booking, and `globalSettings` caches rows for
   // 60 s — so Block 2's uncommitted 35% / 7.5% would outlive the transaction and
@@ -1683,7 +1654,7 @@ async function main() {
     ctx.victim = await makeUser(client, 'victim');
     await makeWallet(client, ctx.victim.id, 80000);
 
-    // Block 2 writes the live commission and deposit, so it runs BEFORE the booking
+    // Block 2 writes the live commission and deposit, so it runs before the booking
     // that Block 7 later refunds — that booking's deposit is the proof the write took
     // effect on the very next operation rather than on the next restart.
     await block2Live(client, ctx);
@@ -1767,7 +1738,7 @@ async function main() {
     client.release();
   }
 
-  // Block 8 is deliberately outside the transaction — it COMMITS, because the
+  // Block 8 is deliberately outside the transaction — it commits, because the
   // middleware it drives reads through the pool and cannot see uncommitted rows.
   if (!VERIFY_CLEAN) await block8Enforcement(ctx);
 

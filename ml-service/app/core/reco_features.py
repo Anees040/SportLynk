@@ -87,11 +87,9 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Contract version
-# ─────────────────────────────────────────────────────────────────────────────
 
-#: Bump this whenever a change here alters what an existing vector MEANS. The
+#: Bump this whenever a change here alters what an existing vector means. The
 #: registry compares it to the artifact's stamped value and refuses a mismatch.
 RECO_SPEC_VERSION = "reco-features-v1"
 
@@ -105,9 +103,7 @@ class RecoFeatureError(ValueError):
     """
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Block layout — FROZEN
-# ─────────────────────────────────────────────────────────────────────────────
 
 BLOCK_SPORT = "sport"
 BLOCK_PRICE = "price_bucket"
@@ -116,7 +112,7 @@ BLOCK_AMENITIES = "amenities"
 BLOCK_ZONE = "zone"
 BLOCK_INDOOR = "indoor_outdoor"
 
-#: Concatenation order. This IS the vector layout; reordering it invalidates every
+#: Concatenation order. This is the vector layout; reordering it invalidates every
 #: artifact, which is why it is hashed into the fingerprint.
 BLOCK_ORDER: tuple[str, ...] = (
     BLOCK_SPORT,
@@ -134,7 +130,7 @@ L2_BLOCKS = frozenset({BLOCK_SPORT, BLOCK_PRICE, BLOCK_AMENITIES, BLOCK_ZONE, BL
 #: Number of price bins. 5 quantile bins, per the wave spec.
 PRICE_BUCKETS = 5
 
-#: Rating scale of `venues.rating` (DECIMAL(3,2), 1–5).
+#: Rating scale of `venues.rating` (decimal(3,2), 1–5).
 RATING_MAX = 5.0
 
 #: Pseudo-count for the rating shrinkage. A 5.0 from one review is not evidence of a
@@ -147,12 +143,10 @@ RATING_PRIOR_WEIGHT = 5.0
 #: install. 3.5/5 is deliberately mid-scale and not flattering.
 RATING_PRIOR_FALLBACK = 3.5
 
-# ─────────────────────────────────────────────────────────────────────────────
 # User-vector weights — FROZEN (the wave spec's numbers)
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: 0.5 recency-weighted booking history · 0.3 stated preferences · 0.2 affinity
-#: (highly-reviewed venues). Each component is unit-normalised BEFORE the blend, so
+#: (highly-reviewed venues). Each component is unit-normalised before the blend, so
 #: these weights mean what they say: without that step a component that happens to
 #: populate five blocks would outweigh one that populates two regardless of weight.
 W_HISTORY = 0.5
@@ -175,17 +169,15 @@ COMPONENT_WEIGHTS: dict[str, float] = {
 
 #: Exponential recency decay on booking history: a booking this many days old counts
 #: half as much as one today. 90 days is one behavioural season and matches the
-#: horizon the booking data actually spans; a shorter half-life on a corpus this
+#: horizon the booking data spans; a shorter half-life on a corpus this
 #: sparse would leave most users with one effective booking.
 RECENCY_HALF_LIFE_DAYS = 90.0
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Display mapping — FROZEN
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: `match% = round(55 + 43 x sim)`, straight from the wave spec. The point of the
 #: floor and the span is honesty: cosine similarity on non-negative vectors lives in
-#: [0, 1], so the badge spans 55–98 and NEVER shows 100%. A 100% match is a claim no
+#: [0, 1], so the badge spans 55–98 and never shows 100%. A 100% match is a claim no
 #: content-based model can support, and a badge that shows it teaches the user to
 #: distrust the ones that are real.
 MATCH_PCT_BASE = 55
@@ -200,13 +192,13 @@ PROFILE_COLD_START = "cold_start"
 LABEL_HISTORY = "For you"
 LABEL_COLD_START = "Popular nearby"
 
-#: Cold start (no bookings AND no high reviews): popularity in the user's city
+#: Cold start (no bookings and no high reviews): popularity in the user's city
 #: blended with their stated sports, per the wave spec. The weights renormalise when
 #: nothing is stated, which leaves pure popularity.
 COLD_W_POPULARITY = 0.6
 COLD_W_SPORT = 0.4
 
-#: Popularity itself is demand AND satisfaction. Booking count alone would rank a
+#: Popularity itself is demand and satisfaction. Booking count alone would rank a
 #: brand-new 4.8-star venue below every mediocre one on a corpus this sparse, and a
 #: "popular nearby" rail that means "booked at least once" is not useful to a new
 #: user. Both halves are reported separately in the metrics so the blend is auditable.
@@ -222,13 +214,11 @@ REASON_MIN_SHARE = 0.05
 #: reads off a tile.
 REASON_MAX = 3
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Sport canonicalisation — FROZEN
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: `venues.sport_type` is free VARCHAR(50) and `player_profiles.sport_preferences` a
-#: free TEXT[] filled by the app, so the same sport arrives spelled several ways.
-#: Aliases apply AFTER `_slug()`, so only genuine synonyms need to appear here —
+#: free text[] filled by the app, so the same sport arrives spelled several ways.
+#: Aliases apply after `_slug()`, so only genuine synonyms need to appear here —
 #: case, spaces and hyphens are already handled.
 SPORT_ALIASES: dict[str, str] = {
     "soccer": "football",
@@ -241,12 +231,10 @@ SPORT_ALIASES: dict[str, str] = {
     "badminton_doubles": "badminton",
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Amenity canonicalisation — FROZEN
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: Every JSONB key the platform recognises, mapped to its canonical amenity. A key
-#: not listed here is DROPPED and counted (see `amenity_flags`), which is the whole
+#: not listed here is dropped and counted (see `amenity_flags`), which is the whole
 #: reason this is a whitelist rather than a pass-through: `pitch: "grass"` is a
 #: surface descriptor, not an amenity, and folding it in as one would put a
 #: meaningless column into every vector. The trainer reports the dropped-key
@@ -329,16 +317,14 @@ AMENITY_LABELS: dict[str, str] = {
     "wifi": "Wi-Fi",
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Zone derivation — FROZEN
-# ─────────────────────────────────────────────────────────────────────────────
 
-#: Named housing schemes, checked BEFORE the sector regex because a scheme name is a
+#: Named housing schemes, checked before the sector regex because a scheme name is a
 #: far more reliable area signal than a bare letter-digit pair — "DHA Phase 2" and
 #: "Phase 4, Bahria Town" have no sector token at all, and an address like
 #: "Block C 12, Gulberg" would otherwise be filed under C-12 rather than Gulberg.
 #:
-#: `PHASE n` is deliberately NOT part of the key, for the same granularity reason as
+#: `PHASE n` is deliberately not part of the key, for the same granularity reason as
 #: sub-sectors below: Bahria Town Phase 4 and Phase 7 are the same part of town as
 #: far as a venue recommendation goes, and a one-hot block in which every venue is
 #: alone carries no similarity signal whatsoever.
@@ -355,9 +341,9 @@ ZONE_SCHEMES: tuple[tuple[str, str], ...] = (
 )
 
 #: Islamabad-style sector token: F-11, G-6, G-8/2, I-9. Letters are restricted to
-#: A–I, which is the range the twin cities' sectors actually use; opening it to A–Z
+#: A–I, which is the range the twin cities' sectors use; opening it to A–Z
 #: buys nothing and starts matching street numbers. The optional `/n` sub-sector is
-#: MATCHED so it cannot break the token, then DISCARDED — at this catalogue size
+#: matched so it cannot break the token, then discarded — at this catalogue size
 #: sub-sector granularity would give almost every venue its own zone.
 _RE_SECTOR = re.compile(r"\b([A-I])[-\s]?(\d{1,2})(?:\s*/\s*\d{1,2})?\b")
 
@@ -369,11 +355,9 @@ ZONE_AREA_ANY = "*"
 #: visible in the fitted vocabulary rather than looking like a real place.
 ZONE_CITY_UNKNOWN = "UNKNOWN"
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Indoor / outdoor — FROZEN
-# ─────────────────────────────────────────────────────────────────────────────
 
-#: `venues.ground_type` VARCHAR(20) DEFAULT 'turf'. Anything not known to be indoors
+#: `venues.ground_type` VARCHAR(20) default 'turf'. Anything not known to be indoors
 #: is treated as outdoors, which is the right default for this schema: the column's
 #: own default value is an outdoor surface.
 INDOOR_GROUND_TYPES = frozenset({"indoor", "indoors", "hall", "futsal_indoor", "covered", "dome"})
@@ -389,12 +373,10 @@ INDOOR_INDEX = 0
 OUTDOOR_INDEX = 1
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Coercion helpers — permissive about WIRE FORMAT, strict about VALUE
-# ─────────────────────────────────────────────────────────────────────────────
+# Coercion helpers — permissive about wire format, strict about value
 # Same doctrine as `features.py`: the export endpoint sends camelCase JSON, a psql
-# dump used for debugging sends snake_case, and `pg` returns DECIMAL columns as
-# STRINGS (golden rule 6). All three must vectorise identically, so the readers below
+# dump used for debugging sends snake_case, and `pg` returns decimal columns as
+# strings (golden rule 6). All three must vectorise identically, so the readers below
 # accept any of them and the value checks happen once, here.
 
 _RE_NON_WORD = re.compile(r"[^a-z0-9]+")
@@ -445,9 +427,7 @@ def _as_int(value: Any, default: int = 0) -> int:
     return default if out is None else int(out)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Frozen derivations
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def canon_sport(value: Any) -> str:
@@ -686,9 +666,7 @@ def price_bucket_of(price: Any, edges: Sequence[float]) -> int | None:
     return max(0, min(idx, PRICE_BUCKETS - 1))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The fitted space
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -710,7 +688,7 @@ class VenueSpace:
     zones: tuple[str, ...]
     rating_prior: float
 
-    # ── layout ──────────────────────────────────────────────────────────────
+    # Layout
     @property
     def widths(self) -> dict[str, int]:
         return {
@@ -749,7 +727,7 @@ class VenueSpace:
         names.append(f"{BLOCK_INDOOR}=outdoor")
         return tuple(names)
 
-    # ── fitting ─────────────────────────────────────────────────────────────
+    # Fitting
     @classmethod
     def fit(cls, venues: Sequence[Mapping[str, Any]]) -> "VenueSpace":
         """Build the vocabularies from a venue snapshot.
@@ -797,7 +775,7 @@ class VenueSpace:
             rating_prior=rating_prior,
         )
 
-    # ── serialisation ───────────────────────────────────────────────────────
+    # Serialisation
     def to_dict(self) -> dict[str, Any]:
         return {
             "sports": list(self.sports),
@@ -822,9 +800,7 @@ class VenueSpace:
             raise RecoFeatureError(f"malformed VenueSpace payload: {exc}") from exc
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Vectorisation
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _l2_normalise_inplace(vector: np.ndarray, span: slice) -> None:
@@ -983,9 +959,7 @@ def blend_user_vector(
     return blended, applied
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Scoring
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def cosine_scores(matrix: np.ndarray, row_norms: np.ndarray, user_vector: np.ndarray) -> np.ndarray:
@@ -1107,9 +1081,7 @@ def build_reasons(
     return reasons
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Published contract
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def reco_spec_fingerprint() -> str:
@@ -1165,8 +1137,8 @@ def reco_spec_fingerprint() -> str:
     return digest.hexdigest()[:16]
 
 
-#: Canonical amenities this contract RECOGNISES — distinct from the fitted vocabulary
-#: inside an artifact, which lists only the ones some venue actually has. `water` is
+#: Canonical amenities this contract recognises — distinct from the fitted vocabulary
+#: inside an artifact, which lists only the ones some venue has. `water` is
 #: recognised here and named in the wave spec, but no seed venue carries a water key,
 #: so it will not appear in a fitted space until an owner adds one. Publishing both
 #: lists is what makes that difference visible instead of looking like a bug.

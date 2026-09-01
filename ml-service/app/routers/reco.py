@@ -45,7 +45,7 @@ router = APIRouter(tags=["recommendations"])
 #: Ceiling on a posted pool. Node's own SQL already caps its candidate queries far
 #: below this; the limit is here so a malformed or hostile caller cannot make the
 #: service score an unbounded list, and so the failure is a clean 422 rather than a
-#: slow request. Pydantic enforces it before any of our code runs.
+#: slow request. Pydantic enforces it before any of this service's code runs.
 MAX_CANDIDATES = 500
 
 

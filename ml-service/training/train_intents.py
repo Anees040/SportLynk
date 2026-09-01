@@ -253,9 +253,7 @@ if str(ROOT) not in sys.path:
 from app.core import intent_spec, nlu_text  # noqa: E402
 from app.core.proba import SoftmaxSVC  # noqa: E402
 
-# --------------------------------------------------------------------------- #
 # Paths, keys, and the numbers this trainer is willing to be judged by
-# --------------------------------------------------------------------------- #
 
 DATA_DIR = ROOT / "data" / "assistant"
 CORPUS_CSV = DATA_DIR / "intents.csv"
@@ -285,7 +283,7 @@ CHAR_MAX_FEATURES = 80_000
 MIN_DF = 1
 
 # (knob, chosen, what the alternatives measured). Every number is validation
-# accuracy of THIS pipeline at C=C_VALUE with grouped calibration folds, one knob
+# accuracy of this pipeline at C=C_VALUE with grouped calibration folds, one knob
 # moved at a time off the shipped configuration; reproduce with training/_knob_sweep
 # semantics (fit train split, score val). Only two knobs are decided by a margin
 # worth the name -- char_wb and min_df; the n-gram rows are 1-3 rows of 348 apart
@@ -299,10 +297,10 @@ FEATURE_SELECTION_NOTES: tuple[tuple[str, str, str], ...] = (
                               "splits <num>/<qm>/<emo> into bare words and loses the placeholder"),
 )
 
-# C was picked on validation ONLY, and the plateau is honestly flat: the spread
+# C was picked on validation only, and the plateau is honestly flat: the spread
 # across the whole sweep is 6 rows out of 348. Recorded as
 # {C: (val_acc, val_macro_f1, coverage@0.45, acc_on_answered, exam_acc)} so the
-# model card can state that the exam column was NOT what chose the winner.
+# model card can state that the exam column was not what chose the winner.
 C_SELECTION_SWEEP: dict[float, tuple[float, float, float, float, float]] = {
     0.25: (0.8563, 0.8552, 0.874, 0.9178, 0.6667),
     0.5: (0.8678, 0.8662, 0.876, 0.9246, 0.6467),
@@ -311,7 +309,7 @@ C_SELECTION_SWEEP: dict[float, tuple[float, float, float, float, float]] = {
     4.0: (0.8621, 0.8592, 0.891, 0.9258, 0.6333),
     8.0: (0.8621, 0.8592, 0.879, 0.9281, 0.6267),
 }
-# Validation argmax, ties and near-ties broken toward the SMALLER C. The plateau is
+# Validation argmax, ties and near-ties broken toward the smaller C. The plateau is
 # 1-4 rows of 348 wide, so without a tie-break the winner is decided by noise; on a
 # flat plateau the more regularised model is the better bet on unseen phrasing.
 C_SWEEP_WINNER = min(
@@ -341,9 +339,7 @@ ECE_BINS = 10
 BOOTSTRAP_ROUNDS = 2000
 
 
-# --------------------------------------------------------------------------- #
 # Output plumbing and small utilities (same shapes as train_sentiment.py)
-# --------------------------------------------------------------------------- #
 
 _QUIET = False
 
@@ -440,9 +436,7 @@ def write_lockfile(path: Path) -> bool:
     return True
 
 
-# --------------------------------------------------------------------------- #
 # Model construction
-# --------------------------------------------------------------------------- #
 
 def calibration_folds(
     y: Sequence[str],
@@ -562,9 +556,7 @@ def build_pipeline(
     return Pipeline([("features", features), ("clf", clf)])
 
 
-# --------------------------------------------------------------------------- #
 # Evaluation
-# --------------------------------------------------------------------------- #
 
 LABELS = list(intent_spec.INTENTS)
 GROUPS = list(intent_spec.INTENT_GROUPS)
@@ -751,7 +743,7 @@ def top_confusions(cm: list[list[int]], labels: list[str], k: int = 10) -> list[
     """The k most frequent (gold -> predicted) mistakes, with the spec's own note on
     whether that pair was DESIGNED to be confusable (intent_spec.INTENT_CATALOG)."""
     # INTENT_CATALOG rows are (intent, group, gloss, confusable) and `confusable`
-    # names the ONE sibling the spec expects to be mixed up with. Symmetric here:
+    # names the one sibling the spec expects to be mixed up with. Symmetric here:
     # if the spec says A is confusable with B, then B->A counts as predicted too.
     declared: dict[str, set[str]] = {name: set() for name in labels}
     for name, _group, _gloss, sibling in intent_spec.INTENT_CATALOG:
@@ -858,9 +850,7 @@ def recheck_contamination(corpus_rows: list[dict], exam_rows: list[dict]) -> dic
     }
 
 
-# --------------------------------------------------------------------------- #
 # Reporting
-# --------------------------------------------------------------------------- #
 
 def print_metrics_table(title: str, m: dict) -> None:
     shout(f"\n{title}")
@@ -1316,9 +1306,7 @@ def write_model_card(path: Path, record: dict) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-# --------------------------------------------------------------------------- #
 # CLI
-# --------------------------------------------------------------------------- #
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -1369,9 +1357,7 @@ def _predict_with_conf(model: Pipeline, X: list[str]) -> tuple[list[str], np.nda
     return [classes[i] for i in idx], proba[np.arange(len(idx)), idx]
 
 
-# --------------------------------------------------------------------------- #
 # main
-# --------------------------------------------------------------------------- #
 
 def main(argv: list[str] | None = None) -> int:
     global _QUIET
@@ -1380,7 +1366,7 @@ def main(argv: list[str] | None = None) -> int:
     started = datetime.now(tz=timezone.utc)
     t_start = time.perf_counter()
     stamp = started.strftime("%Y%m%d-%H%M")
-    # The major tracks the LABEL CONTRACT, not this script: a 23-label model must
+    # The major tracks the label contract, not this script: a 23-label model must
     # not ship calling itself v1. intent_spec.INTENT_SPEC_VERSION is the source.
     _, _sep, spec_major = intent_spec.INTENT_SPEC_VERSION.rpartition("-")
     if not (_sep and spec_major.startswith("v") and spec_major[1:].isdigit()):
@@ -1406,13 +1392,13 @@ def main(argv: list[str] | None = None) -> int:
 
     gates: list[Gate] = []
 
-    # ── 1. contracts ────────────────────────────────────────────────────────
-    # The two frozen modules this model is fitted THROUGH. If either one's
+    # 1. Contracts
+    # The two frozen modules this model is fitted through. If either one's
     # self-check fails, nothing downstream is worth measuring: the classifier
     # would be learning from text the serving path no longer produces.
-    # NOTE the three self_check() conventions in this codebase are NOT the same, and
-    # assuming they were is a live bug risk: nlu_text.self_check() returns the NUMBER
-    # OF CHECKS and raises on failure, intent_spec.self_check() returns a list of
+    # NOTE the three self_check() conventions in this codebase are not the same, and
+    # assuming they were is a live bug risk: nlu_text.self_check() returns the number
+    # of checks and raises on failure, intent_spec.self_check() returns a list of
     # receipts and raises on failure, entities.self_check() returns a shell-style 0/1
     # exit code. Only the RAISE is common to all three, so that is what is trusted.
     contract_problems: list[str] = []
@@ -1430,7 +1416,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         contract_problems.append(f"intent_spec.self_check() failed: {exc}")
 
-    # The entity extractor is the OTHER half of model #4. It is not trained and not
+    # The entity extractor is the other half of model #4. It is not trained and not
     # fitted here, but its fingerprint is stamped into this artifact so that
     # /nlu/parse can prove the two halves that ship together were built together.
     # A missing dateparser must not block a classifier release, hence the guard.
@@ -1451,7 +1437,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     gates.append(Gate("contracts", not contract_problems, contract_detail))
 
-    # ── 2-3. provenance ─────────────────────────────────────────────────────
+    # 2-3. provenance
     corpus_rows = load_rows(args.corpus)
     exam_rows = load_rows(args.exam)
     corpus_meta = read_json(CORPUS_META)
@@ -1507,7 +1493,7 @@ def main(argv: list[str] | None = None) -> int:
         if not exam_problems else "; ".join(exam_problems),
     ))
 
-    # ── 4. contamination, recomputed here ───────────────────────────────────
+    # 4. Contamination, recomputed here
     say("\nrechecking exam-vs-corpus overlap (150 x 1,680 pairs)...")
     contam = recheck_contamination(corpus_rows, exam_rows)
     contam_ok = contam["exactCollisions"] == 0 and contam["maxNearDup"] < CONTAM_NEAR_DUP_MAX
@@ -1518,8 +1504,8 @@ def main(argv: list[str] | None = None) -> int:
         f"({contam['maxNearDupMetric']}) < {CONTAM_NEAR_DUP_MAX}",
     ))
 
-    # ── data ────────────────────────────────────────────────────────────────
-    # The split column is the corpus generator's TEMPLATE-GROUPED split; it is used
+    # Data
+    # The split column is the corpus generator's template-grouped split; it is used
     # as-is rather than re-split here, so every number in this report is comparable
     # with intents_meta.json's census and with any other run.
     X_all = [r["text"] for r in corpus_rows]
@@ -1536,7 +1522,7 @@ def main(argv: list[str] | None = None) -> int:
     y_ex = [r["intent"] for r in exam_rows]
     say(f"  corpus {len(X_all)} rows -> train {len(X_tr)} / val {len(X_va)}; exam {len(X_ex)}")
 
-    # ── optional: live C sweep, then stop ───────────────────────────────────
+    # Optional: live C sweep, then stop
     if args.sweep_c:
         shout("\nC sweep (fit on train, selected on validation; exam shown, NOT used)")
         shout(f"  {'C':>6}{'valAcc':>9}{'valMF1':>9}{'cov@f':>8}{'accAns':>9}{'exam':>8}")
@@ -1554,7 +1540,7 @@ def main(argv: list[str] | None = None) -> int:
         shout("\nsweep only -- nothing trained for release. Re-run without --sweep-c.")
         return 0
 
-    # ── the split fit: every number used to CHOOSE anything ─────────────────
+    # The split fit: every number used to choose anything
     folds_group = calibration_folds(y_tr, g_tr, seed=args.seed)
     folds_arg: list[tuple[np.ndarray, np.ndarray]] | int = (
         folds_group if args.calib_folds == "group" else 5
@@ -1585,10 +1571,10 @@ def main(argv: list[str] | None = None) -> int:
                                           args.threshold).items() if k != "threshold"},
     }
 
-    # ── the shipped fit: refit on ALL rows, then read the exam ONCE ──────────
+    # The shipped fit: refit on all rows, then read the exam once
     # The validation split's job was to choose the configuration, and it has now
     # done it. Throwing away 348 labelled rows afterwards to keep a number tidy is
-    # the worse trade -- so the artifact is refitted on everything and BOTH exam
+    # the worse trade -- so the artifact is refitted on everything and both exam
     # numbers are reported (they differ by less than the bootstrap CI).
     say(f"\nrefitting on all {len(X_all)} rows for the shipped artifact...")
     t0 = time.perf_counter()
@@ -1615,8 +1601,8 @@ def main(argv: list[str] | None = None) -> int:
     exam_confusions = top_confusions(exam_metrics["confusion_matrix"]["matrix"], LABELS)
     val_grouped = grouped_metrics(y_va, pred_va)
 
-    # ── the probability-layer comparison (the wave's central claim) ──────────
-    # Re-measured, not quoted. Every arm is fitted on TRAIN and scored on VALIDATION,
+    # The probability-layer comparison (the wave's central claim)
+    # Re-measured, not quoted. Every arm is fitted on TRAIN and scored on validation,
     # so the exam plays no part in choosing how probabilities are produced.
     def _proba_row(name: str, model: Pipeline) -> dict:
         p, c = _predict_with_conf(model, X_va)
@@ -1663,14 +1649,14 @@ def main(argv: list[str] | None = None) -> int:
                     f"(recorded {rec}, now {live['val_accuracy']}/{live['coverage']}/{live['ece']}) "
                     "-- update PROBA_COMPARISON_RECORDED and the docstring table")
 
-    # ── baselines and ablation ──────────────────────────────────────────────
+    # Baselines and ablation
     base = baselines(y_tr, y_ex)
     ablation: dict[str, dict] = {}
     if not args.no_ablation:
         say("\nablating feature views (4 uncalibrated fits)...")
         ablation = run_ablation(X_tr, y_tr, X_va, y_va, X_ex, y_ex, seed=args.seed)
 
-    # ── 5-10. the measured gates ────────────────────────────────────────────
+    # 5-10. the measured gates
     maj_acc = base["predict_train_majority"]["accuracy"]
     gates.append(Gate(
         "no leakage", val_metrics["accuracy"] <= LEAKAGE_MAX_VAL_ACC,
@@ -1703,7 +1689,7 @@ def main(argv: list[str] | None = None) -> int:
     ))
     all_passed = all(g.ok for g in gates)
 
-    # ── print everything a human needs to judge the run ─────────────────────
+    # Print everything a human needs to judge the run
     print_metrics_table(f"VALIDATION ({len(y_va)} template-disjoint rows, split fit)", val_metrics)
     print_metrics_table(f"EXAM ({len(y_ex)} sha-locked hand-written rows, full refit)", exam_metrics)
     shout(f"\n  exam accuracy 95% CI  {fmt_ci(exam_ci)}")
@@ -1748,7 +1734,7 @@ def main(argv: list[str] | None = None) -> int:
           f"{base['predict_train_majority']['accuracy']:.4f}")
     shout(f"  THIS MODEL                {exam_metrics['accuracy']:.4f}")
 
-    # ── the record: one dict, everything derives from it ────────────────────
+    # The record: one dict, everything derives from it
     clf = model_full.named_steps["clf"]
     word_vocab = 0
     char_vocab = 0
@@ -1850,7 +1836,7 @@ def main(argv: list[str] | None = None) -> int:
         "elapsedSeconds": round(time.perf_counter() - t_start, 2),
     }
 
-    # ── always-written reports ──────────────────────────────────────────────
+    # Always-written reports
     metrics_path = reports_dir / "intent_metrics.json"
     metrics_path.write_text(
         json.dumps(record, indent=2, default=_jsonable, ensure_ascii=False), encoding="utf-8"
@@ -1884,13 +1870,13 @@ def main(argv: list[str] | None = None) -> int:
     shout(f"  reports/intent_reliability.png       {'written' if rel_ok else 'SKIPPED'}")
     shout(f"  reports/requirements.lock.txt        {'written' if lock_ok else 'SKIPPED'}")
 
-    # ── gates, then the artifact ─────────────────────────────────────────────
+    # Gates, then the artifact
     shout("\nRELEASE GATES")
     for g in gates:
         shout(g.line())
 
     # The dataset receipt is published on /health and in the model card, so it is
-    # read as provenance. It must be DERIVED from the corpus meta, never typed in:
+    # read as provenance. It must be derived from the corpus meta, never typed in:
     # a hardcoded count silently describes a previous corpus after every regen.
     try:
         _tpl_rows = corpus_meta["inputs"]["templates"]["rows"]
@@ -1909,12 +1895,12 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = {
         "model": model_full,
-        # ── what the registry gates at load time ──
+        # What the registry gates at load time
         "intentSpecVersion": record["intentSpecVersion"],
         "intentSpecFingerprint": record["intentSpecFingerprint"],
         "nluTextSpecVersion": record["nluTextSpecVersion"],
         "nluTextSpecFingerprint": record["nluTextSpecFingerprint"],
-        # ── what /nlu/parse and /health report ──
+        # What /nlu/parse and /health report
         "datasetSpecVersion": record["datasetSpecVersion"],
         "datasetSpecFingerprint": record["datasetSpecFingerprint"],
         "entitySpecVersion": record["entitySpecVersion"],
@@ -1923,7 +1909,7 @@ def main(argv: list[str] | None = None) -> int:
         "trainedAt": record["trainedAt"],
         "labels": LABELS,
         "intentGroups": record["intentGroups"],
-        # The serving abstain floor travels WITH the model. The router must read it
+        # The serving abstain floor travels with the model. The router must read it
         # from here rather than keep its own constant: retuning the floor is then a
         # retrain, not a code change in two places that can disagree.
         "confidenceThreshold": args.threshold,

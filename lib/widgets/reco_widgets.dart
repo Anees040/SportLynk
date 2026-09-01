@@ -8,7 +8,7 @@ import 'match_widgets.dart' show CompetitivenessTone, TrustBadgeChip;
 /// The S.5 Wave B recommender UI: the match-percentage badge, the "Why this
 /// match?" breakdown, and the roster screen's suggested-players rail.
 ///
-/// WHY THE BREAKDOWN IS A FIRST-CLASS WIDGET AND NOT A TOOLTIP
+/// Why the breakdown is a first-class widget and not a tooltip
 /// A recommender that shows a bare "83%" is asking to be trusted; one that can be
 /// opened up is offering to be checked. The whole point of the weighted scorer is
 /// that every part of it is publishable — the weights ship in the same payload as
@@ -19,9 +19,7 @@ import 'match_widgets.dart' show CompetitivenessTone, TrustBadgeChip;
 /// Nothing here computes a score. It renders what the server sent, and when the
 /// server sent nothing it says so instead of filling the gap.
 
-// ═══════════════════════════════════════════════════════════════
 //  Percentage
-// ═══════════════════════════════════════════════════════════════
 
 /// A match percentage as a pill. Colour bands come from [CompetitivenessTone] so
 /// a 62% reads the same here as it does on a competitiveness bar — two different
@@ -80,9 +78,7 @@ class MatchPctBadge extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Attribution
-// ═══════════════════════════════════════════════════════════════
 
 /// One line naming what produced an ordering — and, when nothing did, the
 /// server's own sentence about what the list is instead.
@@ -135,9 +131,7 @@ class RankingSourceNote extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Why this match?
-// ═══════════════════════════════════════════════════════════════
 
 /// The expandable breakdown row (S.5 Wave B).
 ///
@@ -157,7 +151,7 @@ class WhyThisMatch extends StatefulWidget {
   /// A closing line — the spec fingerprint, or which input the level block used.
   final String? footnote;
 
-  /// Starts open. Used inside a details sheet, where the breakdown IS the content.
+  /// Starts open. Used inside a details sheet, where the breakdown is the content.
   final bool initiallyExpanded;
 
   const WhyThisMatch({
@@ -376,9 +370,7 @@ class _ComponentRow extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Suggested players rail (FR2.8)
-// ═══════════════════════════════════════════════════════════════
 
 /// The roster screen's horizontal rail of suggested players.
 ///

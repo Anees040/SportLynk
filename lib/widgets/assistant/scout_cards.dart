@@ -6,14 +6,14 @@ import 'scout_cards_more.dart';
 import 'scout_chips.dart';
 import 'scout_theme.dart';
 
-/// THE switch: one card type in, one widget out.
+/// The switch: one card type in, one widget out.
 ///
 /// The backend's reply contract says the client renders by `card.type`, which makes
 /// this the single place a type becomes pixels. Two consequences are deliberate:
 ///
 ///  1. An unknown type renders as a labelled placeholder, not a crash and not
 ///     silence. A newer backend that adds a thirteenth card must degrade to
-///     "this needs a newer app version" on an old build, because the reply's TEXT
+///     "this needs a newer app version" on an old build, because the reply's text
 ///     is still perfectly useful without the card.
 ///  2. `stats` is in the contract but produced by no action today. It still gets a
 ///     renderer — a generic key/value table over whatever `data` holds — so the
@@ -29,7 +29,7 @@ class ScoutCardView extends StatelessWidget {
   ///
   /// Only the policy card reads it, and only to avoid printing a paragraph the
   /// user has already just read: `topup_help` puts both of its policy sentences in
-  /// the reply text AND in the card, while `refund_policy` puts the second one in
+  /// the reply text and in the card, while `refund_policy` puts the second one in
   /// the card alone. A card cannot know which without seeing the sentence above it.
   final String? contextText;
 
@@ -206,12 +206,12 @@ class _VenueCard extends StatelessWidget {
 
 /// The slot grid — the fastest path from "I want to play" to a booking.
 ///
-/// Each tile carries its NUMBER as well as its time, because the number is a thing
+/// Each tile carries its number as well as its time, because the number is a thing
 /// the user can also type ("2", "the second one") and the dialog manager resolves
 /// it. Showing it makes that shortcut discoverable instead of secret, and it means
 /// a screen reader can say "slot 2" rather than reading a bare timestamp.
 ///
-/// The tap posts the chip the BACKEND minted for that slot, not arguments this
+/// The tap posts the chip the backend minted for that slot, not arguments this
 /// widget assembled, so a slot id never has to survive a round trip through the
 /// UI's own idea of what a slot is.
 class _SlotPickerCard extends StatelessWidget {
@@ -255,7 +255,7 @@ class _SlotPickerCard extends StatelessWidget {
               spacing: 7,
               runSpacing: 7,
               children: p.slots.map((s) {
-                // ONLY the server's own minted chip may be posted. Synthesizing a
+                // Only the server's own minted chip may be posted. Synthesizing a
                 // `pick_slot` here would author a money-path action client-side, and the
                 // point of the button-only actions is that they are unreachable except
                 // through a button the server sent. `assistantActions.js` mints one per

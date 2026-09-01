@@ -7,8 +7,8 @@ import 'scout_theme.dart';
 /// A floating button rather than a sixth tab, and that is a considered choice: the
 /// bottom bar already carries five destinations at 10px labels, and a sixth would
 /// shrink every existing one to buy a place for a feature nobody has used yet. A FAB
-/// also says the right thing about what Scout is — an assistant that follows you
-/// across screens, not a section of the app you navigate to and come back from.
+/// also says the right thing about what Scout is — an assistant that follows the
+/// user across screens, not a section of the app to navigate to and come back from.
 ///
 /// The halo breathes on a 2.4s cycle. Slow enough to read as "alive" rather than
 /// "notification", and it is decoration only: the icon, the colour and the tooltip all

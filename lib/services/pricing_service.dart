@@ -3,12 +3,12 @@ import 'api_service.dart';
 
 /// AI pricing + demand forecast (S.3 Wave D, FR4.17 / FR4.18).
 ///
-/// Everything in this file exists to keep ONE promise to the owner: the number on
+/// Everything in this file exists to keep one promise to the owner: the number on
 /// the card is a suggestion they can read the reasoning for, and nothing changes
 /// what a player pays until they press Apply. So the models below carry the
 /// *provenance* of every figure — which service produced it ([PriceSuggestion.source]),
 /// how sure it is ([PriceSuggestion.confidence]), what moved it ([topFactors]), and
-/// how the model that produced it actually scored ([ModelMetrics]) — instead of a
+/// how the model that produced it scored ([ModelMetrics]) — instead of a
 /// bare rupee value the screen would have to dress up in invented confidence.
 ///
 /// **`null` from a read means the request failed. An empty/unavailable payload means
@@ -63,7 +63,7 @@ class PriceFactor {
 /// The served model's own test-set scores, read from the artifact at request time.
 ///
 /// This is the honest version of the "quiet flex" caption. The wave brief suggested
-/// hardcoding `AUC 0.84`; the model that actually ships scores 0.7628, so the
+/// hardcoding `AUC 0.84`; the model that ships scores 0.7628, so the
 /// caption reads whatever the loaded artifact measured. A demo number that does not
 /// match `pricing_metrics.json` is the kind of thing an FYP panel asks about once.
 class ModelMetrics {
@@ -277,7 +277,7 @@ class DemandPoint {
   }
 }
 
-/// The demand thresholds the SERVER used to bucket the bars, carried alongside them
+/// The demand thresholds the server used to bucket the bars, carried alongside them
 /// so the chart legend and the chart cannot disagree. Anchored on the training set's
 /// measured unconditional booking rate, not on taste.
 class DemandLevels {
@@ -430,7 +430,7 @@ class PricingService {
       );
 }
 
-// ── Coercion helpers ─────────────────────────────────────────
+// Coercion helpers
 // JSON numbers arrive as int or double depending on whether Postgres/Python emitted
 // a trailing `.0`, and `as double` on an int throws. Every numeric read goes through
 // these, so one integral price does not blank the whole card.

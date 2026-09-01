@@ -1,6 +1,6 @@
 /**
  * Factory function that returns middleware to check user role.
- * Must be used AFTER authMiddleware so req.user exists.
+ * Must be used after authMiddleware so req.user exists.
  *
  * Usage: router.post('/bookings', auth, checkRole('player'), controller)
  */

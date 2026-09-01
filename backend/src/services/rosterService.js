@@ -1,17 +1,16 @@
 /**
  * rosterService.js — "who should we play with, and who should we play against".
  *
- * WHY THIS FILE EXISTS
- * --------------------
+ * Why this file exists
  * FR8.15: no business rule may exist twice. Scout answers `find_players` and
- * `find_opponents`, and the ONLY honest way to do that is to run the same code
+ * `find_opponents`, and the only honest way to do that is to run the same code
  * the roster rail and the Find Opponents screen already run — the candidate
  * pools, the model call, the fallback ordering, the trust badges and the
  * "unranked pairing shows no percentage" rule. Re-implementing any of it for the
  * assistant would give SportLynk two opinions about who is a good teammate, and
  * the first person to notice would be the person whose demo it is.
  *
- * So the two handler bodies were MOVED here verbatim, exactly as S.6 Wave C
+ * So the two handler bodies were moved here verbatim, exactly as S.6 Wave C
  * moved routes/bookings.js's rules into bookingService.js, and both routes are
  * now transport:
  *
@@ -23,8 +22,7 @@
  * lets the assistant call them; the route unwraps that into the JSON envelope it
  * always sent, so the Flutter app sees the same bytes it saw in S.5.
  *
- * WHAT THE CALLER STILL OWES
- * --------------------------
+ * What the caller still owes
  * A pg client. Neither function opens or commits anything — they are pure reads,
  * and the assistant calls them inside the turn's transaction so a suggestion and
  * the booking it leads to are read against one consistent snapshot.
@@ -62,42 +60,40 @@ const SUGGEST_LIMIT = 12;
 const BOOKED_STATUSES = ['confirmed', 'checked_in'];
 
 
-// ==========================================================================
-// PLAYERS
-// ==========================================================================
+// Players
 
 /**
  * suggestPlayers — FR2.8, the roster screen's rail, and Scout's `find_players`.
  *
- * ADMIN ONLY, and that is a privacy decision rather than a UI one. The response
+ * Admin only, and that is a privacy decision rather than a UI one. The response
  * names other players and says how often they have been booking, so it is limited
- * to the two people who can actually act on it — the captain and vice-captain, the
+ * to the two people who can act on it — the captain and vice-captain, the
  * same gate as the invite endpoints it feeds. An ordinary member browsing a list of
  * strangers' activity has no use for it and no business seeing it.
  *
- * WHAT THE CANDIDATE POOL IS, AND WHY THE SPEC'S FILTERS ARE WHERE THEY ARE
+ * What the candidate pool is, and why the spec's filters sit where they do
  * The wave defines the pool as "public players, same city, sport matches, not
  * already members". Three of those needed a decision, because the columns the
  * literal reading wants do not exist:
  *
- *   • "PUBLIC PLAYERS" — there is no per-player visibility flag anywhere in the
+ *   • "public players" — there is no per-player visibility flag anywhere in the
  *     schema, so this is `role='player' AND is_active=true`: the same definition of
  *     "a player account that exists" that the reco export already uses. No column
  *     was invented and none was assumed.
  *
- *   • "SAME CITY" — player_profiles has no city either. A player's city is DERIVED
- *     from the venues they actually book, which is stronger evidence than a
+ *   • "SAME CITY" — player_profiles has no city either. A player's city is derived
+ *     from the venues they book, which is stronger evidence than a
  *     self-typed field would have been. A player with no bookings has no derived
- *     city, and is ADMITTED rather than excluded: unknown is not "different", and a
+ *     city, and is admitted rather than excluded: unknown is not "different", and a
  *     strict filter on a derived column would empty this rail of exactly the new
  *     players it is most useful for. Their zone component is then null, which the
  *     scorer treats as neutral instead of as a penalty.
  *
- *   • "SPORT MATCHES" — deliberately NOT filtered in SQL. Which spellings of a
+ *   • "sport matches" — deliberately not filtered in SQL. Which spellings of a
  *     sport are the same sport is decided by one alias table, and that table lives
- *     in ml-service/app/core/reco_features.py. A LIKE clause here would be a second
+ *     in ml-service/app/core/reco_features.py. A like clause here would be a second
  *     opinion that silently drops the player who typed "Soccer". So the pool is
- *     sport-agnostic, the scorer computes fit, and a candidate whose STATED
+ *     sport-agnostic, the scorer computes fit, and a candidate whose stated
  *     preferences exclude this sport (fit == 0) is dropped afterwards. Players who
  *     stated nothing (fit == null) stay: an empty preferences array is an unfilled
  *     profile, not a refusal.
@@ -253,12 +249,12 @@ async function suggestPlayers(client, { teamId: teamId0, userId } = {}) {
       .filter(Boolean)
       .slice(0, SUGGEST_LIMIT);
   } else {
-    // FALLBACK: the pool in recent-activity order, with NO percentages — the same
+    // Fallback: the pool in recent-activity order, with no percentages — the same
     // rule the venue recommender's heuristic path follows (mlClient's header: a
     // fallback never carries a fabricated match_pct). The rail still works, and it
     // shows no number rather than a made-up one.
     //
-    // Its sport test is an EXACT case-insensitive match, because the alias table is
+    // Its sport test is an exact case-insensitive match, because the alias table is
     // in the service that is currently unreachable. So while ranking is down this
     // list may omit a player who typed "Soccer" for a football team. Stated as a
     // known degradation rather than hidden: `ranking.fallbackNote` says the list is
@@ -294,26 +290,24 @@ async function suggestPlayers(client, { teamId: teamId0, userId } = {}) {
 }
 
 
-// ==========================================================================
-// OPPONENTS
-// ==========================================================================
+// Opponents
 
 /**
  * suggestOpponents — GET /api/matches/opponents, and Scout's `find_opponents`.
  *
  * The Find Opponents list (FR5.3 – FR5.5): public teams in the same sport that
- * the caller does not already belong to, CLOSEST RATING FIRST, each carrying its
+ * the caller does not already belong to, closest rating first, each carrying its
  * competitiveness score against the caller's team and its roster trust badge.
  *
- * WHY NOT /teams/discover
+ * Why not /teams/discover
  * That endpoint is rating-ordered and team-agnostic — it cannot know which team
- * you would be challenging, so it cannot order by rating PROXIMITY, cannot
+ * the caller would be challenging, so it cannot order by rating proximity, cannot
  * compute competitiveness, and does not carry trust. All three are what this
  * screen is specified to show, and all three depend on the pairing rather than on
  * either team alone.
  *
- * FR5.3 — S.5 Wave B MOVED THE RANKING TO THE MODEL SEAM, and the SQL's
- * `abs(t.elo - my elo)` ordering is now the FALLBACK rather than the answer. The
+ * FR5.3 — S.5 Wave B moved the ranking to the MODEL seam, and the SQL's
+ * `abs(t.elo - my elo)` ordering is now the fallback rather than the answer. The
  * ml-service scores 0.6 x rating proximity + 0.2 x opponent trust + 0.2 x recent
  * activity and returns a component breakdown per row; when it cannot be reached
  * the rows ship in this query's order with S.2's competitiveness formula, which is
@@ -322,7 +316,7 @@ async function suggestPlayers(client, { teamId: teamId0, userId } = {}) {
  */
 async function suggestOpponents(client, { teamId: teamId0, userId, q: q0 = '' } = {}) {
   // The route used to normalise the query string before connecting. It lives here
-  // now because the assistant passes a team id it resolved from a NAME, and both
+  // now because the assistant passes a team id it resolved from a name, and both
   // callers must reject the same garbage with the same words.
   const teamId = String(teamId0 == null ? '' : teamId0).trim().toLowerCase();
   if (!access.isUuid(teamId)) {
@@ -379,13 +373,13 @@ async function suggestOpponents(client, { teamId: teamId0, userId, q: q0 = '' } 
     params,
   );
 
-  // ── Recent activity for the whole pool, in one query ────────────────────
-  // The recommender's third component. Counted over the SAME 30-day window and
-  // the SAME statuses utils/teamStats.js already counts a team's own activity
+  // Recent activity for the whole pool, in one query
+  // The recommender's third component. Counted over the same 30-day window and
+  // the same statuses utils/teamStats.js already counts a team's own activity
   // over (a disputed fixture was still played), so the number behind a "Playing
   // regularly" reason is the number that team's own profile card shows.
   //
-  // LEFT JOIN LATERAL over unnest, so a team with no matches comes back as ZERO
+  // LEFT JOIN LATERAL over unnest, so a team with no matches comes back as zero
   // rather than missing: zero is a measurement — genuinely inactive — and
   // reco_rank scores it 0.0, while an absent value would take the neutral prior
   // and quietly reward a dormant team.
@@ -432,7 +426,7 @@ async function suggestOpponents(client, { teamId: teamId0, userId, q: q0 = '' } 
       // FR5.4 — null whenever either side is unranked, so the bar renders
       // "Unranked" instead of a percentage derived from a placeholder 1000.
       //
-      // THIS IS NOW THE FALLBACK VALUE. When the ranking service answers, it is
+      // This is NOW the fallback value. When the ranking service answers, it is
       // overwritten below by the three-component score; when it does not, this v1
       // number ships unchanged and the screen keeps working. Both paths obey the
       // same unranked rule, which is why the swap is invisible to the UI.
@@ -447,7 +441,7 @@ async function suggestOpponents(client, { teamId: teamId0, userId, q: q0 = '' } 
     };
   });
 
-  // ── FR5.3 — model ranking, v1 kept as the fallback ──────────────────────
+  // FR5.3 — model ranking, v1 kept as the fallback
   // The ml-service scores each pairing on 0.6 x rating proximity + 0.2 x trust +
   // 0.2 x recent activity and returns a per-row component breakdown, which the app
   // renders as the expandable "Why this match?" line. Rating proximity is the same

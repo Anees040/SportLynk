@@ -11,7 +11,7 @@ import 'team.dart' show asNum;
 /// rule that exists in SQL. When the two disagree the server wins, which is only
 /// true if the client never invents its own copy of the logic.
 ///
-/// Every numeric read goes through [asNum] because Postgres hands back DECIMAL
+/// Every numeric read goes through [asNum] because Postgres hands back decimal
 /// columns as strings, and `1000` arriving as `"1000"` would silently become a
 /// null int and render as an empty rating.
 
@@ -66,7 +66,7 @@ class MatchSide {
   /// ER2.3 — the team's rating is frozen platform-wide for dispute abuse.
   final bool eloFrozen;
 
-  /// The points this side gained or lost on THIS match. Null until verified.
+  /// The points this side gained or lost on this match. Null until verified.
   final int? eloDelta;
 
   /// FR5.5 — the roster's average trust score, banded by the server so every
@@ -162,7 +162,7 @@ class MatchBooking {
       );
 
   /// `20:00:00` → `8:00 PM`. Times arrive as the venue's local wall-clock string
-  /// and are NOT timestamps, so they are formatted as-is rather than converted:
+  /// and are not timestamps, so they are formatted as-is rather than converted:
   /// a 20:00 slot is 20:00 at that pitch regardless of the phone's timezone.
   static String prettyTime(String? raw) {
     if (raw == null || raw.isEmpty) return '';
@@ -268,7 +268,7 @@ class MatchTournament {
       );
 
   /// Same wall-clock formatting as a booking's, for the same reason: these are
-  /// TIME columns at the pitch, not instants to be shifted into the phone's zone.
+  /// time columns at the pitch, not instants to be shifted into the phone's zone.
   String get timeRange {
     final a = MatchBooking.prettyTime(startTime);
     final b = MatchBooking.prettyTime(endTime);
@@ -345,7 +345,7 @@ class MatchModel {
   final String? effectiveStatus;
 
   /// Populated by `GET /matches/:id` and the owner queue: what each captain
-  /// submitted. Hidden from a team until BOTH are in, so neither can copy.
+  /// submitted. Hidden from a team until both are in, so neither can copy.
   final List<MatchSubmission> submissions;
 
   const MatchModel({
@@ -425,7 +425,7 @@ class MatchModel {
   /// that has timed out but not yet been swept never looks answerable.
   String get shownStatus => effectiveStatus ?? status;
 
-  // ── Where and when ──────────────────────────────────────────
+  // Where and when
   //
   // Every match has a pitch and a kickoff, but it hangs off one of two anchors:
   // a booking for a friendly, a reserved fixture slot for a tournament. Screens
@@ -441,7 +441,7 @@ class MatchModel {
   DateTime? get slotDate => booking?.slotDate ?? tournament?.slotDate;
   String get timeRange => booking?.timeRange ?? tournament?.timeRange ?? '';
 
-  /// True when neither anchor could tell us where this is played — a genuinely
+  /// True when neither anchor identifies where this is played — a genuinely
   /// broken row, and the only case that deserves a warning.
   bool get hasNoSlot => venueName == null && slotDate == null;
 
@@ -452,7 +452,7 @@ class MatchModel {
     return d == null ? null : '${d.day}/${d.month}/${d.year}';
   }
 
-  // ── State predicates ────────────────────────────────────────
+  // State predicates
   bool get isPending => shownStatus == MatchStatus.challengeSent;
   bool get isAccepted =>
       shownStatus == MatchStatus.accepted || shownStatus == MatchStatus.awaitingResults;
@@ -562,7 +562,7 @@ class MatchSubmission {
 ///
 /// S.5 Wave B added the breakdown fields. [competitiveness] is unchanged in
 /// meaning and still obeys FR5.4 (null while either team is unranked), but its
-/// VALUE now comes from the three-component scorer when that service answered,
+/// value now comes from the three-component scorer when that service answered,
 /// and from the v1 rating-gap formula when it did not. Which one produced it is
 /// `OpponentList.ranking.available` — the row itself deliberately does not carry a
 /// per-row flag, because the whole list is ordered by one engine or the other.
@@ -820,7 +820,7 @@ class MatchCenterData {
   bool get amCaptain => myRole == 'captain';
 
   /// Whether I am one of the people a match's coordination room admits. It holds
-  /// both teams' captains AND vice-captains (`ensureCaptainChannel`), so this is
+  /// both teams' captains and vice-captains (`ensureCaptainChannel`), so this is
   /// deliberately wider than [amCaptain] — a vice-captain is in that room even
   /// though they cannot report a score.
   bool get isTeamOfficial => myRole == 'captain' || myRole == 'vice_captain';

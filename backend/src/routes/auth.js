@@ -5,7 +5,7 @@ const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const push = require('../services/pushService');
 
-// ─── POST /api/auth/register/player ──────────────────────────
+// POST /api/auth/register/player
 router.post('/register/player', async (req, res, next) => {
   try {
     const { name, phone, password, email, firebaseUid, avatarUrl } = req.body;
@@ -73,7 +73,7 @@ router.post('/register/player', async (req, res, next) => {
   }
 });
 
-// ─── POST /api/auth/register/owner ───────────────────────────
+// POST /api/auth/register/owner
 router.post('/register/owner', async (req, res, next) => {
   try {
     const {
@@ -147,7 +147,7 @@ router.post('/register/owner', async (req, res, next) => {
   }
 });
 
-// ─── POST /api/auth/login ────────────────────────────────────
+// POST /api/auth/login
 router.post('/login', async (req, res, next) => {
   try {
     const { identifier, password } = req.body;
@@ -210,7 +210,7 @@ router.post('/login', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ─── POST /api/auth/verify-phone ─────────────────────────────
+// POST /api/auth/verify-phone
 router.post('/verify-phone', async (req, res, next) => {
   try {
     const { phone } = req.body;
@@ -220,7 +220,7 @@ router.post('/verify-phone', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ─── POST /api/auth/forgot-password/send-otp ─────────────────
+// POST /api/auth/forgot-password/send-otp
 router.post('/forgot-password/send-otp', async (req, res, next) => {
   try {
     const { phone } = req.body;
@@ -231,7 +231,7 @@ router.post('/forgot-password/send-otp', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ─── POST /api/auth/forgot-password/reset ────────────────────
+// POST /api/auth/forgot-password/reset
 router.post('/forgot-password/reset', async (req, res, next) => {
   try {
     const { phone, newPassword, firebaseUid } = req.body;
@@ -244,7 +244,7 @@ router.post('/forgot-password/reset', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ─── GET /api/auth/me ────────────────────────────────────────
+// GET /api/auth/me
 router.get('/me', auth, async (req, res, next) => {
   try {
     const result = await pool.query(
@@ -261,9 +261,7 @@ router.get('/me', auth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DEVICE TOKENS AT THE SESSION BOUNDARY  (S.7 Wave C)
-// ═══════════════════════════════════════════════════════════════════════════
+// Device tokens at the session boundary  (S.7 Wave C)
 //
 // POST /api/notifications/devices is the primary registration path — an FCM token
 // arrives asynchronously from `getToken()` and again from every `onTokenRefresh`,
@@ -272,7 +270,7 @@ router.get('/me', auth, async (req, res, next) => {
 // round trip means a phone that installs, logs in and is immediately locked can still
 // be reached.
 //
-// LOGOUT IS THE HALF THAT MATTERS. An FCM token belongs to an app INSTALL, not to a
+// Logout is the half that matters. An FCM token belongs to an app install, not to a
 // user, so a token left registered after logout keeps delivering the previous user's
 // notifications to whoever signs in next — on a shared or handed-down phone that is a
 // privacy leak, not a stale badge. Revoking is therefore not optional cleanup.
@@ -280,7 +278,7 @@ router.get('/me', auth, async (req, res, next) => {
 /**
  * POST /api/auth/logout — revoke this device's push token.
  *
- * `{ fcmToken }` revokes ONE device; omitting it revokes every device for the user
+ * `{ fcmToken }` revokes one device; omitting it revokes every device for the user
  * ("log me out everywhere"). The JWT itself is stateless and cannot be revoked, which
  * is a separate problem solved in Wave D by the suspension check in authMiddleware —
  * this route is only about where notifications go.

@@ -7,12 +7,12 @@
  * change is visible to everyone, in order, forever. A team where the captain can
  * quietly remove someone is a team that argues about what happened.
  *
- * WHY A SEPARATE FILE
+ * Why a separate file
  * Two different callers need these: routes/teams.js (roster changes) and
  * routes/chat.js (group name/icon changes). Keeping the sentences here means
  * "removed" is worded identically no matter which endpoint caused it.
  *
- * WHY THE SENTENCE IS STORED, NOT JUST THE EVENT
+ * Why the sentence is stored, not just the event
  * `body` holds a complete third-person sentence, so anything that only knows how
  * to show text — a push notification, the chat-list preview, an older build of
  * the app — renders something correct with zero logic. `system_meta` carries the
@@ -61,8 +61,8 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
     case 'visibility_changed':
       return `${a} made the team ${v === 'private' ? 'private' : 'public'}`;
 
-    // ── Match lifecycle (S.2 Wave C) ────────────────────────────────────────
-    // These pills are posted into BOTH teams' chats, so `v` is always THE OTHER
+    // Match lifecycle (S.2 Wave C)
+    // These pills are posted into both teams' chats, so `v` is always the other
     // TEAM from the perspective of the channel being written to. The two
     // asymmetric moments (who sent, who received) get their own event rather
     // than one sentence bent to fit both, because "you challenged them" and
@@ -102,7 +102,7 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
         : `SportLynk ruled on the match against ${v || 'the other team'}`;
 
 
-    // ── Booking rooms (S.7 Wave B) ──────────────────────────────────────────
+    // Booking rooms (S.7 Wave B)
     // The opening pill does double duty: it tells the player why a thread they
     // did not create just appeared, and it gives the room a last_message_preview
     // so the chat list has something to show before anybody types.
@@ -113,8 +113,8 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
     case 'booking_no_show':
       return 'The venue marked this booking as a no-show';
 
-    // ── The coordination room (S.7 Wave B, FR8.5) ───────────────────────────
-    // NEUTRAL wording, every one of them. A captain room holds both teams, so
+    // The coordination room (S.7 Wave B, FR8.5)
+    // Neutral wording, every one of them. A captain room holds both teams, so
     // the per-team sentences above ("you challenged them") would be wrong for
     // half the readers. These say what happened without taking a side, which is
     // also what makes the archive readable to an admin ruling a dispute (FR10.6).
@@ -141,7 +141,7 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
 }
 
 /**
- * Build the row payload for a system message. Deliberately does NOT touch the
+ * Build the row payload for a system message. Deliberately does not touch the
  * database: chatCore.postSystemMessage does the insert, so there is exactly one
  * code path that writes to chat_messages and bumps the channel's last-message
  * columns.

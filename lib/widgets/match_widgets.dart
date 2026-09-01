@@ -21,9 +21,7 @@ import '../models/match.dart';
 /// state that appears constantly on a new install — not an edge case to bolt on
 /// afterwards.
 
-// ═══════════════════════════════════════════════════════════════
 //  Competitiveness (FR5.4)
-// ═══════════════════════════════════════════════════════════════
 
 /// How a competitiveness score reads to a human. 5..100 from the server, where
 /// 100 is two teams with identical ratings.
@@ -257,9 +255,7 @@ class _GaugePainter extends CustomPainter {
       old.fraction != fraction || old.color != color;
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Trust (FR5.5)
-// ═══════════════════════════════════════════════════════════════
 
 /// The roster's trust badge. Bands come from the server (`matchCore.trustBadge`)
 /// so this only chooses the colour and icon for a band it is told.
@@ -319,9 +315,7 @@ class TrustBadgeChip extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Ratings
-// ═══════════════════════════════════════════════════════════════
 
 /// A team's rating, or "Unranked" (FR2.6). Never prints 1000 for a team that has
 /// not played — that would imply a record it does not have.
@@ -416,9 +410,7 @@ class EloDeltaChip extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Status
-// ═══════════════════════════════════════════════════════════════
 
 /// The match's state, in the words a captain would use for it.
 class MatchStatusChip extends StatelessWidget {
@@ -426,7 +418,7 @@ class MatchStatusChip extends StatelessWidget {
   const MatchStatusChip({super.key, required this.status});
 
   /// Deliberately not the raw enum. "awaiting_owner" is a database state;
-  /// "Owner verifying" is what is actually happening to the user's match.
+  /// "Owner verifying" is what is happening to the user's match.
   static (String, Color, IconData) describe(String status) => switch (status) {
         MatchStatus.challengeSent => ('Awaiting reply', AppColors.warning, Icons.schedule),
         MatchStatus.accepted => ('Confirmed', AppColors.accent, Icons.event_available),
@@ -562,9 +554,7 @@ class _ChallengeCountdownState extends State<ChallengeCountdown> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
 //  Bits and pieces
-// ═══════════════════════════════════════════════════════════════
 
 /// A team crest, falling back to a shield. Used at four sizes across the flow, so
 /// the fallback lives here instead of being re-typed with a different icon.

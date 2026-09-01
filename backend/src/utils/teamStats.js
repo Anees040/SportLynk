@@ -5,12 +5,11 @@
  * one is a real query with rules attached, and a route file that inlines them
  * stops reading as "who may do what" and starts reading as SQL.
  *
- * THE ONE RULE THAT MATTERS MOST: RANKED MEANS THE SAME THING EVERYWHERE
- * ---------------------------------------------------------------------
+ * The one rule that matters most: ranked means the same thing everywhere
  * FR2.6 says a team has no displayable rating until it has >=1 verified match.
  * Wave B put that rule in elo.isRanked() / elo.displayElo(), and the match
  * screens have used it since. This module binds to those same two functions —
- * RANKED_MIN below IS elo.RANKED_MIN_MATCHES, bound as a query PARAMETER, not a
+ * RANKED_MIN below is elo.RANKED_MIN_MATCHES, bound as a query parameter, not a
  * literal typed a second time.
  *
  * That matters because the failure it prevents is silent: if the leaderboard
@@ -18,19 +17,17 @@
  * and read "Unranked" on its own profile, and nothing would crash — the app
  * would just quietly contradict itself in front of the committee.
  *
- * WHY THE SEED 1000 IS NEVER SENT AS A RATING
- * -------------------------------------------
+ * Why the SEED 1000 is never sent as a rating
  * Unranked teams are excluded from the board entirely (they have not earned a
  * position), and every row still ships `ranked` + `display_elo` so a screen
  * cannot print a placeholder as though it were earned. On a fresh install the
- * board is legitimately EMPTY, and that is the correct answer, not a bug.
+ * board is legitimately empty, and that is the correct answer, not a bug.
  *
- * WHY MOVEMENT IS COMPUTED, NOT STORED
- * ------------------------------------
+ * Why movement is computed, not stored
  * There is no rank-snapshot table, and adding one would need a nightly job that
  * silently rots the day it stops running. elo_history already records
  * (elo_before, elo_after, created_at) for every rating change, so a team's
- * rating 7 days ago is recoverable exactly: it is the `elo_before` of its OLDEST
+ * rating 7 days ago is recoverable exactly: it is the `elo_before` of its oldest
  * change inside the window, or — when nothing moved in the window — its rating
  * right now. Re-ranking on that column gives the position it held then, and the
  * difference is the movement. Nothing to schedule, nothing to backfill, and it
@@ -40,7 +37,7 @@
  * board 7 days ago, so its movement is NULL — "new", not "+12". Reporting a
  * climb from a rank it never held would be an invented number.
  *
- * SHAPE: this file feeds routes/teams.js, which is snake_case. matchCore's
+ * Shape: this file feeds routes/teams.js, which is snake_case. matchCore's
  * teamFeatures() feeds routes/matches.js, which is camelCase. The conversion
  * happens once, in profileStats(), and nowhere else.
  */
@@ -94,7 +91,7 @@ function normaliseCity(raw) {
  * Ranked public teams only, ordered by rating, with the position each team held
  * MOVEMENT_WINDOW_DAYS ago and the difference between the two.
  *
- * `is_mine` is computed here from the VIEWER'S membership rather than being
+ * `is_mine` is computed here from the viewer's membership rather than being
  * inferred client-side. The screen previously guessed it from a `role` field
  * this endpoint never sent, so the "YOU" badge could never appear — a viewer
  * fact has to be answered by the server that knows the viewer.
@@ -197,7 +194,7 @@ async function rankings(db, { sport = null, city = null, viewerId = null, limit 
 }
 
 /**
- * The cities that actually have ranked teams right now — the filter chips are
+ * The cities that have ranked teams right now — the filter chips are
  * built from this rather than from a hard-coded list of Pakistani cities.
  *
  * A chip the data cannot satisfy is worse than a missing chip: the user taps
@@ -231,7 +228,7 @@ async function rankedCities(db, { sport = null } = {}) {
 /**
  * The profile snapshot (FR5.15 + Wave D item 5).
  *
- * `form` is NOT re-derived here: matchCore.teamFeatures() already produces the
+ * `form` is not re-derived here: matchCore.teamFeatures() already produces the
  * canonical last-5 string that find-opponents and the match preview both read,
  * and a second copy of that SQL would drift the first time one was edited. This
  * function adds only what did not exist anywhere — the 30-day activity count,
@@ -240,7 +237,7 @@ async function rankedCities(db, { sport = null } = {}) {
  * activity_30d counts matches that reached a terminal state inside the window,
  * and is the feature S.5's recommender will consume. It counts DISPUTED
  * alongside COMPLETED on purpose: the question it answers is "is this team
- * actually playing?", and a disputed fixture was still played.
+ * playing?", and a disputed fixture was still played.
  */
 async function profileStats(db, teamId) {
   const [features, counts] = await Promise.all([
@@ -255,7 +252,7 @@ async function profileStats(db, teamId) {
     ),
   ]);
 
-  // teamFeatures() returns CAMELCASE (eloFrozen, memberCount) because it feeds
+  // teamFeatures() returns camelCase (eloFrozen, memberCount) because it feeds
   // the camelCase matches API. teams.js is snake_case, so the rename happens
   // here — this is the one seam between the two conventions.
   const f = features.get(String(teamId)) || {};
@@ -286,13 +283,12 @@ async function profileStats(db, teamId) {
 
 /**
  * The ELO chart series + match history (FR5.14 / FR5.16) — the team's last N
- * terminal matches, OLDEST FIRST so a line chart reads left to right without the
+ * terminal matches, oldest first so a line chart reads left to right without the
  * client reversing anything.
  *
- * WHY THIS IS NOT JUST `SELECT * FROM elo_history`
- * ------------------------------------------------
- * FR5.14 wants disputed matches ON the chart, drawn as red hollow dots. A
- * disputed match has NO elo_history row — that is the whole point of the dispute
+ * Why this is not just `SELECT * FROM elo_history`
+ * FR5.14 wants disputed matches on the chart, drawn as red hollow dots. A
+ * disputed match has no elo_history row — that is the whole point of the dispute
  * rule (Wave C: the match completes and records W/L, but no points move).
  * Reading elo_history alone would silently drop exactly the points the
  * requirement asks to display.
@@ -371,7 +367,7 @@ async function eloSeries(db, teamId, { limit = SERIES_LIMIT } = {}) {
     };
   });
 
-  // Points before the team's first RATED match have no rating to sit at. Drop
+  // Points before the team's first rated match have no rating to sit at. Drop
   // them rather than invent one — a chart is allowed to start later than the
   // match history does.
   return points.filter((p) => p.elo_at !== null);

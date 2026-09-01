@@ -7,11 +7,11 @@ import '../utils/num_util.dart';
 /// These mirror `routes/reviews.js` and `routes/admin.js` one field at a time.
 /// Those endpoints answer in **camelCase** (unlike the older snake_case reads), so
 /// every key below is camelCase — the one casing trap that turns a populated screen
-/// blank if you mirror the wrong endpoint's convention.
+/// blank if the wrong endpoint's convention is mirrored.
 ///
 /// Numbers come through [num_util]: Postgres hands back `DECIMAL`/`NUMERIC` as
 /// Strings, so `avgStars` arrives as `"4.25"` and every trust component as a
-/// stringified fraction. The rule the backend is careful about and so are we:
+/// stringified fraction. The rule the backend is careful about, and so is this model:
 /// **a null component is "no data yet", never a zero.** A user with no disputes on
 /// record has `disputes == null`, which the UI must say out loud rather than
 /// drawing an empty bar that reads as "0% dispute-free".
@@ -46,7 +46,7 @@ class ReviewSentiment {
         source: _str(j['source']),
       );
 
-  /// The classifier actually ran. `false` for both "server was down" and "no text".
+  /// The classifier ran. `false` for both "server was down" and "no text".
   bool get scoredByModel => source == 'model' && label != null;
 
   /// The review saved but the model was unreachable — the "added shortly" state.
@@ -137,7 +137,7 @@ class SentimentDistribution {
 }
 
 /// `GET /api/venues/:id/reviews` — one page of reviews plus the venue-wide
-/// aggregates (which are computed over ALL visible reviews, not just this page).
+/// aggregates (which are computed over all visible reviews, not just this page).
 class VenueReviews {
   final String venueId;
   final int page;
@@ -252,7 +252,7 @@ class TrustBreakdown {
   static const TrustBreakdown empty = TrustBreakdown();
 }
 
-/// `GET /api/users/:id/reviews` — reviews a user has RECEIVED plus their trust
+/// `GET /api/users/:id/reviews` — reviews a user has received plus their trust
 /// ledger. Feeds the M25 Trust Profile screen.
 class UserReviews {
   final String userId;
@@ -302,7 +302,7 @@ class UserReviews {
 }
 
 /// One manual report on a review, as surfaced in the admin queue. An
-/// auto-escalation by the sentiment model produces NO row of this kind — the
+/// auto-escalation by the sentiment model produces no row of this kind — the
 /// review is simply `flagged=true` with an empty [FlaggedReview.flags] list.
 class ReviewFlag {
   final String? reason;

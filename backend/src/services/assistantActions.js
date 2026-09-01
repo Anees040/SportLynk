@@ -1,33 +1,30 @@
 /**
- * assistantActions.js — what Scout can actually DO.
+ * assistantActions.js — the actions Scout can perform.
  *
  * One function per capability, and every one of them returns the same shape:
  *
  *   { reply, state? }     reply  = utils/assistantReply.reply(...)
- *                         state  = an OPTIONAL patch the dialog manager merges
+ *                         state  = an optional patch the dialog manager merges
  *
- * WHY ACTIONS DO NOT WRITE STATE THEMSELVES
- * -----------------------------------------
- * A booking flow that both answers the user AND edits session_state from inside
+ * Why ACTIONS do not write state themselves
+ * A booking flow that both answers the user and edits session_state from inside
  * the action is a flow with two writers, and the failure mode is a `confirm` that
  * survives the turn it was answered in — Scout re-asking "confirm?" forever, or
  * worse, holding a stale confirmation and executing it against a later "haan".
- * So actions PROPOSE a patch and services/dialogManager.js is the only writer.
+ * So actions propose a patch and services/dialogManager.js is the only writer.
  *
- * WHY THERE IS NO SQL IN THIS FILE
- * --------------------------------
+ * Why there is no SQL in this file
  * FR8.15. Every read goes through discoveryService / rosterService / bookingService
  * / teamStats, which are the same functions the REST routes call. There are exactly
- * THREE exceptions, each marked with `SQL EXCEPTION` where it happens: the caller's
+ * three exceptions, each marked with `SQL EXCEPTION` where it happens: the caller's
  * wallet row, the caller's own team memberships, and the caller's profile. All three
  * are one join keyed on the caller's own id with no derived rule attached, so
  * wrapping them in a shared function would add an indirection that owns nothing --
- * and any rule they DO touch is borrowed (teamAccess.ADMIN_ROLES decides who counts
+ * and any rule they do touch is borrowed (teamAccess.ADMIN_ROLES decides who counts
  * as a team admin, here as everywhere).
  *
- * THE ACTION KEY IS THE CONTRACT
- * ------------------------------
- * `ACTIONS` is keyed by the SAME strings as the trained intent labels, plus the
+ * The ACTION key is the contract
+ * `ACTIONS` is keyed by the same strings as the trained intent labels, plus the
  * button-only ones (`pick_slot`, `confirm`, `capability_menu`, …). That is what
  * lets a chip press skip the classifier entirely: routes/assistant.js looks the
  * key up here directly. `assertRoutable()` proves at boot that every one of the
@@ -89,7 +86,7 @@ function pktDate(offsetDays = 0) {
 /**
  * A venue card, built once so the three places that show venues cannot drift.
  *
- * `matchPct` is passed through UNCHANGED, including null. mlClient's contract is
+ * `matchPct` is passed through unchanged, including null. mlClient's contract is
  * that an unavailable ranker means "order these deterministically and invent no
  * percentage", and a card that filled in a 0 would be a lie with a number on it.
  */
@@ -140,9 +137,9 @@ function slotPickerCard(venue, slots, { date }) {
 }
 
 /**
- * A DATE column as YYYY-MM-DD.
+ * A date column as YYYY-MM-DD.
  *
- * node-postgres turns a DATE into a JS Date at LOCAL midnight, and
+ * node-postgres turns a date into a JS Date at local midnight, and
  * `toISOString()` on that shifts the day backwards for any timezone west of UTC.
  * bookings.slot_date is PKT wall-clock text, so the fix is to add the offset back
  * before slicing rather than to hope the server runs in Karachi.
@@ -159,7 +156,7 @@ function dateStr(v) {
  *
  * It exists because a classifier is a guess. "kal 6 baje book kar do" can be a
  * booking or it can be a question about tomorrow, and the difference is PKR 2,000
- * of the user's money moving into escrow. So the numbers are shown BEFORE the
+ * of the user's money moving into escrow. So the numbers are shown before the
  * write, both buttons are explicit, and there is no default action: `confirm` and
  * `cancel_confirm` are the only two ways out of this card.
  *
@@ -222,9 +219,9 @@ function bookingCard(b, { buttons = null } = {}) {
 /**
  * Resolve "Rawal ground" to a venue id.
  *
- * The assistant is handed a NAME far more often than an id, and a wrong guess here
+ * The assistant is handed a name far more often than an id, and a wrong guess here
  * books the wrong ground — so the rule is: exactly one match resolves, several
- * matches ASK, none matches falls back to a search. It never picks the first row.
+ * matches ask, none matches falls back to a search. It never picks the first row.
  */
 async function resolveVenue(client, { venueId = null, name = null, sport = null, area = null } = {}) {
   if (venueId && access.isUuid(String(venueId).trim().toLowerCase())) {
@@ -249,13 +246,13 @@ async function resolveVenue(client, { venueId = null, name = null, sport = null,
  * shown an empty list, which is the difference between a dead end and an onboarding.
  */
 async function resolveTeam(client, { userId, teamId = null, name = null, adminOnly = false } = {}) {
-  // SQL EXCEPTION 2 of 3 (see the file header): the caller's own memberships.
+  // SQL exception 2 of 3 (see the file header): the caller's own memberships.
   const runner = client || pool;
   const id = teamId ? String(teamId).trim().toLowerCase() : null;
 
   // One query shape for all three ways in — a chip carrying an id, a spoken team
   // name, or nothing at all. An id is resolved rather than trusted because every
-  // caller needs the NAME and the ROLE back, not just the id, and because an id
+  // caller needs the name and the role back, not the id alone, and because an id
   // that survives this join is one the caller is provably a member of: a stale chip
   // then fails here as "which team?" instead of as a 403 from three layers down.
   async function ask({ byId = false, byName = false }) {
@@ -280,21 +277,19 @@ async function resolveTeam(client, { userId, teamId = null, name = null, adminOn
   const byName = !!(name && access.squash(name));
   let rows = await ask({ byId, byName });
   // A chip or a name that matches none of the caller's teams: re-ask unfiltered so
-  // the reply can offer the teams they DO have instead of "you are not in a team".
+  // the reply can offer the teams they do have instead of "you are not in a team".
   if (!rows.length && (byId || byName)) rows = await ask({});
   if (rows.length === 1) return { one: rows[0], many: [] };
   return { one: null, many: rows };
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// DISCOVERY
-// ══════════════════════════════════════════════════════════════════════════
+// Discovery
 
 /**
  * find_venue — "koi ground milega football ka Rawalpindi mein 2000 se kam?"
  *
  * The trained entity extractor supplies sport / area / budget / date, and every one
- * of them is OPTIONAL: an empty search is a valid question ("show me grounds") and
+ * of them is optional: an empty search is a valid question ("show me grounds") and
  * must not be turned into a slot-filling interrogation. Only `book_venue` asks.
  *
  * Ranking comes from model #3 when the user has history and the service is up
@@ -306,12 +301,12 @@ async function findVenue(ctx) {
   const rows = await discovery.searchVenues(client, {
     sport: slots.sport || null,
     city: slots.area || null,
-    // `locality` is a NEIGHBOURHOOD ("DHA", "Gulberg"), which is not a city and so
-    // cannot go through the city filter -- it is matched against the ADDRESS by the
+    // `locality` is a neighbourhood ("DHA", "Gulberg"), which is not a city and so
+    // cannot go through the city filter -- it is matched against the address by the
     // same free-text term a spoken venue name uses. dialogManager splits the two.
     search: slots.venueName || slots.locality || null,
     maxPrice: slots.budget || null,
-    // `sort` and `offset` arrive from this action's OWN chips -- "Cheapest first"
+    // `sort` and `offset` arrive from this action's own chips -- "Cheapest first"
     // and "More grounds". Reading them here is what makes those two chips do
     // something; a chip whose args nobody reads is a button that lies.
     sort: slots.sort || (slots.budget ? 'price_low' : null),
@@ -319,7 +314,7 @@ async function findVenue(ctx) {
     limit: 12,
   });
   if (!rows.length) {
-    // Paging off the END of a list is not the same as finding nothing: the user has
+    // Paging off the end of a list is not the same as finding nothing: the user has
     // just seen three grounds, so "nothing matching that" would read as a bug.
     if (slots.offset) {
       return { reply: reply('That is every ground I have for that search.', {
@@ -471,7 +466,7 @@ async function venueInfo(ctx) {
   const det = await discovery.venueDetail(client, { venueId: one.id, userId, date: slots.date });
   const v = det.ok ? det.data : one;
   // `amenities` and `operating_hours_from/to` are the real column names (013/014);
-  // an assistant quoting a column that does not exist would just print nothing.
+  // an assistant quoting a column that does not exist would print nothing at all.
   const facilities = Array.isArray(v.amenities) ? v.amenities.filter(Boolean) : [];
   const bits = [
     v.city && `${v.city}`,
@@ -503,7 +498,7 @@ async function venueInfo(ctx) {
  * ground's coordinates plus a `geo:` URI and a Google Maps URL, and Flutter's
  * widget opens whichever the device has (url_launcher). Building it here rather
  * than in Dart keeps one rule in one place: a venue with no latitude gets its
- * ADDRESS as a search query instead of a broken pin at 0,0 in the Gulf of Guinea.
+ * address as a search query instead of a broken pin at 0,0 in the Gulf of Guinea.
  */
 async function navigate(ctx) {
   const { client, userId, slots = {} } = ctx;
@@ -561,9 +556,7 @@ async function navigate(ctx) {
     }) };
 }
 
-// ══════════════════════════════════════════════════════════════════════════
 // BOOKING
-// ══════════════════════════════════════════════════════════════════════════
 
 /**
  * book_venue — the slot-filling flow, and the only action that spends money.
@@ -576,7 +569,7 @@ async function navigate(ctx) {
  *   slot chosen  -> CONFIRM card with the price and the deposit note
  *   confirmed    -> bookingService.createBooking, inside the turn's transaction
  *
- * The confirm step is NOT decoration. It is the last point at which a
+ * The confirm step is not decoration. It is the last point at which a
  * misclassified sentence can be stopped before a wallet moves, so `state.confirm`
  * carries the resolved slotId and the quoted price, and the dialog manager will
  * only execute it against an explicit affirmation.
@@ -661,10 +654,10 @@ async function bookVenue(ctx) {
     }), state: { intent: 'book_venue', pending: 'slot', slots } };
   }
 
-  // ── CONFIRM ───────────────────────────────────────────────────────────────
-  // The confirm step is NOT decoration. It is the last point at which a
+  // CONFIRM
+  // The confirm step is not decoration. It is the last point at which a
   // misclassified sentence can be stopped before a wallet moves, so state.confirm
-  // carries the RESOLVED slotId and the QUOTED price, and dialogManager will only
+  // carries the resolved slotId and the QUOTED price, and dialogManager will only
   // execute it against an explicit affirmation.
   const got = await discovery.slotById(client, { slotId: slots.slotId, userId });
   if (!got.ok || !got.data.bookable) {
@@ -727,7 +720,7 @@ async function bookVenue(ctx) {
  * Run one money call inside a SAVEPOINT.
  *
  * bookingService's contract is "the caller must ROLLBACK on ok:false", and a Scout
- * turn cannot do that: the user's message and Scout's reply are written in the SAME
+ * turn cannot do that: the user's message and Scout's reply are written in the same
  * transaction on purpose, so that a booking can never be recorded without the
  * sentence that asked for it. Rolling the whole turn back to report "insufficient
  * funds" would delete the conversation that explains the failure.
@@ -787,7 +780,7 @@ async function pickSlot(ctx) {
 }
 
 /**
- * EXECUTE a confirmed booking. Reached only from an explicit affirmation.
+ * Execute a confirmed booking. Reached only from an explicit affirmation.
  *
  * The slot is re-checked here even though the confirm step just checked it, and
  * even though createBooking checks it again under a row lock. That is not
@@ -840,7 +833,7 @@ async function executeBooking(ctx) {
   }));
 
   if (!out.ok) {
-    // insufficient_funds is the one failure a user can DO something about, so it
+    // insufficient_funds is the one failure a user can do something about, so it
     // gets the top-up chip rather than the generic apology.
     const short = out.code === 'insufficient_funds';
     const need = short ? money(live) : null;
@@ -881,10 +874,10 @@ async function executeBooking(ctx) {
 /**
  * `cancel_booking` — list what is cancellable, then quote the refund, then ask.
  *
- * The refund is QUOTED before the question, which is the wave spec's requirement
+ * The refund is quoted before the question, which is the wave spec's requirement
  * ("You'll get PKR 1,600 back (80%) — confirm?") and also the only honest way to
  * ask: a late cancellation forfeits the deposit, and a user who is not shown that
- * number before answering has not really been asked.
+ * number before answering has not been asked a fair question.
  *
  * With exactly one cancellable booking Scout still shows the confirm card rather
  * than acting. One booking is not consent.
@@ -965,9 +958,9 @@ async function cancelBooking(ctx) {
 }
 
 /**
- * EXECUTE a confirmed cancellation.
+ * Execute a confirmed cancellation.
  *
- * The numbers reported are the ones cancelBooking actually MOVED, never the quoted
+ * The numbers reported are the ones cancelBooking moved, never the quoted
  * ones. previewCancellation says so in its own header: if the 24-hour boundary is
  * crossed between the quote and the confirmation, the real refund is smaller, and
  * a Scout that repeated its own quote would be telling the user something false
@@ -1011,9 +1004,7 @@ async function executeCancel(ctx) {
   };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// READS — "my bookings", "wallet", "my elo", tournaments, policy
-// ════════════════════════════════════════════════════════════════════════════
+// Reads — "my bookings", "wallet", "my elo", tournaments, policy
 
 /**
  * `my_bookings`. Upcoming first, because that is what a person means when they ask
@@ -1053,7 +1044,7 @@ async function myBookings(ctx) {
 /**
  * `wallet_balance`.
  *
- * SQL EXCEPTION 1 of 3 (see the file header). One row, one table, no derived rule:
+ * SQL exception 1 of 3 (see the file header). One row, one table, no derived rule:
  * `balance` is spendable and `frozen_balance` is money already committed to
  * bookings in escrow. Routing this through a service would add a layer that owns
  * nothing.
@@ -1092,17 +1083,17 @@ async function walletBalance(ctx) {
 }
 
 /**
- * The seven policy topics, keyed by the words a user actually types.
+ * The seven policy topics, keyed by the words a user types.
  *
- * This is topic ROUTING, not policy: every sentence and every number still comes
+ * This is topic routing, not policy: every sentence and every number still comes
  * from utils/policyText.js, which renders escrow.js POLICY into the editable
- * wording in global_settings. Adding a synonym here can change WHICH rule Scout
+ * wording in global_settings. Adding a synonym here can change which rule Scout
 
 /**
  * A timestamptz as a PKT calendar day.
  *
- * `registration_deadline` is an INSTANT, not a date, so it needs the PKT offset
- * ADDED — the opposite correction to dateStr(), which undoes a local-midnight DATE.
+ * `registration_deadline` is an instant, not a date, so it needs the PKT offset
+ * added — the opposite correction to dateStr(), which undoes a local-midnight date.
  * Getting this backwards moves a deadline by a day, and a deadline is the one
  * number on a tournament card a team cannot afford to read wrong.
  */
@@ -1134,7 +1125,7 @@ function untilLabel(when) {
 /**
  * A tournament card, built once — the same rule bookingCard follows.
  *
- * It reads EITHER shape on purpose. `tournament_list` has snake_case rows straight
+ * It reads either shape on purpose. `tournament_list` has snake_case rows straight
  * from discoveryService, and `tournament_detail` has the camelCase payload
  * `GET /api/tournaments/:id` returns; making two card builders would mean the browse
  * bubble and the detail bubble could render the same cup differently, which is the
@@ -1152,7 +1143,7 @@ function tournamentCard(t, { buttons = null } = {}) {
   const startDay = start ? dateStr(start) : null;
   const raw = t.registration_deadline == null ? t.registrationDeadline : t.registration_deadline;
   // Coerced to a Date before pktDay sees it: the camelCase payload carries the
-  // deadline as an ISO STRING, and pktDay's string path takes the UTC day, which is
+  // deadline as an ISO string, and pktDay's string path takes the UTC day, which is
   // the wrong day for anything after 7pm PKT. See pktDay's own comment.
   const rawDeadline = raw instanceof Date ? raw : (raw ? new Date(raw) : null);
   const deadline = rawDeadline && !Number.isNaN(rawDeadline.getTime()) ? pktDay(rawDeadline) : null;
@@ -1191,7 +1182,7 @@ function tournamentCard(t, { buttons = null } = {}) {
 /**
  * `tournament_list`. The table is empty on a fresh database, and that is a real
  * answer rather than an error — Scout says nothing is open and offers the things
- * that ARE, instead of implying the feature is broken.
+ * that are, instead of implying the feature is broken.
  *
  * The card itself is `tournamentCard`, shared with `tournament_detail` so browse and
  * detail cannot render the same cup two ways. `city` comes from the VENUE, because
@@ -1199,7 +1190,7 @@ function tournamentCard(t, { buttons = null } = {}) {
  *
  * The chips are the module's whole front door: `Details` opens the bracket and
  * `Enter this cup` opens the entry flow. Neither spends anything — 019 gave every
- * tournament a real entry fee, so the ONLY path to a charge is the confirm card that
+ * tournament a real entry fee, so the only path to a charge is the confirm card that
  * `tournament_register` arms.
  */
 async function tournamentList(ctx) {
@@ -1224,7 +1215,7 @@ async function tournamentList(ctx) {
       cards: rows.map((t) => tournamentCard(t, {
         buttons: [
           chip('Details', 'tournament_detail', { tournamentId: t.id }),
-          // Offered on the CARD, never fired by it: the chip opens the entry flow,
+          // Offered on the card, never fired by it: the chip opens the entry flow,
           // which resolves the team, checks the wallet and asks for a confirmation
           // before a rupee moves. `isFull` is respected here so the button is not
           // painted onto a cup that cannot accept it.
@@ -1241,9 +1232,9 @@ async function tournamentList(ctx) {
 /**
  * `tournament_detail` — one cup: the field, the bracket and the money.
  *
- * CHIP-ONLY, and it must stay that way. The classifier has 23 labels and none of them
+ * Chip-only, and it must stay that way. The classifier has 23 labels and none of them
  * is "that tournament": a sentence cannot carry a uuid, so a trained label here would
- * mean Scout guessing WHICH cup a user meant and showing them somebody else's bracket.
+ * mean Scout guessing which cup a user meant and showing them somebody else's bracket.
  * The id arrives in a chip's args instead — the same door `pick_slot` uses, for the
  * same reason. Wave A adds no trained labels at all, so the released artifact and its
  * 23 labels stay byte-identical.
@@ -1287,7 +1278,7 @@ async function tournamentDetail(ctx) {
     + `${t.entryFee > 0 ? ` at ${money(t.entryFee)} entry` : ', free entry'}.`);
 
   // The four states a cup can be read in, each one a different question the user is
-  // actually asking: can I still enter, when is my match, who won, what happened.
+  // asking: can I still enter, when is my match, who won, what happened.
   if (t.status === 'cancelled') {
     said.push('It was cancelled and every entry fee went back to the team that paid it.');
   } else if (t.status === 'completed' && t.winnerName) {
@@ -1366,7 +1357,7 @@ async function tournamentDetail(ctx) {
         generated: Boolean(b.generated),
       },
     }),
-    // The id survives the turn so a follow-up ("enter it", "kitna hai?") is about THIS
+    // The id survives the turn so a follow-up ("enter it", "kitna hai?") is about this
     // cup. `tournamentId` is a DECISION slot in dialogManager, so the moment the user
     // changes subject it is dropped rather than carried into the next errand.
     state: {
@@ -1382,15 +1373,15 @@ async function tournamentDetail(ctx) {
 /**
  * `tournament_register` — the entry flow, and the only tournament money door.
  *
- * CHIP-ONLY, for a harder reason than `tournament_detail`. This one SPENDS: the entry
+ * Chip-only, for a harder reason than `tournament_detail`. This one spends: the entry
  * fee leaves the captain's balance the moment it succeeds. The S.6 rule stands
- * unchanged — money is reached by a chip and confirmed by the frozen lexicon, NEVER by
+ * unchanged — money is reached by a chip and confirmed by the frozen lexicon, never by
  * a probability — so there is no trained label for it, and the classifier cannot start
  * an entry no matter what a user types. The path is: a card Scout painted → this
  * action → a confirm card → `executeTournamentEntry`.
  *
  * Nothing here writes. Every branch below either refuses with the service's own reason
- * or ARMS a confirmation, which lives exactly one turn (see dialogManager's confirm
+ * or arms a confirmation, which lives exactly one turn (see dialogManager's confirm
  * gate). That is what makes it impossible for yesterday's "haan" to enter a cup today.
  */
 async function tournamentRegister(ctx) {
@@ -1429,7 +1420,7 @@ async function tournamentRegister(ctx) {
       slots: { tournamentId: t.id } },
   });
 
-  // ---- may this cup be entered at all -------------------------------------
+  // May this cup be entered at all
   // Read in the order a person would ask it, and every answer is the state the
   // service would refuse with anyway, said in a sentence instead of a code.
   if (v.isOwner) {
@@ -1452,8 +1443,8 @@ async function tournamentRegister(ctx) {
     return no(`Registration for ${t.name} closed on ${day(pktDay(new Date(t.registrationDeadline)))}.`);
   }
 
-  // ---- which squad --------------------------------------------------------
-  // `eligibleTeams` is the service's list: teams this user CAPTAINS, in this
+  // Which squad
+  // `eligibleTeams` is the service's list: teams this user captains, in this
   // tournament's sport, not already entered. Only a captain can enter a team and only
   // a captain can be paid a prize, so a member of somebody else's squad is told the
   // truth rather than shown a button that would 403.
@@ -1485,7 +1476,7 @@ async function tournamentRegister(ctx) {
     };
   }
 
-  // ---- the money ----------------------------------------------------------
+  // The money
   const fee = asNum(t.entryFee, 0);
   const balance = v.walletBalance;
   if (balance != null && balance < fee) {
@@ -1494,7 +1485,7 @@ async function tournamentRegister(ctx) {
     [chip('Add money', 'topup_help'), chip('Wallet', 'wallet_balance')]);
   }
 
-  // ---- arm the confirmation ------------------------------------------------
+  // Arm the confirmation
   // The card states the four things a captain is agreeing to: what leaves the wallet,
   // what it buys, what happens if they win, and when the money stops being theirs to
   // take back. `withdraw` is allowed until the bracket is drawn, which is the honest
@@ -1548,7 +1539,7 @@ async function tournamentRegister(ctx) {
 }
 
 /**
- * The executor behind a confirmed entry. Reached ONLY through dialogManager's confirm
+ * The executor behind a confirmed entry. Reached only through dialogManager's confirm
  * gate, which fires on the chip or on a whole-utterance affirm from the frozen
  * lexicon — never on a model score. By the time this runs the captain has seen the
  * fee, the wallet after, and the prize, on a card.
@@ -1617,7 +1608,7 @@ async function executeTournamentEntry(ctx) {
 }
 
 /**
- * `my_tournaments` — CHIP-ONLY, and a read.
+ * `my_tournaments` — chip-only, and a read.
  *
  * Chip-only not because it spends but because it does not exist in the released
  * classifier's 23 labels, and S.6's rule is that the label set is frozen: adding a
@@ -1698,13 +1689,11 @@ async function myTournaments(ctx) {
   };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// PEOPLE AND TEAMS — the ranked answers, all of them through rosterService
-// ════════════════════════════════════════════════════════════════════════════
+// People and TEAMS — the ranked answers, all of them through rosterService
 
 /**
  * A player card. `matchPct` and `reasons` come from model #4's ranker via
- * rosterService and are passed through UNCHANGED, null included — the same rule
+ * rosterService and are passed through unchanged, null included — the same rule
  * venueCard follows, for the same reason.
  */
 function playerCard(p) {
@@ -1744,22 +1733,20 @@ function teamCard(t, { buttons = null } = {}) {
   });
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// PEOPLE AND TEAMS
-// ══════════════════════════════════════════════════════════════════════════
+// People and TEAMS
 
 /**
  * find_players — "kisi ko chahiye football team ke liye".
  *
- * Model #4's job ends at the label; WHICH team is a question the classifier cannot
+ * Model #4's job ends at the label; which team is a question the classifier cannot
  * answer, because a user with three squads has three right answers. So the team is
  * resolved the same way every other id in this file is: a chip carrying `teamId`, a
  * spoken name, or — when the caller has exactly one team an admin can recruit for —
  * silence. Anything ambiguous asks, with the teams as chips.
  *
- * ADMIN-ONLY is not this file's rule: rosterService.suggestPlayers calls
+ * Admin-only is not this file's rule: rosterService.suggestPlayers calls
  * access.requireRole(..., 'admin') and would refuse anyway. Resolving with
- * `adminOnly` here only changes WHERE the user finds out — a friendly "you are not
+ * `adminOnly` here only changes where the user finds out — a friendly "you are not
  * an admin of that squad" instead of a 403 shape from two layers down.
  */
 async function findPlayers(ctx) {
@@ -1802,19 +1789,19 @@ async function findPlayers(ctx) {
     }), state: { intent: null, slots } };
   }
 
-  // The `source` badge is the honest half of this reply, and it answers a NARROWER
-  // question than "is this list well ordered". reco_rank.py is a DETERMINISTIC
-  // WEIGHTED SCORER, not a trained model: S.5 Wave B states the weights literally,
+  // The `source` badge is the honest half of this reply, and it answers a narrower
+  // question than "is this list well ordered". reco_rank.py is a deterministic
+  // weighted scorer, not a trained model: S.5 Wave B states the weights literally,
   // so mlClient gives it its own third value, `'ranked'`, and says why at length.
   // This file used to stamp `model` over it anyway, which put an "AI" badge on a
   // weighted mean on a screen a real captain reads. Two separate questions:
   //
   //   scored     — the formula ran, so the percentages are real and "best fit
   //                first" is a true sentence
-  //   modelBadge — a TRAINED model shaped this answer. Only model #3, the venue
+  //   modelBadge — a trained model shaped this answer. Only model #3, the venue
   //                recommender, ever earns it on a Scout reply, and it earns it by
-  //                ml-service saying `source: 'model'` itself rather than by us
-  //                inferring it from "the call did not fail".
+  //                ml-service saying `source: 'model'` itself rather than by this
+  //                file inferring it from "the call did not fail".
   //
   // `meta.ranking` still carries 'ranked' vs 'heuristic', so the distinction a
   // reviewer needs survives in the place that can hold a name. A fabricated number
@@ -1847,14 +1834,14 @@ async function findPlayers(ctx) {
 /**
  * find_opponents — "koi team milegi match ke liye?"
  *
- * Ordered by rating PROXIMITY, not by strength, which is why it cannot reuse
- * find_teams: the score depends on the PAIRING, so the caller's team has to be
+ * Ordered by rating proximity, not by strength, which is why it cannot reuse
+ * find_teams: the score depends on the pairing, so the caller's team has to be
  * resolved first. Any member may look; only a captain may challenge.
  *
- * WHAT SCOUT DOES NOT DO HERE, and says so: a challenge requires a booked slot
+ * What Scout does not do here, and says so: a challenge requires a booked slot
  * (matchCore's rule — a match is played at a ground at a time, so the challenge
  * carries a booking id). Offering "challenge them" as a chip would be a button that
- * fails, so the reply offers the step that actually comes first: book a ground.
+ * fails, so the reply offers the step that comes first: book a ground.
  */
 async function findOpponents(ctx) {
   const { client, userId } = ctx;
@@ -1937,18 +1924,18 @@ async function findOpponents(ctx) {
 /**
  * find_teams — "koi team hai join karne ke liye?"
  *
- * discoveryService.discoverTeams is the SAME query GET /api/teams/discover runs,
+ * discoveryService.discoverTeams is the same query GET /api/teams/discover runs,
  * so the two exclusions are inherited rather than restated: private squads are out,
  * and so is any team the user is already in ("find me a team" must never offer the
  * one they captain).
  *
- * Strongest first — deliberately NOT rating-proximity order. Someone looking for a
+ * Strongest first — deliberately not rating-proximity order. Someone looking for a
  * squad to join wants the good ones; only find_opponents cares about a fair pairing.
  * There is no model here, so the source is `live` and no card carries a percentage.
  *
  * The card's button deep-links to the team screen instead of sending a join request.
  * POST /api/teams/:id/join-request exists and works for public teams, but it takes a
- * message and it is a WRITE against another user's squad: Scout hands over the
+ * message and it is a write against another user's squad: Scout hands over the
  * screen and the user taps it, which is the same courtesy the venue cards get.
  */
 async function findTeams(ctx) {
@@ -2061,23 +2048,20 @@ async function teamRating(ctx) {
   };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// POLICY AND HELP  —  no database reads, no model, and no invented numbers
-// ════════════════════════════════════════════════════════════════════════════
+// POLICY and help  —  no database reads, no model, and no invented numbers
 
 /**
  * refund_policy — "cancel karne pe paisa wapas milta hai?"
  *
- * GOLDEN RULE 3 in one function. The SENTENCE comes from
- * global_settings.assistant.policy_text (an owner can reword it); every NUMBER in it
+ * Golden rule 3 in one function. The sentence comes from
+ * global_settings.assistant.policy_text (an owner can reword it); every number in it
  * is substituted from utils/escrow.js POLICY at render time by utils/policyText.js.
- * So the cancellation window Scout quotes is the window bookingService actually
+ * So the cancellation window Scout quotes is the window bookingService itself
  * enforces, and rewording the text cannot make Scout lie about the arithmetic.
  *
- * WHICH PARAGRAPH, AND WHY IT IS NOT THE CLASSIFIER'S JOB
- * ------------------------------------------------------
- * The model has ONE label for every money-rules question; policyText has seven
- * topics. So the paragraph is chosen here, and by the words the user actually typed
+ * Which paragraph, and why it is not the classifier's job
+ * The model has one label for every money-rules question; policyText has seven
+ * topics. So the paragraph is chosen here, and by the words the user typed
  * — never from a leftover slot. A chip press (no text) is the one case that trusts
  * `slots.topic`, because that value came from the chip the user just tapped. This is
  * deliberate: `topic` survives across turns of the same intent, so honouring a stale
@@ -2132,7 +2116,7 @@ async function refundPolicy(ctx) {
         chip('My bookings', 'my_bookings')],
       meta: { topic: name, seeded: main.seeded },
     }),
-    // `topic` is cleared so the NEXT policy question starts from the words in it.
+    // `topic` is cleared so the next policy question starts from the words in it.
     state: { intent: null, slots: { ...slots, topic: null } },
   };
 }
@@ -2140,7 +2124,7 @@ async function refundPolicy(ctx) {
 /**
  * topup_help — "wallet me paisa kaise dalun?"
  *
- * There is no payment gateway in the FYP build, so this is honestly a HOW-TO and not
+ * There is no payment gateway in the FYP build, so this is honestly a how-to and not
  * a transaction: Scout points at the Wallet screen and states the withdrawal floor,
  * which is a POLICY number and therefore rendered rather than typed.
  */
@@ -2168,7 +2152,7 @@ async function topupHelp(ctx) {
 /**
  * elo_help — "rating kaise banti hai?"
  *
- * Every number here is READ from the two owners of it: utils/elo.js for the rules and
+ * Every number here is read from the two owners of it: utils/elo.js for the rules and
  * global_settings for the tunables. If the committee changes the K-factor in the
  * database, this answer changes with it — which is the entire reason globalSettings
  * exists and the reason this handler is async for a sentence with no query in it.
@@ -2195,11 +2179,11 @@ async function eloHelp() {
 /**
  * create_team_help — "team kaise banau?"
  *
- * A WRITE Scout deliberately does not perform. Creating a team takes a name, a sport
+ * A write Scout deliberately does not perform. Creating a team takes a name, a sport
  * and a visibility choice, and it makes the caller captain of a real row other people
  * then join; a chat turn that guessed any of those three would be a squad the user did
- * not ask for. So this is the steps plus a deep link, and it says what Scout WILL do
- * once the team exists — which is the part the user actually wanted.
+ * not ask for. So this is the steps plus a deep link, and it says what Scout will do
+ * once the team exists — which is the part the user asked for.
  */
 async function createTeamHelp(ctx) {
   const slots = ctx.slots || {};
@@ -2219,11 +2203,11 @@ async function createTeamHelp(ctx) {
 /**
  * greeting — "assalam o alaikum", "hi", "kya haal hai".
  *
- * SQL EXCEPTION 3 of 3 (see the file header): the caller's own name. One row keyed on
+ * SQL exception 3 of 3 (see the file header): the caller's own name. One row keyed on
  * the caller's own id with no derived rule attached, so it stays here rather than
  * earning a service function.
  *
- * Answers by NAME — the user's, and Scout's own from global_settings, so renaming the
+ * Answers by name — the user's, and Scout's own from global_settings, so renaming the
  * assistant renames it everywhere — and then immediately offers work. A greeting that
  * only greets back is a dead end, and the wave spec forbids those.
  */
@@ -2251,8 +2235,7 @@ async function greeting(ctx) {
 /**
  * app_help — "ye app kaise chalti hai", "profile kahan hai", and every deep-link chip.
  *
- * THE SCREEN MAP IS A CONTRACT WITH FLUTTER, NOT PROSE
- * ---------------------------------------------------
+ * The screen MAP is a contract with Flutter, not prose
  * Cards and chips hand back `{screen, id}` so the client can push a route instead of
  * posting a message. Wave D's chip handler routes on this map's keys; a client that
  * posts one back anyway lands here and gets the sentence for that screen, which is
@@ -2303,7 +2286,7 @@ async function appHelp(ctx) {
 /**
  * capability_menu — the button-only "what can you do?".
  *
- * Identical payload to the abstain menu, on purpose: a user who ASKS what Scout can do
+ * Identical payload to the abstain menu, on purpose: a user who asks what Scout can do
  * and a user whose sentence Scout could not place should see the same list, so there is
  * one place where capabilities are described. `source` is `menu`, which is how the
  * metrics separate "I helped" from "I offered to".
@@ -2316,7 +2299,7 @@ async function capabilityMenu(ctx) {
 /**
  * out_of_scope — the model's own "this is not about SportLynk".
  *
- * Scout is deliberately NOT a general assistant (the user's requirement), so the honest
+ * Scout is deliberately not a general assistant (the user's requirement), so the honest
  * answer to "mausam kaisa hai" is that it does grounds, teams, bookings and money — and
  * then the menu, so the turn still ends somewhere useful. ER2.6.
  */
@@ -2328,25 +2311,22 @@ async function outOfScope(ctx) {
   return { reply: { ...m, action: 'out_of_scope', actionOk: true }, state: { intent: null, slots: {} } };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// ASK THE OWNER  —  the one place Scout is allowed to not know
-// ════════════════════════════════════════════════════════════════════════════
+// Ask the owner  —  the one place Scout is allowed to not know
 
 /**
  * contact_owner — "ground wale se pooch lo floodlights hain ya nahi".
  *
  * The escalation is the honest answer to a question no query can answer: is there
- * parking, is the turf new, can we play at 2am. Scout files it against the VENUE, the
+ * parking, is the turf new, can we play at 2am. Scout files it against the venue, the
  * owner answers from their queue, the answer is published into assistant_kb, and the
- * NEXT player asking the same thing gets it instantly with `source: 'kb'`. That loop is
+ * next player asking the same thing gets it instantly with `source: 'kb'`. That loop is
  * why the wave has an owner side at all.
  *
- * THREE THINGS THIS DELIBERATELY REFUSES
- * --------------------------------------
+ * Three things this deliberately refuses
  *   money/policy   assistantKb.BLOCKED_INTENTS — an owner may not redefine the refund
  *                  rules by answering a question, so those never enter the queue.
- *   no venue       "ask the owner" needs an owner; without a ground Scout asks WHICH.
- *   duplicate      ten players asking the same thing is ONE queue item, and everyone
+ *   no venue       "ask the owner" needs an owner; without a ground Scout asks which.
+ *   duplicate      ten players asking the same thing is one queue item, and everyone
  *                  is told it is already with the owner rather than filing again.
  *
  * A KB hit short-circuits the whole thing: if the owner has already answered this, the
@@ -2441,20 +2421,18 @@ async function contactOwner(ctx) {
   };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// CONFIRMATION  —  the two-turn gate in front of every write
-// ════════════════════════════════════════════════════════════════════════════
+// Confirmation  —  the two-turn gate in front of every write
 
 /**
- * `confirm` — the user said yes to an ARMED confirmation.
+ * `confirm` — the user said yes to an armed confirmation.
  *
  * The dialog manager has already established that this turn may fire a confirm at all:
- * a `confirm` block was armed by the PREVIOUS turn, it survives exactly one turn, and
+ * a `confirm` block was armed by the previous turn, it survives exactly one turn, and
  * only four inputs reach here (the Confirm chip, a whole-utterance affirm, and their
  * two negatives to cancel_confirm). This function therefore does not re-litigate
  * consent — it dispatches on what was armed.
  *
- * DISPATCH ON THE BLOCK, NOT ON THE INTENT. `ctx.confirm.action` was written by the
+ * Dispatch on the block, not on the intent. `ctx.confirm.action` was written by the
  * handler that asked the question, so "haan" can never fire a booking when what was
  * armed was a cancellation, no matter what the classifier made of the word.
  */
@@ -2473,12 +2451,12 @@ async function runConfirmed(ctx) {
 }
 
 /**
- * `cancel_confirm` — the user said NO to an armed confirmation.
+ * `cancel_confirm` — the user said no to an armed confirmation.
  *
- * Nothing is executed and the block is dropped. The reply keeps the SUBJECT alive
+ * Nothing is executed and the block is dropped. The reply keeps the subject alive
  * (the ground, the booking) because "nahi" almost always means "not that one" rather
  * than "stop": offering other times is the difference between a helpful assistant and
- * one that makes you start over.
+ * one that forces the user to start over.
  */
 async function cancelConfirm(ctx) {
   const c = ctx.confirm || {};
@@ -2500,7 +2478,7 @@ async function cancelConfirm(ctx) {
 }
 
 /**
- * `affirm` and `deny` with NOTHING armed — "haan" out of the blue.
+ * `affirm` and `deny` with nothing armed — "haan" out of the blue.
  *
  * These exist because the classifier has labels for them and assertRoutable() demands
  * a home for every label. They must never look like a confirmation: the whole point of
@@ -2543,9 +2521,7 @@ async function strayDeny(ctx) {
   };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// THE REGISTRY  —  the only thing routes/assistant.js and dialogManager dispatch on
-// ════════════════════════════════════════════════════════════════════════════
+// The registry  —  the only thing routes/assistant.js and dialogManager dispatch on
 
 /**
  * The 23 labels the released intent artifact can produce.
@@ -2567,13 +2543,13 @@ const INTENT_LABELS = Object.freeze([
 ]);
 
 /**
- * Actions that exist only as a BUTTON. The classifier has no label for them and never
+ * Actions that exist only as a button. The classifier has no label for them and never
  * will: they are steps inside a flow, reached by tapping a chip Scout itself painted.
  */
-// Executable, but NOT trained labels: nothing in this list can be reached by the
+// Executable, but not trained labels: nothing in this list can be reached by the
 // classifier, only by a chip Scout itself painted. The three tournament actions are
 // here because S.6 released model #4 with 23 labels and this wave does not retrain
-// it -- and because `tournament_register` SPENDS, so it must stay behind the chip.
+// it -- and because `tournament_register` spends, so it must stay behind the chip.
 const BUTTON_ONLY = Object.freeze(['pick_slot', 'confirm', 'cancel_confirm', 'capability_menu',
   'tournament_detail', 'tournament_register', 'my_tournaments']);
 
@@ -2585,14 +2561,14 @@ const EXECUTORS = Object.freeze({
 });
 
 /**
- * EVERY key Scout can execute. The 23 trained labels plus the seven button-only steps.
+ * Every key Scout can execute. The 23 trained labels plus the seven button-only steps.
  *
  * dialogManager looks a handler up here by intent; routes/assistant.js looks one up by
  * the `action` on a chip. Both go through this object, which is why a chip can skip the
  * classifier entirely and why there is exactly one definition of what Scout can do.
  */
 const ACTIONS = Object.freeze({
-  // ── discovery ──────────────────────────────────────────────────────────────
+  // Discovery
   find_venue: findVenue,
   check_availability: checkAvailability,
   venue_info: venueInfo,
@@ -2603,7 +2579,7 @@ const ACTIONS = Object.freeze({
   tournament_list: tournamentList,
   tournament_detail: tournamentDetail,
   team_stats: teamRating,
-  // ── booking and money ──────────────────────────────────────────────────────
+  // Booking and money
   book_venue: bookVenue,
   pick_slot: pickSlot,
   cancel_booking: cancelBooking,
@@ -2613,7 +2589,7 @@ const ACTIONS = Object.freeze({
   wallet_balance: walletBalance,
   confirm: runConfirmed,
   cancel_confirm: cancelConfirm,
-  // ── talking ────────────────────────────────────────────────────────────────
+  // Talking
   greeting,
   affirm: strayAffirm,
   deny: strayDeny,
@@ -2640,7 +2616,7 @@ function intentLabels() {
 /**
  * Boot-time proof that this file can route everything that can reach it.
  *
- * FOUR assertions, and each one has caught a real class of bug in this wave:
+ * Four assertions, and each one has caught a real class of bug in this wave:
  *   1. every trained label has a handler        — a retrain cannot land in silence
  *   2. every handler is a function              — a typo'd name is a 500 at runtime
  *   3. every capability chip is executable      — a menu button that 400s is worse

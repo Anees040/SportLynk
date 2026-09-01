@@ -120,13 +120,11 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
-# ─────────────────────────────────────────────────────────────────────────────
 # sys.path bootstrap.
 #
-# `python training/train_pricing.py` puts `training/` on sys.path[0], NOT the
+# `python training/train_pricing.py` puts `training/` on sys.path[0], not the
 # ml-service root, so `from app.core import features` would fail. Same bootstrap
 # as generate_bookings.py, on purpose -- both scripts are run the same way.
-# ─────────────────────────────────────────────────────────────────────────────
 _ML_ROOT = Path(__file__).resolve().parent.parent
 if str(_ML_ROOT) not in sys.path:
     sys.path.insert(0, str(_ML_ROOT))
@@ -152,9 +150,7 @@ from sklearn.pipeline import Pipeline  # noqa: E402
 from sklearn.preprocessing import OneHotEncoder, StandardScaler  # noqa: E402
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Constants -- every threshold in this file, in one place with its reason
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: Must match registry.KNOWN_MODELS and the filename convention it enforces.
 MODEL_KEY = "pricing"
@@ -170,8 +166,8 @@ TEST_WINDOW_DAYS = 28
 
 #: Hyperparameters are chosen on the last 28 days of TRAIN, never on TEST. Same
 #: length as the test window so the selection fold resembles the thing it is
-#: selecting for. sklearn's own `early_stopping=True` is NOT used: it carves its
-#: validation fold at RANDOM, which would quietly reintroduce the venue-random-effect
+#: selecting for. sklearn's own `early_stopping=True` is not used: it carves its
+#: validation fold at random, which would quietly reintroduce the venue-random-effect
 #: leak this whole split exists to prevent.
 VALID_WINDOW_DAYS = 28
 
@@ -185,18 +181,18 @@ GATE_ROC_AUC_MAX = 0.99
 #: ceiling is information the generator never put in the features.
 GATE_CEILING_SLACK = 1.02
 
-#: Brier SKILL against the base-rate predictor, i.e. 1 - brier/brier_of_always_p_bar.
+#: Brier skill against the base-rate predictor, i.e. 1 - brier/brier_of_always_p_bar.
 #: A raw Brier threshold would be a magic number that silently drifts with the booked
 #: rate; skill is self-normalising, and 0.05 says "measurably better than a constant".
 GATE_BRIER_SKILL_MIN = 0.05
 
-#: Predictions must actually vary. A near-constant model can squeak past a Brier gate
+#: Predictions must vary. A near-constant model can squeak past a Brier gate
 #: while being useless for pricing, because every price would score the same.
 GATE_PRED_STD_MIN = 0.05
 
 #: The monotone price-response gate. Unlike generate_bookings.py's
-#: `check_price_monotone`, which measures a SAMPLED booked share and therefore needs a
-#: binomial-noise budget, this reads a DETERMINISTIC model prediction. There is no
+#: `check_price_monotone`, which measures a sampled booked share and therefore needs a
+#: binomial-noise budget, this reads a deterministic model prediction. There is no
 #: sampling noise to absorb, so a fixed tolerance is correct here -- it exists only to
 #: forgive the tiny flats and steps a gradient-boosted tree makes between split points.
 MONOTONE_TOLERANCE = 0.005
@@ -207,8 +203,8 @@ MONOTONE_MIN_DROP = 0.010
 #: would act on.
 SWEEP_STEPS = 17
 
-#: BUSINESS cap on what may be RECOMMENDED, deliberately separate from the band the
-#: model was TRAINED on. The sweep still evaluates above it, so the report can say what
+#: Business cap on what may be recommended, deliberately separate from the band the
+#: model was trained on. The sweep still evaluates above it, so the report can say what
 #: the cap costs. This is the wave prompt's 1.3x ceiling.
 POLICY_MAX_RATIO = 1.30
 
@@ -219,7 +215,7 @@ PLATEAU_TOL = 0.01
 
 #: Permutation importance repeats. Measured on Brier, not accuracy: this model exists to
 #: be well-calibrated, so the question is "which feature, if scrambled, damages the
-#: PROBABILITIES most".
+#: probabilities most".
 IMPORTANCE_REPEATS = 5
 
 #: Raw columns `features.build_feature_dict` consumes. Named explicitly so a column
@@ -232,7 +228,7 @@ FEATURE_SOURCE_COLUMNS: tuple[str, ...] = (
 #: Never inputs. Asserted against FEATURE_ORDER at train time, not merely documented.
 LEAKY_COLUMNS: tuple[str, ...] = ("latent_p", "booked_gross", "cancelled")
 
-#: Diagnostic columns the generator wrote that MUST equal what the frozen builder
+#: Diagnostic columns the generator wrote that must equal what the frozen builder
 #: derives from the raw columns. This is generate_bookings.py's `check_diagnostics_agree`
 #: re-run at train time over 100% of rows instead of a sample -- the single strongest
 #: guard against train/serve skew, because it proves the `hour` the simulator applied
@@ -248,17 +244,17 @@ CSV_FLOAT_MIRRORS: frozenset[str] = frozenset({"price_ratio"})
 
 #: Relative tolerance for those float mirrors, derived rather than tuned. "%.6g" keeps six
 #: significant figures, so for a ratio just above 1.0 the last digit sits at the 1e-5 place
-#: and half-ulp rounding costs up to 5e-6 RELATIVELY. (Ratios below 1.0 are cheaper: at
+#: and half-ulp rounding costs up to 5e-6 relatively. (Ratios below 1.0 are cheaper: at
 #: 0.7 the exponent drops, the last digit lands at 1e-6, and the bound falls to ~7e-7.)
 #: Run #2 measured a worst deviation of 4.92e-06 -- flush against that 5e-6 ceiling, which
 #: is what confirms the mechanism is purely the serialiser. 1e-5 is twice the bound, so it
-#: has margin, and it is still FIVE orders of magnitude below the one-whole-unit errors
-#: this gate exists to catch. An earlier 2e-6 was simply wrong arithmetic on my part -- it
+#: has margin, and it is still five orders of magnitude below the one-whole-unit errors
+#: this gate exists to catch. An earlier 2e-6 was wrong arithmetic -- it
 #: bounded the 6th significant figure at 5e-7 instead of 5e-6.
 CSV_FLOAT_RTOL = 1e-5
 
 #: How many distinct venues the monotone-price gate sweeps, crossed with four scenarios.
-#: One number, referenced by the profile builder AND the under-coverage warning, so the
+#: One number, referenced by the profile builder and the under-coverage warning, so the
 #: promised count and the checked count cannot drift apart the way they did in run #1.
 PROFILE_VENUES = 6
 
@@ -296,9 +292,7 @@ def shout(text: str = "") -> None:
     print(text)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Small containers
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -350,9 +344,7 @@ class Candidate:
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Provenance -- the model card must not be able to name a dataset it never saw
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def sha256_of(path: Path) -> str:
@@ -375,9 +367,7 @@ def read_dataset_meta(data_path: Path) -> dict[str, Any]:
         return {}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Load
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def load_dataset(path: Path) -> pd.DataFrame:
@@ -408,9 +398,7 @@ def load_dataset(path: Path) -> pd.DataFrame:
     return frame
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Build the matrix -- the ONLY path, and it is the shared one
-# ─────────────────────────────────────────────────────────────────────────────
+# Build the matrix -- the only path, and it is the shared one
 
 
 def build_matrix(frame: pd.DataFrame) -> pd.DataFrame:
@@ -515,9 +503,7 @@ def check_diagnostics_agree(raw: pd.DataFrame, matrix: pd.DataFrame) -> Gate:
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The time split, with its no-leakage proof
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def time_split(raw: pd.DataFrame, matrix: pd.DataFrame, *, test_days: int, valid_days: int) -> Split:
@@ -544,18 +530,18 @@ def time_split(raw: pd.DataFrame, matrix: pd.DataFrame, *, test_days: int, valid
             f"(slot_date spans {raw['slot_date'].min().date()}..{last_slot.date()})"
         )
 
-    # PROOF 1 -- no training label was realised after the cutoff.
+    # Proof 1 -- no training label was realised after the cutoff.
     train_last_slot = raw.loc[is_train, "slot_date"].max()
     if train_last_slot > cutoff:
         raise SystemExit(f"split bug: a training slot_date {train_last_slot} is past the cutoff {cutoff}")
 
-    # PROOF 2 -- no training row was even DECIDED after the cutoff. This is the property
-    # an as_of-keyed split cannot give you, and it is the whole argument for slot_date.
+    # Proof 2 -- no training row was even decided after the cutoff. This is the property
+    # an as_of-keyed split cannot provide, and it is the whole argument for slot_date.
     train_last_asof = raw.loc[is_train, "as_of"].max()
     if train_last_asof > cutoff:
         raise SystemExit(f"split bug: a training as_of {train_last_asof} is past the cutoff {cutoff}")
 
-    # PROOF 3 -- the two sides partition the rows exactly. Catches an off-by-one in the
+    # Proof 3 -- the two sides partition the rows exactly. Catches an off-by-one in the
     # boundary arithmetic, which would otherwise show up only as a slightly odd metric.
     if int(is_train.sum()) + int(is_test.sum()) != len(raw):
         raise SystemExit("split bug: train and test do not partition the dataset")
@@ -586,9 +572,7 @@ def time_split(raw: pd.DataFrame, matrix: pd.DataFrame, *, test_days: int, valid
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Pipelines -- preprocessing lives INSIDE the artifact, never in a notebook
-# ─────────────────────────────────────────────────────────────────────────────
+# Pipelines -- preprocessing lives inside the artifact, never in a notebook
 
 
 def make_preprocessor(*, impute: bool, scale: bool) -> ColumnTransformer:
@@ -721,9 +705,7 @@ def predict_p(model: Pipeline, X: pd.DataFrame) -> np.ndarray:
     return np.asarray(proba[:, idx], dtype="float64")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Scoring
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def score(y: np.ndarray, p: np.ndarray) -> dict[str, Any]:
@@ -866,7 +848,7 @@ def permutation_importance_brier(
         deltas = []
         for _ in range(repeats):
             shuffled = X.copy()
-            # Rebuild the column with its ORIGINAL dtype. Assigning a raw object array
+            # Rebuild the column with its original dtype. Assigning a raw object array
             # would demote `sport`/`city` from pandas `string` to `object`, and the
             # OneHotEncoder learned its categories from the string dtype -- the
             # importance would then be measuring a dtype change, not a shuffle.
@@ -904,9 +886,7 @@ def baseline_price_coefficient(model: Pipeline) -> float | None:
         return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The price optimizer
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def sweep_prices(model: Pipeline, ctx: dict[str, Any], *, steps: int = SWEEP_STEPS) -> dict[str, Any]:
@@ -945,7 +925,7 @@ def sweep_prices(model: Pipeline, ctx: dict[str, Any], *, steps: int = SWEEP_STE
     ratios = price_arr / base_price
     revenue = price_arr * probs
 
-    # The business cap is applied HERE, to the choice, not upstream to the grid -- so the
+    # The business cap is applied here, to the choice, not upstream to the grid -- so the
     # cost of the cap stays measurable.
     # The epsilon is 1e-6 rather than 0 because price_grid computes
     # 0.70 + 0.80 * 12/16, which is 1.2999999999999998 in binary floating point. An
@@ -1066,7 +1046,7 @@ def representative_profiles(raw: pd.DataFrame, *, venues: int = PROFILE_VENUES) 
     unrated = agg.index[agg["venue_rating"].isna()]
     take(unrated[0] if len(unrated) else None)
     for sport in agg["sport"].dropna().unique():
-        # The cheapest venue of this sport that is NOT already picked. Taking rows[0]
+        # The cheapest venue of this sport that is not already picked. Taking rows[0]
         # unconditionally re-nominates index 0 for whichever sport owns the cheapest
         # venue overall, which is how run #1 lost two of its six.
         rows = [int(j) for j in agg.index[agg["sport"] == sport] if int(j) not in picks]
@@ -1119,7 +1099,7 @@ def representative_profiles(raw: pd.DataFrame, *, venues: int = PROFILE_VENUES) 
                     "slot_date": day,
                     "start_time": hour,
                     # Seven days out: inside the trained lead-time range and the horizon an
-                    # owner actually reprices on.
+                    # owner reprices on.
                     "as_of": day - timedelta(days=7),
                 }
             )
@@ -1213,10 +1193,8 @@ def actionable_gate(sweeps: Sequence[dict[str, Any]]) -> Gate:
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Figures. Palette and rcParams come from demand_plots so the whole report set
 # looks like one document -- and so a palette change happens in one file.
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _plot_context():
@@ -1416,9 +1394,7 @@ def plot_importance(rows: Sequence[dict[str, Any]], out: Path) -> Path | None:
     return out
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Model card
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def write_model_card(path: Path, m: dict[str, Any]) -> Path:
@@ -1831,9 +1807,7 @@ def write_model_card(path: Path, m: dict[str, Any]) -> Path:
     return path
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Serialisation helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _jsonable(obj: Any) -> Any:
@@ -1886,9 +1860,7 @@ def write_lockfile(path: Path) -> Path | None:
         return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # main
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def print_metrics_table(
@@ -2017,7 +1989,7 @@ def main(argv: list[str] | None = None) -> int:
                           if sha_matches
                           else "csv sha256 does NOT match bookings_meta.json -- regenerated or edited"))
 
-    # ── 2. build the matrix through the ONE shared builder
+    # ── 2. build the matrix through the one shared builder
     say("")
     say("building features through app/core/features.build_frame ...")
     matrix = build_matrix(raw)
@@ -2093,7 +2065,7 @@ def main(argv: list[str] | None = None) -> int:
             "test": score(split.y_test, predict_p(model, split.X_test)),
         }
 
-    # ── 7. refit the winner on ALL of train
+    # ── 7. refit the winner on all of train
     say("")
     say("refitting the chosen configuration on the full training window ...")
     final = make_hgb(chosen.nan_strategy, chosen.params, args.seed)
@@ -2247,7 +2219,7 @@ def main(argv: list[str] | None = None) -> int:
     if uplifts:
         # Reported with its caveat attached, always. This number is modelled expected
         # revenue against a counterfactual in which every slot is priced at list -- it is
-        # NOT a measured business result, and it inherits the simulator's elasticity
+        # not a measured business result, and it inherits the simulator's elasticity
         # assumptions wholesale. ELASTICITY_PEAK = 0.85 (inelastic) is what sends peak
         # slots to the policy cap and does most of the work here; if the true peak
         # elasticity exceeds 1.0 the sign of the recommendation can change. It is quoted
@@ -2354,7 +2326,7 @@ def main(argv: list[str] | None = None) -> int:
             "policyMaxRatio": POLICY_MAX_RATIO,
             "plateauTolerance": PLATEAU_TOL,
             "profiles": len(sweeps),
-            # Recorded so the gate's COVERAGE is auditable from the artifact and not only
+            # Recorded so the gate's coverage is auditable from the artifact and not only
             # from console scrollback. Run #1 swept 4 venues while three documents claimed
             # 6, and nothing in the JSON would have revealed it.
             "profileVenues": n_venues,
@@ -2452,8 +2424,8 @@ def main(argv: list[str] | None = None) -> int:
             "gates": [{"name": g.name, "ok": g.ok} for g in gates],
         }
 
-        # The timestamped copy is written either way, so a FAILED run leaves evidence that
-        # can be loaded and inspected. Only `_latest` -- the one the service actually reads --
+        # The timestamped copy is written either way, so a failed run leaves evidence that
+        # can be loaded and inspected. Only `_latest` -- the one the service reads --
         # is gated.
         versioned = models / f"{MODEL_KEY}_{stamp}.joblib"
         joblib.dump(payload, versioned, compress=3)
@@ -2508,8 +2480,8 @@ def main(argv: list[str] | None = None) -> int:
             # This warning replaces a note that said /predict/price returns 501 and that
             # wiring inference "is S.3 Wave D". Wave D has landed, so that text was false
             # in the worst possible place -- the last screen of a live demo. What matters
-            # now is the opposite hazard: a retrain does NOT hot-swap the served model, so
-            # after this run the owner dashboard still shows the PREVIOUS model_version
+            # now is the opposite hazard: a retrain does not hot-swap the served model, so
+            # after this run the owner dashboard still shows the previous model_version
             # until uvicorn is restarted. Demoing a retrain and then pointing at an
             # unchanged caption is how a viva goes wrong.
             shout("  A RUNNING ml-service still holds its loaded artifact in memory: restart")

@@ -13,7 +13,7 @@
  *
  * The four claims the file header makes are each pinned by a test:
  *   3, 5, 6   the bracket is standard: seeds 1 and 2 can only meet in the final
- *   6         byes land on the TOP seeds, for every field size from 2 to 32
+ *   6         byes land on the top seeds, for every field size from 2 to 32
  *   10        K is 40 / 48 / 56 by stake, and exactly 0 for a bye
  *   14-19     pool = venue_cost + prize + margin, to the paisa, always
  */
@@ -56,7 +56,6 @@ function playFavourites(bracket) {
   return { final, champion: final.winner, seedOf };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('1 — seedTeams(): strongest first, deterministic on a tie, input untouched', () => {
   const input = [
     { id: 'c', name: 'Charlie', elo: 1000 },
@@ -77,7 +76,6 @@ test('1 — seedTeams(): strongest first, deterministic on a tie, input untouche
   assert.equal(un[1].elo, 1000);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('2 — bracketSize / rounds / byes / fixtureCount: the shape arithmetic', () => {
   const table = [
     // n, size, rounds, byes, nodes, playedKnockout, playedRoundRobin
@@ -113,7 +111,6 @@ test('2 — bracketSize / rounds / byes / fixtureCount: the shape arithmetic', (
   assert.equal(f.fixtureCount('knockout', 0), 0);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('3 — bracketOrder(): standard pairings, one top-half seed per pair', () => {
   assert.deepEqual(f.bracketOrder(2), [1, 2]);
   assert.deepEqual(f.bracketOrder(4), [1, 4, 2, 3]);
@@ -127,8 +124,8 @@ test('3 — bracketOrder(): standard pairings, one top-half seed per pair', () =
     // Every pair sums to size+1, which is what makes 1 meet the weakest team.
     for (let i = 0; i < size; i += 2) {
       assert.equal(order[i] + order[i + 1], size + 1, `pair ${i / 2 + 1} of ${size}`);
-      // EXACTLY ONE of the pair is in the top half. This is the property that
-      // makes padding safe: dropping the highest seed NUMBERS can never empty a
+      // Exactly one of the pair is in the top half. This is the property that
+      // makes padding safe: dropping the highest seed numbers can never empty a
       // pair, so every bye has a team and it is always the stronger one.
       const top = [order[i], order[i + 1]].filter((s) => s <= size / 2).length;
       assert.equal(top, 1, `pair ${i / 2 + 1} of ${size} must hold one top-half seed`);
@@ -136,7 +133,6 @@ test('3 — bracketOrder(): standard pairings, one top-half seed per pair', () =
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('4 — knockoutFixtures(8): a full bracket, no byes, every node wired forward', () => {
   const b = f.knockoutFixtures(f.seedTeams(mk(8)));
   assert.equal(b.size, 8);
@@ -174,7 +170,6 @@ test('4 — knockoutFixtures(8): a full bracket, no byes, every node wired forwa
   assert.equal(b.fixtures.find((x) => x.round === 3).nextRound, null);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('5 — knockoutFixtures(5): three byes, all to the top seeds, resolved at once', () => {
   const b = f.knockoutFixtures(f.seedTeams(mk(5)));
   assert.equal(b.size, 8);
@@ -206,7 +201,6 @@ test('5 — knockoutFixtures(5): three byes, all to the top seeds, resolved at o
   assert.equal(semis[1].isBye, false, 'two bye winners meeting is a real match, not a bye');
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('6 — BYES GO TO THE TOP SEEDS, for every field size from 2 to 32', () => {
   for (let n = 2; n <= 32; n += 1) {
     const b = f.knockoutFixtures(f.seedTeams(mk(n)));
@@ -230,7 +224,6 @@ test('6 — BYES GO TO THE TOP SEEDS, for every field size from 2 to 32', () => 
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('7 — advanceSlot(): ceil(p/2), odd fills team_a, even fills team_b', () => {
   assert.deepEqual(f.advanceSlot(1, 1), { round: 2, position: 1, side: 'a' });
   assert.deepEqual(f.advanceSlot(1, 2), { round: 2, position: 1, side: 'b' });
@@ -241,7 +234,6 @@ test('7 — advanceSlot(): ceil(p/2), odd fills team_a, even fills team_b', () =
   assert.equal(f.advanceSlot(1, 0), null);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('8 — seeds 1 and 2 can only meet in the FINAL, and the favourite wins it', () => {
   for (const n of [2, 4, 5, 8, 11, 16]) {
     const b = f.knockoutFixtures(f.seedTeams(mk(n)));
@@ -256,7 +248,6 @@ test('8 — seeds 1 and 2 can only meet in the FINAL, and the favourite wins it'
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('9 — roundLabel(): the words a captain actually reads', () => {
   assert.equal(f.roundLabel(3, 3), 'Final');
   assert.equal(f.roundLabel(2, 3), 'Semi-final');
@@ -270,7 +261,6 @@ test('9 — roundLabel(): the words a captain actually reads', () => {
   assert.equal(f.roundLabel(2, 5, f.FORMATS.ROUND_ROBIN), 'Matchday 2');
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('10 — K-FACTOR: 40 early, 48 semi, 56 final, and exactly 0 for a bye', () => {
   assert.equal(f.kFactorFor({ round: 1, rounds: 3 }), 40);
   assert.equal(f.kFactorFor({ round: 2, rounds: 3 }), 48);
@@ -291,7 +281,7 @@ test('10 — K-FACTOR: 40 early, 48 semi, 56 final, and exactly 0 for a bye', ()
     assert.ok(f.kFactorFor({ round: r, rounds: 3 }) > f.K.FRIENDLY,
       `round ${r} must count for more than a friendly`);
   }
-  // K = 0 really does freeze a rating: proved against the ladder itself, not
+  // K = 0 does freeze a rating: proved against the ladder itself, not
   // against a comment.
   const frozen = elo.rate({
     ratingChallenger: 1200, ratingOpponent: 1000, scoreChallenger: 1,
@@ -311,7 +301,6 @@ test('10 — K-FACTOR: 40 early, 48 semi, 56 final, and exactly 0 for a bye', ()
   assert.equal(asFinal, 28);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('11 — circleMethod(): every pair once, nobody twice a day, no bye rows', () => {
   for (const n of [2, 3, 4, 5, 6]) {
     const rr = f.circleMethod(f.seedTeams(mk(n)));
@@ -340,7 +329,6 @@ test('11 — circleMethod(): every pair once, nobody twice a day, no bye rows', 
   assert.deepEqual(f.circleMethod([{ id: 'solo' }]), { rounds: 0, fixtures: [] });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('12 — standings(): 3/1/0, goal difference, walkovers count, byes do not', () => {
   const teams = [
     { id: 'a', name: 'Alpha', elo: 1000 },
@@ -392,7 +380,6 @@ test('12 — standings(): 3/1/0, goal difference, walkovers count, byes do not',
   assert.deepEqual(cold.map((x) => x.teamId), ['a', 'b', 'c', 'd'], 'alphabetical when all tied');
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('13 — standings(): head-to-head splits teams level on points and goals', () => {
   const teams = [{ id: 'x', name: 'Xerxes' }, { id: 'y', name: 'Yankee' }];
   // Two teams, two meetings: one 1-0 each way. Level on everything.
@@ -405,7 +392,7 @@ test('13 — standings(): head-to-head splits teams level on points and goals', 
 
   // Now the real tiebreak. Three teams end level on points, goal difference and
   // goals for, and only the head-to-head separates two of them — and the names
-  // are chosen so that ALPHABETICAL order would give the opposite answer. If the
+  // are chosen so that alphabetical order would give the opposite answer. If the
   // comparator ignored head-to-head this test would fail, which is the point.
   const three = [
     { id: 'x', name: 'Zulu' },        // beat Alpha head-to-head, but sorts last by name
@@ -426,7 +413,6 @@ test('13 — standings(): head-to-head splits teams level on points and goals', 
     'Zulu beat Alpha, so Zulu is above it despite losing on name');
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('14 — splitPool(): the worked example, to the rupee', () => {
   // 8 teams at PKR 4,000, seven one-hour slots at PKR 2,000. These are the exact
   // numbers in the wave plan and in doc/CLAUDE.md, and they are the argument for
@@ -455,7 +441,6 @@ test('14 — splitPool(): the worked example, to the rupee', () => {
   assert.deepEqual(f.splitPool({ pool: 32000, slotTotal: 14000 }).prize, e.prize);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('15 — splitPool(): the identity holds to the PAISA across the whole space', () => {
   const fees = [0, 1, 500, 999.99, 1000.5, 2000, 3333.33, 4000, 12345.67];
   const teamCounts = [2, 3, 4, 5, 6, 7, 8, 16];
@@ -490,7 +475,6 @@ test('15 — splitPool(): the identity holds to the PAISA across the whole space
   assert.ok(cases > 2000, `expected a real sweep, ran ${cases}`);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('16 — splitPool(): UNDERWATER pays no prize and never bills the owner', () => {
   // Four teams at PKR 1,000 cannot cover seven hours at PKR 2,000.
   const e = f.splitPool({ entryFee: 1000, teams: 4, slotTotal: 14000 });
@@ -505,7 +489,7 @@ test('16 — splitPool(): UNDERWATER pays no prize and never bills the owner', (
   assert.equal(e.ownerEarning, 4000, 'the owner takes the pool and no more');
   assert.equal(e.ownerEarning, e.pool);
   assert.equal(e.identityOk, true);
-  // Exactly break-even is NOT underwater: nothing is owed, nothing is left.
+  // Exactly break-even is not underwater: nothing is owed, nothing is left.
   const even = f.splitPool({ entryFee: 3500, teams: 4, slotTotal: 14000 });
   assert.equal(even.surplus, 0);
   assert.equal(even.underwater, false);
@@ -514,14 +498,13 @@ test('16 — splitPool(): UNDERWATER pays no prize and never bills the owner', (
   assert.equal(even.margin, 0);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('17 — splitPool(): the rounding remainder lands in the owner margin', () => {
   // A surplus of PKR 100.01 at 60% is 60.006 — six-tenths of a paisa that has to
   // go somewhere. It goes to the margin, never to a prize that cannot be paid.
   const e = f.splitPool({ pool: 100.01, slotTotal: 0, prizePercent: 60 });
   assert.equal(e.prize, 60);
   assert.equal(e.margin, 40.01);
-  // Asserted in PAISA, not rupees: 0 + 60 + 40.01 evaluates to 100.00999999999999
+  // Asserted in paisa, not rupees: 0 + 60 + 40.01 evaluates to 100.00999999999999
   // in IEEE floats. That failure mode is exactly why splitPool does its
   // arithmetic in integer paisa and reports `identityOk` from inside, instead of
   // leaving every caller to re-add rupee decimals and get a different answer.
@@ -535,12 +518,11 @@ test('17 — splitPool(): the rounding remainder lands in the owner margin', () 
   assert.equal(tiny.winnerShare, 0.02);
   assert.equal(tiny.runnerupShare, 0.01);
   assert.equal(tiny.winnerShare + tiny.runnerupShare, tiny.prize);
-  // Fee strings from pg (DECIMAL comes back as text) must not become NaN.
+  // Fee strings from pg (decimal comes back as text) must not become NaN.
   const fromDb = f.splitPool({ entryFee: '4000.00', teams: '8', slotTotal: '14000.00' });
   assert.equal(fromDb.ownerEarning, 21200);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('18 — splitPool(): the venue discount is the owner giving up their own cost', () => {
   const full = f.splitPool({ entryFee: 4000, teams: 8, slotTotal: 14000 });
   const half = f.splitPool({
@@ -565,14 +547,13 @@ test('18 — splitPool(): the venue discount is the owner giving up their own co
   assert.equal(f.splitPool({ pool: 100, slotTotal: 0, prizePercent: -50 }).prize, 0);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('19 — recommendEntryFee(): the fee actually meets the target at MIN teams', () => {
   const r = f.recommendEntryFee({ slotTotal: 14000, minTeams: 4, targetMarginPercent: 25 });
   assert.equal(r.venueCost, 14000);
   assert.equal(r.targetMargin, 3500);
   assert.equal(r.achievable, true);
   assert.equal(r.entryFee % 100, 0, 'a recommended fee is a round number');
-  // The promise: at the WORST legal turnout the owner still clears the target.
+  // The promise: at the worst legal turnout the owner still clears the target.
   assert.ok(r.atMinTeams.margin >= r.targetMargin,
     `margin ${r.atMinTeams.margin} should reach ${r.targetMargin}`);
   assert.equal(r.atMinTeams.underwater, false);
@@ -601,7 +582,6 @@ test('19 — recommendEntryFee(): the fee actually meets the target at MIN teams
   assert.equal(all.atMinTeams.prize, 0);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('20 — winProbability(): the Elo curve, not a second opinion', () => {
   assert.equal(f.winProbability(1000, 1000), 0.5);
   for (const [a, b] of [[1000, 1200], [1400, 1000], [1013, 987]]) {
@@ -615,7 +595,6 @@ test('20 — winProbability(): the Elo curve, not a second opinion', () => {
   assert.equal(f.winProbability('1200', '1000'), elo.expected(1200, 1000));
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('21 — normaliseFixture(): a Postgres row and a generated node read the same', () => {
   const fromDb = f.normaliseFixture({
     round: 2, position: 1, team_a: 'a', team_b: 'b', score_a: '3', score_b: '1',
@@ -637,7 +616,6 @@ test('21 — normaliseFixture(): a Postgres row and a generated node read the sa
   assert.equal(f.normaliseFixture(null).status, 'upcoming');
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 test('22 — buildFixtures(): one call site, both formats, and the caps hold', () => {
   const seeded = f.seedTeams(mk(6));
   const ko = f.buildFixtures(f.FORMATS.KNOCKOUT, seeded);

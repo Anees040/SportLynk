@@ -60,12 +60,12 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
 
   /// Keep the header badge honest for as long as this screen lives.
   ///
-  /// The socket is opened HERE, not in the chat screens: a badge that only moves
-  /// while you are already looking at the inbox is not a badge. The service is a
+  /// The socket is opened here, not in the chat screens: a badge that only moves
+  /// while the inbox is already open is not a badge. The service is a
   /// singleton and connecting is idempotent, so a thread screen re-using it costs
   /// nothing — and Wave C's bell hangs off this same connection.
   ///
-  /// The count is RE-READ rather than incremented, because the server decides what
+  /// The count is re-read rather than incremented, because the server decides what
   /// counts (muted rooms out, my own messages out) and a second copy of that rule
   /// here is how a badge starts disagreeing with the list it links to. The debounce
   /// is what keeps the re-read from being one request per message in a busy team
@@ -89,9 +89,9 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     setState(() => _chatUnread = u.total);
   }
 
-  /// Chats opens FULL-SCREEN from the header rather than as a sixth bottom tab:
+  /// Chats opens full-screen from the header rather than as a sixth bottom tab:
   /// five is already as many as a bottom bar can label legibly, and the inbox is
-  /// somewhere you go and come back from, not somewhere you live.
+  /// somewhere the user visits and comes back from, not somewhere they stay.
   Future<void> _openChats() async {
     await Navigator.push(
       context,
@@ -180,7 +180,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     );
   }
 
-  // ── BOTTOM NAV BAR ──────────────────────────────────────────
+  // Bottom navigation bar
   Widget _buildNav() {
     final items = [
       ('Home', Icons.home_rounded, Icons.home_outlined),
@@ -234,7 +234,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     );
   }
 
-  // ── HOME TAB ────────────────────────────────────────────────
+  // Home tab
   Widget _buildHome(AuthProvider auth) {
     final userName = auth.currentUser?.name ?? 'Player';
     final firstName = userName.split(' ').first;
@@ -252,7 +252,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         slivers: [
-          // ── HERO HEADER ──────────────────────────────────────
+          // Hero HEADER
           SliverToBoxAdapter(
             child: Container(
               decoration: const BoxDecoration(
@@ -332,7 +332,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
             ),
           ),
 
-          // ── SEARCH BAR ───────────────────────────────────────
+          // Search bar
           SliverToBoxAdapter(
             child: Transform.translate(
               offset: const Offset(0, -1),
@@ -373,7 +373,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
             ),
           ),
 
-          // ── ASK SCOUT ─────────────────────────────────────────
+          // Ask Scout
           // Above Quick Actions, because it is the shortest path to every one of
           // them: "koi ground milega kal shaam" beats four taps through the grid.
           // The FAB handles discovery on the other tabs; this is the pitch.
@@ -384,7 +384,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
             ),
           ),
 
-          // ── QUICK ACTIONS ─────────────────────────────────────
+          // Quick ACTIONS
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
@@ -429,7 +429,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
             ),
           ),
 
-          // ── UPCOMING BOOKINGS ─────────────────────────────────
+          // UPCOMING bookings
           SliverToBoxAdapter(child: _buildUpcomingBookings()),
 
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -438,7 +438,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     );
   }
 
-  // ── HELPERS ─────────────────────────────────────────────────
+  // Helpers
   String _greeting() {
     final h = DateTime.now().hour;
     if (h < 12) return 'Morning';

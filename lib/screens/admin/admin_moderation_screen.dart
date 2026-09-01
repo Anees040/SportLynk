@@ -21,7 +21,7 @@ import '../../widgets/trust_widgets.dart';
 ///   • Restore → put a hidden review back.
 ///   • Dismiss → "this is fine" — clear the flag, leave the review visible.
 /// Hiding or restoring changes trust/venue inputs, so the backend recomputes those in
-/// the same transaction. After any action we reload from the server, which is the
+/// the same transaction. After any action the screen reloads from the server, which is the
 /// authority on what remains in the queue.
 class AdminModerationScreen extends StatefulWidget {
   const AdminModerationScreen({super.key});

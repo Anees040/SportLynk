@@ -124,7 +124,7 @@ MAX_TEXT_CHARS = 4000
 #: pipeline's setup cost once per review.
 MAX_BATCH_ITEMS = 200
 
-#: Fallback operating point for the strong-negative escalation, used ONLY when the
+#: Fallback operating point for the strong-negative escalation, used only when the
 #: served artifact carries no threshold of its own. The real value ships in the
 #: joblib (`toxicity.negativeProbabilityThreshold`), because it is a property of
 #: the score distribution of one trained model -- see the module docstring.
@@ -134,7 +134,7 @@ MAX_BATCH_ITEMS = 200
 #: moment C changed and the model's margins narrowed (the highest P(negative) the
 #: shipped model emits anywhere on the exam is 0.9234, so 0.90 escalated 2 rows out
 #: of 68 true negatives). A fallback is by definition a guess about a model this
-#: code knows nothing about, so it is now set on the LOOSE side: a slightly
+#: code knows nothing about, so it is now set on the loose side: a slightly
 #: over-eager escalation is visible and gets fixed, whereas one that never fires
 #: looks exactly like a well-behaved quiet feature.
 DEFAULT_NEG_THRESHOLD = 0.70
@@ -149,7 +149,7 @@ MAX_NEG_THRESHOLD = 0.999
 REASON_ABUSE = "abusive_language"
 REASON_STRONG_NEGATIVE = "strong_negative"
 
-#: Emoji placeholders. These ARE evidence -- a review that is nothing but "🎉" or
+#: Emoji placeholders. These are evidence -- a review that is nothing but "🎉" or
 #: "😡" carries a genuine polarity signal, which is the whole reason `text_norm` maps
 #: emoji to polarity tokens instead of discarding them. Kept out of the set below so
 #: an emoji-only review is scored rather than rejected.
@@ -166,7 +166,7 @@ _EMOJI_TOKENS = frozenset(
 #: <money>, <url>, <email>, <user>, <phone>. A review made only of these has nothing
 #: to score -- see `_scoreable`.
 #:
-#: DERIVED from `text_norm.PLACEHOLDERS` rather than typed out, so that adding a
+#: Derived from `text_norm.PLACEHOLDERS` rather than typed out, so that adding a
 #: placeholder to the normaliser cannot silently leave a hole here. A new
 #: non-emoji placeholder joins this set automatically, which is the safe default:
 #: worst case a review is rejected as unusable, never scored on no evidence.
@@ -191,9 +191,7 @@ class CamelModel(BaseModel):
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Requests
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class SentimentRequest(CamelModel):
@@ -222,9 +220,7 @@ class SentimentBatchRequest(CamelModel):
     items: list[SentimentRequest] = Field(min_length=1, max_length=MAX_BATCH_ITEMS)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Responses
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class ClassScores(CamelModel):
@@ -347,9 +343,7 @@ class SentimentBatchResponse(CamelModel):
     model_metrics: SentimentModelMetrics | None = None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _require_model() -> Any:
@@ -606,9 +600,7 @@ def _log_batch(results: Iterable[SentimentResponse], requests: Sequence[Sentimen
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Routes
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 @router.get("/sentiment/spec", summary="The frozen normalisation contract")

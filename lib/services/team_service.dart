@@ -17,7 +17,7 @@ class TeamService {
           .toList()
       : <Team>[];
 
-  // ── Reads ──────────────────────────────────────────────────
+  // Reads
   Future<List<Team>> mine(String token) async =>
       _teams(await _api.get(ApiConstants.myTeams, token: token));
 
@@ -69,7 +69,7 @@ class TeamService {
     return SuggestedPlayers.fromJson(data is Map ? Map<String, dynamic>.from(data) : const {});
   }
 
-  // ── Create / edit ──────────────────────────────────────────
+  // Create / edit
   Future<Map<String, dynamic>> create(
     String token, {
     required String name,
@@ -101,7 +101,7 @@ class TeamService {
         'logo': ?logo,
       }, token: token);
 
-  // ── Invites ────────────────────────────────────────────────
+  // Invites
   /// Mint a fresh 48h invite link. The raw token is returned exactly once.
   ///
   /// [note] rides along on the server's `req.body.note` — the roster rail names
@@ -126,7 +126,7 @@ class TeamService {
   Future<Map<String, dynamic>> joinByToken(String token, String inviteToken) =>
       _api.post(ApiConstants.teamJoin(inviteToken), {}, token: token);
 
-  // ── Join requests (public teams) ───────────────────────────
+  // Join requests (public teams)
   Future<Map<String, dynamic>> joinRequest(String token, String id, {String? message}) =>
       _api.post(ApiConstants.teamJoinRequest(id), {
         if (message != null && message.isNotEmpty) 'message': message,
@@ -139,7 +139,7 @@ class TeamService {
           String token, String id, String requestId, String action) =>
       _api.patch(ApiConstants.teamRequest(id, requestId), {'action': action}, token: token);
 
-  // ── Membership ─────────────────────────────────────────────
+  // Membership
   /// action ∈ {remove, captain, vice_captain, member}
   Future<Map<String, dynamic>> memberAction(
           String token, String teamId, String userId, String action) =>

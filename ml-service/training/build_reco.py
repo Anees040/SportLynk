@@ -63,7 +63,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 # Importing config loads ml-service/.env (so RECO_EXPORT_API_KEY / RECO_EXPORT_URL are
-# picked up without the caller exporting them by hand) and gives us the SAME MODEL_DIR /
+# picked up without the caller exporting them by hand) and yields the same MODEL_DIR /
 # REPORT_DIR the running service reads — so a trained artifact lands exactly where the
 # registry looks, and an ML_MODEL_DIR override is honoured here too.
 from app.core import config  # noqa: E402  (path insert must precede this import)
@@ -77,21 +77,19 @@ from app.core.reco_model import VenueRecommender  # noqa: E402
 MODEL_KEY = "reco"
 
 # Below this many evaluable users (>=2 bookings), leave-one-out HitRate is too noisy to
-# gate on — we release regardless and flag it, rather than block release on a number
+# gate on — the release proceeds with a flag rather than blocking on a number
 # built from a handful of rows. At or above it, the model must beat popularity to reach
 # _latest.joblib.
 MIN_TRUST_USERS = 5
 
-# When the model IS trusted (enough users), it must not underperform the popularity
+# When the model is trusted (enough users), it must not underperform the popularity
 # baseline it exists to improve on. Tiny epsilon so an exact tie still passes.
 LIFT_EPSILON = 1e-9
 
 DEFAULT_URL = "http://127.0.0.1:3000/api/internal/export/reco-data"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Data
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def pull(url: str, key: str) -> dict:
@@ -131,9 +129,7 @@ def _canonical_sha256(data: dict) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Evaluation
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -236,9 +232,7 @@ def evaluate(model: VenueRecommender, users: list[dict]) -> Eval:
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Release gates
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -281,9 +275,7 @@ def release_gates(model: VenueRecommender, ev: Eval) -> list[Gate]:
     return gates
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Reports
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _libraries() -> dict:
@@ -414,9 +406,7 @@ small-corpus caveat. HitRate@5 **{m['hitRateAt5']:.3f}** vs popularity {m['popul
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Entry point
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def main() -> int:
@@ -479,7 +469,7 @@ def main() -> int:
         "released": released,
     }
 
-    # ── console summary ──
+    # Console summary
     print()
     for g in gates:
         print(f"  [{'PASS' if g.passed else 'FAIL'}] {g.name}: {g.detail}")

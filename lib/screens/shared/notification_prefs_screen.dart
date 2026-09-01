@@ -11,15 +11,15 @@ import '../../services/push_service.dart';
 /// Per-category push / in-app toggles, quiet hours, and an honest answer to "why is
 /// my phone quiet?".
 ///
-/// WHERE THESE ARE ENFORCED
+/// WHERE these are enforced
 /// Not here. `jobs/pushJob.js` reads `users.notification_prefs` and the quiet window
 /// before it calls FCM, so a muted category is muted for a user who never opens this
 /// screen again and on a phone that is switched off. A preference the client honours
-/// is a suggestion, not a preference. What this screen owns is the WORDING of that
+/// is a suggestion, not a preference. What this screen owns is the wording of that
 /// contract -- in particular that in-app is not the same switch as push, and that the
 /// feed keeps every row either way.
 ///
-/// WHY THE CATEGORY LIST COMES FROM THE SERVER
+/// Why the CATEGORY list comes from the server
 /// `categories` and `unmutable` arrive with the preferences, derived from
 /// `notificationTypes.js`. A category added in a later wave therefore appears here
 /// with no client change, and `system` is named unmutable by the same file that
@@ -88,10 +88,10 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> {
     });
   }
 
-  /// Writes, then REPLACES local state with the server's echo.
+  /// Writes, then replaces local state with the server's echo.
   ///
   /// `PUT /preferences` normalises what it stores -- an unknown category is dropped
-  /// and a malformed "25:99" falls back -- and returns what it actually kept. Showing
+  /// and a malformed "25:99" falls back -- and returns what it kept. Showing
   /// the echo rather than the optimistic copy means the switch a user sees is the
   /// switch the job will read, so a silently-rejected value cannot look saved.
   Future<void> _save(NotificationPrefs next) async {
@@ -99,7 +99,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> {
     if (t == null) return;
     setState(() { _p = next; _saving = true; }); // optimistic, for the switch animation
     final echoed = await _svc.savePrefs(t, next);
-    // The foreground banner gate lives in PushService, so it is handed the ECHO the
+    // The foreground banner gate lives in PushService, so it is handed the echo the
     // moment it lands: an in-app toggle takes effect on the next message, not on the
     // next app start.
     if (echoed != null) PushService().applyPrefs(echoed);
@@ -356,7 +356,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> {
     final label = _labels[cat] ?? _titleCase(cat);
     final hint = _hints[cat];
     // muteAll does not rewrite the per-category flags on the server, so the switches
-    // keep their own values and are shown DISABLED instead of forced off. Turning the
+    // keep their own values and are shown disabled instead of forced off. Turning the
     // master switch back off must restore exactly what the user had before.
     final dim = p.muteAll && !locked;
 

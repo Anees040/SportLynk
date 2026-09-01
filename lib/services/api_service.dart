@@ -38,7 +38,7 @@ class ApiClient {
   ///
   /// Render's free plan spins the container down after ~15 minutes idle and
   /// cold-starts in roughly 30 seconds. 45s covers that with margin; after one
-  /// success we drop to [_warmTimeout] so a genuinely dead network still fails
+  /// success the bound drops to [_warmTimeout] so a genuinely dead network still fails
   /// fast. Reset to cold on a connection error, since sleeping is the likeliest
   /// cause and the next attempt deserves the long budget again.
   static const Duration _coldTimeout = Duration(seconds: 45);
@@ -197,7 +197,7 @@ class ApiClient {
   ///
   /// The backend already answers in that shape for every route (including its
   /// 404 and its global error handler), so normally this just decodes. The
-  /// fallbacks below are for the cases that are *not* our own JSON: a proxy's
+  /// fallbacks below are for the cases that are *not* this API's own JSON: a proxy's
   /// HTML error page, a Render cold-start 502, or a rate-limit response.
   Map<String, dynamic> _decode(http.Response response) {
     final status = response.statusCode;
@@ -214,7 +214,7 @@ class ApiClient {
 
     if (decoded != null) {
       decoded.putIfAbsent('statusCode', () => status);
-      // Trust an explicit flag from our own API; otherwise derive one so a
+      // Trust an explicit flag from the app's own API; otherwise derive one so a
       // hand-written response without `success` still behaves sanely.
       decoded.putIfAbsent('success', () => status >= 200 && status < 300);
       if (decoded['success'] != true && decoded['message'] == null) {

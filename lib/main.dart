@@ -28,8 +28,8 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase initialization failed: $e');
   }
-  // BEFORE runApp, and deliberately so: `getInitialMessage()` is what a tray tap on
-  // a KILLED app arrives as, it resolves exactly once, and it must be read before
+  // Before runApp, and deliberately so: `getInitialMessage()` is what a tray tap on
+  // a killed app arrives as, it resolves exactly once, and it must be read before
   // the first frame or the link is lost. PushService parks it and
   // `DeepLink.replayPending()` fires it from the first home screen, once
   // AuthProvider has resolved -- a deep link pushed before authentication would land

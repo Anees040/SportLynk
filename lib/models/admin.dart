@@ -1,6 +1,6 @@
 /// The shapes the four admin surfaces answer with (S.7 Wave D).
 ///
-/// EVERY FIELD HERE IS SERVER-DECIDED, and that is the point of the file.
+/// Every field here is server-decided, and that is the point of the file.
 /// `severityElo` is computed with the live K-factor by `utils/elo.js`, the ruling
 /// buttons are enabled by a server `capabilities` block, and the settings form is
 /// built from whatever `GET /api/admin/settings` sends. Nothing about admin policy
@@ -34,9 +34,7 @@ List<Map<String, dynamic>> _rows(dynamic v) => (v as List? ?? const [])
     .map((m) => Map<String, dynamic>.from(m))
     .toList();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DISPUTES — the queue row
-// ─────────────────────────────────────────────────────────────────────────────
+// Disputes — the queue row
 
 /// One side of a disputed match, as the queue and the case file both carry it.
 class DisputeTeam {
@@ -125,12 +123,12 @@ class DisputeRow {
   /// would show a different order from the one it is reading.
   final int ageHours;
 
-  /// The rating actually at stake if this is ruled — `elo.rate()` at the live K.
+  /// The rating at stake if this is ruled — `elo.rate()` at the live K.
   /// This is the triage number: 32 points of a title decider outrank a week-old
   /// friendly, which is why the queue leads with it.
   final int severityElo;
 
-  /// BOTH captains filed. One ruling closes both, so the admin should not go
+  /// Both captains filed. One ruling closes both, so the admin should not go
   /// hunting for the second row afterwards.
   final bool bothSidesDisputed;
 
@@ -209,9 +207,7 @@ class DisputeRow {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DISPUTES — the case file (FR10.6)
-// ─────────────────────────────────────────────────────────────────────────────
+// Disputes — the case file (FR10.6)
 
 /// One captain's submitted scoreline. Null on a side that never filed — which is
 /// itself evidence, and the reason this is nullable rather than defaulted to 0–0.
@@ -258,7 +254,7 @@ class RosterMember {
   final String? avatarUrl;
   final String role;
 
-  /// From `player_profiles`, LEFT-joined server-side: null means "never rated",
+  /// From `player_profiles`, left-joined server-side: null means "never rated",
   /// which is different from 0 and must not render as a bad score.
   final double? trustScore;
 
@@ -286,7 +282,7 @@ class RosterMember {
   bool get isViceCaptain => role == 'vice_captain';
 }
 
-/// The booking the match was played on, and what the owner actually saw.
+/// The booking the match was played on, and what the owner saw.
 class CaseBooking {
   final String id;
   final String? slotDate;
@@ -400,7 +396,7 @@ class ArchiveMessage {
 
 /// A rating movement already on the record for this match. Present only when the
 /// match was rated before the dispute — which is exactly when a ruling has to
-/// CORRECT rather than apply.
+/// correct rather than apply.
 class EloHistoryEntry {
   final String teamId;
   final String? teamName;
@@ -434,7 +430,7 @@ class EloHistoryEntry {
       );
 }
 
-/// What the server says this screen may offer. The buttons are enabled from THIS
+/// What the server says this screen may offer. The buttons are enabled from this
 /// and never from client-side reasoning about the match: an overturn of an
 /// already-rated match needs a migration, and `correctionBlockedBy` names the file
 /// so the screen can explain a disabled button instead of failing on submit.
@@ -466,7 +462,7 @@ class DisputeCapabilities {
 }
 
 /// A sibling dispute on the same match, as the case file lists it. Deliberately
-/// NOT a [DisputeRow]: the server sends five keys here, and parsing it as a queue
+/// not a [DisputeRow]: the server sends five keys here, and parsing it as a queue
 /// row would fabricate a zero severity and an empty match block.
 class RelatedDispute {
   final String id;
@@ -501,7 +497,7 @@ class DisputeCase {
   final DisputeSubmission? challengerSubmission;
   final DisputeSubmission? opponentSubmission;
 
-  /// True when both captains filed the SAME scoreline. A dispute over an agreed
+  /// True when both captains filed the same scoreline. A dispute over an agreed
   /// result is a different case from a dispute over two conflicting ones, and the
   /// admin should see which at a glance.
   final bool submissionsAgree;
@@ -516,7 +512,7 @@ class DisputeCase {
   final List<EloHistoryEntry> eloHistory;
   final DisputeCapabilities capabilities;
 
-  /// Other disputes on the SAME match. One ruling closes them all, so the screen
+  /// Other disputes on the same match. One ruling closes them all, so the screen
   /// says so rather than letting the admin open each one in turn.
   final List<RelatedDispute> otherDisputes;
 
@@ -581,9 +577,7 @@ class DisputeCase {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// USERS — search, suspend, reinstate (FR10.8)
-// ─────────────────────────────────────────────────────────────────────────────
+// Users — search, suspend, reinstate (FR10.8)
 
 /// A row of `GET /api/admin/users`. `suspended` is derived server-side from
 /// `users.is_active`; there is no second column for it, and the client must not
@@ -650,9 +644,9 @@ class AdminUserRow {
   }
 }
 
-/// What a suspension actually unwound. Rendered as a receipt after the action,
+/// What a suspension unwound. Rendered as a receipt after the action,
 /// because "suspended" alone hides the part that matters: money moved, and some
-/// things deliberately did NOT move.
+/// things deliberately did not move.
 class SuspensionCascade {
   final List<String> challengesExpired;
   final List<CascadeBooking> bookingsCancelled;
@@ -795,7 +789,7 @@ class SuspensionResult {
   final String? reason;
   final SuspensionCascade? cascade;
 
-  /// Venues brought back on a reinstatement. Bookings do NOT come back — a
+  /// Venues brought back on a reinstatement. Bookings do not come back — a
   /// cancelled booking was refunded and its slot may already be someone else's.
   final int venuesRestored;
 
@@ -827,12 +821,10 @@ class SuspensionResult {
       );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GLOBAL SETTINGS (FR10.9–10.11)
-// ─────────────────────────────────────────────────────────────────────────────
+// Global settings (FR10.9–10.11)
 
 /// One writable platform setting, exactly as `GET /api/admin/settings` describes
-/// it. There is NO Dart copy of the catalogue: label, bounds, step, unit and type
+/// it. There is no Dart copy of the catalogue: label, bounds, step, unit and type
 /// all arrive from `utils/settingsCatalog.js`, so a field added on the server
 /// appears here with no app release, and the screen can never offer a value the
 /// server would reject.
@@ -856,7 +848,7 @@ class SettingsField {
   /// the same rule the server enforces.
   final String? pairsWith;
 
-  /// EFFECTIVE value: what the next booking will actually use. `num`, `bool`,
+  /// Effective value: what the next booking will use. `num`, `bool`,
   /// `String`, or `Map<String, bool>` for a `sports` field.
   final dynamic value;
 

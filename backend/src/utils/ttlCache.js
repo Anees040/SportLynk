@@ -1,13 +1,12 @@
 /**
  * ttlCache.js — a small, bounded, in-memory TTL cache.
  *
- * WHY THIS EXISTS
- * ---------------
+ * Why this exists
  * S.3 Wave D puts two ML-backed reads on the owner dashboard: a price suggestion and
  * a 72-hour demand forecast. Both cost a cross-process HTTP call to the Python
  * service with a 2-second timeout, and both answer questions whose answers do not
  * change minute to minute — a demand forecast for the next 72 hours is the same
- * forecast whether you ask at 14:00 or 14:20. Recomputing it on every dashboard
+ * forecast whether it is requested at 14:00 or at 14:20. Recomputing it on every dashboard
  * refresh would spend 2s of latency and a scikit-learn inference to produce a byte
  * -identical response.
  *
@@ -17,30 +16,27 @@
  * things the inline version does not have: a size bound, in-flight de-duplication,
  * and a rule about failures.
  *
- * WHY IN-MEMORY AND NOT REDIS
- * ---------------------------
+ * Why in-memory and not REDIS
  * SportLynk already runs three processes (Flutter aside): Node, Postgres, and now
  * FastAPI. A fourth process to hold a value that is cheap to recompute and harmless
- * to lose is the wrong trade at this stage. This cache is a LATENCY OPTIMISATION,
+ * to lose is the wrong trade at this stage. This cache is a latency optimisation,
  * never a source of truth: the correct behaviour on a cold start, a restart or an
  * eviction is one extra ML call, which is exactly what happens.
  *
  * The consequence to be aware of: with more than one Node instance behind a load
  * balancer, each holds its own copy, so a venue's suggestion could differ across
  * instances for up to one TTL. That is acceptable for a suggestion an owner must
- * explicitly apply. It would NOT be acceptable for anything transactional, which is
+ * explicitly apply. It would not be acceptable for anything transactional, which is
  * why nothing in here caches a booking, a balance, or a lock.
  *
- * WHY FAILURES ARE NOT CACHED BY DEFAULT
- * --------------------------------------
+ * Why failures are not cached by default
  * Caching "the ML service was down" for an hour would turn a 30-second outage into a
  * 60-minute one, and mlClient.js already has a circuit breaker whose entire job is to
  * make repeated failures cheap. So `getOrSet` takes a `shouldCache` predicate and the
  * default stores only what the caller says is worth storing. A degraded answer is
  * served, then forgotten.
  *
- * WHY IN-FLIGHT DE-DUPLICATION
- * ----------------------------
+ * Why in-flight de-duplication
  * Without it, five simultaneous dashboard loads on a cold key make five ML calls,
  * each paying the full timeout, and four of them are thrown away. The promise itself
  * is cached while it is pending, so concurrent callers await the same call. This is
@@ -69,7 +65,7 @@ class TtlCache {
     // key is venueId + date + hour, so a scripted client could otherwise mint
     // unbounded distinct keys and grow the heap until the process dies — a cache
     // becoming a memory leak is a real and boring way to lose a production node.
-    // Eviction is oldest-INSERTED first, not least-recently-used: a JS Map iterates
+    // Eviction is oldest-inserted first, not least-recently-used: a JS Map iterates
     // in insertion order, so `keys().next()` is the oldest entry for free, and with a
     // uniform TTL the oldest entry is also the one closest to expiring anyway. True
     // LRU would need a second structure to buy almost nothing here.
@@ -97,7 +93,7 @@ class TtlCache {
   }
 
   set(key, value) {
-    // Delete-then-set so an overwrite moves the key to the END of the insertion
+    // Delete-then-set so an overwrite moves the key to the end of the insertion
     // order. Without this, a hot key that is refreshed forever keeps its original
     // position and is evicted while still fresh.
     if (this.store.has(key)) this.store.delete(key);
@@ -112,7 +108,7 @@ class TtlCache {
   }
 
   /**
-   * The method callers actually use: return the cached value, or run `loader` once.
+   * The method callers use: return the cached value, or run `loader` once.
    *
    * @param {string}   key
    * @param {Function} loader       async () => value
