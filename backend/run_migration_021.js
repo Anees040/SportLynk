@@ -2,27 +2,27 @@
  * Runner for migrations/021_dispute_ruling_labels.sql
  * Usage: node run_migration_021.js
  *
- * NOT YET APPLIED. 019 and 020 were applied with the user's go-ahead; 021 was
+ * Not yet applied. 019 and 020 were applied with the user's go-ahead; 021 was
  * written afterwards, needs its own, and is listed as a manual step. Everything
- * in Wave D works without it EXCEPT one branch - see WHAT NEEDS THIS, below.
+ * in Wave D works without it EXCEPT one branch - see what needs this, below.
  *
  * 021 widens two label vocabularies. It is small, but it is the kind of small
  * that fails at runtime rather than at apply time, so both halves are probed with
- * the REAL statements the application will run:
+ * the real statements the application will run:
  *
  *   1. chk_elo_history_reason must accept 'admin_reversal' and 'admin_ruling'
- *      AND still reject a typo. A CHECK widened to "reason IS NOT NULL" would
+ *      And still reject a typo. A CHECK widened to "reason IS NOT NULL" would
  *      pass a "does it accept the new label" test and quietly accept anything.
- *   2. txn_type must contain 'platform_commission' AND accept it in an INSERT.
+ *   2. txn_type must contain 'platform_commission' and accept it in an INSERT.
  *      The label existing in pg_enum is not the same fact as a transaction
  *      writing with it: an ADD VALUE inside the same transaction that uses it
  *      raises 55P04, which is exactly what the split marker is there to avoid.
  *
- * Both probes write rows and are ALWAYS rolled back - this runs against the
+ * Both probes write rows and are always rolled back - this runs against the
  * shared Supabase database and must leave nothing behind.
  *
- * WHAT NEEDS THIS
- *   - A dispute ruling that FLIPS an already-rated match (elo_applied = true),
+ * What needs this
+ *   - A dispute ruling that flips an already-rated match (elo_applied = true),
  *     which is only reachable when the dispute was filed against a COMPLETED
  *     match. disputeService checks for the labels first and refuses with a
  *     message naming this file rather than raising a 23514 mid-transaction.
@@ -30,17 +30,17 @@
  *     platform_commission label. commission_pct defaults to 0, so until an
  *     admin changes it nothing is deducted and nothing is written either way.
  *
- * WHAT THIS MIGRATION DELIBERATELY DOES NOT DO
+ * What this migration deliberately does not do
  * There are 24 naive `timestamp` columns left in the schema (bookings.created_at,
  * transactions.created_at, users.created_at, ...). 020 converted `notifications`
  * because a feed renders "2 hours ago" from it; converting the other twelve
  * tables is a sweeping change no wave has asked for, and their values are already
  * UTC because every session is. Wave D's financial export therefore ranges over
- * `bookings.slot_date` - a true DATE holding PKT wall-clock - instead of over a
+ * `bookings.slot_date` - a true date holding PKT wall-clock - instead of over a
  * naive timestamp, which makes "August" mean the same thing to the owner and to
  * Postgres without touching a single column.
  *
- * Safe to re-run: the CHECK is dropped and recreated inside a guarded DO block,
+ * Safe to re-run: the CHECK is dropped and recreated inside a guarded do block,
  * and ADD VALUE uses IF NOT EXISTS.
  */
 const fs = require('fs');
