@@ -2,24 +2,24 @@
  * Runner for migrations/017_reviews_moderation.sql
  * Usage: node run_migration_017.js
  *
- * Applied as ONE multi-statement command, so Postgres wraps it in a single
+ * Applied as one multi-statement command, so Postgres wraps it in a single
  * implicit transaction and a failure anywhere leaves the database untouched.
  * (No `-- @@SPLIT@@` marker: this migration adds no enum values, and
  * `ALTER TYPE ... ADD VALUE` is the only statement that cannot run in a txn.)
  *
  * Like the 016 runner, this is more than a `\d` dump:
  *
- *   1. A PRE-FLIGHT that can stop the migration. ux_reviews_one_per_author is a
+ *   1. A pre-flight that can stop the migration. ux_reviews_one_per_author is a
  *      UNIQUE index over live data — if two rows already share
  *      (booking_id, reviewer_id, review_type) the CREATE fails with a 23505 that
- *      names the index, not the rows. Any such pair is found and PRINTED first
+ *      names the index, not the rows. Any such pair is found and printed first
  *      and the migration is not attempted, because deciding which duplicate
  *      review to keep is a decision for a human.
  *
- *   2. FUNCTIONAL PROBES. Three of the guarantees here are constraints, and a
+ *   2. Functional probes. Three of the guarantees here are constraints, and a
  *      constraint that exists but does not constrain is worse than none — it
  *      reads as enforced and is enforced nowhere. Each probe inserts a row that
- *      MUST be rejected and asserts the SQLSTATE, inside a transaction that is
+ *      must be rejected and asserts the SQLSTATE, inside a transaction that is
  *      always rolled back. The probe that matters most is the one-review-per-
  *      author index, because that is the only thing standing between a
  *      double-tapped Submit and two reviews for one booking.
@@ -75,7 +75,7 @@ async function run() {
   };
 
   try {
-    // ─── Pre-flight ─────────────────────────────────────────────────────────
+    // Pre-flight
     const before = await tableNames(client);
     const missingPrereqs = PREREQUISITE_TABLES.filter((t) => !before.includes(t));
     if (missingPrereqs.length) {
@@ -126,12 +126,12 @@ async function run() {
     console.log('   No duplicate (booking, author, type) reviews.');
     console.log('');
 
-    // ─── Apply ──────────────────────────────────────────────────────────────
+    // Apply
     await client.query(sql);
     console.log('Migration 017 applied. Verifying:');
     console.log('');
 
-    // ─── 1. review_flags columns ────────────────────────────────────────────
+    // 1. review_flags columns
     const { rows: cols } = await client.query(
       `SELECT table_name, column_name, data_type
          FROM information_schema.columns
@@ -151,7 +151,7 @@ async function run() {
     check(badCols.length === 0,
       `all ${colTotal} review_flags columns present with the right type${badCols.length ? ` — WRONG: ${badCols.join('; ')}` : ''}`);
 
-    // ─── 2. Indexes ─────────────────────────────────────────────────────────
+    // 2. Indexes
     const { rows: idxRows } = await client.query(
       `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'`,
     );
@@ -176,7 +176,7 @@ async function run() {
     check(/WHERE/i.test(userIdx) && /reviewed_user_id/i.test(userIdx),
       'idx_reviews_reviewed_user is partial on reviewed_user_id IS NOT NULL (venue reviews carry none)');
 
-    // ─── 3. CHECK constraint exists ─────────────────────────────────────────
+    // 3. CHECK constraint exists
     const { rows: conRows } = await client.query(
       `SELECT con.conname, pg_get_constraintdef(con.oid) AS def
          FROM pg_constraint con
@@ -189,7 +189,7 @@ async function run() {
     check(missingCons.length === 0,
       `all ${EXPECTED_CONSTRAINTS.length} CHECK constraint(s) exist${missingCons.length ? ` — MISSING: ${missingCons.join(', ')}` : ''}`);
 
-    // ─── 4. trust_score cold-start default flipped 100 → 50 ─────────────────
+    // 4. trust_score cold-start default flipped 100 → 50
     const { rows: [tsCol] } = await client.query(
       `SELECT column_default
          FROM information_schema.columns
@@ -200,8 +200,8 @@ async function run() {
     check(/\b50\b/.test(tsDefault) && !/\b100\b/.test(tsDefault),
       `player_profiles.trust_score DEFAULT is 50, not 100 (zero-signal baseline; was "${tsDefault}")`);
 
-    // ─── 5. Functional probes — do the constraints actually constrain? ───────
-    // Everything below runs inside a transaction that is ALWAYS rolled back, and
+    // 5. Functional probes — do the constraints constrain?
+    // Everything below runs inside a transaction that is always rolled back, and
     // every insert expected to fail gets its own SAVEPOINT: without one, the
     // first 23505/23514 aborts the transaction and every later query dies with
     // 25P02 instead of reporting a result.
@@ -219,7 +219,7 @@ async function run() {
 
     // The probes need a real user + booking (both are FK targets). Seeded dev
     // databases have them; an empty one skips the probes with a note — the
-    // constraints are still proven to EXIST above, the probes are the bonus.
+    // constraints are still proven to exist above, the probes are the bonus.
     const { rows: userRow } = await client.query('SELECT id FROM users LIMIT 1');
     const { rows: bookingRow } = await client.query('SELECT id FROM bookings LIMIT 1');
 
@@ -236,7 +236,7 @@ async function run() {
           [bid, uid],
         );
 
-        // 5a. THE important one — a second venue review, same author + booking.
+        // 5a. The important one — a second venue review, same author + booking.
         const dupe = await tryInsert('r1', () => client.query(
           `INSERT INTO reviews (booking_id, reviewer_id, review_type, rating)
            VALUES ($1, $2, 'venue', 3)`, [bid, uid]));
@@ -244,7 +244,7 @@ async function run() {
           `a SECOND venue review on the same booking by the same author is rejected (23505) — `
           + `a double-tapped Submit cannot double-review${dupe.ok ? ' — IT WAS ACCEPTED' : ` — got ${dupe.code}`}`);
 
-        // 5b. A DIFFERENT type on the same (booking, author) is allowed — the
+        // 5b. A different type on the same (booking, author) is allowed — the
         //     captain's opponent review must not collide with their venue review.
         const otherType = await tryInsert('r2', () => client.query(
           `INSERT INTO reviews (booking_id, reviewer_id, review_type, rating)
@@ -281,7 +281,7 @@ async function run() {
       console.log('   ~ skipped the functional probes (need one users row and one bookings row)');
     }
 
-    // ─── Listing ────────────────────────────────────────────────────────────
+    // Listing
     console.log('');
     console.log('Reviews backend now enforced by the database:');
     console.log('   • one review per (booking, author, type)  — FR9.1');
