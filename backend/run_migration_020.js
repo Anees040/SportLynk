@@ -3,8 +3,8 @@
  * Usage: node run_migration_020.js
  *
  * 020 turns `notifications` from a write-only log into a feed and adds the two
- * tables the admin module needs. It contains NO `ALTER TYPE ... ADD VALUE`, so
- * unlike 019 it needs no chunking: the whole file is applied as ONE command and
+ * tables the admin module needs. It contains no `ALTER TYPE ... ADD VALUE`, so
+ * unlike 019 it needs no chunking: the whole file is applied as one command and
  * Postgres wraps it in a single implicit transaction. A failure anywhere — the
  * timezone conversion, a backfill, a CHECK that a live row violates — leaves the
  * schema exactly as it was. The split mechanism below is kept identical to 019's
@@ -13,30 +13,30 @@
  * Why this runner is long. Four of 020's guarantees are load-bearing, and each
  * one is the sort of thing that reads as working while being broken:
  *
- *   1. THE TIMEZONE CONVERSION IS ONE-WAY AND MUST STAY THAT WAY. 187 live rows
- *      are reinterpreted as UTC. The .sql guards on the CURRENT data type, so a
+ *   1. The TIMEZONE conversion is one-way and must stay that way. 187 live rows
+ *      are reinterpreted as UTC. The .sql guards on the current data type, so a
  *      second run does nothing; if that guard were on a column list instead,
- *      re-running would apply AT TIME ZONE a second time and silently move every
+ *      re-running would apply at time zone a second time and silently move every
  *      historical row by the session offset. The census asserts the resulting
- *      type AND the default, because a converted column with a lost DEFAULT would
+ *      type and the default, because a converted column with a lost default would
  *      make the next INSERT write NULL and every "2 hours ago" read as never.
  *
- *   2. THE COLLAPSE INDEX MUST BE INFERABLE. notify() v2 does
+ *   2. The collapse INDEX must be inferable. notify() v2 does
  *      `ON CONFLICT (user_id, group_key) WHERE <predicate> DO UPDATE` to turn
  *      three chat notifications into one row reading "3 new messages". Postgres
- *      infers a PARTIAL unique index only when the index predicate is implied by
+ *      infers a partial unique index only when the index predicate is implied by
  *      the ON CONFLICT WHERE clause — one word out of place and every grouped
  *      notify() raises 42P10 at runtime, inside a money transaction. So the probe
- *      below runs the REAL upsert twice and asserts group_count goes 1 -> 2.
+ *      below runs the real upsert twice and asserts group_count goes 1 -> 2.
  *
- *   3. READ AND DISMISSED ROWS MUST BE OUTSIDE THAT INDEX. Once you have seen
- *      "2 new messages", the next message has to start a FRESH row rather than
- *      bump a row you already read (which would leave the feed permanently
+ *   3. Read and dismissed rows must be outside that index. Once the user has seen
+ *      "2 new messages", the next message has to start a fresh row rather than
+ *      bump a row already read (which would leave the feed permanently
  *      showing an old timestamp and never re-notify). Two probes prove a same-key
  *      row is accepted once the first is read, and again once it is dismissed.
  *
- *   4. THE AUDIT TRAIL MUST OUTLIVE ITS SUBJECTS. admin_audit.admin_id is
- *      ON DELETE SET NULL and user_devices.user_id is ON DELETE CASCADE, which is
+ *   4. The audit trail must outlive its subjects. admin_audit.admin_id is
+ *      on DELETE SET NULL and user_devices.user_id is ON DELETE CASCADE, which is
  *      the opposite pairing on purpose: deleting an admin must not erase what they
  *      did, and deleting a user must not leave their push tokens behind. Both are
  *      proven by deleting a probe user inside the rolled-back transaction.
@@ -73,9 +73,9 @@ const EXPECTED_INDEXES = [
   'idx_disputes_queue',
 ];
 
-// Indexes 020 DEPENDS ON and deliberately does not re-create. idx_notifications_user
+// Indexes 020 depends on and deliberately does not re-create. idx_notifications_user
 // (010) is what the feed's own user_id filter rides on; the two dispute indexes are
-// what make the queue's joins cheap. A thing you rely on and never check is a thing
+// what make the queue's joins cheap. An index relied on and never checked is one
 // that can quietly go missing.
 const INHERITED_INDEXES = [
   'idx_notifications_user',
@@ -105,7 +105,7 @@ const EXPECTED_FKEYS = [
   'admin_audit_admin_id_fkey',
 ];
 
-// table -> column -> data_type. Presence AND type, because a jsonb column that
+// table -> column -> data_type. Presence and type, because a jsonb column that
 // came out as text would accept every write and answer no query.
 const EXPECTED_COLUMNS = {
   notifications: {
@@ -166,8 +166,8 @@ const EXPECTED_COLUMNS = {
   },
 };
 
-// The columns whose NOT NULL + DEFAULT are being relied on, not merely their
-// presence. The outbox drain reads `WHERE sent_push = false`: a NULLABLE sent_push
+// The columns whose NOT NULL + default are being relied on, not merely their
+// presence. The outbox drain reads `WHERE sent_push = false`: a nullable sent_push
 // would make every historical row invisible to it (NULL = false is NULL, not
 // true), so the entire backlog would sit unpushed with no error anywhere.
 // [table, column, expected is_nullable, expected default or null for "any"]
@@ -221,7 +221,7 @@ async function run() {
   };
 
   try {
-    // ─── Pre-flight ─────────────────────────────────────────────────────────
+    // Pre-flight
     const before = await tableNames(client);
     const missingPrereqs = PREREQUISITE_TABLES.filter((t) => !before.includes(t));
     if (missingPrereqs.length) {
@@ -269,9 +269,9 @@ async function run() {
     }
 
     // chk_notifications_category validates every existing row the instant it is
-    // added, and the .sql backfills `category` from a CASE on the type prefix
-    // immediately before. If a live type ever falls outside that CASE it lands on
-    // 'system', which IS in the vocabulary — so this cannot fail. Printed anyway,
+    // added, and the .sql backfills `category` from a case on the type prefix
+    // immediately before. If a live type ever falls outside that case it lands on
+    // 'system', which is in the vocabulary — so this cannot fail. Printed anyway,
     // because the number is the interesting part: it is the size of the backlog
     // about to become a readable feed.
     const { rows: [pre] } = await client.query(
@@ -297,7 +297,7 @@ async function run() {
       + `${EXPECTED_TABLES.filter((t) => before.includes(t)).length}/2 already present.`);
     console.log('');
 
-    // ─── Apply ──────────────────────────────────────────────────────────────
+    // Apply
     // 020 has no ALTER TYPE, so there is nothing whose "already exists" may be
     // swallowed: any error here is real and takes the whole file down with it.
     let applyFailed = false;
@@ -318,13 +318,13 @@ async function run() {
     console.log('');
     console.log('Migration 020 applied. Verifying:');
     console.log('');
-    // ─── 1. The two new tables ──────────────────────────────────────────────
+    // 1. The two new tables
     const after = await tableNames(client);
     for (const t of EXPECTED_TABLES) check(after.includes(t), `table ${t} exists`);
     check(after.length >= before.length,
       `no table disappeared (${before.length} → ${after.length})`);
 
-    // ─── 2. Columns, with their types ───────────────────────────────────────
+    // 2. Columns, with their types
     const { rows: colRows } = await client.query(
       `SELECT table_name, column_name, data_type, is_nullable, column_default
          FROM information_schema.columns
@@ -350,7 +350,7 @@ async function run() {
     }
     check(colBad === 0, `all ${colOk} expected column(s) present with the right type`);
 
-    // ─── 3. Nullability and defaults, where they are load-bearing ───────────
+    // 3. Nullability and defaults, where they are load-bearing
     for (const [table, col, nullable, def] of EXPECTED_COLUMN_RULES) {
       const got = colMap.get(`${table}.${col}`);
       if (!got) { check(false, `${table}.${col} exists (for its NOT NULL/default)`); continue; }
@@ -363,7 +363,7 @@ async function run() {
           + `default=${got.column_default === null ? 'NULL' : `"${got.column_default}"`}`}`);
     }
 
-    // ─── 4. CHECK constraints and foreign keys ──────────────────────────────
+    // 4. CHECK constraints and foreign keys
     const { rows: conRows } = await client.query(
       `SELECT conname, contype FROM pg_constraint WHERE conname = ANY($1::text[])`,
       [[...EXPECTED_CONSTRAINTS, ...EXPECTED_FKEYS]],
@@ -393,7 +393,7 @@ async function run() {
     check(delMap.get('users_suspended_by_fkey') === 'n',
       'users.suspended_by is ON DELETE SET NULL');
 
-    // ─── 5. Indexes, and the predicates the queries depend on ───────────────
+    // 5. Indexes, and the predicates the queries depend on
     const { rows: idxRows } = await client.query(
       `SELECT indexname, indexdef FROM pg_indexes
         WHERE schemaname = 'public' AND indexname = ANY($1::text[])`,
@@ -431,8 +431,8 @@ async function run() {
       'idx_disputes_queue orders open disputes by severity — the queue sorts by '
       + 'consequence, not by age alone');
 
-    // ─── 6. The backfill, on the real 187 rows ──────────────────────────────
-    // A backfill that ran and got the CASE wrong is worse than one that did not
+    // 6. The backfill, on the real 187 rows
+    // A backfill that ran and got the case wrong is worse than one that did not
     // run: every historical row would be filed under the wrong filter chip and
     // the count on 'system' would look plausible. So the mapping is asserted per
     // prefix, against live data.
@@ -506,22 +506,22 @@ async function run() {
         + `${new Date(drift.newest).toISOString()}`);
     }
 
-    // ─── 7. Functional probes ───────────────────────────────────────────────
+    // 7. Functional probes
     // A constraint that exists but does not constrain reads as enforced and is
-    // enforced nowhere. Each probe writes a row that MUST be accepted or MUST be
+    // enforced nowhere. Each probe writes a row that must be accepted or must be
     // rejected with a named SQLSTATE, inside a transaction that is always rolled
     // back. Nothing here survives.
     console.log('');
     console.log('   Functional probes (all rolled back):');
 
-    // TWO helpers, and the difference between them is the point.
+    // Two helpers, and the difference between them is the point.
     //
-    // tryWrite rolls back to its savepoint even when the write SUCCEEDS, so each
+    // tryWrite rolls back to its savepoint even when the write succeeds, so each
     // vocabulary probe is completely isolated: one probe's accepted row can never
     // be the reason the next one passes or fails.
     //
     // tryKeep RELEASEs instead, so the row survives inside the outer transaction.
-    // The collapse-index probes NEED that — an upsert cannot conflict with a row
+    // The collapse-index probes need that — an upsert cannot conflict with a row
     // that was rolled away — and so do the cascade probes, which delete a user and
     // then look for what the delete took with it.
     const tryWrite = async (label, fn) => {
@@ -583,7 +583,7 @@ async function run() {
 
       await client.query('BEGIN');
       try {
-        // ── 7a. The vocabularies ─────────────────────────────────────────────
+        // 7a. The vocabularies
         const okBase = await tryWrite('p1', () => insN());
         check(okBase.ok,
           'a plain chat notification is accepted (the baseline — every probe below '
@@ -631,7 +631,7 @@ async function run() {
           'an actor_id that is not a user is rejected (23503) — "Ali sent you a message" must '
           + `name someone who exists${badActor.ok ? ' — IT WAS ACCEPTED' : ` — got ${badActor.code}`}`);
 
-        // ── 7b. The row a client can actually render ──────────────────────────
+        // 7b. The row a client can render
         const dl = await tryWrite('p10', () => insN({
           deep_link: JSON.stringify({ route: '/booking-detail', args: { bookingId: uid } }),
           image_url: 'https://example.test/a.png',
@@ -650,10 +650,10 @@ async function run() {
           'every probe above is isolated — its savepoint rolled back on success too, so '
           + `no accepted row can prop up the next probe (${dlRead.length} left visible)`);
 
-        // ── 7c. THE COLLAPSE. The one probe this whole runner exists for ──────
+        // 7c. The collapse. The one probe this whole runner exists for
         // notify() v2 runs this exact statement inside money transactions. If the
         // ON CONFLICT predicate does not imply the index predicate, Postgres
-        // raises 42P10 — "no unique or exclusion constraint matching the ON
+        // raises 42P10 — "no unique or exclusion constraint matching the on
         // CONFLICT specification" — and every grouped notification fails at
         // runtime, inside a transaction holding FOR UPDATE locks on a wallet.
         const GKEY = `${PROBE_TAG}:gk`;
@@ -695,7 +695,7 @@ async function run() {
           + '(23505) — the uniqueness is enforced by the database, so two messages arriving '
           + `in the same millisecond collapse instead of racing${dupe.ok ? ' — IT WAS ACCEPTED' : ` — got ${dupe.code}`}`);
 
-        // ── 7d. Read and dismissed rows must fall OUTSIDE that index ─────────
+        // 7d. Read and dismissed rows must fall outside that index
         await client.query(
           'UPDATE notifications SET is_read = true, read_at = now() WHERE id = $1',
           [up1.rows[0].id],
@@ -724,7 +724,7 @@ async function run() {
           `the five messages produced exactly 3 rows (${gk.n} found) — collapsed while unread, `
           + 'fresh after read, fresh after dismiss');
 
-        // ── 7e. user_devices — one row per phone ──────────────────────────────
+        // 7e. user_devices — one row per phone
         const TOKEN = `${PROBE_TAG}:token:aaa`;
         const dev1 = await tryKeep('p17', () => client.query(
           `INSERT INTO user_devices (user_id, fcm_token, platform, device_label)
@@ -759,7 +759,7 @@ async function run() {
           "platform = 'symbian' is rejected (23514) — the send path sets android.priority "
           + `from it${badPlat.ok ? ' — IT WAS ACCEPTED' : ''}`);
 
-        // ── 7f. A device that changes hands must MOVE, not duplicate ──────────
+        // 7f. A device that changes hands must move, not duplicate
         // This is the upsert POST /api/notifications/devices runs. If the token
         // stayed on the old row, the previous owner of that phone would keep
         // receiving the new owner's notifications — a privacy failure, not a bug.
@@ -793,7 +793,7 @@ async function run() {
           );
           check(tokCount.n === 1, `exactly one row holds that token (${tokCount.n} found)`);
 
-          // ── 7g. The two opposite delete rules ──────────────────────────────
+          // 7g. The two opposite delete rules
           const audit = await tryKeep('p23', () => client.query(
             `INSERT INTO admin_audit (admin_id, action, entity_type, entity_id, before, after, note)
              VALUES ($1, 'suspend_user', 'user', $2, $3::jsonb, $4::jsonb, $5) RETURNING id`,
@@ -823,7 +823,7 @@ async function run() {
             + `above, on purpose${survived.length ? '' : ' — THE AUDIT ROW WAS DELETED'}`);
         }
 
-        // ── 7h. The dispute ruling vocabulary ─────────────────────────────────
+        // 7h. The dispute ruling vocabulary
         if (matchRows.length) {
           const mid = matchRows[0].id;
           const rteam = matchRows[0].challenger_team;
@@ -869,7 +869,7 @@ async function run() {
           console.log('   ~ skipped the dispute probes (no matches rows)');
         }
 
-        // ── 7i. Preferences and the suspension audit trail ────────────────────
+        // 7i. Preferences and the suspension audit trail
         const prefs = await tryWrite('p28', () => client.query(
           `UPDATE users SET notification_prefs = $2::jsonb WHERE id = $1
            RETURNING notification_prefs -> 'push' ->> 'chat' AS chat_push`,
@@ -895,7 +895,7 @@ async function run() {
         await client.query('ROLLBACK');   // nothing above may survive
       }
 
-      // ─── 8. Nothing leaked ────────────────────────────────────────────────
+      // 8. Nothing leaked
       const { rows: [left] } = await client.query(
         `SELECT (SELECT count(*)::int FROM notifications WHERE title = $1)     AS n,
                 (SELECT count(*)::int FROM user_devices  WHERE fcm_token LIKE $2) AS d,
@@ -910,7 +910,7 @@ async function run() {
         + `(${left.n} notification, ${left.d} device, ${left.a} audit, ${left.p} dispute, `
         + `${left.u} user)`);
 
-      // The prefs probe wrote to a REAL user's row. Prove the rollback reached it,
+      // The prefs probe wrote to a real user's row. Prove the rollback reached it,
       // because a leaked preference object would silently suppress that person's
       // notifications and nothing would ever report it.
       const { rows: [realUser] } = await client.query(
@@ -921,7 +921,7 @@ async function run() {
         + `is_active is ${realUser.is_active}`);
     }
 
-    // ─── Listing ────────────────────────────────────────────────────────────
+    // Listing
     console.log('');
     console.log('The notification feed is now representable in the database:');
     console.log('   • created_at is timestamptz — "2 hours ago" is the same sentence on every server');
