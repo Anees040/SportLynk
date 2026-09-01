@@ -7,7 +7,7 @@ async function run() {
   try {
     console.log('🔄 Running migration 008: Admin role & venues...\n');
 
-    // ── Step 1: Add admin to user_role enum ──────────────────────────────────
+    // Step 1: Add admin to user_role enum
     try {
       await pool.query("ALTER TYPE user_role ADD VALUE 'admin'");
       console.log('✅ Added admin to user_role enum');
@@ -19,18 +19,18 @@ async function run() {
       }
     }
 
-    // ── Step 2: Add columns to venues ────────────────────────────────────────
+    // Step 2: Add columns to venues
     await pool.query("ALTER TABLE venues ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT true");
     await pool.query("ALTER TABLE venues ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) DEFAULT 'approved'");
     console.log('✅ venues: is_verified, verification_status columns ensured');
 
-    // ── Step 3: Add columns to owner_profiles ────────────────────────────────
+    // Step 3: Add columns to owner_profiles
     await pool.query("ALTER TABLE owner_profiles ADD COLUMN IF NOT EXISTS rejection_reason TEXT");
     await pool.query("ALTER TABLE owner_profiles ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP");
     await pool.query("ALTER TABLE owner_profiles ADD COLUMN IF NOT EXISTS reviewed_by UUID REFERENCES users(id)");
     console.log('✅ owner_profiles: rejection_reason, reviewed_at, reviewed_by columns ensured');
 
-    // ── Step 4: Create admin user ─────────────────────────────────────────────
+    // Step 4: Create admin user
     const adminExists = await pool.query("SELECT id FROM users WHERE email = 'admin@sportlynk.com'");
     if (adminExists.rows.length === 0) {
       const hash = await bcrypt.hash('Admin@SportLynk1', 12);
@@ -50,7 +50,7 @@ async function run() {
       console.log('⏭️  Admin user already exists (admin@sportlynk.com)');
     }
 
-    // ── Step 5: Create test owner ─────────────────────────────────────────────
+    // Step 5: Create test owner
     const ownerExists = await pool.query("SELECT id FROM users WHERE email = 'testowner@sportlynk.com'");
     let ownerId;
 
@@ -87,7 +87,7 @@ async function run() {
       console.log('⏭️  Test owner already exists (testowner@sportlynk.com)');
     }
 
-    // ── Step 6: Ensure test owner has a venue ────────────────────────────────
+    // Step 6: Ensure test owner has a venue
     if (ownerId) {
       const venueExists = await pool.query('SELECT id FROM venues WHERE owner_id = $1 LIMIT 1', [ownerId]);
 
