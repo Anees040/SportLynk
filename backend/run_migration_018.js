@@ -2,28 +2,28 @@
  * Runner for migrations/018_assistant.sql
  * Usage: node run_migration_018.js
  *
- * Applied as ONE multi-statement command, so Postgres wraps it in a single
+ * Applied as one multi-statement command, so Postgres wraps it in a single
  * implicit transaction and a failure anywhere leaves the database untouched.
  * (No `-- @@SPLIT@@` marker: 018 adds no enum values, and `ALTER TYPE ... ADD
  * VALUE` is the only statement that cannot run inside a transaction.)
  *
  * Four things this proves that a `\d` dump cannot:
  *
- *   1. MANY ASSISTANT THREADS PER USER ARE LEGAL. 015 created
+ *   1. Many ASSISTANT threads per user are legal. 015 created
  *      `ux_chat_channels_type_ref UNIQUE (type, ref_id) WHERE ref_id IS NOT NULL`.
  *      Scout's threads carry ref_id = NULL, so the index does not apply and a
  *      user may hold as many as they like — which is the entire basis of "new
  *      chat / switch chat". That is a subtle read of somebody else's index, so it
- *      is PROVEN by inserting two and checking neither is rejected, not asserted.
+ *      is proven by inserting two and checking neither is rejected, not asserted.
  *
- *   2. THE MONEY-AND-POLICY FIREWALL CONSTRAINS. chk_assistant_kb_intent is what
+ *   2. The money-and-policy firewall constrains. chk_assistant_kb_intent is what
  *      stops a learned, human-typed answer from ever being served for
  *      wallet_balance or refund_policy. A constraint that exists but does not
- *      constrain reads as enforced and is enforced nowhere, so a row that MUST be
+ *      constrain reads as enforced and is enforced nowhere, so a row that must be
  *      rejected is inserted and its SQLSTATE asserted.
  *
- *   3. assistant_turns HAS NO TEXT COLUMN. doc/claude.md forbids logging the
- *      utterance. That is a property of the SCHEMA, so it is checked against
+ *   3. assistant_turns has no TEXT COLUMN. doc/claude.md forbids logging the
+ *      utterance. That is a property of the schema, so it is checked against
  *      information_schema rather than trusted to code review: any future column
  *      named like message text fails this runner loudly.
  *
@@ -122,9 +122,9 @@ const EXPECTED_COLUMNS = {
   },
 };
 
-// ── The privacy assertion ───────────────────────────────────────────────────
+// The privacy assertion
 // Nothing resembling raw user text may live on the telemetry table. Names, not
-// a regex on the whole column list, so the failure message can say WHICH.
+// a regex on the whole column list, so the failure message can say which.
 const FORBIDDEN_TURN_COLUMNS = [
   'text', 'body', 'utterance', 'message', 'message_text', 'raw_text',
   'query', 'input', 'input_text', 'transcript', 'reply', 'answer',
@@ -151,7 +151,7 @@ async function run() {
   };
 
   try {
-    // ─── Pre-flight ─────────────────────────────────────────────────────────
+    // Pre-flight
     const before = await tableNames(client);
     const missingPrereqs = PREREQUISITE_TABLES.filter((t) => !before.includes(t));
     if (missingPrereqs.length) {
@@ -216,12 +216,12 @@ async function run() {
     console.log('   No chat_messages.kind values outside the new enumeration.');
     console.log('');
 
-    // ─── Apply ──────────────────────────────────────────────────────────────
+    // Apply
     await client.query(sql);
     console.log('Migration 018 applied. Verifying:');
     console.log('');
 
-    // ─── 1. Columns ─────────────────────────────────────────────────────────
+    // 1. Columns
     const { rows: cols } = await client.query(
       `SELECT table_name, column_name, data_type
          FROM information_schema.columns
@@ -254,7 +254,7 @@ async function run() {
       `chat_channels.session_state is NOT NULL DEFAULT '{}' (turn 1 of a new thread reads `
       + `state before writing any)`);
 
-    // ─── 2. THE PRIVACY ASSERTION ───────────────────────────────────────────
+    // 2. The privacy assertion
     const turnCols = cols.filter((c) => c.table_name === 'assistant_turns').map((c) => c.column_name);
     const leaks = turnCols.filter((c) => FORBIDDEN_TURN_COLUMNS.includes(c));
     check(leaks.length === 0,
@@ -264,7 +264,7 @@ async function run() {
     check(turnCols.includes('text_chars'),
       'assistant_turns.text_chars exists — length is the only property of the text kept');
 
-    // ─── 3. Indexes ─────────────────────────────────────────────────────────
+    // 3. Indexes
     const { rows: idxRows } = await client.query(
       `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'`,
     );
@@ -298,7 +298,7 @@ async function run() {
       console.log('     overlap (slower, still correct). Not a failure.');
     }
 
-    // ─── 4. Constraints ─────────────────────────────────────────────────────
+    // 4. Constraints
     const { rows: conRows } = await client.query(
       `SELECT con.conname, pg_get_constraintdef(con.oid) AS def
          FROM pg_constraint con
@@ -312,7 +312,7 @@ async function run() {
       `all ${EXPECTED_CONSTRAINTS.length} CHECK constraint(s) exist`
       + `${missingCons.length ? ` — MISSING: ${missingCons.join(', ')}` : ''}`);
 
-    // The kind enumeration must now carry 'assistant' AND still carry 015's four —
+    // The kind enumeration must now carry 'assistant' and still carry 015's four —
     // a DROP-then-ADD that lost one would silently make every voice note
     // unwritable, and nothing in the assistant would notice.
     const kindDef = cons.get('chk_chat_messages_kind') || '';
@@ -330,8 +330,8 @@ async function run() {
       `chk_assistant_kb_intent names all ${fwIntents.length} money/policy intents — a learned, `
       + `human-typed answer can never be served for them${fwOk ? '' : ` — got: ${fwDef}`}`);
 
-    // ─── 5. Functional probes — do the constraints actually constrain? ───────
-    // Everything below runs inside a transaction that is ALWAYS rolled back, and
+    // 5. Functional probes — do the constraints constrain?
+    // Everything below runs inside a transaction that is always rolled back, and
     // every insert expected to fail gets its own SAVEPOINT: without one, the first
     // 23505/23514 aborts the transaction and every later query dies with 25P02
     // instead of reporting a result.
@@ -349,7 +349,7 @@ async function run() {
 
     // The probes need a real user and a real venue (both are FK targets). A
     // seeded dev database has them; an empty one skips with a note — the
-    // constraints are still proven to EXIST above, the probes are the bonus.
+    // constraints are still proven to exist above, the probes are the bonus.
     const { rows: userRow } = await client.query('SELECT id FROM users LIMIT 1');
     const { rows: venueRow } = await client.query(
       'SELECT id, owner_id FROM venues ORDER BY created_at LIMIT 1',
@@ -362,8 +362,8 @@ async function run() {
 
       await client.query('BEGIN');
       try {
-        // 5a. THE ONE THAT MAKES "new chat" POSSIBLE. 015's
-        //     ux_chat_channels_type_ref is UNIQUE (type, ref_id) WHERE ref_id IS
+        // 5a. The one that makes "new chat" possible. 015's
+        //     ux_chat_channels_type_ref is UNIQUE (type, ref_id) WHERE ref_id is
         //     NOT NULL. Scout's threads carry ref_id = NULL, so the index must not
         //     apply and a user may hold many. Proven, not assumed.
         const { rows: [chA] } = await client.query(
@@ -447,7 +447,7 @@ async function run() {
           + `forbids a free-text-less dead end${emptyAssistant.ok ? ' — IT WAS ACCEPTED' : ''}`);
 
         // 5f. Feedback: a vote is ±1, one per user per message, changeable but not
-        //     stuffable. This is the only signal that says an answer was WRONG.
+        //     stuffable. This is the only signal that says an answer was wrong.
         await client.query(
           `INSERT INTO assistant_feedback (message_id, user_id, vote) VALUES ($1, $2, -1)`,
           [msg.id, uid]);
@@ -463,7 +463,7 @@ async function run() {
         check(!zeroVote.ok && zeroVote.code === '23514',
           `vote = 0 is rejected (23514) — a rating has a direction${zeroVote.ok ? ' — IT WAS ACCEPTED' : ''}`);
 
-        // 5g. THE FIREWALL. A human-typed answer must never be servable for a
+        // 5g. The firewall. A human-typed answer must never be servable for a
         //     money or policy question, no matter what any future route does.
         const moneyKb = await tryInsert('p7', () => client.query(
           `INSERT INTO assistant_kb (scope, venue_id, question, answer, intent, status)
@@ -505,7 +505,7 @@ async function run() {
           `question_norm is derived by the database, lowercased and punctuation-squashed `
           + `— got "${kb1.question_norm}"`);
 
-        // 5j. Fuzzy retrieval actually retrieves. "does g11 have lights" shares no
+        // 5j. Fuzzy retrieval retrieves. "does g11 have lights" shares no
         //     exact phrase with the stored question, and that is the whole point: a
         //     KB that only answers verbatim repeats would never serve a second user.
         if (useTrgm) {
@@ -571,8 +571,8 @@ async function run() {
       console.log('   ~ skipped the functional probes (need one users row and one venues row)');
     }
 
-    // ─── 6. Seeds ───────────────────────────────────────────────────────────
-    // These the migration COMMITS, so they are read outside the probe transaction.
+    // 6. Seeds
+    // These the migration commits, so they are read outside the probe transaction.
     const { rows: [asstRow] } = await client.query(
       `SELECT value FROM global_settings WHERE key = 'assistant'`,
     );
@@ -603,7 +603,7 @@ async function run() {
       `${kbCount.n} published global how-to answer(s) seeded (create team, find opponents, `
       + `ELO, tournaments) — Scout can answer these on turn 1 with no owner involved`);
 
-    // ─── Listing ────────────────────────────────────────────────────────────
+    // Listing
     console.log('');
     console.log('Scout can now hold a conversation, and the database enforces:');
     console.log('   • many assistant threads per user       — new chat / switch chat / rename');
