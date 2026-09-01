@@ -2,14 +2,14 @@
  * Runner for migrations/014_withdrawals.sql
  * Usage: node run_migration_014.js
  *
- * Applied as ONE multi-statement command, which Postgres wraps in a single
+ * Applied as one multi-statement command, which Postgres wraps in a single
  * implicit transaction — so it is all-or-nothing. (No `-- @@SPLIT@@` marker
  * needed: this migration adds no enum values, and `ALTER TYPE ... ADD VALUE` is
  * the only statement that cannot run inside a transaction.)
  *
  * The assertions below go further than `\dt` can, because the risk in this
  * migration is not a missing table — it is a constraint that exists but does not
- * actually constrain. `uq_withdrawals_one_pending` is the entire implementation
+ * constrain. `uq_withdrawals_one_pending` is the entire implementation
  * of "one pending withdrawal at a time" (ER1.6), so check 6 does not merely look
  * the index up by name: it inserts two pending rows and asserts the second one is
  * REJECTED, inside a transaction that is then rolled back so no data is left
@@ -66,7 +66,7 @@ async function run() {
   };
 
   try {
-    // ─── Pre-flight ─────────────────────────────────────────────────────────
+    // Pre-flight
     const before = await tableNames(client);
     const missingPrereqs = PREREQUISITE_TABLES.filter((t) => !before.includes(t));
     if (missingPrereqs.length) {
@@ -83,16 +83,16 @@ async function run() {
     }
     console.log('');
 
-    // ─── Apply ──────────────────────────────────────────────────────────────
+    // Apply
     await client.query(sql);
     console.log('Migration 014 applied. Verifying:');
     console.log('');
 
-    // ─── 1. Table ───────────────────────────────────────────────────────────
+    // 1. Table
     const after = await tableNames(client);
     check(after.includes('withdrawals'), 'withdrawals table exists');
 
-    // ─── 2. Column types ────────────────────────────────────────────────────
+    // 2. Column types
     const { rows: cols } = await client.query(
       `SELECT column_name, data_type, is_nullable
          FROM information_schema.columns
@@ -120,7 +120,7 @@ async function run() {
     check(wronglyNullable.length === 0,
       `NOT NULL on ${mustBeNotNull.length} required columns${wronglyNullable.length ? ` — NULLABLE: ${wronglyNullable.join(', ')}` : ''}`);
 
-    // ─── 3. CHECK constraints ───────────────────────────────────────────────
+    // 3. CHECK constraints
     const { rows: checkRows } = await client.query(
       `SELECT con.conname, pg_get_constraintdef(con.oid) AS def
          FROM pg_constraint con
@@ -137,7 +137,7 @@ async function run() {
     check(/amount/.test(allChecks) && />\s*\(?0/.test(allChecks),
       'amount CHECK rejects zero and negatives');
 
-    // ─── 4. Foreign keys ────────────────────────────────────────────────────
+    // 4. Foreign keys
     const { rows: fkRows } = await client.query(
       `SELECT kcu.column_name, ccu.table_name AS refs
          FROM information_schema.table_constraints tc
@@ -158,7 +158,7 @@ async function run() {
     check(missingFks.length === 0,
       `all 3 foreign keys present${missingFks.length ? ` — WRONG: ${missingFks.join(', ')}` : ''}`);
 
-    // ─── 5. Indexes exist, and the unique one is actually partial + unique ───
+    // 5. Indexes exist, and the unique one is partial + unique
     const { rows: idxRows } = await client.query(
       `SELECT indexname, indexdef FROM pg_indexes
         WHERE schemaname = 'public' AND tablename = 'withdrawals'`,
@@ -172,11 +172,11 @@ async function run() {
     check(/CREATE UNIQUE INDEX/i.test(uqDef) && /WHERE.*pending/i.test(uqDef),
       `uq_withdrawals_one_pending is UNIQUE and partial on status='pending'${uqDef ? '' : ' — index missing'}`);
 
-    // ─── 6. Functional test: does the constraint actually constrain? ─────────
+    // 6. Functional test: does the constraint constrain?
     // Named indexes prove nothing on their own. Insert two pending rows for the
-    // same user and assert the SECOND is rejected with 23505. The whole probe
+    // same user and assert the second is rejected with 23505. The whole probe
     // runs inside a transaction that is always rolled back, so it leaves no data
-    // behind — and it picks a user with no pending row of their own so the FIRST
+    // behind — and it picks a user with no pending row of their own so the first
     // insert is guaranteed to be the one that succeeds.
     const { rows: victims } = await client.query(
       `SELECT w.user_id, w.id AS wallet_id
@@ -237,7 +237,7 @@ async function run() {
       console.log(`   ~ probe rolled back — withdrawals holds ${n} row(s)`);
     }
 
-    // ─── Listing ────────────────────────────────────────────────────────────
+    // Listing
     console.log('');
     const created = after.filter((t) => !before.includes(t));
     console.log(`Tables now in public (${after.length}):`);
