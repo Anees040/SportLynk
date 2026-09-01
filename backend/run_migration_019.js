@@ -5,7 +5,7 @@
  * The migration is split on the marker line (spelled "-- @@" + "SPLIT@@" so this
  * comment does not become one) because ALTER TYPE ... ADD VALUE cannot run
  * inside a multi-command string, and 019 adds three txn_type values. Chunks 1-3
- * are those three ALTER TYPEs; chunk 4 is everything else, applied as ONE
+ * are those three ALTER TYPEs; chunk 4 is everything else, applied as one
  * command so Postgres wraps it in a single implicit transaction and a failure
  * anywhere leaves the schema untouched.
  *
@@ -13,32 +13,32 @@
  * possible, and four of its guarantees are the only thing standing between a
  * demo and a bracket that pays the wrong team:
  *
- *   1. A PRE-FLIGHT that can stop the migration. Sections 1-3 add CHECK
- *      constraints to columns 013 created WITHOUT one, and ADD CONSTRAINT
+ *   1. A pre-flight that can stop the migration. Sections 1-3 add CHECK
+ *      constraints to columns 013 created without one, and ADD CONSTRAINT
  *      validates every existing row immediately. The .sql backfills the three
- *      status/format vocabularies first, but a DUPLICATE (tournament_id, round,
+ *      status/format vocabularies first, but a duplicate (tournament_id, round,
  *      position) in fixtures cannot be backfilled - deciding which bracket node
  *      to delete is a decision for a human - so any such pair is printed and the
  *      migration is not attempted.
  *
- *   2. NULLABILITY AND DEFAULTS, not just presence. pool_amount and the three
+ *   2. Nullability and DEFAULTS, not just presence. pool_amount and the three
  *      other money columns are numeric(10,2) NOT NULL DEFAULT 0. If any came out
  *      nullable the waterfall could write a NULL, and the audit
  *      "pool = venue_cost + prize + margin" would compare NULL to NULL, which is
  *      not false - it would pass while the arithmetic was missing. So the census
  *      asserts is_nullable and column_default, not merely that a column exists.
  *
- *   3. FUNCTIONAL PROBES. A constraint that exists but does not constrain reads
- *      as enforced and is enforced nowhere. Each probe writes a row that MUST be
+ *   3. Functional probes. A constraint that exists but does not constrain reads
+ *      as enforced and is enforced nowhere. Each probe writes a row that must be
  *      rejected and asserts the SQLSTATE, inside a transaction that is always
  *      rolled back. The three that matter most: a knockout whose max_teams is
  *      not a power of two (an unclosable bracket), a bye carrying two teams (a
  *      team advancing without playing a match), and two fixtures on one slot
  *      (two matches on one pitch, and the second pair of teams turned away).
  *
- *   4. THE ENUM. The three txn_type values are read back out of pg_enum rather
+ *   4. The ENUM. The three txn_type values are read back out of pg_enum rather
  *      than assumed from a successful ALTER, because ADD VALUE IF NOT EXISTS
- *      succeeds silently when the type is not the one you thought it was.
+ *      succeeds silently even when the type is not the expected one.
  *
  * Safe to re-run: every statement in the .sql is idempotent.
  */
@@ -66,9 +66,9 @@ const EXPECTED_INDEXES = [
   'idx_tournaments_owner',
 ];
 
-// The four 013 already created, which 019 DEPENDS ON and deliberately does not
+// The four 013 already created, which 019 depends on and deliberately does not
 // re-create under new names (see section 7 of the .sql). Asserted here for the
-// same reason uq_fixtures_slot is: a thing you rely on and never check is a thing
+// same reason uq_fixtures_slot is: an object relied on and never checked is one
 // that can quietly go missing.
 const INHERITED_INDEXES = [
   'idx_tournaments_status',
@@ -152,7 +152,7 @@ const EXPECTED_COLUMNS = {
 };
 
 // The columns whose NOT NULL is itself a guarantee (header note 2), mapped to a
-// fragment their DEFAULT must contain. A money column that came back nullable is
+// fragment their default must contain. A money column that came back nullable is
 // a silent hole in the audit, so this is checked as strictly as the type.
 const EXPECTED_NOT_NULL = {
   'tournaments.min_teams': '4',
@@ -214,7 +214,7 @@ async function run() {
   };
 
   try {
-    // ─── Pre-flight ─────────────────────────────────────────────────────────
+    // Pre-flight
     const before = await tableNames(client);
     const missingPrereqs = PREREQUISITE_TABLES.filter((t) => !before.includes(t));
     if (missingPrereqs.length) {
@@ -229,7 +229,7 @@ async function run() {
     // uq_fixtures_slot is a UNIQUE constraint over live data. Two bracket nodes
     // sharing (tournament, round, position) would make ADD CONSTRAINT fail with
     // a 23505 that names the constraint and not the rows, so they are found and
-    // printed FIRST — a migration must not choose which fixture to delete.
+    // printed first — a migration must not choose which fixture to delete.
     const { rows: dupeFixtures } = await client.query(
       `SELECT tournament_id, round, position, count(*)::int AS n
          FROM fixtures
@@ -293,10 +293,10 @@ async function run() {
     console.log('   No duplicate bracket nodes, no dual-context matches.');
     console.log('');
 
-    // ─── Apply ──────────────────────────────────────────────────────────────
+    // Apply
     // Only an ALTER TYPE chunk may be skipped on "already exists": swallowing
     // that message anywhere else would hide a real collision (an index or a
-    // constraint name already taken by something that is not ours).
+    // constraint name already taken by something unrelated to this migration).
     let applyFailed = false;
     for (let i = 0; i < chunks.length; i++) {
       const isEnumChunk = /^ALTER TYPE/m.test(chunks[i]) && chunks[i].length < 4000;
@@ -322,7 +322,7 @@ async function run() {
     console.log('Migration 019 applied. Verifying:');
     console.log('');
 
-    // ─── 1. The three new txn_type values ───────────────────────────────────
+    // 1. The three new txn_type values
     const { rows: enumRows } = await client.query(
       `SELECT e.enumlabel FROM pg_enum e
          JOIN pg_type t ON t.oid = e.enumtypid
@@ -339,7 +339,7 @@ async function run() {
     check(labels.includes('refund') && labels.includes('escrow_release'),
       'txn_type still carries refund and escrow_release (the tournament unwind reuses them)');
 
-    // ─── 2. Columns, with types ─────────────────────────────────────────────
+    // 2. Columns, with types
     const { rows: cols } = await client.query(
       `SELECT table_name, column_name, data_type, is_nullable, column_default
          FROM information_schema.columns
@@ -379,7 +379,7 @@ async function run() {
       `all 5 money columns are numeric(10,2) — paisa-exact`
       + `${badScale.length ? ` — WRONG: ${badScale.join('; ')}` : ''}`);
 
-    // ─── 3. NOT NULL and DEFAULT (header note 2) ────────────────────────────
+    // 3. NOT NULL and default (header note 2)
     const badNotNull = [];
     for (const [key, wantDefault] of Object.entries(EXPECTED_NOT_NULL)) {
       const got = colInfo.get(key);
@@ -393,7 +393,7 @@ async function run() {
       `all ${Object.keys(EXPECTED_NOT_NULL).length} policy/money columns are NOT NULL with the right DEFAULT`
       + `${badNotNull.length ? ` — WRONG: ${badNotNull.join('; ')}` : ''}`);
 
-    // The four columns that must stay NULLABLE, because NULL is their meaning:
+    // The four columns that must stay nullable, because NULL is their meaning:
     // "not generated yet", "no winner yet", "not scheduled yet".
     const nullableWanted = ['tournaments.fixtures_generated_at', 'tournaments.winner_team',
       'tournaments.rounds', 'fixtures.slot_id', 'fixtures.scheduled_at', 'fixtures.match_id'];
@@ -403,7 +403,7 @@ async function run() {
       'the 6 columns whose NULL is a meaning ("not generated / no winner / not scheduled") stay nullable'
       + `${badNullable.length ? ` — WRONG: ${badNullable.join(', ')}` : ''}`);
 
-    // ─── 4. Indexes ─────────────────────────────────────────────────────────
+    // 4. Indexes
     const { rows: idxRows } = await client.query(
       `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'`,
     );
@@ -419,7 +419,7 @@ async function run() {
       + `did not need to duplicate them`
       + `${missingInherited.length ? ` — MISSING: ${missingInherited.join(', ')}` : ''}`);
 
-    // The point of not re-creating them: exactly ONE index over
+    // The point of not re-creating them: exactly one index over
     // (status, registration_deadline). A second one under a different name would
     // double the write cost of every tournament update to answer one query.
     const browseIdx = idx.get('idx_tournaments_status') || '';
@@ -427,7 +427,7 @@ async function run() {
       'the browse list is served by the idx_tournaments_status that 013 created — no duplicate '
       + 'index over the same two columns');
 
-    // The one index that is a RULE and not an optimisation: one fixture per slot.
+    // The one index that is a rule and not an optimisation: one fixture per slot.
     // It must be UNIQUE and it must be partial, or the many unscheduled fixtures
     // (slot_id NULL) would collide with each other and generation would fail.
     const slotIdx = idx.get('uq_fixtures_slot_id') || '';
@@ -447,7 +447,7 @@ async function run() {
       'idx_transactions_tournament is partial on tournament_id IS NOT NULL '
       + '(the ledger is mostly bookings; this indexes only the tournament rows)');
 
-    // ─── 5. Constraints ─────────────────────────────────────────────────────
+    // 5. Constraints
     const { rows: conRows } = await client.query(
       `SELECT con.conname, con.contype, pg_get_constraintdef(con.oid) AS def
          FROM pg_constraint con
@@ -467,7 +467,7 @@ async function run() {
       + '— fixture generation is safe to retry'
       + `${missingUniq.length ? ` — MISSING: ${missingUniq.join(', ')}` : ''}`);
 
-    // 013's UNIQUE (tournament_id, team_id) is what 019 RELIES ON rather than
+    // 013's UNIQUE (tournament_id, team_id) is what 019 relies on rather than
     // re-creating, so it is asserted rather than assumed: without it, a
     // double-tapped Register button charges one captain twice.
     const dedupe = conRows.find((r) => r.contype === 'u'
@@ -477,14 +477,14 @@ async function run() {
       + `— one entry per team, so a double-tapped Register cannot charge twice`
       + `${dedupe ? ` [${dedupe.conname}]` : ''}`);
 
-    // The bracket-shape CHECK must actually contain the power-of-two test; a
+    // The bracket-shape CHECK must contain the power-of-two test; a
     // constraint that only capped the ceiling would let max_teams = 6 through.
     const maxTeamsDef = (cons.get('chk_tournaments_max_teams') || {}).def || '';
     check(/&/.test(maxTeamsDef) && /round_robin/.test(maxTeamsDef),
       'chk_tournaments_max_teams tests the power of two (x & (x-1) = 0) for knockout '
       + 'and caps round_robin separately');
 
-    // ─── 6. The global_settings tournament block ────────────────────────────
+    // 6. The global_settings tournament block
     const { rows: setRows } = await client.query(
       `SELECT value FROM global_settings WHERE key = 'tournament'`,
     );
@@ -506,7 +506,7 @@ async function run() {
         'the seeded K-factors are 40 / 48 / 56 (early / semi / final) against 32 for a friendly');
     }
 
-    // elo.k_factor must still be 32: the tournament weights are ADDED beside the
+    // elo.k_factor must still be 32: the tournament weights are added beside the
     // friendly ladder, not a replacement for it.
     const { rows: eloRows } = await client.query(
       `SELECT value FROM global_settings WHERE key = 'elo'`,
@@ -514,8 +514,8 @@ async function run() {
     check(eloRows.length > 0 && Number(eloRows[0].value.k_factor) === 32,
       'global_settings.elo.k_factor is still 32 — one ladder, the friendly weight untouched');
 
-    // ─── 7. Functional probes ───────────────────────────────────────────────
-    // Everything below runs inside a transaction that is ALWAYS rolled back, and
+    // 7. Functional probes
+    // Everything below runs inside a transaction that is always rolled back, and
     // every write expected to fail gets its own SAVEPOINT: without one, the first
     // 23505/23514 aborts the transaction and every later query dies with 25P02
     // instead of reporting a result.
@@ -533,7 +533,7 @@ async function run() {
 
     // The probes need real FK targets. A seeded dev database has them; an empty
     // one skips the probes with a note — the constraints are still proven to
-    // EXIST above, and the probes are what prove they BITE.
+    // exist above, and the probes are what prove they bite.
     const { rows: teamRows } = await client.query(
       'SELECT id, titles FROM teams ORDER BY created_at LIMIT 2');
     const { rows: slotRows } = await client.query('SELECT id FROM slots LIMIT 2');
@@ -561,7 +561,7 @@ async function run() {
 
       await client.query('BEGIN');
       try {
-        // ── 7a. Bracket shape — the constraint that keeps a knockout closable ─
+        // 7a. Bracket shape — the constraint that keeps a knockout closable
         const ok8 = await tryWrite('p1', () => insT({ max_teams: 8 }));
         check(ok8.ok, 'a knockout with max_teams = 8 is accepted (a closable bracket)');
 
@@ -588,7 +588,7 @@ async function run() {
         const rr5 = await tryWrite('p6', () => insT({ format: 'round_robin', max_teams: 5 }));
         check(rr5.ok, 'a round-robin with max_teams = 5 is accepted (the power-of-two rule is knockout-only)');
 
-        // ── 7b. Vocabulary ───────────────────────────────────────────────────
+        // 7b. Vocabulary
         const badFmt = await tryWrite('p7', () => insT({ format: 'league' }));
         check(!badFmt.ok && badFmt.code === '23514',
           `format = 'league' is rejected (23514) — utils/fixtures.js generates two shapes`
@@ -600,7 +600,7 @@ async function run() {
           + `typo'd status would make a tournament invisible while still taking money`
           + `${badStatus.ok ? ' — IT WAS ACCEPTED' : ''}`);
 
-        // ── 7c. The money percentages ────────────────────────────────────────
+        // 7c. The money percentages
         const badSplit = await tryWrite('p9', () => insT({ winner_percent: 60, runnerup_percent: 30 }));
         check(!badSplit.ok && badSplit.code === '23514',
           `winner 60 + runner-up 30 is rejected (23514) — 10% of the prize pool would be `
@@ -631,7 +631,7 @@ async function run() {
           `slot_minutes = 0 is rejected (23514) — the scheduler divides by it`
           + `${badMinutes.ok ? ' — IT WAS ACCEPTED' : ''}`);
 
-        // ── 7d. Registration — one entry per team, and its vocabulary ─────────
+        // 7d. Registration — one entry per team, and its vocabulary
         const { rows: [tour] } = await insT({ max_teams: 4, entry_fee: 1000 });
         await client.query(
           `INSERT INTO tournament_teams (tournament_id, team_id, status, paid_amount)
@@ -659,7 +659,7 @@ async function run() {
           `a negative paid_amount is rejected (23514) — a refund must return what was taken`
           + `${negPaid.ok ? ' — IT WAS ACCEPTED' : ''}`);
 
-        // ── 7e. The bracket ──────────────────────────────────────────────────
+        // 7e. The bracket
         await client.query(
           `INSERT INTO fixtures (tournament_id, round, position, team_a, team_b, label)
            VALUES ($1, 1, 1, $2, $3, 'Semi-final 1')`, [tour.id, tA, tB]);
@@ -686,7 +686,7 @@ async function run() {
           `a team drawn against itself is rejected (23514) — the classic off-by-one in a `
           + `seeding table${selfPlay.ok ? ' — IT WAS ACCEPTED' : ''}`);
 
-        // THE most damaging thing a bracket can get wrong.
+        // The most damaging thing a bracket can get wrong.
         const fatBye = await tryWrite('p21', () => client.query(
           `INSERT INTO fixtures (tournament_id, round, position, team_a, team_b, is_bye)
            VALUES ($1, 1, 2, $2, $3, true)`, [tour.id, tA, tB]));
@@ -715,7 +715,7 @@ async function run() {
           `fixture status = 'plaid' is rejected (23514) — 013 documented the vocabulary in a `
           + `comment and enforced nothing${badFixStatus.ok ? ' — IT WAS ACCEPTED' : ''}`);
 
-        // ── 7f. One fixture per reserved hour ────────────────────────────────
+        // 7f. One fixture per reserved hour
         if (slotRows.length) {
           const slot = slotRows[0].id;
           await client.query(
@@ -732,7 +732,7 @@ async function run() {
           console.log('   ~ skipped the one-fixture-per-slot probe (no slots rows)');
         }
 
-        // ── 7g. A match belongs to ONE context ───────────────────────────────
+        // 7g. A match belongs to one context
         const tourMatch = await tryWrite('p26', () => client.query(
           `INSERT INTO matches (challenger_team, opponent_team, sport, status, tournament_id)
            VALUES ($1, $2, 'football', 'awaiting_owner', $3) RETURNING id`,
@@ -753,7 +753,7 @@ async function run() {
           console.log('   ~ skipped the dual-context probe (no bookings rows)');
         }
 
-        // ── 7h. The tournament-record counters ───────────────────────────────
+        // 7h. The tournament-record counters
         const negTitles = await tryWrite('p28', () => client.query(
           `UPDATE teams SET titles = -1 WHERE id = $1`, [tA]));
         check(!negTitles.ok && negTitles.code === '23514',
@@ -769,7 +769,7 @@ async function run() {
         check(bumpRecord.ok,
           'the four counters increment together (the team card reads "12 played · 8 W · 2 titles")');
 
-        // ── 7i. The ledger can be read per tournament ────────────────────────
+        // 7i. The ledger can be read per tournament
         const { rows: walletRows } = await client.query('SELECT user_id FROM wallets LIMIT 1');
         if (walletRows.length) {
           const entryTxn = await tryWrite('p30', () => client.query(
@@ -797,8 +797,8 @@ async function run() {
 
       // The counters were bumped inside the rolled-back transaction; prove the
       // rollback reached them too, because a leaked +1 title would be a false
-      // achievement on a real team's card. Compared against the value READ
-      // BEFORE the probes, not against 0 — a team may legitimately have titles.
+      // achievement on a real team's card. Compared against the value read
+      // before the probes, not against 0 — a team may legitimately have titles.
       const { rows: [nowTeam] } = await client.query(
         'SELECT titles FROM teams WHERE id = $1', [teamRows[0].id],
       );
@@ -811,7 +811,7 @@ async function run() {
       console.log('     re-run this to prove they BITE.');
     }
 
-    // ─── Listing ────────────────────────────────────────────────────────────
+    // Listing
     console.log('');
     console.log('Tournament module now enforced by the database:');
     console.log('   • knockout max_teams is a power of two, round-robin capped at 6 — FE-1/FE-6');
