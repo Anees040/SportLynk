@@ -2,7 +2,7 @@
  * Runner for migrations/015_teams_chat.sql
  * Usage: node run_migration_015.js
  *
- * Applied as ONE multi-statement command, so Postgres wraps it in a single
+ * Applied as one multi-statement command, so Postgres wraps it in a single
  * implicit transaction and a failure anywhere leaves the database untouched.
  * (No `-- @@SPLIT@@` marker: this migration adds no enum values, and
  * `ALTER TYPE ... ADD VALUE` is the only statement that cannot run inside a
@@ -10,17 +10,17 @@
  *
  * Two things make this runner more than a `\d` dump:
  *
- *   1. A PRE-FLIGHT that can stop the migration. ux_teams_name_sport is a UNIQUE
+ *   1. A pre-flight that can stop the migration. ux_teams_name_sport is a UNIQUE
  *      index over live data — if two football teams are already called "Lahore
  *      Lions", CREATE UNIQUE INDEX fails with a 23505 whose message names the
- *      index, not the teams. So the duplicates are found and PRINTED first, and
+ *      index, not the teams. So the duplicates are found and printed first, and
  *      the migration is not attempted, because "rename one of these two teams"
  *      is a decision for a human and not something a migration may do silently.
  *
- *   2. FUNCTIONAL PROBES. Six of the guarantees here are constraints, and a
+ *   2. Functional probes. Six of the guarantees here are constraints, and a
  *      constraint that exists but does not constrain is worse than no constraint
  *      — it reads as enforced in the schema and is enforced nowhere. Each probe
- *      inserts a row that MUST be rejected and asserts the SQLSTATE, inside a
+ *      inserts a row that must be rejected and asserts the SQLSTATE, inside a
  *      transaction that is always rolled back.
  *
  * Safe to re-run: every statement in the .sql is idempotent.
@@ -118,7 +118,7 @@ async function run() {
   };
 
   try {
-    // ─── Pre-flight ─────────────────────────────────────────────────────────
+    // Pre-flight
     const before = await tableNames(client);
     const missingPrereqs = PREREQUISITE_TABLES.filter((t) => !before.includes(t));
     if (missingPrereqs.length) {
@@ -165,18 +165,18 @@ async function run() {
     }
     console.log('');
 
-    // ─── Apply ──────────────────────────────────────────────────────────────
+    // Apply
     await client.query(sql);
     console.log('Migration 015 applied. Verifying:');
     console.log('');
 
-    // ─── 1. Tables ──────────────────────────────────────────────────────────
+    // 1. Tables
     const after = await tableNames(client);
     const missingTables = EXPECTED_TABLES.filter((t) => !after.includes(t));
     check(missingTables.length === 0,
       `both new tables exist${missingTables.length ? ` — MISSING: ${missingTables.join(', ')}` : ''}`);
 
-    // ─── 2. Columns ─────────────────────────────────────────────────────────
+    // 2. Columns
     const { rows: cols } = await client.query(
       `SELECT table_name, column_name, data_type, is_nullable
          FROM information_schema.columns
@@ -207,7 +207,7 @@ async function run() {
           typeOf.get('team_invites.token') === undefined,
       'team_invites.token is now NULLABLE (tokens are stored hashed)');
 
-    // ─── 3. Indexes ─────────────────────────────────────────────────────────
+    // 3. Indexes
     const { rows: idxRows } = await client.query(
       `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'`,
     );
@@ -216,7 +216,7 @@ async function run() {
     check(missingIdx.length === 0,
       `all ${EXPECTED_INDEXES.length} indexes exist${missingIdx.length ? ` — MISSING: ${missingIdx.join(', ')}` : ''}`);
 
-    // The three that must have a specific SHAPE, not just a name.
+    // The three that must have a specific shape, not just a name.
     const nameIdx = idx.get('ux_teams_name_sport') || '';
     check(/CREATE UNIQUE INDEX/i.test(nameIdx) && /lower/i.test(nameIdx) && /btrim/i.test(nameIdx),
       'ux_teams_name_sport is UNIQUE and case/whitespace-insensitive (FR2.1)');
@@ -229,11 +229,11 @@ async function run() {
     check(/CREATE UNIQUE INDEX/i.test(clientIdx) && /client_id IS NOT NULL/i.test(clientIdx),
       'ux_chat_messages_client is UNIQUE and partial — idempotent send');
 
-    // Deviation c: the non-unique predecessor must be GONE, not left alongside.
+    // Deviation c: the non-unique predecessor must be gone, not left alongside.
     check(!idx.has('idx_chat_channels_ref'),
       'idx_chat_channels_ref dropped (replaced by the unique index above)');
 
-    // ─── 4. CHECK constraints exist ─────────────────────────────────────────
+    // 4. CHECK constraints exist
     const { rows: conRows } = await client.query(
       `SELECT con.conname, rel.relname AS tbl, pg_get_constraintdef(con.oid) AS def
          FROM pg_constraint con
@@ -251,7 +251,7 @@ async function run() {
     check(/audio/.test(cons.get('chk_chat_messages_kind') || ''),
       'chk_chat_messages_kind allows text / image / audio / system');
 
-    // ─── 5. Backfill actually happened ──────────────────────────────────────
+    // 5. Backfill happened
     const { rows: [bf] } = await client.query(
       `SELECT
          (SELECT count(*)::int FROM teams)                                    AS teams,
@@ -274,8 +274,8 @@ async function run() {
       check(true, 'every team has at least one captain in team_members (FR2.10)');
     }
 
-    // ─── 6. Functional probes — do the constraints actually constrain? ───────
-    // Everything below runs inside a transaction that is ALWAYS rolled back, and
+    // 6. Functional probes — do the constraints constrain?
+    // Everything below runs inside a transaction that is always rolled back, and
     // every insert expected to fail gets its own SAVEPOINT: without one, the
     // first 23505 aborts the transaction and every later query dies with 25P02
     // instead of reporting a result.
@@ -381,7 +381,7 @@ async function run() {
     check(n === 0 && c === 0,
       `probe rolled back cleanly — ${n} probe team(s), ${c} probe message(s) left behind`);
 
-    // ─── Listing ────────────────────────────────────────────────────────────
+    // Listing
     console.log('');
     const created = after.filter((t) => !before.includes(t));
     console.log(`Tables now in public (${after.length}):`);
