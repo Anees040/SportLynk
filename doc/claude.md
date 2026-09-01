@@ -765,7 +765,7 @@ acceptance list (TESTING.md §4.21) instead of declaring it done.
   "2 hours ago" wrong by 5 hours in Pakistan; the other 24 naive columns were left alone on purpose — they are not
   rendered as relative times). DECISION — **one server-owned registry**: `utils/notificationTypes.js` maps every
   type to `{category, priority, icon, deepLink, groupKey}`, **45 types → 9 routes**, `assertNotificationTypes()`
-  at boot, and the check script asserts all 9 routes exist as strings in `lib/main.dart` — a deep link is the one
+  at boot, and the check script asserts all 9 routes exist as strings in `lib/routes/app_routes.dart` — a deep link is the one
   place server and client can disagree while each half is individually correct ("the tap does nothing" is now a
   failing assertion). DECISION — **push is a transactional outbox, not an inline call**: `notify()` runs inside
   money transactions holding `FOR UPDATE` locks, so the row IS the queue (`sent_push = false`) and

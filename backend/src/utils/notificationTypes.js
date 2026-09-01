@@ -31,11 +31,13 @@
  * to push on and a null deep link, which is precisely the "the notification came
  * but tapping it does nothing" failure this module exists to make impossible.
  *
- * DEEP LINKS ARE ROUTE NAMES THAT MUST EXIST IN lib/main.dart
- * ----------------------------------------------------------
+ * DEEP LINKS ARE ROUTE NAMES THAT MUST EXIST IN lib/routes/app_routes.dart
+ * ------------------------------------------------------------------------
  * `deepLink()` returns `{ route, args }` where `route` is a NAMED Flutter route.
  * `check_notifications.js` asserts every route this file can emit is present in
- * lib/main.dart's `routes:` map, by string match. That check is the whole reason
+ * the client's `routes:` map — lib/routes/app_routes.dart, where the table lives,
+ * unioned with lib/main.dart, where it used to — by string match. That check is
+ * the whole reason
  * the mapping is worth centralising: it turns "the tap does nothing" from a bug a
  * user finds into a script failure.
  *
@@ -455,7 +457,8 @@ function allTypes() {
 
 /**
  * Every distinct route this registry can ever emit. `check_notifications.js`
- * asserts each one exists in lib/main.dart, which is the guard against a
+ * asserts each one exists in the client's route table (lib/routes/app_routes.dart),
+ * which is the guard against a
  * notification whose tap goes nowhere.
  *
  * Routes are collected by CALLING each deepLink with a fully-populated fake

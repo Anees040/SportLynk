@@ -36,7 +36,8 @@
  * It drives the core functions, not HTTP, and it never contacts Firebase. The
  * final block therefore closes the gap the only way a rolled-back script can: it
  * reads the SOURCE of server.js, routes/chat.js and routes/auth.js and asserts the
- * wiring exists, and it reads lib/main.dart and asserts every route the registry
+ * wiring exists, and it reads the Flutter route table — lib/routes/app_routes.dart,
+ * and lib/main.dart with it — and asserts every route the registry
  * can emit is a route the app actually registers. "A function that works and is
  * never called" and "a notification whose tap goes nowhere" are the two failures
  * this wave exists to end, so both are checked rather than assumed.
@@ -805,7 +806,7 @@ function blockWiring() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 10 · THE DEEP LINKS RESOLVE  —  server routes vs lib/main.dart
+// 10 · THE DEEP LINKS RESOLVE  —  server routes vs the Flutter route table
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // The registry computes the destination SERVER-side and ships it as
@@ -814,26 +815,40 @@ function blockWiring() {
 // and the symptom is a notification that looks perfect and does nothing when tapped.
 //
 // Nothing in Dart or in Node can catch that — one half is a string in a JS object, the
-// other is a key in a Flutter route table — so it is checked here, by reading
-// lib/main.dart and requiring every route the registry can emit to appear in it.
+// other is a key in a Flutter route table — so it is checked here, by reading that table
+// and requiring every route the registry can emit to appear in it.
 // This is the single assertion in the file that is aimed directly at the breakage the
 // user reported, and it is why the registry keeps its routes in one exported list.
+//
+// The table's home is lib/routes/app_routes.dart; it used to be inline in lib/main.dart.
+// BOTH are read and their keys UNIONED, because this block does not care which file
+// declares a route — only that the app registers it. Reading both is also what stops a
+// future move of the table from turning a real assertion into a silent false pass: the
+// route set would have to vanish from two files at once for that.
 function blockDeepLinks() {
-  section('10 · Deep links — every route the server emits exists in lib/main.dart');
+  section('10 · Deep links — every route the server emits exists in the route table');
 
-  const main = readRoot(path.join('lib', 'main.dart'));
-  if (!main) { skip('lib/main.dart could not be read'); return; }
+  const routeFiles = [
+    path.join('lib', 'routes', 'app_routes.dart'),
+    path.join('lib', 'main.dart'),
+  ];
+  const sources = routeFiles.map((rel) => readRoot(rel)).filter(Boolean);
+  if (!sources.length) { skip(`${routeFiles.join(' / ')} could not be read`); return; }
 
-  const declared = new Set((main.match(/["'](\/[a-z0-9-]+)["']\s*:/g) || [])
-    .map((s) => s.replace(/["':\s]/g, '')));
-  check(declared.size > 10, `main.dart declares ${declared.size} named routes`);
+  const declared = new Set();
+  for (const src of sources) {
+    for (const hit of src.match(/["'](\/[a-z0-9-]+)["']\s*:/g) || []) {
+      declared.add(hit.replace(/["':\s]/g, ''));
+    }
+  }
+  check(declared.size > 10, `the route table declares ${declared.size} named routes`);
 
   const routes = reg.allRoutes();
   check(routes.length > 0, `the registry emits ${routes.length} distinct routes`);
   const missing = routes.filter((r) => !declared.has(r));
   if (check(missing.length === 0,
-    missing.length ? `MISSING from main.dart: ${missing.join(', ')}` : 'all of them are registered in main.dart')) {
-    ev.note(`All ${routes.length} registry routes resolve against lib/main.dart — no notification taps into a dead route.`);
+    missing.length ? `MISSING from the route table: ${missing.join(', ')}` : 'all of them are registered in app_routes.dart')) {
+    ev.note(`All ${routes.length} registry routes resolve against the Flutter route table — no notification taps into a dead route.`);
   }
 
   // The bells. Wave B shipped them inert on purpose; Wave C is what gives them a tap.
