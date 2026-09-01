@@ -4,19 +4,19 @@ const fs = require("fs");
 const pool = require("./src/db/pool");
 
 /**
- * Split SQL into executable statements, treating DO $$ ... $$; blocks as single
+ * Split SQL into executable statements, treating do $$ ... $$; blocks as single
  * atomic units (they contain inner semicolons that must not be split on).
  */
 function parseStatements(sql) {
   const statements = [];
-  // Regex: greedily matches a full DO $$ … $$; block (non-greedy inner match)
+  // Regex: greedily matches a full do $$ … $$; block (non-greedy inner match)
   const doPattern = /DO\s+\$\$[\s\S]*?\$\$\s*;/g;
 
   let lastIndex = 0;
   let match;
 
   while ((match = doPattern.exec(sql)) !== null) {
-    // Split the text *before* this DO block on regular semicolons
+    // Split the text *before* this do block on regular semicolons
     const before = sql.slice(lastIndex, match.index);
     before
       .split(";")
@@ -24,12 +24,12 @@ function parseStatements(sql) {
       .filter((s) => s.replace(/--[^\n]*/g, "").trim().length > 0)
       .forEach((s) => statements.push(s));
 
-    // Add the DO $$ block as a single, unsplit statement
+    // Add the do $$ block as a single, unsplit statement
     statements.push(match[0].trim());
     lastIndex = match.index + match[0].length;
   }
 
-  // Handle any SQL that comes after the last DO block
+  // Handle any SQL that comes after the last do block
   const after = sql.slice(lastIndex);
   after
     .split(";")
