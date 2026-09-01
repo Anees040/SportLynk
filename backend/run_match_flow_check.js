@@ -2,13 +2,13 @@
  * S.2 Wave C acceptance harness — the whole match lifecycle over real HTTP.
  *
  * `npm test` covers the ELO arithmetic in isolation (test/elo.test.js, no
- * database). This is the other half: it drives the ACTUAL Express routes with
- * ACTUAL JWTs against the live database, because every bug worth finding in this
+ * database). This is the other half: it drives the actual Express routes with
+ * actual JWTs against the live database, because every bug worth finding in this
  * wave lives in the seams the unit tests cannot reach — the authority checks, the
  * state machine, the transaction boundaries, and the ELO exchange landing in the
  * same commit as the status change.
  *
- * WHAT IT PROVES
+ * What it proves
  *   Happy path      challenge → accept → two agreeing results → owner verifies →
  *                   ratings move, two elo_history rows, W/L recorded
  *   Conflict path   two disagreeing results → disputed, a SYSTEM dispute row with
@@ -16,11 +16,11 @@
  *                   verification refused afterwards
  *   Dispute path    a captain disputes inside the 24h window (FR5.17)
  *   Authority       non-captains cannot challenge or submit; a stranger owner
- *                   cannot verify; the body cannot override who you are
+ *                   cannot verify; the body cannot override the caller's identity
  *   Idempotency     no double submission, no double verification, no second
  *                   challenge on a booking that already has a live match
  *
- * IT ALSO SEEDS. Running it leaves two real public teams with captains, chat
+ * It also seeds. Running it leaves two real public teams with captains, chat
  * channels and confirmed bookings behind — which is exactly the fixture needed
  * for the two-phone manual test, so that setup does not have to be done by hand.
  *
@@ -41,7 +41,7 @@ const BASE = process.env.SL_CHECK_BASE || 'http://localhost:3000/api';
 const TEAM_A_NAME = 'E2E Falcons';
 const TEAM_B_NAME = 'E2E Titans';
 
-// ── Reporting ───────────────────────────────────────────────────────────────
+// Reporting
 const results = [];
 let failed = 0;
 
@@ -57,7 +57,7 @@ function section(title) {
   console.log(`\n── ${title} ${'─'.repeat(Math.max(0, 62 - title.length))}`);
 }
 
-// ── HTTP ────────────────────────────────────────────────────────────────────
+// HTTP
 async function call(method, path, { token, body } = {}) {
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -78,7 +78,7 @@ const sign = (u) => jwt.sign(
   { expiresIn: '1h' },
 );
 
-// ── Seeding ─────────────────────────────────────────────────────────────────
+// Seeding
 
 /** A public football team captained by `userId`, with its chat channel wired. */
 async function ensureTeam(client, name, userId) {
@@ -181,7 +181,7 @@ async function seed() {
       'SELECT id, name, role, phone FROM users WHERE id = $1', [venue.owner_id],
     )).rows[0];
 
-    // A DIFFERENT owner, to prove the verify gate is per-venue and not per-role.
+    // A different owner, to prove the verify gate is per-venue and not per-role.
     const otherOwner = (await client.query(
       "SELECT id, name, role, phone FROM users WHERE role = 'owner' AND id <> $1 LIMIT 1",
       [venue.owner_id],
@@ -216,7 +216,7 @@ async function seed() {
   }
 }
 
-// ── The run ─────────────────────────────────────────────────────────────────
+// The run
 async function main() {
   console.log('SportLynk — S.2 Wave C acceptance check');
   console.log(`Target: ${BASE}\n`);
@@ -240,7 +240,7 @@ async function main() {
   console.log(`Seeded: ${s.teamA.name} (captain ${s.captainA.name}) vs ${s.teamB.name} (captain ${s.captainB.name})`);
   console.log(`Venue:  ${s.venue.name} — owner ${s.owner.name}`);
 
-  // ── Reads that feed the screens ───────────────────────────────────────────
+  // Reads that feed the screens
   section('Opponent discovery (FR5.3 – FR5.5)');
   const opp = await call('GET', `/matches/opponents?teamId=${s.teamA.id}`, { token: tokA });
   check('GET /opponents returns 200', opp.status === 200, JSON.stringify(opp.body).slice(0, 160));
@@ -283,7 +283,7 @@ async function main() {
   check('another captain does not see my bookings',
     (linkB.body?.data || []).every((b) => b.id !== s.bookings.happy.id));
 
-  // ── Happy path ────────────────────────────────────────────────────────────
+  // Happy path
   section('Challenge (FR5.8 – FR5.12)');
   const asMember = await call('POST', '/matches/challenge', {
     token: tokMember,
@@ -490,7 +490,7 @@ async function main() {
   });
   check('one dispute per team per match', disputeAgain.status === 409, `status=${disputeAgain.status}`);
 
-  // ── Conflict path ─────────────────────────────────────────────────────────
+  // Conflict path
   section('Conflicting results (ER2.1 → disputed)');
   const m2 = await call('POST', '/matches/challenge', {
     token: tokA,
@@ -528,7 +528,7 @@ async function main() {
     check('no rating was written for the disputed match', eh.rows[0].n === 0, `rows=${eh.rows[0].n}`);
   } finally { c4.release(); }
 
-  // ── Expiry sweep ──────────────────────────────────────────────────────────
+  // Expiry sweep
   section('48h expiry sweep (FR5.12)');
   const m3 = await call('POST', '/matches/challenge', {
     token: tokA,
@@ -573,7 +573,7 @@ async function main() {
   });
   check('the freed slot can be challenged again', reuse.status === 200, `status=${reuse.status}`);
 
-  // ── Leave a usable fixture ────────────────────────────────────────────────
+  // Leave a usable fixture
   // The run ends by design with disputes filed and — once it has been run a few
   // times — E2E Titans frozen by ER2.3. Both are proven above, but leaving them
   // in place would mean the manual two-phone test starts with a team whose rating
@@ -595,7 +595,7 @@ async function main() {
     );
   } finally { c7.release(); }
 
-  // ── Summary ───────────────────────────────────────────────────────────────
+  // Summary
   console.log(`\n${'═'.repeat(68)}`);
   const passed = results.length - failed;
   console.log(`  ${passed}/${results.length} checks passed`);
