@@ -13,7 +13,7 @@ async function run() {
   const client = await pool.connect();
   let failed = false;
   try {
-    // Snapshot first, so the log can say what was actually created vs. already there.
+    // Snapshot first, so the log can say what was created vs. already there.
     const before = await client.query(
       `SELECT indexname FROM pg_indexes
         WHERE schemaname = 'public'
