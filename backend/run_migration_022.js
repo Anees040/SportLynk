@@ -5,13 +5,13 @@
  * 022 replaces one unique index. That is a small change with a sharp edge, so the
  * probes here are all about the edge rather than the object:
  *
- *   1. The rows 021's labels describe must now be WRITEABLE. Before 022 a reversal
+ *   1. The rows 021's labels describe must now be writeable. Before 022 a reversal
  *      and a ruling for the same (team, match) raised 23505 and aborted the whole
  *      dispute-ruling transaction. This is the failure 022 exists to remove, so it
  *      is asserted directly: three rows, three reasons, one team, one match.
- *   2. A second VERIFICATION must still collide. If it does not, 022 has bought the
+ *   2. A second verification must still collide. If it does not, 022 has bought the
  *      correction by deleting the guard, which would be a worse database than the
- *      one it started from. The probe asserts the 23505 AND that the violation
+ *      one it started from. The probe asserts the 23505 and that the violation
  *      names the new index, because that name is what routes/matches.js turns into
  *      "This match has already been rated."
  *   3. Two reason-less rows must still collide. `reason` is nullable and NULL never
@@ -19,10 +19,10 @@
  *      that, a three-column key would be no guard at all for a writer that omits a
  *      reason. This is the probe that proves the COALESCE is load-bearing.
  *
- * Every probe writes rows and is ALWAYS rolled back — this runs against the shared
+ * Every probe writes rows and is always rolled back — this runs against the shared
  * Supabase database and must leave nothing behind.
  *
- * WHAT NEEDS THIS
+ * What needs this
  *   `services/disputeService.rule()` with `action: 'rule_challenger'` (or opponent,
  *   or custom) against a match whose `elo_applied` is already true — the overturn
  *   branch, reachable because POST /api/matches/:id/dispute may be filed against a
@@ -30,7 +30,7 @@
  *   Without 022 that transaction dies on the index; with it, the ruling lands and
  *   the audit trail reads reversal-then-ruling per team.
  *
- * THE END-TO-END PROOF IS NOT HERE. `src/scripts/check_admin.js` Block 5 rules a
+ * The end-to-end proof is not here. `src/scripts/check_admin.js` Block 5 rules a
  * real disputed match through the real service and asserts the four rows, their
  * reasons, and that the ladder still sums to the same total. This runner only
  * proves the schema will let that happen.
@@ -78,7 +78,7 @@ async function run() {
     console.log(`   ${OLD_INDEX}: ${pre.has_old ? 'present (will be dropped)' : 'absent'}`);
     console.log(`   ${NEW_INDEX}: ${pre.has_new ? 'present (re-run)' : 'absent (will be created)'}`);
 
-    // The one thing that can make the CREATE fail. Reported BEFORE applying, so a
+    // The one thing that can make the CREATE fail. Reported before applying, so a
     // failure reads as "these rows are the problem" instead of a bare 23505.
     const { rows: dupes } = await client.query(
       `SELECT team_id, match_id, COALESCE(reason, 'unspecified') AS reason, count(*)::int AS n
@@ -136,7 +136,7 @@ async function run() {
 
     console.log('\n--- Probes (all rolled back) -----------------------------');
     // elo_history.team_id and .match_id are FK-bound, and the partial index only
-    // covers rows WITH a match — so these probes need one real team and one real
+    // covers rows with a match — so these probes need one real team and one real
     // match. They are read from whatever the database already holds and never
     // written to; if the table is empty the probes say so rather than inventing ids.
     const { rows: [seed] } = await client.query(
@@ -156,7 +156,7 @@ async function run() {
         [seed.team_id, seed.match_id, reason],
       );
 
-      // 1. THE FAILURE 022 REMOVES. Before this migration the second of these three
+      // 1. The failure 022 removes. Before this migration the second of these three
       //    raised 23505 and took the ruling transaction with it.
       await client.query('SAVEPOINT p_trio');
       try {
@@ -168,7 +168,7 @@ async function run() {
         check(false, `the reversal+ruling trio is writeable (${e.code} ${e.constraint || e.message})`);
       }
 
-      // 2. THE GUARD 022 KEEPS. The trio above is still in the transaction, so this
+      // 2. The guard 022 keeps. The trio above is still in the transaction, so this
       //    is a genuine second verification for a team that already has one.
       try {
         await ins('match_verified');
@@ -179,7 +179,7 @@ async function run() {
       }
       await client.query('ROLLBACK TO SAVEPOINT p_trio');
 
-      // 3. THE COALESCE. Two rows that both omit a reason: without the fold, NULL
+      // 3. The COALESCE. Two rows that both omit a reason: without the fold, NULL
       //    never equals NULL and both would be accepted for the same team+match.
       await client.query('SAVEPOINT p_null');
       try {
@@ -192,7 +192,7 @@ async function run() {
       }
       await client.query('ROLLBACK TO SAVEPOINT p_null');
 
-      // 4. And a row with NO match is still outside the guard entirely — that is what
+      // 4. And a row with no match is still outside the guard entirely — that is what
       //    the partial predicate is for, and 021's own probes rely on it.
       await client.query('SAVEPOINT p_nomatch');
       try {
