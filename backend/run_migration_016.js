@@ -2,7 +2,7 @@
  * Runner for migrations/016_matches_elo.sql
  * Usage: node run_migration_016.js
  *
- * Applied as ONE multi-statement command, so Postgres wraps it in a single
+ * Applied as one multi-statement command, so Postgres wraps it in a single
  * implicit transaction and a failure anywhere leaves the database untouched.
  * (No `-- @@SPLIT@@` marker: this migration adds no enum values, and
  * `ALTER TYPE ... ADD VALUE` is the only statement that cannot run inside a
@@ -10,19 +10,19 @@
  *
  * Like the 015 runner, this is more than a `\d` dump:
  *
- *   1. A PRE-FLIGHT that can stop the migration. chk_matches_status is a CHECK
+ *   1. A pre-flight that can stop the migration. chk_matches_status is a CHECK
  *      over live data — if a row already holds a status outside the state
  *      machine, the ALTER fails with a 23514 that names the constraint and not
- *      the row. Bad statuses are found and PRINTED first, and the migration is
+ *      the row. Bad statuses are found and printed first, and the migration is
  *      not attempted, because deciding what a mystery status should become is a
  *      decision for a human. The same applies to ux_matches_booking_live: two
  *      live matches already sharing one booking is a double-booked pitch, and a
  *      migration must not pick which match survives.
  *
- *   2. FUNCTIONAL PROBES. Ten of the guarantees here are constraints, and a
+ *   2. Functional probes. Ten of the guarantees here are constraints, and a
  *      constraint that exists but does not constrain is worse than no constraint
  *      — it reads as enforced in the schema and is enforced nowhere. Each probe
- *      inserts a row that MUST be rejected and asserts the SQLSTATE, inside a
+ *      inserts a row that must be rejected and asserts the SQLSTATE, inside a
  *      transaction that is always rolled back. The probe that matters most is
  *      the one-live-match-per-booking index, because that is the only thing
  *      standing between a double-tapped Challenge button and two teams turning
@@ -118,7 +118,7 @@ async function run() {
   };
 
   try {
-    // ─── Pre-flight ─────────────────────────────────────────────────────────
+    // Pre-flight
     const before = await tableNames(client);
     const missingPrereqs = PREREQUISITE_TABLES.filter((t) => !before.includes(t));
     if (missingPrereqs.length) {
@@ -216,12 +216,12 @@ async function run() {
     console.log('   No illegal statuses, no double-booked matches, no duplicate disputes.');
     console.log('');
 
-    // ─── Apply ──────────────────────────────────────────────────────────────
+    // Apply
     await client.query(sql);
     console.log('Migration 016 applied. Verifying:');
     console.log('');
 
-    // ─── 1. Columns ─────────────────────────────────────────────────────────
+    // 1. Columns
     const { rows: cols } = await client.query(
       `SELECT table_name, column_name, data_type, is_nullable, column_default
          FROM information_schema.columns
@@ -252,7 +252,7 @@ async function run() {
     check(/false/i.test(defaultOf.get('teams.elo_frozen') || ''),
       'teams.elo_frozen defaults to FALSE (no team starts frozen)');
 
-    // ─── 2. Indexes ─────────────────────────────────────────────────────────
+    // 2. Indexes
     const { rows: idxRows } = await client.query(
       `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'`,
     );
@@ -261,7 +261,7 @@ async function run() {
     check(missingIdx.length === 0,
       `all ${EXPECTED_INDEXES.length} indexes exist${missingIdx.length ? ` — MISSING: ${missingIdx.join(', ')}` : ''}`);
 
-    // The ones that must have a specific SHAPE, not just a name.
+    // The ones that must have a specific shape, not just a name.
     const bookingIdx = idx.get('ux_matches_booking_live') || '';
     check(/CREATE UNIQUE INDEX/i.test(bookingIdx) && /WHERE/i.test(bookingIdx)
       && /rejected/i.test(bookingIdx) === false,
@@ -276,7 +276,7 @@ async function run() {
     check(/CREATE UNIQUE INDEX/i.test(histIdx),
       'ux_elo_history_team_match is UNIQUE — one rating row per team per match');
 
-    // ─── 3. CHECK constraints exist ─────────────────────────────────────────
+    // 3. CHECK constraints exist
     const { rows: conRows } = await client.query(
       `SELECT con.conname, pg_get_constraintdef(con.oid) AS def
          FROM pg_constraint con
@@ -294,7 +294,7 @@ async function run() {
     check(missingStates.length === 0,
       `chk_matches_status covers all ${LEGAL_STATUSES.length} states of the machine${missingStates.length ? ` — MISSING: ${missingStates.join(', ')}` : ''}`);
 
-    // ─── 4. Settings rows Wave B reads ──────────────────────────────────────
+    // 4. Settings rows Wave B reads
     const { rows: settings } = await client.query(
       `SELECT key, value FROM global_settings WHERE key IN ('elo','match')`,
     );
@@ -307,7 +307,7 @@ async function run() {
       `global_settings.match is readable — ${matchCfg.challenge_ttl_hours}h challenge TTL (FR5.12), `
       + `${matchCfg.dispute_window_hours}h dispute window (FR5.17)`);
 
-    // ─── 5. Backfill actually happened ──────────────────────────────────────
+    // 5. Backfill happened
     const { rows: [bf] } = await client.query(
       `SELECT count(*)::int AS unbackfilled
          FROM elo_history
@@ -316,8 +316,8 @@ async function run() {
     check(bf.unbackfilled === 0,
       `every pre-existing rating row has its delta backfilled (${bf.unbackfilled} left NULL)`);
 
-    // ─── 6. Functional probes — do the constraints actually constrain? ───────
-    // Everything below runs inside a transaction that is ALWAYS rolled back, and
+    // 6. Functional probes — do the constraints constrain?
+    // Everything below runs inside a transaction that is always rolled back, and
     // every insert expected to fail gets its own SAVEPOINT: without one, the
     // first 23514 aborts the transaction and every later query dies with 25P02
     // instead of reporting a result.
@@ -364,7 +364,7 @@ async function run() {
       check(!badComp.ok && badComp.code === '23514',
         `competitiveness=0 is rejected (the band floors at 5, and 0 reads as missing data)${badComp.ok ? ' — IT WAS ACCEPTED' : ''}`);
 
-      // 6d. THE important one — one live match per booking.
+      // 6d. The important one — one live match per booking.
       if (bookingRows.length) {
         const bid = bookingRows[0].id;
         await client.query(
@@ -453,7 +453,7 @@ async function run() {
     check(t === 0 && mm === 0,
       `probe rolled back cleanly — ${t} probe team(s), ${mm} probe match(es) left behind`);
 
-    // ─── Listing ────────────────────────────────────────────────────────────
+    // Listing
     console.log('');
     console.log('Match lifecycle now enforced by the database:');
     console.log('   challenge_sent ─accept→ accepted ─both results agree→ awaiting_owner');
