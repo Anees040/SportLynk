@@ -102,7 +102,7 @@ flutter build apk --release --dart-define=API_BASE_URL=https://<your-app>.onrend
 cd backend && npm run seed:venues
 ```
 
-> ⚠️ This **deletes** the first owner account's existing venues, slots, bookings
+> ⚠️ This *deletes* the first owner account's existing venues, slots, bookings
 > and their transaction rows before inserting 10 demo venues. It prints what it is
 > about to delete and waits 5 seconds. User accounts and wallet balances are not
 > touched.
