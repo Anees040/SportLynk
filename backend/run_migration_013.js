@@ -2,7 +2,7 @@
  * Runner for migrations/013_fyp2_foundation.sql
  * Usage: node run_migration_013.js
  *
- * Applies the migration as ONE multi-statement command, which Postgres wraps in
+ * Applies the migration as one multi-statement command, which Postgres wraps in
  * a single implicit transaction — so it is all-or-nothing. (No `-- @@SPLIT@@`
  * marker is needed here: unlike 010, this migration contains no
  * `ALTER TYPE ... ADD VALUE`, which is the only statement that cannot run
@@ -23,7 +23,7 @@ const path = require('path');
 const pool = require('./src/db/pool');
 
 // Tables this migration ALTERs rather than creates. If any is missing, schema.sql
-// or migration 010 has not been applied and we must not proceed — an ALTER on a
+// or migration 010 has not been applied and the run must stop — an ALTER on a
 // missing table would abort the whole transaction with a bare 42P01.
 const PREREQUISITE_TABLES = [
   'users', 'venues', 'bookings', 'teams', 'reviews', 'player_profiles',
@@ -36,7 +36,7 @@ const NEW_TABLES = [
   'chat_messages', 'global_settings',
 ];
 
-// Every column below MUST be uuid. This is the assertion that would have caught
+// Every column below must be uuid. This is the assertion that would have caught
 // the spec as pasted: it declared all of these `int`/`serial`.
 const MUST_BE_UUID = {
   team_invites: ['id', 'team_id', 'created_by', 'used_by'],
@@ -66,7 +66,7 @@ const NEW_COLUMNS = {
   notifications: { payload: 'jsonb' },
 };
 
-// The two deliberate omissions. Asserted ABSENT so a later "helpful" migration
+// The two deliberate omissions. Asserted absent so a later "helpful" migration
 // that re-adds them fails this check loudly instead of quietly forking the flag.
 const MUST_NOT_EXIST = [
   ['users', 'suspended'],       // is_active is the suspension flag (auth.js:164)
@@ -108,7 +108,7 @@ async function run() {
   };
 
   try {
-    // ─── Pre-flight ─────────────────────────────────────────────────────────
+    // Pre-flight
     const before = await tableNames(client);
     const missingPrereqs = PREREQUISITE_TABLES.filter((t) => !before.includes(t));
     if (missingPrereqs.length) {
@@ -128,18 +128,18 @@ async function run() {
     }
     console.log('');
 
-    // ─── Apply ──────────────────────────────────────────────────────────────
+    // Apply
     await client.query(sql);
     console.log('Migration 013 applied. Verifying:');
     console.log('');
 
-    // ─── 1. Tables ──────────────────────────────────────────────────────────
+    // 1. Tables
     const after = await tableNames(client);
     const missing = NEW_TABLES.filter((t) => !after.includes(t));
     check(missing.length === 0,
       `all ${NEW_TABLES.length} new tables exist${missing.length ? ` — MISSING: ${missing.join(', ')}` : ''}`);
 
-    // ─── 2. Column types (the uuid-vs-int assertion) ─────────────────────────
+    // 2. Column types (the uuid-vs-int assertion)
     const { rows: cols } = await client.query(
       `SELECT table_name, column_name, data_type
          FROM information_schema.columns
@@ -174,7 +174,7 @@ async function run() {
     check(leaked.length === 0,
       `duplicate flags absent (users.suspended, notifications.read)${leaked.length ? ` — PRESENT: ${leaked.map((p) => p.join('.')).join(', ')}` : ''}`);
 
-    // ─── 3. The FKs the spec omitted ────────────────────────────────────────
+    // 3. The FKs the spec omitted
     const { rows: fkRows } = await client.query(
       `SELECT tc.table_name, kcu.column_name
          FROM information_schema.table_constraints tc
@@ -191,9 +191,9 @@ async function run() {
     check(missingFks.length === 0,
       `winner_team FKs present${missingFks.length ? ` — MISSING: ${missingFks.join(', ')}` : ''}`);
 
-    // ─── 4. teams backfill ──────────────────────────────────────────────────
+    // 4. Teams backfill
     // Guarded on the legacy columns still existing, exactly as the migration's
-    // own DO block is — a database built from migrations alone may not have them.
+    // own do block is — a database built from migrations alone may not have them.
     const hasEloRating = typeOf.has('teams.elo_rating');
     const hasIsPublic = typeOf.has('teams.is_public');
     const { rows: [teamCounts] } = await client.query(
@@ -216,7 +216,7 @@ async function run() {
         ? 'teams.visibility matches legacy is_public'
         : 'teams.visibility present (no legacy is_public to reconcile)');
 
-    // ─── 5. global_settings seed ────────────────────────────────────────────
+    // 5. global_settings seed
     const { rows: settings } = await client.query(
       'SELECT key FROM global_settings ORDER BY key',
     );
@@ -226,7 +226,7 @@ async function run() {
     check(missingSeed.length === 0,
       `global_settings seeded (${seeded.join(', ')})${missingSeed.length ? ` — MISSING: ${missingSeed.join(', ')}` : ''}`);
 
-    // ─── 6. Indexes ─────────────────────────────────────────────────────────
+    // 6. Indexes
     const { rows: idxRows } = await client.query(
       `SELECT indexname FROM pg_indexes WHERE schemaname = 'public'`,
     );
@@ -235,7 +235,7 @@ async function run() {
     check(missingIdx.length === 0,
       `all ${EXPECTED_INDEXES.length} new indexes exist${missingIdx.length ? ` — MISSING: ${missingIdx.join(', ')}` : ''}`);
 
-    // ─── Listing (the \dt the accept criterion asked for) ───────────────────
+    // Listing (the \dt the accept criterion asked for)
     console.log('');
     const created = after.filter((t) => !before.includes(t));
     console.log(`Tables now in public (${after.length}):`);
