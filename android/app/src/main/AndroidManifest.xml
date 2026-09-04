@@ -4,7 +4,7 @@
     <!-- S.7 Wave C. Android 13 (API 33) made notifications an explicit runtime
          permission: without this line the request PushService makes is denied
          instantly and silently, with no dialog and no error, and the phone simply
-         never buzzes. Declaring it does not grant it -- the user is still asked
+         never buzzes. Declaring it does not grant it: the user is still asked
          once, by `FirebaseMessaging.requestPermission()`. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
@@ -38,7 +38,7 @@
                  activity so firebase_messaging can hand it to
                  `onMessageOpenedApp` (app backgrounded) or `getInitialMessage()`
                  (app killed). Without it the banner opens the app on its home
-                 screen and the deep link is lost -- which is precisely the
+                 screen and the deep link is lost, which is precisely the
                  "the tap does nothing" failure this wave exists to close. -->
             <intent-filter>
                 <action android:name="FLUTTER_NOTIFICATION_CLICK"/>
@@ -54,7 +54,7 @@
              Firebase SDK uses it instead of creating its own
              `fcm_fallback_notification_channel` at DEFAULT importance, which would
              throw away the high-priority heads-up behaviour the server asks for.
-             The channel itself is CREATED in MainActivity.kt -- this meta-data only
+             The channel itself is CREATED in MainActivity.kt; this meta-data only
              names it, and the two strings plus `ANDROID_CHANNEL` in
              backend/src/services/pushService.js must all match. -->
         <meta-data

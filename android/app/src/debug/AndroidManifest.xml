@@ -4,4 +4,12 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Development only. The API is plain HTTP on the host machine (10.0.2.2 on the
+         emulator, or localhost through `adb reverse` on a physical device), and the
+         platform has blocked cleartext by default since API 28 - without this a real
+         phone fails every request in a way that reads as "the backend is down". This
+         file is merged into debug and profile builds only; the release manifest does
+         not permit cleartext, which is what the Play Store expects. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>
