@@ -127,7 +127,7 @@ async function autoConfirm(bookingId) {
       body: `${b.player_name}'s request was pending for over ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)} and has been auto-confirmed.`,
     });
 
-    // S.7 Wave B -- confirm path #2. Identical call to routes/owner.js so the
+    // Confirm path #2. Identical call to routes/owner.js so the
     // room and its opening sentence do not depend on who confirmed; the unique
     // (type, ref_id) index makes a race between the two an update, not a
     // duplicate room.

@@ -49,7 +49,7 @@ class ApiConstants {
   static const String checkin = '/owner/checkin';
   static const String checkinDecide = '/owner/checkin/decide';
 
-  // Owner — AI pricing (S.3 Wave D). These three sit behind the same owner auth as
+  // Owner — AI pricing. These three sit behind the same owner auth as
   // the rest of this block; the venue id in the path is checked against the caller's
   // ownership server-side, so a wrong id and someone else's id both read as 404.
   static String ownerVenuePricing(String venueId) => '/owner/venues/$venueId/pricing';
@@ -95,7 +95,7 @@ class ApiConstants {
   static String chatReactions(String channelId, String messageId) => '/chat/$channelId/messages/$messageId/reactions';
   static String chatMessage(String channelId, String messageId) => '/chat/$channelId/messages/$messageId';
 
-  // Chat: the inbox and the other two channel types (S.7 Wave B)
+  // Chat: the inbox and the other two channel types
   /// The inbox itself. `type` filters to one of booking/captain/team; `cursor` is
   /// the previous page's `sortAt`, passed back verbatim — it is keyed on the same
   /// expression the server sorts by, so building one client-side would page wrong.
@@ -106,7 +106,7 @@ class ApiConstants {
   static String chatMute(String channelId) => '/chat/$channelId/mute';
   static String chatQuickReplies(String channelId) => '/chat/$channelId/quick-replies';
 
-  // Notifications (S.7 Wave C)
+  // Notifications
   /// The feed. `cursor` is the previous page's `nextCursor`, passed back verbatim:
   /// it is a `"<createdAt>~<id>"` pair, not a timestamp, because one transaction
   /// routinely writes several notifications (a booking approval alerts the player
@@ -122,7 +122,7 @@ class ApiConstants {
   static String notificationUnread(String id) => '/notifications/$id/unread';
   static String notification(String id) => '/notifications/$id';
 
-  // Matches (S2 Wave C)
+  // Matches
   /// The match list is `?team_id=` (snake) because it mirrors the SQL column,
   /// while the pairing reads take `teamId`/`challengerTeam` — the backend is the
   /// authority on each name, so they are spelled out here once rather than
@@ -139,7 +139,7 @@ class ApiConstants {
   static String matchVerify(String id) => '/matches/$id/verify';
   static String matchDispute(String id) => '/matches/$id/dispute';
 
-  // Reviews & Trust 2.0 (S.4 Wave D)
+  // Reviews & Trust 2.0
   /// Reviews mount at the bare `/api` root (not under a `/reviews` collection for
   /// the reads): the write is `POST /api/reviews`, but a venue's reviews hang off
   /// the venue and a user's off the user, mirroring the routes in `reviews.js`.
@@ -148,14 +148,14 @@ class ApiConstants {
   static String userReviews(String userId) => '/users/$userId/reviews';
   static String flagReview(String reviewId) => '/reviews/$reviewId/flag';
 
-  // Admin moderation (S.4 Wave D)
+  // Admin moderation
   /// Under `/api/admin`, behind `checkRole('admin')`. The queue is every review
   /// needing an eye (reported or model-escalated or already hidden); the PATCH
   /// takes `{action: 'hide'|'restore'|'dismiss'}`.
   static const String adminFlaggedReviews = '/admin/reviews/flagged';
   static String adminModerateReview(String reviewId) => '/admin/reviews/$reviewId';
 
-  // Scout, the assistant (S.6 Wave D)
+  // Scout, the assistant
   /// Every player-facing turn goes through the one `POST /message`: typed text
   /// and a tapped chip are the same request, distinguished only by whether the
   /// body carries `action`. That is deliberate — a chip must not need a second
@@ -170,7 +170,7 @@ class ApiConstants {
   static String assistantFeedback(String messageId) =>
       '/assistant/messages/$messageId/feedback';
 
-  // Tournaments (S.7 Wave A)
+  // Tournaments
   /// Module 6. `/mine` and `/preview` are declared before `/:id` on the server, so
   /// they are real endpoints and not a tournament whose id happens to be "mine" —
   /// spelled out here in the same order for anyone comparing the two files.
@@ -192,7 +192,7 @@ class ApiConstants {
   static String tournamentFixtureWalkover(String id, String fixtureId) =>
       '/tournaments/$id/fixtures/$fixtureId/walkover';
 
-  // Admin: disputes, users, settings (S.7 Wave D)
+  // Admin: disputes, users, settings
   /// All of these sit under `/api/admin`, which mounts one
   /// `auth + checkRole('admin')` above every sub-router -- so there is no
   /// per-path authorisation to remember here, and a new admin path cannot ship
@@ -211,7 +211,7 @@ class ApiConstants {
   static const String adminSettings = '/admin/settings';
   static const String adminSettingsReset = '/admin/settings/reset';
 
-  // Financial export (S.7 Wave D / FR4.16)
+  // Financial export (FR4.16)
   /// One generator, two scopes. `?from&to` are required `YYYY-MM-DD` and the span
   /// is capped server-side at 366 days; `?format=json` previews the same walk the
   /// CSV streams, so the screen's totals cannot disagree with the file.

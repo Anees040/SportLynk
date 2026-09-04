@@ -15,7 +15,7 @@ SOURCES (all real, all cited in data/sentiment/README.md)
               cannot drown the Roman-Urdu signal. Supplies English + neutral.
   * authored  Hand-written in-domain booking rows (data/sentiment/authored*.csv;
               every matching file is loaded and merged), optional. Supplies the
-              venue register the other two lack. This is the wave-sanctioned
+              venue register the other two lack. This is the sanctioned
               augmentation ("300-500 self-labeled sports sentences, NOT from the
               test set").
 

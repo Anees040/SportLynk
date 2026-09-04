@@ -23,8 +23,8 @@
  * one friendly worth a season. Never the other way round.
  *
  * Why the LABELS and descriptions are server-side
- * The admin screen renders whatever this file sends, so a key added in a later
- * wave appears in the app -- correctly labelled, correctly bounded -- with no
+ * The admin screen renders whatever this file sends, so a key added later
+ * appears in the app -- correctly labelled, correctly bounded -- with no
  * client change and no release. The alternative is a Dart const map that drifts
  * out of step with what the server enforces, which is exactly the class
  * of bug where the UI offers a range the API refuses.

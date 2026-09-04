@@ -80,7 +80,7 @@ WHAT THIS MODULE DELIBERATELY DOES NOT DO
   the char n-gram branch already absorbs inflection.
 * No stopword removal. "nahi", "na", "koi", "hi" look like stopwords and are
   the most important tokens in the corpus.
-* No transliteration to Urdu script. That is a research project, not a wave.
+* No transliteration to Urdu script. That is a research project, not a feature.
 * No spell correction beyond the closed ``VARIANTS`` table. An open-vocabulary
   corrector cannot be version-fingerprinted, so it cannot be part of a
   contract.
@@ -109,7 +109,7 @@ NORM_SPEC_VERSION: str = "sentiment-norm-v1"
 #: string classes, so ``model.classes_`` lines up with this tuple without any
 #: remapping. The spellings match the CHECK constraint in
 #: ``backend/migrations/013_*.sql`` -- not the ``pos/neu/neg`` shorthand used in
-#: the sprint-plan prose.
+#: the plan's prose.
 LABELS: tuple[str, str, str] = ("negative", "neutral", "positive")
 
 #: Maximum length of a run of one repeated character after collapsing.

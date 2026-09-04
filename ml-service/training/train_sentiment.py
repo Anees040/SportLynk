@@ -1,4 +1,4 @@
-"""Train and evaluate Model #2 -- the SportLynk sentiment classifier (S.4 / Wave B).
+"""Train and evaluate Model #2 -- the SportLynk sentiment classifier.
 
 WHAT THIS PRODUCES
 ------------------
@@ -79,7 +79,7 @@ EVERY gate passes:
   3. exam provenance       domain_test_200.csv sha256 == domain_test_meta.json, exam previously validated
   4. no leakage            held-out validation accuracy <= 0.995 (a ~1.0 means the split leaked)
   5. beats baseline        exam accuracy exceeds the majority-class baseline by >= 10 points
-  6. domain target         exam accuracy >= 0.80        <-- the wave's acceptance gate
+  6. domain target         exam accuracy >= 0.80        <-- the acceptance gate
 
 exit 0 = all gates passed AND sentiment_latest.joblib written
 exit 1 = a gate failed; latest is left untouched (registry keeps serving the old one)
@@ -206,7 +206,7 @@ C_SELECTION_SWEEP: dict[float, tuple[float, float]] = {
 C_SWEEP_WINNER: float = max(C_SELECTION_SWEEP, key=lambda c: C_SELECTION_SWEEP[c][0])
 
 # Gate thresholds
-DOMAIN_GATE = 0.80             # wave acceptance: >= 80% on the untouched exam
+DOMAIN_GATE = 0.80             # acceptance: >= 80% on the untouched exam
 LEAKAGE_MAX_VAL_ACC = 0.995    # a near-perfect val score means the split leaked
 BASELINE_MIN_MARGIN = 0.10     # must beat majority baseline by >= 10 points
 

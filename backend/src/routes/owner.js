@@ -23,12 +23,12 @@ const { TtlCache, ONE_HOUR_MS } = require("../utils/ttlCache");
 
 router.use(auth, checkRole("owner"));
 
-// S.7 Wave D - D4. The financial export lives in its own file but on this router,
+// D4. The financial export lives in its own file but on this router,
 // so it inherits the owner check above and is scoped to req.user.id. See
 // routes/reports.js for why the owner filter is never optional.
 router.use(require("./reports").ownerReports);
 
-// AI pricing — S.3 Wave D
+// AI pricing
 //
 // Two read endpoints and one write endpoint, and the split between them is the
 // whole point of FR4.17: the model suggests and the owner applies. There is no code
@@ -37,7 +37,7 @@ router.use(require("./reports").ownerReports);
 // missing feature — a venue owner whose prices moved on their own would stop
 // trusting the dashboard the first time it happened, and would be right to.
 //
-// Caching: one hour, as the wave specifies, in-process. See utils/ttlCache.js for
+// Caching: one hour, as the specifies, in-process. See utils/ttlCache.js for
 // why in-memory rather than Redis, and why a degraded answer is never cached.
 
 /** Two caches, so a forecast eviction can never displace a price suggestion. */
@@ -511,7 +511,7 @@ router.post("/venues", async (req, res, next) => {
 
     const sportType = sportTypes && sportTypes.length > 0 ? sportTypes[0].toLowerCase() : 'football';
 
-    // S.7 Wave D (FR10.10). An admin can switch a sport off; a venue for it must not
+    // FR10.10. An admin can switch a sport off; a venue for it must not
     // be creatable afterwards, or the owner builds out slots for something the
     // platform will refuse to book. Only the CREATE path needs this -- the edit route
     // below deliberately does not accept `sport_type`, so an existing venue cannot
@@ -669,7 +669,7 @@ router.patch("/bookings/:id/approve", async (req, res, next) => {
       body: `${check.rows[0].venue_name} approved your booking. Show your QR code at the venue to check in.`,
     });
 
-    // S.7 Wave B -- the booking room. Opened on confirmed and not on the request:
+    // The booking room. Opened on confirmed and not on the request:
     // an unapproved request is not a conversation, and a room per rejected
     // request would bury the real ones. The other confirm path (autoApproveJob)
     // calls this identically, and `ux_chat_channels_type_ref` makes whichever
@@ -821,7 +821,7 @@ router.patch("/slots/:id/block", async (req, res, next) => {
 
 // PATCH /api/owner/slots/:id/unblock
 //
-// S.7 Wave A added a second reason a slot can read 'blocked': a tournament fixture
+// There is a second reason a slot can read 'blocked': a tournament fixture
 // is standing on that hour. `fixtures.slot_id` is a reservation, not a booking — no
 // bookings row exists to protect it — so without the guard below an owner tidying
 // up their calendar could free an hour the bracket is scheduled to play on, and the
@@ -932,7 +932,7 @@ router.post("/scan-qr", async (req, res, next) => {
 
     const escrow = round2(booking.security_deposit);
 
-    // S.7 Wave D (FR10.9). The platform's commission, taken here and nowhere else.
+    // FR10.9. The platform's commission, taken here and nowhere else.
     //
     // Why check-in is the right moment
     // This is the instant the money stops being contingent: the player showed up,
@@ -1149,7 +1149,7 @@ router.post("/no-show/:id", async (req, res, next) => {
       body: `You missed your slot at ${b.venue_name}. PKR ${refund} returned, PKR ${penalty} deposit forfeited, and your trust score has been updated.`,
     });
 
-    // S.7 Wave B -- the no-show pill goes in the room where the two of them can
+    // The no-show pill goes in the room where the two of them can
     // see it together. A player who says "I was there" and an owner who says
     // otherwise now argue in front of the same timestamped line, which is also
     // what an admin reads when the dispute lands on their desk.

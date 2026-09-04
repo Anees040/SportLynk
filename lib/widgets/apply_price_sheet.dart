@@ -10,7 +10,7 @@ import '../services/pricing_service.dart';
 /// The Apply half of FR4.17 — the owner's explicit act.
 ///
 /// The whole point of this sheet is that it stands between a suggestion and a real
-/// price. Nothing in Wave D writes a price without an owner passing through here:
+/// price. Nothing writes a price without an owner passing through here:
 /// they pick a day, they pick the slots, they see the exact rupee change on each
 /// one, and only then does the PATCH go out.
 ///

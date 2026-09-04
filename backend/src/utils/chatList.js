@@ -1,5 +1,5 @@
 /**
- * chatList.js — the reads behind the chat list (S.7 Wave B).
+ * chatList.js — the reads behind the chat list.
  *
  * Why these are not inline in routes/chat.js
  * Every function here takes a `client`, exactly like bookingService's core

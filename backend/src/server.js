@@ -68,7 +68,7 @@ const settings = require("./utils/globalSettings");
 const escrow = require("./utils/escrow");
 const { ACTIVE_TEST_OVERRIDES } = require("./utils/escrow");
 
-// Notification registry (S.7 Wave C)
+// Notification registry
 // Runs at load, before a single route is mounted, and throws on an inconsistent
 // registry — a category the CHECK constraint would reject, a priority that is not
 // high|normal|low, a missing icon, an entity with no id resolver. Same shape as
@@ -88,12 +88,12 @@ app.use("/api/users", userRoutes);
 app.use("/api/slots", slotRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/chat", chatRoutes);
-// Notifications (S.7 Wave C). routes/notifications.js declares /summary,
+// Notifications. routes/notifications.js declares /summary,
 // /preferences, /devices, /read-all, /test and /types before /:id, for the same
 // declaration-order reason as tournaments below.
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/matches", matchRoutes);
-// Tournaments (S.7 Wave A). routes/tournaments.js declares /mine and /preview
+// Tournaments. routes/tournaments.js declares /mine and /preview
 // before /:id — Express matches in declaration order, so the reverse would send
 // GET /api/tournaments/mine to the detail handler as id="mine".
 app.use("/api/tournaments", tournamentRoutes);
@@ -181,7 +181,7 @@ server.listen(PORT, () => {
     console.warn("");
   }
 
-  // S.7 Wave D. Pull the admin's configured deposit percent into
+  // Pull the admin's configured deposit percent into
   // `escrow.POLICY.DEPOSIT_PERCENT` once, at boot.
   //
   // ~30 call sites read that constant to describe the policy ("20% of the total is
@@ -205,7 +205,7 @@ server.listen(PORT, () => {
   // the app. Without it a tournament nobody generated would hold every captain's
   // entry fee frozen indefinitely.
   startTournamentJob();
-  // The notification outbox drain (S.7 Wave C). notify() writes rows inside money
+  // The notification outbox drain. notify() writes rows inside money
   // transactions and never calls FCM there — holding a wallet row's FOR UPDATE lock
   // across an HTTPS round trip is how a settlement path acquires a network timeout.
   // This job is what turns those rows into a tray banner and an in-app badge, and it

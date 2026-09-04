@@ -552,7 +552,7 @@ async function deleteKb(client, { ownerId, id } = {}) {
 }
 
 /**
- * Counters for the owner dashboard and for the wave report: how much has Scout
+ * Counters for the owner dashboard and for the progress report: how much has Scout
  * learned, and how much of it is being used.
  */
 async function stats(client, { ownerId = null } = {}) {

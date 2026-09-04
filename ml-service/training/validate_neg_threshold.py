@@ -1,5 +1,5 @@
 r"""
-Is the FR9.10 strong-negative threshold a real rule?  —  S.4 Wave B
+Is the FR9.10 strong-negative threshold a real rule?
 
 WHY THIS SCRIPT EXISTS
 `train_sentiment.py` ships `NEG_PROB_THRESHOLD = 0.90`, and that number reaches

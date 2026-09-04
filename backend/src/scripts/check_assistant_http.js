@@ -456,7 +456,7 @@ async function sectionB(cast, tok) {
  * The two utterances the milestone checklist names, over HTTP rather than in-process.
  *
  * "kal shaam football islamabad" is the one that used to abstain: it is a verbless
- * search-box query, and until Wave E added slots-only templates to find_venue the
+ * search-box query, and until slots-only templates were added to find_venue the
  * corpus had never shown the model one. It is asserted here because a checklist line
  * that only passes when called as a function is not a demo.
  */
@@ -509,7 +509,7 @@ async function sectionC(cast, tok, ctx) {
     landed.push(res.data && res.data.threadId);
   }
   check(landed.every((id) => id === ctx.thread),
-    'all four spellings of the chat id land in the SAME chat — Wave D cannot 400 over a naming preference',
+    'all four spellings of the chat id land in the SAME chat — the API cannot 400 over a naming preference',
     JSON.stringify(landed));
 
   const before = await api('GET', '/assistant/threads', { token: t });
@@ -797,7 +797,7 @@ async function sectionH(cast, tok) {
   check(groups.length >= 3, `grouped for rendering (${groups.join(' · ')})`);
 }
 
-// I — the owner side  (testing.md step 200, the wave's most demo-able feature)
+// I — the owner side  (testing.md step 200, the most demo-able feature)
 
 /**
  * A player asks something no query can answer; the owner answers it once; every later
@@ -912,7 +912,7 @@ async function sectionI3(cast, tok, ctx, esc, kb) {
   check(!!row, 'the entry is listed for its owner');
   if (row) {
     check(Number(row.served_count || row.servedCount || 0) >= 1,
-      `with the serve counter the wave report quotes (${row.served_count ?? row.servedCount})`);
+      `with the serve counter the progress report quotes (${row.served_count ?? row.servedCount})`);
   }
   const stats = await api('GET', '/assistant/owner/stats', { token: o });
   eq(stats.status, 200, 'GET /owner/stats → 200');
@@ -968,7 +968,7 @@ async function sectionI4(cast, tok, ctx, kb) {
   }
 }
 
-// J — the money gate, over HTTP  (the rule the whole wave hangs on)
+// J — the money gate, over HTTP  (the rule the whole feature hangs on)
 
 /**
  * USE-6's chain up to the confirmation card, and then not through it.

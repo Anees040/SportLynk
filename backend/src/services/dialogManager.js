@@ -2,7 +2,7 @@
  * dialogManager.js — one turn of conversation, start to finish.
  *
  * Why this file exists
- * The wave spec asks for a slot-filling state machine. This is it, and it is the
+ * The spec asks for a slot-filling state machine. This is it, and it is the
  * only place that decides what a turn means. `assistantActions.js` decides what a
  * meaning does; `routes/assistant.js` is transport. Three files, three jobs, and
  * the reason for the split is that every one of the questions below has exactly one

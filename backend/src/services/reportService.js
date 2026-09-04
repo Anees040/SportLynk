@@ -1,5 +1,5 @@
 /**
- * reportService.js — S.7 Wave D · FR4.16. The financial export, written once and
+ * reportService.js — FR4.16. The financial export, written once and
  * used by both the owner's report and the platform's.
  *
  * Why the money comes from the ledger and not from `bookings`

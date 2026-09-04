@@ -10,7 +10,7 @@
  * the database down: the bracket shape, the byes, the seeding, the waterfall
  * arithmetic, the K table, the slot ranking. None of that touches a row, which is
  * the point. But a bracket the pure functions draw perfectly and the ledger records
- * wrongly is still a broken feature, and the one claim this wave rests on —
+ * wrongly is still a broken feature, and the one claim the module rests on —
  * "the owner is never worse off than selling the same hours" — is a claim about
  * money in wallets, not about a pure function's return value.
  *
@@ -385,7 +385,7 @@ async function blockConfig(client, ctx) {
 // Block 2 — the economics quote (the argument, made checkable)
 
 /**
- * The claim this wave is built on is that a tournament pays an owner more than
+ * The claim the module is built on is that a tournament pays an owner more than
  * selling the same hours, and that teams pay one fee for several matches. Both
  * halves are arithmetic over `slots.price`, and `preview` is where the owner sees
  * it before committing. So this block asserts the quote itself: that the

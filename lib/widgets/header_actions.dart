@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../constants/colors.dart';
 
-/// The two live actions in a home-screen header: chat, and (from Wave C) the
+/// The two live actions in a home-screen header: chat, and the
 /// notification bell.
 ///
 /// Why a widget and not two copies of a container

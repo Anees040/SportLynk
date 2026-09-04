@@ -55,7 +55,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
   bool _suggestLoading = false;
   bool _suggestFailed = false;
 
-  /// S2 Wave D. These arrive inside the same `GET /teams/:id` payload as the
+  /// These arrive inside the same `GET /teams/:id` payload as the
   /// team, but they cannot live on [Team]: `elo` there is a `num` defaulting to
   /// the 1000 seed, which has no way to say "Unranked" (FR2.6). [TeamStats]
   /// carries `ranked` + `displayElo` so the profile can say it.
@@ -117,7 +117,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     }
   }
 
-  /// Wave D's two extra blocks. Parsed in one place so `_load` and `_refresh`
+  /// The two extra stat blocks. Parsed in one place so `_load` and `_refresh`
   /// cannot end up reading different keys — a live `team:update` refresh that
   /// silently dropped the chart would be a hard bug to spot.
   /// Call inside setState.
@@ -511,7 +511,6 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                           onInvite: (p) => _createInvite('Suggested: ${p.name}'),
                         ),
                       ],
-                      // S2 Wave D
                       // Placed below the admin console so a captain's actions stay
                       // where they were, and above Members because a visitor
                       // arriving from the leaderboard came for the record, not the
@@ -647,7 +646,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
         ),
       );
 
-  // S2 Wave D cards
+  // Stats cards
 
   /// Last-5 form + 30-day activity — the two features S.5's recommender will read,
   /// shown here so they are visibly real rather than only present in JSON.

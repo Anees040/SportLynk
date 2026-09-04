@@ -15,7 +15,7 @@ import 'transaction_detail_sheet.dart' show fmtSlotDate, fmtSlotTime;
 /// The breakdown is computed by `GET /api/wallet/frozen`, not by filtering
 /// bookings client-side, so the server can also return `delta` — the gap between
 /// the per-booking sum and `wallets.frozen_balance`. A non-zero delta means rows
-/// escrowed under the old 30% rule from before Wave A. Showing it beats a
+/// escrowed under the old 30% deposit rule. Showing it beats a
 /// breakdown that quietly disagrees with the headline number.
 class FrozenBalanceSheet extends StatefulWidget {
   final String token;

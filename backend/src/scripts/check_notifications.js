@@ -7,10 +7,10 @@
  *         node src/scripts/check_notifications.js --verify-clean
  *
  * Why this script exists
- * Before S.7 Wave C the `notifications` table was write-only: thirty-eight call
- * sites inserted into it and nothing on earth read it. That is the exact shape of
- * breakage that survives a green `npm test` — every unit test passed while the
- * feature did not exist — so this wave is not called done on unit tests.
+ * The `notifications` table used to be write-only: thirty-eight call sites inserted
+ * into it and nothing on earth read it. That is the exact shape of breakage that
+ * survives a green `npm test` — every unit test passed while the feature did not
+ * exist — so the feed is not called done on unit tests.
  *
  * What the unit tests cannot reach is everything interesting here. The collapse
  * upsert depends on Postgres inferring a partial UNIQUE INDEX from an ON CONFLICT
@@ -37,7 +37,7 @@
  * and lib/main.dart with it — and asserts every route the registry
  * can emit is a route the app registers. "A function that works and is
  * never called" and "a notification whose tap goes nowhere" are the two failures
- * this wave exists to end, so both are checked rather than assumed.
+ * the feed exists to end, so both are checked rather than assumed.
  *
  *   ✗  a rule broke. The line names it.
  *   ~  the data could not supply the case. A skip is not a pass.
@@ -179,7 +179,7 @@ async function rowOf(client, id) {
 // each to be registered. An unregistered type still writes a row (notify() must
 // never throw inside a money transaction) but lands as category=system with a dead
 // tap — which is precisely the "the button does nothing" breakage that started
-// this sprint.
+// this project.
 
 function probeSync(fn) {
   try { return { ok: true, out: fn(), err: null }; } catch (err) { return { ok: false, out: null, err }; }
@@ -257,12 +257,12 @@ function blockRegistry() {
   if (unregistered.length) console.log(`      unregistered: ${unregistered.join(', ')}`);
 
   // The reverse is not an error and is deliberately reported rather than failed:
-  // dispute_resolved and account_* are registered ahead of Wave D's call sites, and
+  // dispute_resolved and account_* are registered ahead of their call sites, and
   // a registry entry with no caller yet is a plan, not a bug.
   const unused = types.filter((t) => !emitted.includes(t));
   console.log(`    registered but not yet emitted (${unused.length}): ${unused.join(', ') || 'none'}`);
   ev.note(`Registered-but-not-yet-emitted types (${unused.length}): ${unused.join(', ') || 'none'} `
-    + '— these are Wave D call sites, not defects.');
+    + '— these are admin call sites, not defects.');
 }
 
 // 2 · what notify() writes
@@ -434,7 +434,7 @@ async function blockCollapse(client, ctx) {
   }
 }
 
-// 4 · the feed  — the read side that did not exist before this wave
+// 4 · the feed  — the read side that did not exist before
 //
 // The unread count is checked against a hand-computed number rather than against a
 // second copy of the same query. A check script that re-implements the query it is
@@ -623,7 +623,7 @@ function blockQuietHours() {
 // The drain runs against the same transaction this script owns, which is the only
 // way to observe it without leaving stamped rows behind. Firebase is never called:
 // with no service account the send path is skipped and the row is stamped with why,
-// and that is the state this wave ships in — so it is the state that gets tested.
+// and that is the state the code ships in — so it is the state that gets tested.
 //
 // The important ordering claim is that a muted category is recorded as muted even
 // while push is unconfigured. Both are true at once, and reporting the Firebase key
@@ -747,7 +747,7 @@ async function blockOutbox(client, ctx) {
 // Everything above proves the notification machine works. This block proves it is
 // plugged in, by reading the source of the files that have to call it. That
 // distinction is the whole reason this block exists: the failure that opened this
-// sprint was not a broken function, it was a correct function nobody called — a
+// work was not a broken function, it was a correct function nobody called — a
 // notifications table with 33 writers and no reader, and a bell icon with no onTap.
 //
 // A string match on source is a blunt instrument and it is the right one here. The
@@ -832,7 +832,7 @@ function blockDeepLinks() {
     ev.note(`All ${routes.length} registry routes resolve against the Flutter route table — no notification taps into a dead route.`);
   }
 
-  // The bells. Wave B shipped them inert on purpose; Wave C is what gives them a tap.
+  // The bells. They shipped inert on purpose; the feed is what gives them a tap.
   for (const screen of ['player_home_screen.dart', 'owner_home_screen.dart']) {
     const src = readRoot(path.join('lib', 'screens', screen.startsWith('player') ? 'player' : 'owner', screen));
     if (!src) { skip(`${screen} could not be read`); continue; }
@@ -842,10 +842,10 @@ function blockDeepLinks() {
 
 // 11 · schema census  —  migration 020 is applied
 //
-// Wave A shipped on `npm test` alone against a schema that had never been applied, and
-// every check script in it was unrunnable as a result. So the last block asserts the
-// columns and indexes this wave depends on are present on the connected database, not
-// merely present in a .sql file in the repo.
+// An earlier module shipped on `npm test` alone against a schema that had never been
+// applied, and every check script in it was unrunnable as a result. So the last block
+// asserts the columns and indexes this script depends on are present on the connected
+// database, not merely present in a .sql file in the repo.
 async function blockSchema(client) {
   section('11 · Schema census — migration 020 on the live database');
 

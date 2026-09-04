@@ -24,7 +24,7 @@
 
 /**
  * Actions this module knows. Free-form text is accepted — the column is `text`
- * and a future wave must not need a migration to log something new — but naming
+ * and a later change must not need a migration to log something new — but naming
  * them here keeps the vocabulary consistent and greppable, which is what makes
  * the trail searchable a year later.
  */

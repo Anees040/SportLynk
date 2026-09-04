@@ -113,8 +113,8 @@ function isUserOnline(userId) {
 /**
  * Is this user looking at this chat right now?
  *
- * The distinction matters because of what Wave C does with the answer: a new chat
- * message writes a notification row (and therefore a tray push) only when the
+ * The distinction matters because of what the notifier does with the answer: a new
+ * chat message writes a notification row (and therefore a tray push) only when the
  * recipient will not see the message arrive on its own. Someone with the thread
  * open already got it through `c:<channelId>` a millisecond ago, and buzzing their
  * phone about a message visible on screen is the single most irritating thing a

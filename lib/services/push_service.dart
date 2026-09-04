@@ -130,8 +130,8 @@ class PushService {
   Map<String, bool> _inApp = const <String, bool>{};
 
   /// May a foreground banner be drawn for this category? An absent key means yes --
-  /// the same "absent = on" rule the server applies, so a category added in a later
-  /// wave is not silently muted on an old build.
+  /// the same "absent = on" rule the server applies, so a category added later is
+  /// not silently muted on an old build.
   bool allowsBanner(String? category) {
     if (category == null || category.isEmpty) return true;
     if (category == 'system') return true; // unmutable, as on the server

@@ -1,5 +1,5 @@
 """
-Drop mechanically-cloned rows from a sentiment CSV  —  S.4 Wave B data hygiene
+Drop mechanically-cloned rows from a sentiment CSV  —  data hygiene
 
 THE PROBLEM THIS SOLVES
 `authored_batch2.csv` was produced by a generator that emitted every sentence

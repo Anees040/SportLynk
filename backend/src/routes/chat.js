@@ -1,5 +1,5 @@
 /**
- * Chat API (S2 Wave A, extended in S.7 Wave B) — the REST half of chat. The live
+ * Chat API — the REST half of chat. The live
  * half (typing, receipts, presence) is Socket.IO in realtime/; this file owns the
  * inbox, history, sending, read-marks, membership watermarks, reactions,
  * delete-for-everyone, mute and the FR8.10 reply suggestions.
@@ -58,7 +58,7 @@ async function member(client, channelId, userId) {
   return r.rows[0] || null;
 }
 
-// The CHAT list  (S.7 Wave B)
+// The CHAT list
 //
 // Every channel the caller belongs to, most-recent first — the inbox. Until this
 // existed the app could only open a chat it already knew the id of (a team, from
@@ -132,7 +132,7 @@ router.get('/team/:teamId', async (req, res, next) => {
  * confirms a booking they have no business knowing about. Same reason
  * /team/:teamId answers 404 for a non-member.
  *
- * A null answer is also the correct answer for anything that predates Wave B: a
+ * A null answer is also the correct answer for anything that predates the rooms: a
  * booking confirmed last month has no room and never will, so the client renders
  * no button rather than an error.
  */
@@ -227,7 +227,7 @@ router.post('/:channelId/messages', async (req, res, next) => {
     // new: a retried clientId returns the original row, and notifying again
     // would ping a phone twice for one message. chatCore skips anybody with the thread
     // open or the channel muted, and is SAVEPOINT-wrapped so a notifications failure
-    // cannot roll the message back (S.7 Wave C).
+    // cannot roll the message back.
     if (!out.duplicate) {
       await chat.notifyNewMessage(client, {
         channelId: req.params.channelId, message: out.message,
@@ -384,7 +384,7 @@ router.delete('/:channelId/messages/:messageId', async (req, res, next) => {
   } finally { client.release(); }
 });
 
-// Mute  (S.7 Wave B)
+// Mute
 
 /**
  * POST /api/chat/:channelId/mute — body `{hours}` or `{muted:false}`.
@@ -416,7 +416,7 @@ router.post('/:channelId/mute', async (req, res, next) => {
   } catch (e) { next(e); } finally { client.release(); }
 });
 
-// FR8.10 — AI quick replies  (S.7 Wave B)
+// FR8.10 — AI quick replies
 
 /**
  * POST /api/chat/:channelId/quick-replies — body `{text}` or `{messageId}`.

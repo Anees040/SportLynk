@@ -1,5 +1,5 @@
 /**
- * global_settings reader  —  S.2 Wave B
+ * global_settings reader
  *
  * Migration 013 created `global_settings (key text PRIMARY KEY, value jsonb)` and
  * seeded four rows, but until now nothing read them. This module is the single

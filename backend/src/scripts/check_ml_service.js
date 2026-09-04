@@ -2,13 +2,13 @@
  * check_ml_service.js — prove the ML integration works, and that it degrades.
  *
  * Why this exists
- * S.3 Wave A added a whole tier (ml-service/) and a client for it
- * (src/services/mlClient.js), but no route calls that client until Wave C. Without
- * a harness, Wave A would ship code that has never been executed — and the part
- * that matters most, the degradation path, is exactly the part nobody exercises by
- * accident because it only runs when something is broken.
+ * The ml-service/ tier and its Node client (src/services/mlClient.js) were built
+ * before any route called them. Without a harness that code would ship having
+ * never been executed — and the part that matters most, the degradation path, is
+ * exactly the part nobody exercises by accident, because it only runs when
+ * something is broken.
  *
- * So this script is the acceptance test for the wave, in the family of
+ * So this script is the acceptance test for that tier, in the family of
  * verify_schema.js and run_match_flow_check.js: read-only, exits 0 or 1, and safe
  * to run any time.
  *
@@ -22,9 +22,8 @@
  *      reading GET /features/spec. That turns "keep these in sync" from a comment
  *      into a check that fails.
  *   3. The up path. /health answers, reports its model inventory truthfully, and
- *      /predict/price either returns a model suggestion (Wave C onward) or an
- *      honest 503 model_not_loaded (Wave A/B). Both are passes; the script says
- *      which it saw.
+ *      /predict/price either returns a model suggestion or an honest 503
+ *      model_not_loaded. Both are passes; the script says which it saw.
  *   4. The API-KEY gate. A request with no key and a request with a wrong key both
  *      get 401 with the same body. Verified with raw fetch, because mlClient always
  *      sends the real key and therefore cannot test this itself.
@@ -37,7 +36,7 @@
  *      Self-contained on purpose. A test that needs a human to kill a process in
  *      another terminal is a test that gets skipped, and this is the path that
  *      protects the owner dashboard in production.
- *   6. Wave D — that the owner's screen cannot lie. Every figure the dashboard card
+ *   6. The owner's screen cannot lie. Every figure the dashboard card
  *      and the 72-hour chart display is asserted here to be measured rather than
  *      asserted: the confidence is inside its derived clamp, the "why" chips carry
  *      real counterfactual impacts strongest-first, the caption's AUC comes from the
@@ -242,7 +241,7 @@ async function main() {
     );
   }
 
-  // Wave D pure functions: the demand palette and the PKT stamp
+  // Dashboard pure functions: the demand palette and the PKT stamp
   {
     // These three shape every bar on the owner's forecast chart, so they are checked
     // without the service: a colour that is wrong here is wrong on the demo laptop.
@@ -291,7 +290,7 @@ async function main() {
     check('normaliseFactors survives a non-array', ml.normaliseFactors(null).length === 0);
   }
 
-  // Wave D: the thresholds must be anchored on measured data
+  // The thresholds must be anchored on measured data
   {
     // The demand palette's whole claim is that "high" means high relative to what
     // this venue population books, not relative to a number someone liked.
@@ -325,7 +324,7 @@ async function main() {
     }
   }
 
-  // Wave D: the owner-route cache
+  // The owner-route cache
   {
     // owner.js keys its caches on user-supplied date/hour values, so the bound is
     // what stops a scripted client turning the cache into a memory leak.
@@ -521,7 +520,7 @@ async function main() {
         `model=${suggestion.modelVersion}`);
       check('a model response carries a model version', Boolean(suggestion.modelVersion));
 
-      // Wave D: the numbers the card puts on screen
+      // The numbers the card puts on screen
       check(
         // Confidence is derived (identification x boundary penalty x attainment) and
         // clamped to [0.05, 0.95]. A hard 0 or 1 would mean the derivation was skipped.
@@ -582,7 +581,7 @@ async function main() {
         );
       }
     } else {
-      // The EXPECTED state in Wave A/B. Not a failure — but it must be honest
+      // The EXPECTED state before a model is trained. Not a failure — but it must be honest
       // about being a heuristic, which is the whole point of the `source` field.
       console.log(`   -> source='heuristic'  PKR ${suggestion.suggestedPrice} ` +
         `(${suggestion.deltaPct >= 0 ? '+' : ''}${suggestion.deltaPct}%)`);
@@ -748,7 +747,7 @@ async function main() {
         `available=${junk.available} clientError=${junk.clientError} breakerOpen=${ml.breakerState().open}`,
       );
     } else {
-      // The Wave A/B state, or a model that failed to load. Honest degradation, not a
+      // The untrained state, or a model that failed to load. Honest degradation, not a
       // failure — the same posture the price path takes when no artifact is present.
       console.log(`   -> sentiment source='${sentiment.source}' (no model): ${sentiment.reason}`);
       check(

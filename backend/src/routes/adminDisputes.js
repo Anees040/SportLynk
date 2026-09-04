@@ -1,5 +1,5 @@
 /**
- * adminDisputes.js — S.7 Wave D · FR10.6 / FR10.7. The dispute queue, the case
+ * adminDisputes.js — FR10.6 / FR10.7. The dispute queue, the case
  * file, and the ruling.
  *
  * Mounting
@@ -62,7 +62,7 @@ router.get('/disputes', async (req, res, next) => {
  * The case file: both submissions side by side, both rosters with trust scores,
  * the booking and the owner's check-in evidence, the ELO ledger for the match,
  * and the captain-channel chat archive — which is the literal FR10.6 requirement
- * and the reason Wave B was built before this one.
+ * and the reason the chat module was built before this one.
  */
 router.get('/disputes/:id', async (req, res, next) => {
   const { id } = req.params;

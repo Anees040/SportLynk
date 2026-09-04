@@ -1,5 +1,5 @@
 /**
- * adminUsers.js — S.7 Wave D · FR10.8. The user list, and suspension.
+ * adminUsers.js — FR10.8. The user list, and suspension.
  *
  * Mounting
  * This router is mounted into `routes/admin.js`, after its

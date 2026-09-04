@@ -1,5 +1,5 @@
 /**
- * Reviews API (S.4 Wave C) — the first code that ever writes the reviews table.
+ * Reviews API — the first code that ever writes the reviews table.
  *
  * Four ENDPOINTS, one feature file
  *   POST /api/reviews                 leave a venue or opponent review        (FR9.1)

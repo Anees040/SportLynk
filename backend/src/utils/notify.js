@@ -2,11 +2,11 @@
  * Notification rows — written inside the same transaction as the ledger move that
  * caused them, so a rolled-back money move never leaves a stray alert.
  *
- * What changed in S.7 wave C
+ * What the notification registry changed
  * The signature did not. Thirty-eight call sites across jobs, routes and services
  * pass `{ userId, bookingId?, type, title, body?, payload? }` and every one of
  * them still does — moving them would have been the largest and least useful diff
- * in the wave, and a notification's call site is exactly the wrong place to
+ * anywhere, and a notification's call site is exactly the wrong place to
  * decide what category it belongs to or where tapping it goes. Those facts are
  * properties of the TYPE, they are identical at every site that emits it, and
  * they now come from `utils/notificationTypes.js`.

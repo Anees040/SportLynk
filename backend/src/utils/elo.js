@@ -1,5 +1,5 @@
 /**
- * ELO rating engine  —  S.2 Wave B
+ * ELO rating engine
  *
  * Deliberately has no database import.
  *
@@ -61,7 +61,7 @@ const PREFERRED_ELO_BAND = 400;
 const REASON = Object.freeze({
   VERIFIED: 'match_verified',
   FROZEN: 'frozen_no_change',
-  // S.7 Wave D. An admin ruling on a dispute filed against an already-rated
+  // An admin ruling on a dispute filed against an already-rated
   // match has to move ratings that were already moved, and `elo_history` is the
   // thing that makes a rating explainable. So a correction writes both halves:
   // one row undoing this match's contribution, one row applying the ruled one.
@@ -324,7 +324,7 @@ async function applyResult(client, {
   return { ...exchange, frozen, reason };
 }
 
-// S.7 Wave D — correcting a rating that was already applied
+// Correcting a rating that was already applied
 
 /**
  * Does this database accept the two labels a correction writes?

@@ -2,7 +2,7 @@ import 'api_service.dart';
 import '../constants/api_constants.dart';
 import '../models/review.dart';
 
-/// The reviews / Trust 2.0 / moderation data gateway (S.4 Wave D).
+/// The reviews / Trust 2.0 / moderation data gateway.
 ///
 /// Same split as `MatchService`: **reads** unwrap the envelope and return a typed
 /// model (or its `.empty` sentinel, never a throw), so a screen can bind straight

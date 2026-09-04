@@ -3,7 +3,7 @@ library;
 import 'match.dart' show MatchBooking;
 import 'team.dart' show asNum, Team;
 
-/// Wire models for the tournament module (SRS Module 6, S.7 Wave A).
+/// Wire models for the tournament module (SRS Module 6).
 ///
 /// These mirror `tournamentService`'s shapers one field at a time — `shapeTournament`,
 /// `shapeFixture`, `shapeRegistration`, `standings`, `economicsOf`, `viewerContext` —

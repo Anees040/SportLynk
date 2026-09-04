@@ -63,7 +63,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   /// The socket is opened here, not in the chat screens: a badge that only moves
   /// while the inbox is already open is not a badge. The service is a
   /// singleton and connecting is idempotent, so a thread screen re-using it costs
-  /// nothing — and Wave C's bell hangs off this same connection.
+  /// nothing — and the notification bell hangs off this same connection.
   ///
   /// The count is re-read rather than incremented, because the server decides what
   /// counts (muted rooms out, my own messages out) and a second copy of that rule
@@ -299,7 +299,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
                             onTap: _openChats,
                           ),
                           const SizedBox(width: 10),
-                          // Live from Wave C. The bell also boots the notification
+                          // Live. The bell also boots the notification
                           // stack for the session -- see NotificationBell.
                           const NotificationBell(),
                         ]),

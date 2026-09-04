@@ -20,8 +20,8 @@ publishes two hashes rather than one:
   to invalidate the model.
 * :func:`dataset_spec_fingerprint` covers the GENERATION TABLES -- slot
   vocabularies, tidy rules, quotas, gate thresholds. These describe how one
-  dataset was built. Adding a Rawalpindi sector to ``SLOT_VOCAB`` in a later
-  wave changes the next dataset; it does not make an already-trained model
+  dataset was built. Adding a Rawalpindi sector to ``SLOT_VOCAB`` later
+  changes the next dataset; it does not make an already-trained model
   wrong.
 
 One combined hash was the first design and it was wrong: it would mark every
@@ -31,9 +31,9 @@ that actually breaks something.
 
 What this module is NOT
 ----------------------
-It is not the serving-time NLU contract. Wave A produces a dataset. The request
-normaliser, the confidence floor, the entity extractor's regexes and the
-``/nlu/parse`` response shape are Wave B's problem and belong in their own
+It is not the serving-time NLU contract. This module produces a dataset. The
+request normaliser, the confidence floor, the entity extractor's regexes and the
+``/nlu/parse`` response shape belong to serving and live in their own
 module. Everything here that serving will eventually need is in section 2 (the
 label contract); sections 3 to 5 exist only to build a CSV.
 
@@ -62,7 +62,7 @@ leaves "salam " and "hai ? ?" -- so there is nobody to ask and ``tidy`` fixes
 them. An authored row's oddities are the data: "mere paise kahan gaye??" and
 "20 25 log aayenge :)" are how people actually type, and running them through
 ``tidy`` would rewrite them into the generator's house style, which is the exact
-naturalness the sprint plan spent 236 hand-written rows buying. So authored and
+naturalness the plan spent 236 hand-written rows buying. So authored and
 exam rows are checked and, if wrong, sent back to the author -- never silently
 cleaned.
 
@@ -105,7 +105,7 @@ from typing import Iterable, Sequence
 # 1. Identity
 
 #: Bump when the label contract in section 2 changes. Stamped into
-#: ``intents_meta.json``, into the exam lock, and (Wave C) into the model.
+#: ``intents_meta.json``, into the exam lock, and into the model.
 INTENT_SPEC_VERSION: str = "assistant-intents-v2"
 
 #: Bump when the generation tables in sections 3-5 change. Recorded in
@@ -211,7 +211,7 @@ LANG_BUCKETS: dict[str, tuple[str, ...]] = {
 
 #: ``(intent, group, gloss, most-confusable-intent)``.
 #:
-#: ``group`` exists so Wave C can print a 6x6 grouped confusion matrix beside
+#: ``group`` exists so evaluation can print a 6x6 grouped confusion matrix beside
 #: the 15x15 one: 225 cells over ~330 validation rows is unreadable on its own,
 #: and the committee question is "does it confuse booking with browsing", which
 #: the grouped matrix answers directly.
@@ -382,7 +382,7 @@ SPLITS: tuple[str, ...] = ("train", "val")
 #
 # Values are drawn from the real catalogue (``backend/src/scripts/seed_venues.js``
 # -- 5 football and 5 cricket venues across Islamabad and Rawalpindi) and from
-# ``reco_features.ZONE_SCHEMES``, so an extracted entity in Wave B has something
+# ``reco_features.ZONE_SCHEMES``, so an extracted entity has something
 # real to resolve against. Sector spellings intentionally vary in case
 # ("F-11" and "f-11"): both are typed, and the extractor must survive both.
 
@@ -413,7 +413,7 @@ SLOT_VOCAB: dict[str, dict[str, tuple[str, ...]]] = {
         "ru": ("islamabad", "pindi"),
     },
     # The 10 seeded venues, verbatim. A template that names a venue must name a
-    # real one, or Wave B's action layer has nothing to look up and the demo
+    # real one, or the action layer has nothing to look up and the demo
     # fails on a row that looked fine in the CSV.
     "venue": {
         "*": (
@@ -514,13 +514,13 @@ DOMAIN_SLOTS: tuple[str, ...] = tuple(
 # is a target; nothing below it is.
 
 #: Default rows per intent, counting authored rows. 15 x 112 = 1,680, inside
-#: [TOTAL_MIN, TOTAL_MAX] and close to the ~1,800 the sprint plan asked for.
+#: [TOTAL_MIN, TOTAL_MAX] and close to the ~1,800 the plan asked for.
 #: Deliberately equal across intents: a classifier trained on an unbalanced
 #: intent set answers with the prior when it is unsure, and "unsure" is exactly
 #: when a booking assistant must not guess.
 ROWS_PER_INTENT_TARGET: int = 112
 
-#: Hard per-intent bounds. The sprint plan says 100-130 utterances per intent.
+#: Hard per-intent bounds. The plan says 100-130 utterances per intent.
 ROWS_PER_INTENT_MIN: int = 100
 ROWS_PER_INTENT_MAX: int = 130
 
@@ -544,7 +544,7 @@ LANG_BUDGET: dict[str, float] = {"en": 0.40, "ru": 0.35, "mix": 0.25}
 #: macro-F1 would hide it behind the other fourteen.
 MIN_LANG_ROWS_PER_INTENT: dict[str, int] = {"en": 25, "ru": 25, "mix": 10}
 
-#: Hand-written naturalisation rows. The sprint plan asks for ~200 hand-edited
+#: Hand-written naturalisation rows. The plan asks for ~200 hand-edited
 #: utterances; these floors are what "hand-edited" is held to.
 AUTHORED_MIN_TOTAL: int = 200
 AUTHORED_MIN_PER_INTENT: int = 8
@@ -596,7 +596,7 @@ SHINGLE_N: int = 4
 #: no phrasing can own more than about a ninth of its class. It is also the gate
 #: that makes a slot-poor intent honest. `greeting` cannot reach 100 rows by
 #: multiplying "{opener} good morning {polite}" out to 20 near-identical rows; it
-#: has to be given twenty actual greetings, which is the work the sprint plan
+#: has to be given twenty actual greetings, which is the work the plan
 #: means by "hand-edit for naturalness".
 MAX_ROWS_PER_TEMPLATE: int = 12
 
@@ -1146,7 +1146,7 @@ def intent_group(intent: str) -> str:
 
 def spec() -> dict[str, object]:
     """camelCase contract summary for ``intents_meta.json``, the exam lock and
-    (Wave B) ``/health``. Mirrors ``features.spec()`` and ``text_norm.spec()``."""
+ ``/health``. Mirrors ``features.spec()`` and ``text_norm.spec()``."""
     return {
         "intentSpecVersion": INTENT_SPEC_VERSION,
         "intentSpecFingerprint": intent_spec_fingerprint(),

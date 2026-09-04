@@ -10,7 +10,7 @@ reliability -- "hand-labelled" is a description of effort, not evidence of corre
 If two competent annotators only agree on 85% of these rows, then a model scoring 85%
 has hit the ceiling of the label noise and the remaining 15% is not a modelling
 failure at all. Without kappa you cannot tell those two situations apart, and you will
-spend the next wave trying to fix rows that were never unambiguous.
+spend later work trying to fix rows that were never unambiguous.
 
 WHAT IT DOES NOT DO
 It never writes to `domain_test_200.csv`. The exam is opened read-only and its labels

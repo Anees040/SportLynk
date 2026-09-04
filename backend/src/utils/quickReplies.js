@@ -1,5 +1,5 @@
 /**
- * quickReplies.js — FR8.10, AI quick replies (S.7 Wave B).
+ * quickReplies.js — FR8.10, AI quick replies.
  *
  * A venue owner answers the same six questions all day. This reads the message
  * the other side just sent, classifies it with model #4 — the released 23-label

@@ -6,7 +6,7 @@
  * Why this script exists
  * test/assistant.test.js proves the decisions: the lexicon, the slot merge, the card
  * shapes, the refund arithmetic. None of that touches a row, which is the point — it
- * runs with the database down. But the wave was asked for something working, and a
+ * runs with the database down. But the module was asked for something working, and a
  * booking that the dialog manager builds correctly and the ledger records wrongly is
  * still a broken feature. So this script drives real turns through
  * services/dialogManager.handleTurn — real classification by model #4, real venue
@@ -898,7 +898,7 @@ async function conversationD(client, ctx) {
 // E — ask the owner  (escalated → owner answers → the next player gets it free)
 
 /**
- * The one loop in the wave that makes Scout better over time, and the only place it
+ * The one loop that makes Scout better over time, and the only place it
  * is allowed to not know something.
  *
  * A question no query can answer goes to the venue owner (`source: 'escalated'`),
@@ -1080,7 +1080,7 @@ async function conversationF(client, ctx) {
     if (!list.length) return;
     // The badge answers a narrower question than "is this list well ordered": did a
     // trained model shape it? For players the honest answer is never yes. reco_rank.py
-    // is a deterministic weighted scorer whose weights S.5 Wave B states literally, so
+    // is a deterministic weighted scorer whose weights reco_rank.py states literally, so
     // mlClient gives it its own value, 'ranked', and this reply stays `live` whether or
     // not the formula ran. The scored-vs-recent-activity distinction is not lost — it
     // is asserted one line down, in meta.ranking, the field that can hold a name.
@@ -1156,7 +1156,7 @@ async function conversationF(client, ctx) {
  * The affordances the user asked for by name: "chat history, rename (new name),
  * switch chat, new chat".
  *
- * Two of these checks exist because of bugs this wave hit. Message order
+ * Two of these checks exist because of bugs the assistant hit. Message order
  * is one: both rows of a turn are written in the same transaction, so NOW() gives
  * them a byte-identical created_at and ordering by time alone put Scout's answer
  * above the question. Pagination is the other: a cursor carrying that timestamp lost
@@ -1425,7 +1425,7 @@ async function conversationH(client, ctx) {
     'with the cover photo and owner name the card renders — the response bytes did not change');
   const rated = vList.map((v) => asNum(v.rating) || 0);
   check(rated.every((r, i) => i === 0 || rated[i - 1] >= r),
-    'default order is still rating-first (NULLS LAST), the S.5 Wave A ordering');
+    'default order is still rating-first (NULLS LAST), the venue recommender's ordering');
   const cheap = await discovery.searchVenues(client, { sort: 'price_low', limit: 6 });
   const prices = cheap.map((v) => asNum(v.price_per_hour) || 0);
   check(prices.every((p, i) => i === 0 || prices[i - 1] <= p), 'and sort=price_low still sorts');
@@ -1854,7 +1854,7 @@ async function conversationJ(client, ctx) {
  * on handleTurn exists for.
  */
 async function main() {
-  console.log('\nSCOUT — WAVE C VERIFICATION');
+  console.log('\nSCOUT VERIFICATION');
   console.log('every assertion below is stated against the service it must agree with,');
   console.log('and the whole run is rolled back at the end.\n');
 

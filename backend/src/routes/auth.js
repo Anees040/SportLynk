@@ -261,7 +261,7 @@ router.get('/me', auth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Device tokens at the session boundary  (S.7 Wave C)
+// Device tokens at the session boundary
 //
 // POST /api/notifications/devices is the primary registration path — an FCM token
 // arrives asynchronously from `getToken()` and again from every `onTokenRefresh`,
@@ -280,7 +280,7 @@ router.get('/me', auth, async (req, res, next) => {
  *
  * `{ fcmToken }` revokes one device; omitting it revokes every device for the user
  * ("log me out everywhere"). The JWT itself is stateless and cannot be revoked, which
- * is a separate problem solved in Wave D by the suspension check in authMiddleware —
+ * is a separate problem solved by the suspension check in authMiddleware —
  * this route is only about where notifications go.
  */
 router.post('/logout', auth, async (req, res, next) => {

@@ -12,7 +12,7 @@ import 'team_roster_screen.dart';
 
 /// Global team leaderboard — FR5.13.
 ///
-/// S2 Wave D rebuilt this on the ranked-only endpoint. Three things changed, and
+/// Built on the ranked-only endpoint. Three things changed, and
 /// each fixed something that was quietly wrong:
 ///
 ///   • It reads [RankingsPage], not `List<Team>`. Only teams with a verified

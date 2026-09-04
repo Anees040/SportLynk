@@ -29,7 +29,7 @@ import 'rate_experience_screen.dart';
 /// time — the same question the caller has already answered.
 class MatchCenterScreen extends StatefulWidget {
   final String teamId;
-  /// Nullable since S.7 Wave C: a notification deep link carries the match's
+  /// Nullable: a notification deep link carries the match's
   /// `teamId` but not always a name (`notificationTypes.matchLink` only forwards
   /// what the emitting call site put in its payload). The screen loads the team
   /// anyway, so the name is a header nicety, not a prerequisite -- and requiring it

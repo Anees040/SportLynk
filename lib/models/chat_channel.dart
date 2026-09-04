@@ -1,4 +1,4 @@
-/// chat_channel.dart — one row of the inbox (S.7 Wave B).
+/// chat_channel.dart — one row of the inbox.
 ///
 /// A channel row is not just a name. `context` is resolved server-side per
 /// channel type and is what makes the list readable: a booking row carries its

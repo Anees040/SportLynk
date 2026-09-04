@@ -1,5 +1,5 @@
 """
-Rule-based entity extraction for the SportLynk Assistant  —  S.6 Wave B
+Rule-based entity extraction for the SportLynk Assistant
 
 WHAT THIS IS, PLAINLY
 This is a RULE-BASED extractor. There is no model in this file: no weights, no
@@ -14,7 +14,7 @@ the same everywhere:
     statistical model that gets it right 94% of the time is worse than five
     lines of arithmetic that gets it right always.
   * Entity labels are the expensive kind of annotation. Teaching a model to tag
-    spans needs per-token labels over thousands of utterances; the sprint's
+    spans needs per-token labels over thousands of utterances; the project's
     budget bought 1,700 utterance-level INTENT labels instead, which is the
     label the classifier actually needs.
   * Rules are debuggable in the demo. When "shaam 8 baje" resolves wrongly a
@@ -37,7 +37,7 @@ borrows only the parts of the text contract that help word matching:
 two views of the text.
 
 WHY ``dateparser`` IS THE FALLBACK AND NOT THE ENGINE
-The wave spec says "dateparser + Roman Urdu pre-mapping". It was installed
+The spec says "dateparser + Roman Urdu pre-mapping". It was installed
 (1.4.2) and measured before being designed in, and the measurements decided the
 order:
 
@@ -61,7 +61,7 @@ service and the test suite run without it. The rules are what the demo depends
 on; dateparser only widens the tail ("30/08/2026", "sep 3").
 
 WHY THE AREA GAZETTEER DOES NOT COME FROM POSTGRES
-The wave spec says the gazetteer is built from ``venues.city`` and
+The spec says the gazetteer is built from ``venues.city`` and
 ``venues.area`` at startup, and it is -- but not by querying the database. The
 ML tier never touches Postgres (see ``training/build_reco.py``); the catalogue
 reaches it as a read-only snapshot pulled by Node's
@@ -251,7 +251,7 @@ def extract_sport(prepped: str) -> dict[str, Any] | None:
 
 
 # 3. Dates
-# The Roman Urdu pre-mapping the wave spec asks for. Offsets in days from
+# The Roman Urdu pre-mapping the spec asks for. Offsets in days from
 # "today in Asia/Karachi".
 #
 # "kal" is ambiguous in Urdu -- it is both yesterday and tomorrow, disambiguated
@@ -551,7 +551,7 @@ def warm() -> dict[str, Any]:
 
 
 # 5. Times
-# The daypart windows the wave spec names, plus their English equivalents. These
+# The daypart windows the spec names, plus their English equivalents. These
 # are Windows, not instants: "shaam" is a three-hour slot the action layer can
 # search, and collapsing it to 18:00 would silently drop 19:00 and 20:00 from a
 # result set the user would have accepted.
@@ -931,7 +931,7 @@ def _area_canonical(surface: str) -> str:
 def load_venue_areas(model_path: Path | None = None) -> list[tuple[str, str | None]]:
     """(area surface, city) pairs from the recommender artifact's venue snapshot.
 
-    This is the wave spec's "gazetteer built from venues.city + venues.area at
+    This is the spec's "gazetteer built from venues.city + venues.area at
     startup" without a database: the catalogue is already inside
     ``models/reco_latest.joblib``, put there by ``build_reco.py`` from Node's
     read-only export. Returns [] and stays silent when the artifact is absent --

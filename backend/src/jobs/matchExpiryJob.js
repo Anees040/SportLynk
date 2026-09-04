@@ -1,5 +1,5 @@
 /**
- * Challenge expiry sweep  —  FR5.12 (S.2 Wave C)
+ * Challenge expiry sweep  —  FR5.12
  *
  * Every few minutes: find `challenge_sent` matches whose deadline has passed and
  * settle them as `expired`, with a chat pill in both teams' threads.

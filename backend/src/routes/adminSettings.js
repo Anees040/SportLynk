@@ -1,5 +1,5 @@
 /**
- * adminSettings.js — S.7 Wave D · FR10.9–FR10.11. Read and change platform policy
+ * adminSettings.js — FR10.9–FR10.11. Read and change platform policy
  * from the admin app, with no restart.
  *
  * Mounting

@@ -9,7 +9,7 @@ const recoCache = new TtlCache({ name: 'venue-recommendations', ttlMs: 15 * 60 *
 
 /**
  * The checkout-hold and PKT-clock rules that used to live here moved into
- * services/discoveryService.js in S.6 Wave C, because Scout answers `find_venue`,
+ * services/discoveryService.js, because Scout answers `find_venue`,
  * `venue_info` and `check_availability` and FR8.15 forbids a second opinion about
  * whether a slot is free. `slotColumns` is still exported from there for any route
  * that needs the derived columns.

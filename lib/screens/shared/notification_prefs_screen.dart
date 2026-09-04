@@ -21,7 +21,7 @@ import '../../services/push_service.dart';
 ///
 /// Why the CATEGORY list comes from the server
 /// `categories` and `unmutable` arrive with the preferences, derived from
-/// `notificationTypes.js`. A category added in a later wave therefore appears here
+/// `notificationTypes.js`. A category added in a later release therefore appears here
 /// with no client change, and `system` is named unmutable by the same file that
 /// enforces it -- rather than by a const list in this screen that could drift out of
 /// step with the job and quietly promise an opt-out that does not happen.

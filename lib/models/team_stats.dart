@@ -1,7 +1,7 @@
-/// Ranking, stats and ELO-history models — S2 Wave D.
+/// Ranking, stats and ELO-history models.
 ///
 /// These parse `GET /api/teams/rankings` and the `stats` / `eloHistory` blocks
-/// that `GET /api/teams/:id` gained in Wave D.
+/// that `GET /api/teams/:id` gained.
 ///
 /// Key detail: these fields are snake_case, and that is deliberate. routes/
 /// teams.js returns columns straight out of SQL (`logo_url`, `member_count`),

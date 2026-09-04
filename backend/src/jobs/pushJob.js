@@ -1,5 +1,5 @@
 /**
- * pushJob.js — the transactional outbox drain (S.7 Wave C).
+ * pushJob.js — the transactional outbox drain.
  *
  * Why push is a job and not a function call
  * `notify()` is called from inside money transactions that are holding `FOR UPDATE`

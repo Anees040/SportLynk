@@ -22,7 +22,7 @@
  * another player's chats" from being one forged field away.
  *
  * Why /message takes either text or action
- * The wave spec's "no free-text-only dead ends" means every Scout reply ships chips,
+ * The spec's "no free-text-only dead ends" means every Scout reply ships chips,
  * and a tapped chip posts `{action, args, text: <its label>}` instead of a sentence.
  * That is not a second endpoint: it is the same turn with `input_mode='chip'`, and
  * keeping it here is what keeps chip traffic out of model #4's measured accuracy
@@ -59,7 +59,7 @@ const relay = (res, out) => fail(res, out.status || 400, out.message || 'Request
  * The chat this request belongs to.
  *
  * The spec's field is `session_id`; the services call it `threadId`. Both spellings
- * are accepted (plus camelCase) because Wave D's Flutter client is not written yet
+ * are accepted (plus camelCase) because the Flutter client is not written yet
  * and a 400 over a naming preference is a wasted afternoon. Absent is legal and
  * means "the newest chat, or a new one" — see threads.getOrCreate.
  */
@@ -460,7 +460,7 @@ router.delete('/owner/kb/:id', owner, async (req, res, next) => {
  * GET /owner/stats — how much has Scout learned from this owner, and is it being used?
  *
  * `served` is the number that matters: a KB row nobody ever hits is a row that was not
- * worth asking for, and the wave report quotes this counter.
+ * worth asking for, and the progress report quotes this counter.
  */
 router.get('/owner/stats', owner, async (req, res, next) => {
   try {

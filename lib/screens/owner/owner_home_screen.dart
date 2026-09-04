@@ -53,7 +53,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
   bool _priceLoading = false;
   String? _priceVenueId;
 
-  // Chat (S.7 Wave B)
+  // Chat
   // An owner's inbox is mostly booking rooms — the player asking whether the floodlights
   // work, half an hour before they arrive. That is a message an owner cannot afford to miss,
   // which is why the count is live rather than fetched when the inbox opens.
@@ -309,7 +309,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
                 onTap: _openChats,
               ),
               const SizedBox(width: 10),
-              // Live from Wave C. Same widget as the player and admin headers, and
+              // Live. Same widget as the player and admin headers, and
               // the one place the notification stack is started for a session.
               const NotificationBell(),
               const SizedBox(width: 14),
@@ -412,7 +412,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
                   ),
                 ]),
                 const SizedBox(height: 12),
-                // S.7 Wave D / FR4.16. Full width on purpose: the wallet card above
+                // FR4.16. Full width on purpose: the wallet card above
                 // says what the balance is, and this is the only place that says where
                 // it came from -- every booking, its commission and its refunds, for a
                 // date range, as a CSV that opens in Excel.

@@ -23,7 +23,7 @@ class TeamService {
 
   /// The leaderboard (FR5.13).
   ///
-  /// Wave D changed this endpoint's shape from a bare array to an object, because
+  /// This endpoint answers with an object rather than a bare array, because
   /// the city chips have to come from the same query as the rows — a second call
   /// would let the two disagree, and chips that lead to empty screens read as a
   /// broken feature. So this returns [RankingsPage], not `List<Team>`.
@@ -51,7 +51,7 @@ class TeamService {
 
   /// Full profile: `{...team, role, channelId, roster, stats, eloHistory}`.
   /// Returned raw so the screen can distinguish a 403 (private, not a member)
-  /// from a network error, and so Wave D's `stats`/`eloHistory` blocks can be
+  /// from a network error, and so the `stats`/`eloHistory` blocks can be
   /// parsed by their own models rather than squeezed into [Team].
   Future<Map<String, dynamic>> detail(String token, String id) =>
       _api.get(ApiConstants.team(id), token: token);

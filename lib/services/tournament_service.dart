@@ -2,7 +2,7 @@ import '../constants/api_constants.dart';
 import '../models/tournament.dart';
 import 'api_service.dart';
 
-/// Thin, never-throwing wrapper over the tournaments API (SRS Module 6, S.7 Wave A).
+/// Thin, never-throwing wrapper over the tournaments API (SRS Module 6).
 ///
 /// Same split as [MatchService]: reads return typed models and fall back to an empty
 /// one rather than throwing, while every mutation returns the raw

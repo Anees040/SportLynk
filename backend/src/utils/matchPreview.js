@@ -1,5 +1,5 @@
 /**
- * Match preview generator (FR5.10)  —  S.2 Wave C
+ * Match preview generator (FR5.10)
  *
  * Template NLG v1. Every sentence is assembled from real features already in the
  * database — both ratings, the gap between them, last-5 form, win rates, and the

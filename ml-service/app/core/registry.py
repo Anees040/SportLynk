@@ -1,10 +1,10 @@
 """
-Model registry  —  S.3 Wave A
+Model registry
 
 WHAT IT IS FOR
-`/health` has to answer "which models are loaded, and at what version" — the wave's
-requirement #1. That question needs somewhere that knows what is on disk, what
-loaded, what refused to load and why. This is that place.
+`/health` has to answer "which models are loaded, and at what version", the ML
+tier's first requirement. That question needs somewhere that knows what is on
+disk, what loaded, what refused to load and why. This is that place.
 
 It is also the component that makes train/serve skew impossible rather than
 unlikely. Every artifact carries the `FEATURE_SPEC_VERSION` that was in effect
@@ -26,7 +26,7 @@ three months from now, which for an FYP is the difference between evidence and a
 claim. .gitignore keeps `*_latest.joblib` and ignores the timestamped ones, so a
 fresh clone can serve without carrying every historical artifact in git.
 
-THE ARTIFACT CONTRACT (written by training/train_pricing.py in Wave B)
+THE ARTIFACT CONTRACT (written by training/train_pricing.py)
 A dict, not a bare estimator, because a bare estimator cannot tell you what it was
 trained on:
 
@@ -77,7 +77,7 @@ LATEST_SUFFIX = "_latest.joblib"
 #: Model keys this service knows about. Listed explicitly rather than discovered
 #: purely from disk, so /health can report `not_loaded` for a model that is
 #: EXPECTED but absent. Discovery alone cannot distinguish "no pricing model yet"
-#: from "no pricing model was ever supposed to exist" — and in Wave A the correct
+#: from "no pricing model was ever supposed to exist" — and the correct
 #: answer is the first one, which is the whole point of the health endpoint.
 KNOWN_MODELS: tuple[str, ...] = ("pricing", "sentiment", "reco", "intent")
 
@@ -332,7 +332,7 @@ class ModelRegistry:
         """
         Drop the cache so the next `get()` re-reads disk.
 
-        Needed because Wave B trains a model into a directory this process is
+        Needed because training writes a model into a directory this process is
         already serving from. Without it, the only way to pick up a freshly trained
         artifact is to restart uvicorn — survivable for one developer, and exactly
         the kind of footgun that turns into "the model didn't change" during a demo.

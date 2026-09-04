@@ -1,7 +1,7 @@
 /**
  * check_price_sanity.js — does the served model price things the way a human would?
  *
- * S.3 Wave E's milestone checklist contains two claims that no unit test in this repo
+ * The pricing milestone checklist contains two claims that no unit test in this repo
  * covers, because they are not about code paths — they are about whether the trained
  * model behaves like a person who knows the business:
  *

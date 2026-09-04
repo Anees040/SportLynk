@@ -23,7 +23,7 @@ const { recomputeTrust } = require("../utils/trustScore");
 // Ledger: player balance -P, player frozen +P, status pending (P = slot price).
 // The 20% at-risk deposit is stored on the booking but nothing is forfeited yet.
 //
-// The rules moved to services/bookingService.js in S.6 Wave C so the assistant
+// The rules moved to services/bookingService.js so the assistant
 // creates bookings through this logic rather than a second copy of it (FR8.15).
 // What is left here is transport: read the request, call the service, shape the
 // response. The status codes, the messages and the ledger are unchanged.

@@ -1,4 +1,4 @@
-"""Recommendation HTTP contracts — venues (Wave A), players + opponents (Wave B).
+"""Recommendation HTTP contracts — venues, players and opponents.
 
 TWO KINDS OF ENDPOINT LIVE HERE, AND THEY FAIL DIFFERENTLY.
 
@@ -9,7 +9,7 @@ artifact: the venue matrix is fitted once at load time and cached, never per
 request, so retraining needs an explicit cache drop to become visible.
 
 `/reco/players` and `/reco/opponents` are served by `core.reco_rank`, a
-deterministic weighted scorer whose weights the wave specification states
+deterministic weighted scorer whose weights the specification states
 literally. There is no artifact, so there is nothing to load, so those two
 endpoints CANNOT return `model_not_loaded` — a 503 from them would mean the whole
 process is down, which Node's circuit breaker already handles. Do not "improve"
@@ -25,8 +25,8 @@ spec's `{team_id}` stays in the body as the subject of the request, and the pool
 travels beside it.
 
 `source` ON THE WIRE
-Wave A's venue payload carries `source: "model"` and Flutter shows its sparkle
-only for that value. Wave B's two endpoints carry `source: "ranked"` instead —
+The venue payload carries `source: "model"` and Flutter shows its sparkle only for
+that value. The player and opponent endpoints carry `source: "ranked"` instead —
 deliberately a different word, because these numbers come from a published
 formula rather than a learned one, and a screen that says "AI" over a weighted
 mean would be overclaiming to the person reading it. Node maps a transport or
@@ -80,7 +80,7 @@ def _envelope(result: dict[str, Any]) -> dict[str, Any]:
 
     The version and fingerprint travel with the DATA, not just on /health, so a
     stored or logged payload can be traced back to the exact weights that produced
-    its percentages. Wave A does the same with `modelVersion`.
+    its percentages. The venue endpoint does the same with `modelVersion`.
     """
     return {
         **result,

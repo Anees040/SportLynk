@@ -124,7 +124,7 @@ async function emitPersistedMessage(client, channelId, messageId, event = 'chat:
 }
 
 
-// The other two channel TYPES  (S.7 Wave B)
+// The other two channel TYPES
 //
 // `chk_chat_channels_type` has allowed 'booking' and 'captain' since migration
 // 015, and until now nothing in the codebase created either one: the constraint
@@ -222,7 +222,7 @@ async function ensureCaptainChannel(client, { matchId, title = null, memberIds =
   return channelId;
 }
 
-/** The captain room for a match, or null if the challenge predates Wave B. */
+/** The captain room for a match, or null if the challenge predates the rooms. */
 async function captainChannelId(client, matchId) {
   if (!matchId) return null;
   const { rows } = await client.query(
@@ -283,7 +283,7 @@ async function openBookingRoom(client, {
 
 /**
  * Post one pill into an existing room, or do nothing if the room was never
- * created (a booking confirmed before Wave B shipped has no channel, and that
+ * created (a booking confirmed before rooms existed has no channel, and that
  * must read as "no pill", not as an error).
  */
 async function announceInRoom(client, channelId, event, opts = {}) {
@@ -320,7 +320,7 @@ async function emitPills(clientOrPool, pills) {
   }
 }
 
-// CHAT → notification  (S.7 Wave C)
+// CHAT → notification
 //
 // A message is the one notification whose correctness is decided by presence, not
 // by the message. Every other alert in SportLynk is about something that happened

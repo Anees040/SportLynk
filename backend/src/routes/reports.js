@@ -1,5 +1,5 @@
 /**
- * reports.js — S.7 Wave D · D4 / FR4.16. The financial export, as two routes over
+ * reports.js — D4 / FR4.16. The financial export, as two routes over
  * one generator (`services/reportService.js`).
  *
  * Two routers, one file

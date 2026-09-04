@@ -6,7 +6,7 @@ import '../models/assistant.dart' show formatPkr;
 import '../models/tournament.dart';
 import 'match_widgets.dart' show TeamCrest;
 
-/// The visual vocabulary of the tournament module, in one place (S.7 Wave A).
+/// The visual vocabulary of the tournament module, in one place.
 ///
 /// Six screens draw these — the player's browse list, the tournament detail's four
 /// tabs, the owner's create screen with its live economics preview, and the owner's

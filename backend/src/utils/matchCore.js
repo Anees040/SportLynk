@@ -1,5 +1,5 @@
 /**
- * Match lifecycle plumbing  —  S.2 Wave C
+ * Match lifecycle plumbing
  *
  * routes/matches.js owns the HTTP layer: parse, authorise, decide, answer. This
  * module owns everything that layer needs more than once — loading a match with
@@ -123,7 +123,7 @@ const MATCH_VIEW_COLUMNS = `
   ot.name AS ot_name, ot.logo_url AS ot_logo, ot.elo AS ot_elo,
   ot.wins AS ot_wins, ot.losses AS ot_losses, ot.draws AS ot_draws,
   ot.elo_frozen AS ot_frozen, ot.city AS ot_city,
-  -- S.7 Wave A: a tournament fixture reserves a slot instead of creating a
+  -- A tournament fixture reserves a slot instead of creating a
   -- booking, so WHEN and WHERE come from the booking for a friendly and from the
   -- fixture's slot for a tournament match. Before the COALESCE every tournament
   -- match rendered with a null venue, a null time and slot_started = NULL, which
@@ -369,7 +369,7 @@ async function captainIdsOf(client, teamIds) {
 
 /**
  * Captains and vice-captains of these teams, deduped -- the membership of a
- * coordination room (S.7 Wave B).
+ * coordination room.
  *
  * Why both roles
  * FR8.5 calls it the captains' room, but "the captain is unreachable" is exactly
@@ -619,16 +619,16 @@ async function fanOut(client, { matchId, sides, coord = null }) {
     }
   }
 
-  // One neutral pill in the coordination room, if this match has one (S.7 Wave B).
+  // One neutral pill in the coordination room, if this match has one.
   //
   // The per-team sentences above are written from one team's point of view --
   // "you challenged them" -- and a captain room holds both teams, so half the
   // readers would be told the opposite of what happened. `coord.event` names one
   // of the neutral sentences in chatSystemMessages, and it is posted once.
   //
-  // A match accepted before Wave B has no captain channel; captainChannelId
-  // returns null and nothing is posted. That is the whole migration story for
-  // existing matches -- no backfill, no broken read.
+  // A match accepted before captain rooms existed has no captain channel;
+  // captainChannelId returns null and nothing is posted. That is the whole
+  // migration story for existing matches -- no backfill, no broken read.
   if (coord && coord.event) {
     const coordChannel = coord.channelId || await chat.captainChannelId(client, matchId);
     if (coordChannel) {

@@ -1,5 +1,5 @@
 """
-Frozen text contract for the intent classifier  —  S.6 Wave B
+Frozen text contract for the intent classifier
 
 WHY THIS EXISTS, AND WHY IT IS NOT `text_norm.py`
 `core/text_norm.py` is the sentiment normaliser and it is very good at its job:

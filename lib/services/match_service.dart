@@ -2,7 +2,7 @@ import '../constants/api_constants.dart';
 import '../models/match.dart';
 import 'api_service.dart';
 
-/// Thin, never-throwing wrapper over the matches API (S2 Wave C).
+/// Thin, never-throwing wrapper over the matches API.
 ///
 /// Same split as [TeamService]: reads that feed a list return typed models, and
 /// mutations return the raw `{success, message, data}` map so the calling screen

@@ -1,5 +1,5 @@
 /**
- * routes/notifications.js — the feed the table never had (S.7 Wave C).
+ * routes/notifications.js — the feed the table never had.
  *
  * Before this file, `notifications` was write-only: 38 call sites inserted into it
  * and nothing in the entire codebase ever read a row back. The bell on the player

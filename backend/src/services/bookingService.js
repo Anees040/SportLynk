@@ -128,7 +128,7 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
       'Another player is checking out this slot. Try again in a few minutes.');
   }
 
-  // S.7 Wave D. A sport an admin has switched off must stop taking money, not just
+  // A sport an admin has switched off must stop taking money, not just
   // disappear from a dropdown -- a deep link, a stale app or a saved slot id all
   // reach this line without ever seeing the UI. Checked after the slot lock so the
   // message can name the sport, and it fails OPEN (`isSportEnabled` returns true for
@@ -219,7 +219,7 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
 // Cancel — preview, then execute
 
 /**
- * The refund arithmetic for one booking, without cancelling it. New in S.6 Wave C.
+ * The refund arithmetic for one booking, without cancelling it. New.
  *
  * Deliberately a plain read: no FOR UPDATE. A preview must not hold a row lock
  * while a human decides, and the executing path re-reads under a lock anyway, so
@@ -377,7 +377,7 @@ async function cancelBooking(client, { userId, bookingId }) {
     ? `Booking cancelled within ${POLICY.CANCELLATION_WINDOW_HOURS} hours — PKR ${refund} refunded, PKR ${penalty} deposit forfeited to the venue.`
     : `Booking cancelled — PKR ${refund} refunded to your wallet.`;
 
-  // S.7 Wave B -- close the room's story. The thread is not deleted: the owner
+  // Close the room's story. The thread is not deleted: the owner
   // and the player may still need to argue about the refund, and a conversation
   // that vanishes the moment it gets inconvenient is the one thing a venue owner
   // will never trust. A booking cancelled while still pending never had a room,
@@ -495,7 +495,7 @@ const cancelBookingTx = (input) => runInTx((c) => cancelBooking(c, input));
 /**
  * Why this is here and not in the route any more.
  *
- * S.7 Wave D needs to reject-and-refund every pending request against a venue
+ * Suspension needs to reject-and-refund every pending request against a venue
  * whose owner has just been suspended — otherwise players keep paying into a dead
  * venue and their money stays frozen. That is the same money movement the owner's
  * own "reject" button performs, and having two copies of a refund is the exact

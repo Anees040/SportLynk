@@ -1,9 +1,9 @@
 r"""
-Intent exam diff  —  what v2's eight extra labels cost, row by row (S.6 Wave E)
+Intent exam diff  —  what v2's eight extra labels cost, row by row
 
 WHY THIS EXISTS
 
-The wave that took model #4 from 15 labels to 23 published a one-line cost:
+The retrain that took model #4 from 15 labels to 23 published a one-line cost:
 "12 exam rows v1 got right and v2 gets wrong". The number was true of the
 candidate artifact that was current when the sentence was written
 (`intent-v2-20260828-1329`) and it was never recomputed after the corpus fix

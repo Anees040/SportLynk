@@ -10,7 +10,7 @@
  * assistant would give SportLynk two opinions about who is a good teammate, and
  * the first person to notice would be the person whose demo it is.
  *
- * So the two handler bodies were moved here verbatim, exactly as S.6 Wave C
+ * So the two handler bodies were moved here verbatim, exactly as the assistant work
  * moved routes/bookings.js's rules into bookingService.js, and both routes are
  * now transport:
  *
@@ -72,7 +72,7 @@ const BOOKED_STATUSES = ['confirmed', 'checked_in'];
  * strangers' activity has no use for it and no business seeing it.
  *
  * What the candidate pool is, and why the spec's filters sit where they do
- * The wave defines the pool as "public players, same city, sport matches, not
+ * The spec defines the pool as "public players, same city, sport matches, not
  * already members". Three of those needed a decision, because the columns the
  * literal reading wants do not exist:
  *
@@ -306,7 +306,7 @@ async function suggestPlayers(client, { teamId: teamId0, userId } = {}) {
  * screen is specified to show, and all three depend on the pairing rather than on
  * either team alone.
  *
- * FR5.3 — S.5 Wave B moved the ranking to the MODEL seam, and the SQL's
+ * FR5.3 — the ranking moved to the MODEL seam, and the SQL's
  * `abs(t.elo - my elo)` ordering is now the fallback rather than the answer. The
  * ml-service scores 0.6 x rating proximity + 0.2 x opponent trust + 0.2 x recent
  * activity and returns a component breakdown per row; when it cannot be reached

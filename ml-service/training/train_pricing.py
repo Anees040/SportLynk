@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-S.3 Wave C -- train pricing model #1: P(slot booked | slot features, offered price).
+Train pricing model #1: P(slot booked | slot features, offered price).
 
 WHAT THIS PRODUCES
     models/pricing_<utc-stamp>.joblib   provenance copy, one per run (gitignored)
@@ -41,19 +41,19 @@ WHY THE SPLIT IS ON `slot_date` AND NOT ON `as_of`
     as_of > C is scored separately as `testCold`: decisions the model could not possibly
     have seen. Both numbers are reported.
 
-WHERE THIS DEVIATES FROM THE WAVE PROMPT, AND WHY
-    1. FEATURES. The prompt asks for one-hot venue identity and `is_holiday`. This uses
+WHERE THIS DEVIATES FROM THE SPEC, AND WHY
+    1. FEATURES. The spec asks for one-hot venue identity and `is_holiday`. This uses
        the eleven columns frozen in `app/core/features.FEATURE_ORDER` instead. Venue
-       identity and the whole calendar block were excluded in Wave B on purpose -- see
+       identity and the whole calendar block were excluded on purpose -- see
        `data/README.md` "What is generated but deliberately hidden from the model". They
        are not oversights: they are the irreducible noise that stops a synthetic-data AUC
        from looking suspiciously perfect, and venue identity would make every new venue a
        cold start. Adding them here would also change FEATURE_SPEC_VERSION, which trips
        BOTH registry guards and breaks the Node-side contract assertion.
-    2. FILENAME. The prompt says models/pricing_v1.joblib. `app/core/registry.py` loads
-       `models/pricing_latest.joblib` and nothing else, so the prompt's filename would
+    2. FILENAME. The spec says models/pricing_v1.joblib. `app/core/registry.py` loads
+       `models/pricing_latest.joblib` and nothing else, so the spec's filename would
        train a model the service could never serve. The "v1" lives in `modelVersion`.
-    3. SWEEP BAND. The prompt says 0.7x-1.3x. The trained band is 0.70-1.50
+    3. SWEEP BAND. The spec says 0.7x-1.3x. The trained band is 0.70-1.50
        (features.PRICE_RATIO_MIN/MAX) and peak demand is inelastic, so the revenue argmax
        can legitimately sit above 1.30. This sweeps the full trained band and then applies
        POLICY_MAX_RATIO = 1.30 as a SEPARATE business cap -- and reports what the cap
@@ -63,7 +63,7 @@ WHERE THIS DEVIATES FROM THE WAVE PROMPT, AND WHY
        perfectly trustworthy argmax. It is reported, named `priceSensitivity`. A real
        confidence is reported beside it, derived from how sharp the revenue peak is,
        because a flat revenue curve is what actually makes an argmax untrustworthy.
-    5. AUC GATE. The prompt says "target > 0.80". Gating only from below would pass the
+    5. AUC GATE. The spec says "target > 0.80". Gating only from below would pass the
        exact failure `reports/README.md` warns about (a near-1.0 AUC means a feature is
        leaking). The gate is a band, and it is additionally checked against the measured
        Bayes-optimal ceiling -- see below.
@@ -161,7 +161,7 @@ DEFAULT_MODELS_DIR = _ML_ROOT / "models"
 DEFAULT_REPORTS_DIR = _ML_ROOT / "reports"
 DEFAULT_SEED = 42
 
-#: The wave prompt's "last 4 weeks" holdout, in days of `slot_date`.
+#: The spec's "last 4 weeks" holdout, in days of `slot_date`.
 TEST_WINDOW_DAYS = 28
 
 #: Hyperparameters are chosen on the last 28 days of TRAIN, never on TEST. Same
@@ -171,7 +171,7 @@ TEST_WINDOW_DAYS = 28
 #: leak this whole split exists to prevent.
 VALID_WINDOW_DAYS = 28
 
-#: ROC-AUC release band. The floor is the wave's target. The ceiling exists because
+#: ROC-AUC release band. The floor is the spec's target. The ceiling exists because
 #: reports/README.md states the correct reading of 0.99 on this dataset: a leak.
 GATE_ROC_AUC_MIN = 0.80
 GATE_ROC_AUC_MAX = 0.99
@@ -205,7 +205,7 @@ SWEEP_STEPS = 17
 
 #: Business cap on what may be recommended, deliberately separate from the band the
 #: model was trained on. The sweep still evaluates above it, so the report can say what
-#: the cap costs. This is the wave prompt's 1.3x ceiling.
+#: the cap costs. This is the spec's 1.3x ceiling.
 POLICY_MAX_RATIO = 1.30
 
 #: Revenue within this fraction of the peak counts as "indistinguishable from the
@@ -458,7 +458,7 @@ def check_diagnostics_agree(raw: pd.DataFrame, matrix: pd.DataFrame) -> Gate:
     `build_matrix` hands over only FEATURE_SOURCE_COLUMNS, and the contract recomputes
     the ratio from the two INTEGER columns `candidate_price` and `base_price`, both of
     which survive the CSV exactly. So the model trains on the full-precision value and
-    Wave D will serve on that same division from the database. There is no train/serve
+    Serving does the same division from the database. There is no train/serve
     skew; there is a lossy diagnostic column.
 
     So the tolerance is keyed to the serialisation that caused it -- a RELATIVE 1e-5, twice
@@ -900,10 +900,10 @@ def sweep_prices(model: Pipeline, ctx: dict[str, Any], *, steps: int = SWEEP_STE
     The candidate prices come from `features.price_grid`, which walks the band the model
     was TRAINED on. A suggestion is therefore always interpolation, never extrapolation.
 
-    Three numbers come back that the wave prompt does not ask for, because the one it does
+    Three numbers come back that the spec does not ask for, because the one it does
     ask for is not the one an owner can act on:
 
-      priceSensitivity  max(P) - min(P) across the sweep. This is the prompt's
+      priceSensitivity  max(P) - min(P) across the sweep. This is the spec's
                         "confidence = spread of P". It measures ELASTICITY: a very elastic
                         slot has a wide spread AND a perfectly sharp, trustworthy argmax.
       confidence        built from how sharp the revenue peak is. If many prices sit within
@@ -1492,7 +1492,7 @@ def write_model_card(path: Path, m: dict[str, Any]) -> Path:
     A("`is_holiday` * `is_ramadan` * `ramadan_phase` * `is_eid` * `ground_type` *")
     A("`day_of_month` (payday) * venue identity * the per-venue random effect")
     A("")
-    A("The wave prompt asks for one-hot venue identity and `is_holiday`. They are excluded,")
+    A("The spec asks for one-hot venue identity and `is_holiday`. They are excluded,")
     A("and the exclusion is the point rather than an oversight:")
     A("")
     A("- These effects are **real in the data and hidden from the model**, which leaves")
@@ -1580,7 +1580,7 @@ def write_model_card(path: Path, m: dict[str, Any]) -> Path:
         A("outcome here rather than a disappointing one.")
         A("")
         if float(ceil["rocAuc"]) < GATE_ROC_AUC_MIN:
-            A(f"> **Note on the wave's `>{GATE_ROC_AUC_MIN}` target.** The measured ceiling is")
+            A(f"> **Note on the `>{GATE_ROC_AUC_MIN}` target.** The measured ceiling is")
             A(f"> {ceil['rocAuc']:.4f}, so a ROC-AUC above {GATE_ROC_AUC_MIN} is *impossible* on this")
             A("> dataset without a leak. The release gate therefore scores attainment against the")
             A("> ceiling instead of against the literal number. This is reported, not hidden.")
@@ -1624,13 +1624,13 @@ def write_model_card(path: Path, m: dict[str, Any]) -> Path:
     A("  the band the model was *trained* on, so a suggestion is always interpolation and never")
     A("  an extrapolation into prices the model has no evidence for.")
     A(f"- `expected_revenue = price x P(book | price, slot)`; the recommendation is its argmax.")
-    A(f"- **Policy cap {POLICY_MAX_RATIO:g}x.** The wave prompt sweeps only to 1.3x. Peak demand here is")
+    A(f"- **Policy cap {POLICY_MAX_RATIO:g}x.** The spec sweeps only to 1.3x. Peak demand here is")
     A("  inelastic, so the unconstrained revenue argmax can sit above that. Rather than")
     A("  shortening the grid and hiding it, the full band is evaluated and the cap is applied")
     A("  to the *choice* -- so `policyCapCostPct` reports what the cap costs in revenue and the")
     A("  business can revisit it with a number in hand.")
     A("- **Two different quantities, both reported:**")
-    A(f"  - `priceSensitivity` -- max(P) - min(P) across the sweep. This is the wave prompt's")
+    A(f"  - `priceSensitivity` -- max(P) - min(P) across the sweep. This is the spec's")
     A("    \"confidence = spread of P\". It measures **elasticity**: a highly elastic slot has a")
     A("    wide spread *and* a perfectly sharp, trustworthy argmax, so spread cannot be")
     A("    confidence.")
@@ -1877,7 +1877,7 @@ def print_metrics_table(
     """
     The one table to point a camera at.
 
-    S.3 Wave E asks for a metrics table on a live retrain. The numbers were already
+    A live retrain has to show a metrics table. The numbers were already
     printed at step 7, but they scroll off the top of the terminal while the sweep and
     the importance pass run -- so by the time the run ends, the screen is showing gates
     and the metrics are gone. This reprints them at the end, immediately above the gate
@@ -1938,7 +1938,7 @@ def print_metrics_table(
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="train_pricing.py",
-        description="Train SportLynk pricing model #1 (S.3 Wave C).",
+        description="Train SportLynk pricing model #1.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--data", type=Path, default=DEFAULT_DATA, help=f"training CSV (default {DEFAULT_DATA})")
@@ -2109,7 +2109,7 @@ def main(argv: list[str] | None = None) -> int:
     # ── 8. the AUC gates, one flat and one relative to the measured ceiling
     auc = float(test_scores["rocAuc"])
     if ceiling and float(ceiling["rocAuc"]) < GATE_ROC_AUC_MIN:
-        # The prompt's >0.80 is unattainable by construction on this dataset. Say so and
+        # The spec's >0.80 is unattainable by construction on this dataset. Say so and
         # gate on attainment instead of quietly failing a gate that cannot be passed.
         attain = auc / float(ceiling["rocAuc"])
         gates.append(Gate(
@@ -2446,7 +2446,7 @@ def main(argv: list[str] | None = None) -> int:
                 say(f"  {path_str}")
 
     # ── 13. the metrics table, then the gate table, so those two are what is on screen
-    #        at the end of a live retrain (S.3 Wave E asks for exactly this).
+    #        at the end of a live retrain, which is what the checklist asks for.
     print_metrics_table(
         model_version=model_version,
         seed=args.seed,
@@ -2478,7 +2478,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             shout("  models/pricing_latest.joblib is in place.")
             # This warning replaces a note that said /predict/price returns 501 and that
-            # wiring inference "is S.3 Wave D". Wave D has landed, so that text was false
+            # wiring inference was still to come. Inference has landed, so that text was false
             # in the worst possible place -- the last screen of a live demo. What matters
             # now is the opposite hazard: a retrain does not hot-swap the served model, so
             # after this run the owner dashboard still shows the previous model_version

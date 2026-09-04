@@ -1,4 +1,4 @@
-"""Build the SportLynk assistant intent corpus -- Model #4, S.6 Wave A.
+"""Build the SportLynk assistant intent corpus -- the training set for model #4.
 
 Three hand-written inputs, one generated output:
 
@@ -86,7 +86,7 @@ OUT_PATH = DATA / "intents.csv"
 REJECT_PATH = DATA / "intents.rejected.csv"
 META_PATH = DATA / "intents_meta.json"
 
-#: Day 15 of the sprint, the day Wave A was allocated. A seed has to be *some*
+#: Day 15 of the project, the day the corpus was generated. A seed has to be *some*
 #: number; one that says which run produced the corpus is worth more than 42.
 DEFAULT_SEED = 20260824
 
@@ -1053,7 +1053,7 @@ def render_table(rows: list[dict[str, str]]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Generate the assistant intent corpus (S.6 Wave A, model #4)")
+        description="Generate the assistant intent corpus (model #4)")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED,
                         help=f"RNG seed (default {DEFAULT_SEED}); same seed, same bytes")
     parser.add_argument("--per-intent", type=int, default=isp.ROWS_PER_INTENT_TARGET,

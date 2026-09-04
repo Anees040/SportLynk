@@ -1,5 +1,5 @@
 """
-Settings for the ML service  —  S.3 Wave A
+Settings for the ML service
 
 WHY A MODULE AND NOT `os.environ` AT THE CALL SITE
 Two rules have to hold everywhere, and scattering `os.getenv` through the code is
@@ -40,7 +40,7 @@ SERVICE_ROOT = Path(__file__).resolve().parents[2]
 # a leftover localhost line in .env sent a script at the wrong database.
 load_dotenv(SERVICE_ROOT / ".env", override=False)
 
-#: Header the Node backend authenticates with. Named in the wave spec.
+#: Header the Node backend authenticates with. Named in the spec.
 API_KEY_HEADER = "X-API-Key"
 
 #: Minimum acceptable key length. 16 chars is not cryptography, it is a typo

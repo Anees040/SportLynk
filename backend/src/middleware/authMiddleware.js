@@ -2,10 +2,10 @@ const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 
 /**
- * Authentication, and — since S.7 Wave D — suspension enforcement.
+ * Authentication, and suspension enforcement.
  *
  * Why this file touches the database at all
- * Until this wave it was pure `jwt.verify`: 43 lines, no I/O. That made
+ * It was previously pure `jwt.verify`: 43 lines, no I/O. That made
  * suspension cosmetic. `routes/auth.js` refuses to log in an inactive user, but a
  * suspended user who was already logged in kept a valid signed token, and every
  * request it carried sailed through until the token expired on its own. Banning
@@ -23,7 +23,7 @@ const pool = require('../db/pool');
  * Why a database error must not log everybody out
  * This is the same rule `utils/globalSettings.js` states for itself: never throw.
  * If Supabase blips, the honest failure mode is "the re-check did not happen, so
- * the already-verified signature stands" — the pre-Wave-D behaviour. The
+ * the already-verified signature stands" — the earlier behaviour. The
  * alternative is an outage that locks out every user of the app because one query
  * timed out, which trades a rare authorisation gap for a total loss of service.
  *

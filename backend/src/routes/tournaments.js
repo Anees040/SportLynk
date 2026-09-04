@@ -1,5 +1,5 @@
 /**
- * Tournaments API (S.7 Wave A) — SRS Module 6, FE-1 … FE-8.
+ * Tournaments API — SRS Module 6, FE-1 … FE-8.
  *
  * What this file is and is not
  * It is transport. Every rule about who may do what, every peso that moves and

@@ -1,10 +1,10 @@
 """
-Player-for-team and opponent ranking  —  S.5 Wave B
+Player-for-team and opponent ranking
 ═══════════════════════════════════════════════════════════════════════════════
 
 WHAT THIS IS, AND WHAT IT IS NOT
 This module is a DETERMINISTIC WEIGHTED SCORER. It is not model #4, and nothing
-here is trained. The wave specification supplies the weights literally —
+here is trained. The specification supplies the weights literally —
 0.4/0.25/0.2/0.15 for player-for-team and 0.6/0.2/0.2 for opponents — so there is
 no free parameter left to learn: any "training" would be a script that read those
 numbers back out of a file it had just written. Saying so plainly is the point.
@@ -16,9 +16,9 @@ WHY IT LIVES IN THE ML SERVICE AT ALL
 Two reasons, neither of them "because it sounds like ML":
 
   * ONE COPY OF THE FORMULA. The alternative is Node computing it, and then Dart
-    re-deriving the same percentage to draw a bar. Wave A already established the
-    seam — the venue match% mapping lives here and Node/Dart only render it — and
-    a second scoring implementation is exactly where the two would drift apart.
+    re-deriving the same percentage to draw a bar. The venue recommender already
+    established the seam — the venue match% mapping lives here and Node/Dart only
+    render it — and a second implementation is where the two would drift apart.
   * THE SAME FINGERPRINT DISCIPLINE. Seven weights and two saturation caps are the
     shape of thing that gets "tuned" in a demo week and silently changes every
     percentage on screen. `rank_spec_fingerprint()` hashes all of them, `/health`
@@ -29,7 +29,7 @@ reco_features.py is FROZEN. Its fingerprint (138790ba577ea0f0) is stamped inside
 the RELEASED reco_latest.joblib, and registry.py refuses an artifact whose
 fingerprint no longer matches — so appending one constant to that file would take
 the venue recommender from `ready` to `incompatible` and break a shipped feature.
-Wave B therefore gets its own contract with its own version and its own hash. It
+This module therefore gets its own contract, its own version and its own hash. It
 IMPORTS the reusable helpers (canon_sport, zone_label, …) freely: importing does
 not change what the other module hashes.
 
@@ -60,7 +60,7 @@ player tables. So:
     publishes `"position": null` with the reason. Inventing a column here would
     mean inventing the data in it.
   * CITY and ZONE are DERIVED BY NODE from the venues a player actually books
-    (see the route), the same way Wave A derives a venue's zone from its address
+    (see the route), the same way a venue's zone is derived from its address
     because venues has no zone column either. A player who has never booked has
     zone `None`, which is an absent component, not a zero.
 
@@ -107,7 +107,7 @@ C_TRUST = "trust"
 PLAYER_COMPONENT_ORDER: tuple[str, ...] = (C_FIT, C_ELO, C_ACTIVITY, C_ZONE)
 OPPONENT_COMPONENT_ORDER: tuple[str, ...] = (C_ELO, C_TRUST, C_ACTIVITY)
 
-#: FR2.8 — player-for-team suggestion weights, exactly as the wave specifies.
+#: FR2.8 — player-for-team suggestion weights, exactly as the specifies.
 PLAYER_WEIGHTS: dict[str, float] = {
     C_FIT: 0.40,       # sport fit (position has no column — see the module docstring)
     C_ELO: 0.25,       # ELO proximity of the candidate's teams; trust proxies it when teamless
@@ -244,7 +244,7 @@ def sport_fit(candidate_sports: Any, team_sport: Any) -> float | None:
 
 
 def _zone_parts(value: Any) -> tuple[str | None, str | None]:
-    """Split Wave A's `"<CITY>:<AREA>"` key, mapping its two sentinels to None.
+    """Split the `"<CITY>:<AREA>"` zone key, mapping its two sentinels to None.
 
     `zone_of()` yields `UNKNOWN` for a city it could not slug and `*` for an
     address with no recognisable area token, and both mean "not known". Treating
@@ -600,7 +600,7 @@ def spec() -> dict[str, Any]:
         "rankSpecFingerprint": rank_spec_fingerprint(),
         "trained": False,
         "trainedNote": (
-            "deterministic weighted scorer — the wave specifies the weights literally, "
+            "deterministic weighted scorer — the specifies the weights literally, "
             "so there is nothing to learn, no artifact, and no registry entry"
         ),
         "players": {

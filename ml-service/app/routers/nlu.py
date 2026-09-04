@@ -1,4 +1,4 @@
-"""Assistant NLU HTTP contract — the front half of model #4 (S.6 / Wave B).
+"""Assistant NLU HTTP contract — the front half of model #4.
 
 WHAT THIS ENDPOINT IS, AND WHAT IT DELIBERATELY IS NOT
 `POST /nlu/parse` reads one utterance and answers WHAT the user wants (a trained
@@ -58,7 +58,7 @@ review body, and `routers/sentiment.py` already established that the text of a
 user's writing does not go into this service's logs.
 
 LATENCY
-The wave's budget is 50 ms per parse. Both halves are cheap once warm (two TF-IDF
+The spec's budget is 50 ms per parse. Both halves are cheap once warm (two TF-IDF
 transforms plus 15 sigmoid evaluations; regex over <=500 characters), but the
 COLD costs are brutal and neither is this endpoint's fault: joblib load is
 ~300 ms and dateparser's first parse was measured at 8.3 SECONDS. `warm()` pays
@@ -115,7 +115,7 @@ MAX_THRESHOLD = 0.95
 #: C". More would ship the whole 15-way distribution to a phone for nothing.
 ALTERNATIVES = 3
 
-#: Per-request budget from the wave spec. Exceeding it is logged, never an error:
+#: Per-request budget from the spec. Exceeding it is logged, never an error:
 #: a slow correct answer is still the right answer, and turning latency into a 500
 #: would take the assistant down over a garbage-collection pause.
 LATENCY_BUDGET_MS = 50.0
@@ -198,7 +198,7 @@ class ScoredIntent(CamelModel):
 
 
 class ParseResponse(CamelModel):
-    """`{intent, confidence, entities}` as the wave specifies, plus what the
+    """`{intent, confidence, entities}` as the specifies, plus what the
     dialog manager needs to act on it.
 
     The first three fields are the contract; everything after them exists for a
@@ -212,8 +212,8 @@ class ParseResponse(CamelModel):
     * `alternatives` — the menu's content, best first.
     * `threshold` / `modelVersion` / spec fields — provenance. The version and the
       contract fingerprints travel with the DATA, not just on /health, so a logged
-      or stored turn can be traced to the exact artifact that produced it. Wave A's
-      recommender and Wave B's ranker publish theirs for the same reason.
+      or stored turn can be traced to the exact artifact that produced it. The
+      venue recommender and the ranker publish theirs for the same reason.
     """
 
     intent: str

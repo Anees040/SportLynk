@@ -2,7 +2,7 @@
 
 WHY THIS FILE EXISTS
 --------------------
-Wave B ships two halves that fail in completely different ways. The classifier
+The NLU ships two halves that fail in completely different ways. The classifier
 fails STATISTICALLY -- it is 0.87 on validation and 0.62 on the exam, and no test
 can assert that a learned model gets a particular utterance right without turning
 a metric into a lie. The extractor fails MECHANICALLY -- "kal" is either tomorrow
@@ -167,7 +167,7 @@ def test_artifact_fingerprints_match_the_live_modules():
 
 
 def test_artifact_declares_the_abstain_floor_the_router_applies():
-    """0.45 from the wave spec, carried BY the artifact, not hard-coded in serving.
+    """0.45 from the spec, carried BY the artifact, not hard-coded in serving.
 
     S.4 stranded a 0.90 sentiment threshold in a constant no artifact knew about.
     Here the number ships with the model that was validated at it, and the router
@@ -416,7 +416,7 @@ def test_area_outside_the_served_cities_is_not_guessed():
 
 
 def test_area_city_comes_from_the_venue_catalogue():
-    """The wave spec's "gazetteer from venues.city + venues.area": the city on an
+    """The spec's "gazetteer from venues.city + venues.area": the city on an
     extracted area is read from the recommender artifact's venue snapshot, which is
     the only venue list this service is allowed to see (ml-service never touches
     Postgres). Skips when that artifact is absent -- the seed vocabulary alone is
@@ -719,7 +719,7 @@ def test_the_published_spec_describes_what_the_router_does():
 
 
 def test_a_warm_parse_stays_inside_the_fifty_millisecond_budget():
-    """The wave's latency requirement, measured the way the endpoint reports it.
+    """The specified latency requirement, measured the way the endpoint reports it.
 
     Warm, because the cold path is dominated by dateparser's language data (8.3 s
     on first use) and joblib's unpickling -- both paid once, in `warm()`, during
@@ -750,7 +750,7 @@ def test_a_warm_parse_stays_inside_the_fifty_millisecond_budget():
 
 #: Derived, not typed: whatever `intent_spec` declares minus what the last v1
 #: artifact could emit. A typed list rots the moment the contract moves -- and it
-#: already did once during this wave, when a hand-written "new labels" list
+#: already did once, when a hand-written "new labels" list
 #: carried `help_menu` (never a label) and omitted `check_availability` (a v1 one).
 V1_LABELS = frozenset({
     "book_venue", "cancel_booking", "my_bookings", "check_availability", "find_venue",
@@ -814,7 +814,7 @@ def test_the_dialog_group_is_exactly_affirm_and_deny():
 
 def test_every_intent_has_a_group_and_a_gloss():
     """The gloss is not documentation -- it is what decided six v1 rows were
-    mislabelled this wave. An intent without one cannot be argued about, so its
+    mislabelled in review. An intent without one cannot be argued about, so its
     boundary is whatever the model happened to learn."""
     assert len(intent_spec.INTENT_CATALOG) == len(intent_spec.INTENTS)
     for intent, group, gloss, _confusable in intent_spec.INTENT_CATALOG:
@@ -824,7 +824,7 @@ def test_every_intent_has_a_group_and_a_gloss():
 
 
 def test_a_squad_short_of_players_is_find_players_not_find_opponents():
-    """Regression guard for the corpus defect this wave fixed.
+    """Regression guard for the corpus defect that was fixed.
 
     v1 had no `find_players`, so "we need 2 more players for a match" was filed
     under `find_opponents` -- the least-wrong label then, a label error under the

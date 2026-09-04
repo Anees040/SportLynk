@@ -1,5 +1,5 @@
 /**
- * Registration-deadline sweep — SRS FE-4 (S.7 Wave A).
+ * Registration-deadline sweep — SRS FE-4.
  *
  * Every few minutes: find open tournaments whose registration deadline has passed
  * and settle them, one of two ways.

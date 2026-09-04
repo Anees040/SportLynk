@@ -1,5 +1,5 @@
 /**
- * check_admin.js — the admin module (S.7 Wave D), driven against the real
+ * check_admin.js — the admin module, driven against the real
  * database, always rolled back.
  *
  * Usage:  node src/scripts/check_admin.js
@@ -7,7 +7,7 @@
  *         node src/scripts/check_admin.js --verify-clean
  *
  * Why this script exists
- * Wave D added four powers an admin did not have, and every one of them is a claim
+ * The admin module added four powers an admin did not have, and every one is a claim
  * about rows in several tables at once:
  *
  *   a RULING     reverses or applies a rating exchange, closes both sides'
@@ -16,7 +16,7 @@
  *                move the ladder exactly once, which is the one mistake nobody can
  *                detect after the fact;
  *   a suspension cancels and refunds upcoming bookings, withdraws entries, closes an
- *                owner's venues, and — the part that was cosmetic before this wave —
+ *                owner's venues, and — the part that was previously cosmetic —
  *                makes an already-issued token stop working;
  *   a setting    has to reach the next booking with no restart, or FR10.11 is a
  *                sentence in a document rather than a behaviour;
@@ -337,9 +337,10 @@ async function makeDispute(client, { matchId, raisedByTeam, reason }) {
  * Why a semi-final and not the final: `applyFixtureResult` settles the whole
  * tournament — prize money out of the owner's frozen balance, payouts to captains —
  * the moment a node with no `next_round` gets a winner. This block is asserting that
- * a RULING advances a bracket, not that prize settlement works (that is Wave A's
- * check script). A semi leaves `finalDone` false, so `advanceWinner` writes the
- * winner into the final's `team_a` (advanceSlot(1,1).side === 'a') and stops there.
+ * a RULING advances a bracket, not that prize settlement works (that is
+ * check_tournaments.js's job). A semi leaves `finalDone` false, so `advanceWinner`
+ * writes the winner into the final's `team_a` (advanceSlot(1,1).side === 'a') and
+ * stops there.
  *
  * `rounds: 2` also fixes the stake: round 1 of 2 is the semi, so `kFactorFor` returns
  * the configured `k_semi` (48) rather than the ladder's K — which is why the ruling's
@@ -625,9 +626,9 @@ async function block2Live(client, ctx) {
 /**
  * FR10.6 asks for the two submissions, the evidence and the chat log on one screen.
  * The submissions and the evidence are joins; the CHAT log is the part that only
- * exists because Wave B was built first, and it is the part worth asserting — a case
- * file that renders an empty conversation satisfies the requirement on paper and
- * nowhere else.
+ * exists because the chat module was built first, and it is the part worth
+ * asserting — a case file that renders an empty conversation satisfies the
+ * requirement on paper and nowhere else.
  */
 async function block3CaseFile(client, ctx) {
   section('Block 3 · The queue and the case file');
@@ -956,7 +957,7 @@ async function block5Overturn(client, ctx) {
  *
  * The fixture is a SEMI-FINAL on purpose. Settling a FINAL runs the whole prize
  * payout — money out of the owner's frozen balance and into two captains' wallets —
- * which is Wave A's check script's job, not this one's. A semi leaves the bracket
+ * which is check_tournaments.js's job, not this one's. A semi leaves the bracket
  * mid-flight, which is exactly the state being asserted: the winner appears in the
  * final's empty `team_a` slot and the loser is marked eliminated.
  *
@@ -1194,7 +1195,7 @@ async function block7Suspension(client, ctx) {
  * hard-deletes it in a `finally` whether or not the assertions held.
  *
  * What is being proved, and why it is not cosmetic
- * Before Wave D the middleware was 43 lines of pure `jwt.verify` with no database
+ * The middleware was previously 43 lines of pure `jwt.verify` with no database
  * read, so suspension only took effect at the next login. A suspended user kept
  * using the app until their token expired — up to seven days of a banned account
  * behaving normally. The fix is a 30-second-TTL cache in front of one indexed lookup,
@@ -1491,7 +1492,7 @@ async function block9Export(client, ctx) {
  *    `authMiddleware.invalidate(id)` drop caches that are then refilled from the
  *    database. Calling either before `COMMIT` refills them from the pre-write state
  *    and the change appears to have silently failed — the exact class of "I changed
- *    it and nothing happened" bug this wave exists to remove. Asserted on both the
+ *    it and nothing happened" bug this check exists to catch. Asserted on both the
  *    first and the last occurrence in each file, because each has two handlers.
  * 3. Sockets fire after COMMIT. `mc.emitAfterCommit` pushes a ruling to two phones;
  *    doing it before COMMIT can show a player an outcome that then rolls back.

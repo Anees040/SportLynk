@@ -46,7 +46,7 @@ const policyText = require('../utils/policyText');
 const { POLICY, round2, asNum, depositFor } = require('../utils/escrow');
 const access = require('../utils/teamAccess');
 
-/** Cards per list. Three venues is what the wave spec asked for; six slots fit. */
+/** Cards per list. Three venues is what the spec asked for; six slots fit. */
 const TOP_VENUES = 3;
 const TOP_SLOTS = 6;
 const TOP_PEOPLE = 5;
@@ -160,7 +160,7 @@ function dateStr(v) {
  * write, both buttons are explicit, and there is no default action: `confirm` and
  * `cancel_confirm` are the only two ways out of this card.
  *
- * The deposit line is required by the wave spec and comes from escrow.js POLICY
+ * The deposit line is required by the spec and comes from escrow.js POLICY
  * via depositFor(), never from a literal 20 typed here.
  */
 function confirmCard({ what, title, lines = [], total = null, deposit = null,
@@ -874,7 +874,7 @@ async function executeBooking(ctx) {
 /**
  * `cancel_booking` — list what is cancellable, then quote the refund, then ask.
  *
- * The refund is quoted before the question, which is the wave spec's requirement
+ * The refund is quoted before the question, which is the spec's requirement
  * ("You'll get PKR 1,600 back (80%) — confirm?") and also the only honest way to
  * ask: a late cancellation forfeits the deposit, and a user who is not shown that
  * number before answering has not been asked a fair question.
@@ -1236,7 +1236,7 @@ async function tournamentList(ctx) {
  * is "that tournament": a sentence cannot carry a uuid, so a trained label here would
  * mean Scout guessing which cup a user meant and showing them somebody else's bracket.
  * The id arrives in a chip's args instead — the same door `pick_slot` uses, for the
- * same reason. Wave A adds no trained labels at all, so the released artifact and its
+ * same reason. No trained labels are added for it, so the released artifact and its
  * 23 labels stay byte-identical.
  *
  * Every number below comes from `tournamentService.detail`, which is exactly what
@@ -1612,7 +1612,7 @@ async function executeTournamentEntry(ctx) {
  *
  * Chip-only not because it spends but because it does not exist in the released
  * classifier's 23 labels, and S.6's rule is that the label set is frozen: adding a
- * trained label means retraining and re-releasing model #4, which this wave does not
+ * trained label means retraining and re-releasing model #4, which this work does not
  * do. A user who types "meray tournaments" lands on `my_bookings`-style routing or a
  * clarify, and the chip on every tournament card gets them here in one tap.
  *
@@ -1791,7 +1791,7 @@ async function findPlayers(ctx) {
 
   // The `source` badge is the honest half of this reply, and it answers a narrower
   // question than "is this list well ordered". reco_rank.py is a deterministic
-  // weighted scorer, not a trained model: S.5 Wave B states the weights literally,
+  // weighted scorer, not a trained model: the module states the weights literally,
   // so mlClient gives it its own third value, `'ranked'`, and says why at length.
   // This file used to stamp `model` over it anyway, which put an "AI" badge on a
   // weighted mean on a screen a real captain reads. Two separate questions:
@@ -2209,7 +2209,7 @@ async function createTeamHelp(ctx) {
  *
  * Answers by name — the user's, and Scout's own from global_settings, so renaming the
  * assistant renames it everywhere — and then immediately offers work. A greeting that
- * only greets back is a dead end, and the wave spec forbids those.
+ * only greets back is a dead end, and the spec forbids those.
  */
 async function greeting(ctx) {
   const settings = ctx.settings || {};
@@ -2237,7 +2237,7 @@ async function greeting(ctx) {
  *
  * The screen MAP is a contract with Flutter, not prose
  * Cards and chips hand back `{screen, id}` so the client can push a route instead of
- * posting a message. Wave D's chip handler routes on this map's keys; a client that
+ * posting a message. The Flutter chip handler routes on this map's keys; a client that
  * posts one back anyway lands here and gets the sentence for that screen, which is
  * why the same table serves both.
  */
@@ -2320,7 +2320,7 @@ async function outOfScope(ctx) {
  * parking, is the turf new, can we play at 2am. Scout files it against the venue, the
  * owner answers from their queue, the answer is published into assistant_kb, and the
  * next player asking the same thing gets it instantly with `source: 'kb'`. That loop is
- * why the wave has an owner side at all.
+ * why Scout has an owner side at all.
  *
  * Three things this deliberately refuses
  *   money/policy   assistantKb.BLOCKED_INTENTS — an owner may not redefine the refund
@@ -2548,8 +2548,8 @@ const INTENT_LABELS = Object.freeze([
  */
 // Executable, but not trained labels: nothing in this list can be reached by the
 // classifier, only by a chip Scout itself painted. The three tournament actions are
-// here because S.6 released model #4 with 23 labels and this wave does not retrain
-// it -- and because `tournament_register` spends, so it must stay behind the chip.
+// here because model #4 was released with 23 labels and nothing here retrains it
+// -- and because `tournament_register` spends, so it must stay behind the chip.
 const BUTTON_ONLY = Object.freeze(['pick_slot', 'confirm', 'cancel_confirm', 'capability_menu',
   'tournament_detail', 'tournament_register', 'my_tournaments']);
 
@@ -2616,7 +2616,7 @@ function intentLabels() {
 /**
  * Boot-time proof that this file can route everything that can reach it.
  *
- * Four assertions, and each one has caught a real class of bug in this wave:
+ * Four assertions, and each one has caught a real class of bug here:
  *   1. every trained label has a handler        — a retrain cannot land in silence
  *   2. every handler is a function              — a typo'd name is a 500 at runtime
  *   3. every capability chip is executable      — a menu button that 400s is worse

@@ -93,7 +93,7 @@ router.post('/topup', authMiddleware, async (req, res, next) => {
 // The itemised figure is `security_deposit`, not `total_amount`. That is the
 // column the money code treats as authoritative (routes/bookings.js: "security_
 // deposit holds what is in escrow for this booking", and both cancel
-// paths release exactly it). For a Wave-A booking the two are equal, because
+// paths release exactly it). For an older booking the two are equal, because
 // booking freezes the full slot price. For a legacy row created under the old 30%
 // rule they differ — one live booking here has total_amount 3000 against
 // security_deposit 900 — and summing total_amount then reported "PKR 3,000 frozen
@@ -226,7 +226,7 @@ router.post('/withdraw', authMiddleware, async (req, res, next) => {
       return res.status(404).json({ success:false, message:'Wallet not found' });
     }
 
-    // S.7 Wave D — belt and braces on the one route that moves money out of the
+    // Belt and braces on the one route that moves money out of the
     // platform. `authMiddleware` already refuses a suspended account on every
     // request, but it answers from a 30-second cache, and a suspension applied by
     // a second server instance is only visible here after that window. Everything

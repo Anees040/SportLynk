@@ -1,13 +1,13 @@
 /**
  * teamStats.js — the leaderboard, the profile snapshot, and the ELO chart series.
  *
- * S2 Wave D. Three reads live here rather than in routes/teams.js because each
+ * Three reads live here rather than in routes/teams.js because each
  * one is a real query with rules attached, and a route file that inlines them
  * stops reading as "who may do what" and starts reading as SQL.
  *
  * The one rule that matters most: ranked means the same thing everywhere
  * FR2.6 says a team has no displayable rating until it has >=1 verified match.
- * Wave B put that rule in elo.isRanked() / elo.displayElo(), and the match
+ * That rule lives in elo.isRanked() / elo.displayElo(), and the match
  * screens have used it since. This module binds to those same two functions —
  * RANKED_MIN below is elo.RANKED_MIN_MATCHES, bound as a query parameter, not a
  * literal typed a second time.
@@ -52,7 +52,7 @@ const RANKED_MIN = elo.RANKED_MIN_MATCHES;
 /** How far back "movement" looks. Days, not hours — a leaderboard is weekly. */
 const MOVEMENT_WINDOW_DAYS = 7;
 
-/** Recent-activity window for the S.5 recommender feature (Wave D item 5). */
+/** Recent-activity window for the recommender's activity feature. */
 const ACTIVITY_WINDOW_DAYS = 30;
 
 /** Chart depth. FR5.14 asks for the last 10 matches. */
@@ -226,7 +226,7 @@ async function rankedCities(db, { sport = null } = {}) {
 }
 
 /**
- * The profile snapshot (FR5.15 + Wave D item 5).
+ * The profile snapshot (FR5.15).
  *
  * `form` is not re-derived here: matchCore.teamFeatures() already produces the
  * canonical last-5 string that find-opponents and the match preview both read,
@@ -289,7 +289,7 @@ async function profileStats(db, teamId) {
  * Why this is not just `SELECT * FROM elo_history`
  * FR5.14 wants disputed matches on the chart, drawn as red hollow dots. A
  * disputed match has no elo_history row — that is the whole point of the dispute
- * rule (Wave C: the match completes and records W/L, but no points move).
+ * rule: the match completes and records W/L, but no points move.
  * Reading elo_history alone would silently drop exactly the points the
  * requirement asks to display.
  *
@@ -377,7 +377,7 @@ module.exports = {
   RANKED_MIN,
   MOVEMENT_WINDOW_DAYS,
   ACTIVITY_WINDOW_DAYS,
-  // Exported in S.5 Wave B so the opponent recommender counts "recent activity"
+  // Exported so the opponent recommender counts "recent activity"
   // over exactly the statuses this file already counts it over. A third hand-typed
   // copy of [completed, disputed] is how the rail and the profile card would end up
   // disagreeing about how active a team is.

@@ -2,7 +2,7 @@ library;
 
 import '../utils/num_util.dart';
 
-/// Wire models for the reviews / Trust 2.0 / moderation stack (S.4 Wave D).
+/// Wire models for the reviews / Trust 2.0 / moderation stack.
 ///
 /// These mirror `routes/reviews.js` and `routes/admin.js` one field at a time.
 /// Those endpoints answer in **camelCase** (unlike the older snake_case reads), so

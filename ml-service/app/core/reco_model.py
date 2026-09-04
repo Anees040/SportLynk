@@ -1,4 +1,4 @@
-"""Snapshot-backed content recommender for S.5 Wave A."""
+"""Snapshot-backed content recommender for venue suggestions."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

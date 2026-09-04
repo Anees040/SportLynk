@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../constants/colors.dart';
 import '../services/pricing_service.dart';
 
-/// The owner-facing surface of the pricing model (S.3 Wave D).
+/// The owner-facing surface of the pricing model.
 ///
 /// Kept out of the two screens because both the dashboard card and the venue
 /// forecast need the same demand palette and the same honesty rules, and two

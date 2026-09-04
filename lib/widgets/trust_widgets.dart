@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../constants/colors.dart';
 import '../models/review.dart';
 
-/// The visual vocabulary of reviews & Trust 2.0 (S.4 Wave D), in one place.
+/// The visual vocabulary of reviews & Trust 2.0, in one place.
 ///
 /// Sibling to `match_widgets.dart` and it follows the same discipline: one
 /// definition per concept so a sentiment chip that reads "Positive" in green on the

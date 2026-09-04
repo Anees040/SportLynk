@@ -1,5 +1,5 @@
 r"""Train and evaluate Model #4's front half -- the SportLynk assistant INTENT
-classifier (S.6 / Wave B).
+classifier.
 
 WHAT THIS PRODUCES
 ------------------
@@ -90,7 +90,7 @@ fail a SoftmaxSVC build mechanically, instead of trusting whoever reads the mode
 card to notice.
 
 The comparison is re-run on every training run (--no-compare to skip) rather
-than quoted from a notebook, because it is the central claim of this wave.
+than quoted from a notebook, because it is the central claim of this trainer.
 
 WHY THE CALIBRATION FOLDS ARE GROUPED BY template_id
 ----------------------------------------------------
@@ -166,7 +166,7 @@ reader, it knows when it is unsure (that is what the calibration buys), and the
 product leans on exactly that -- the floor plus the Node fallback menu, and later
 the owner-escalation loop, are what stand between a 0.62 exam score and a bad
 user experience. The lever that would move the number is more authored indirect
-rows in the corpus (Wave A's generator, not this trainer's hyperparameters):
+rows in the corpus (the generator, not this trainer's hyperparameters):
 every feature-space knob swept here moved the exam by less than its own +-0.077
 bootstrap CI.
 
@@ -207,7 +207,7 @@ Run:
     ./.venv/Scripts/python.exe training/train_intents.py --proba softmax --no-write
     ./.venv/Scripts/python.exe training/train_intents.py --quiet --no-plot
 
-After a successful run, restart uvicorn (or POST /nlu/refresh, once Wave B's
+After a successful run, restart uvicorn (or POST /nlu/refresh, once the NLU
 router exists) so the serving process picks the new artifact up.
 """
 
@@ -1147,7 +1147,7 @@ def write_model_card(path: Path, record: dict) -> None:
     A(f"- languages: " + ", ".join(f"{k} {v}" for k, v in record["corpus"]["langs"].items()) + "  ")
     A(f"- sources: " + ", ".join(f"{k} {v}" for k, v in record["corpus"]["sources"].items()) + "  ")
     A(f"- exam: `data/assistant/assistant_test.csv` -- {exam['n']} rows, sha256 "
-      f"`{record['exam']['sha256'][:16]}...`, 10 per intent, hand-written in Wave A "
+      f"`{record['exam']['sha256'][:16]}...`, 10 per intent, hand-written "
       "and never trained on")
     A("")
     A("The SHIPPED artifact is refitted on ALL "
@@ -1601,7 +1601,7 @@ def main(argv: list[str] | None = None) -> int:
     exam_confusions = top_confusions(exam_metrics["confusion_matrix"]["matrix"], LABELS)
     val_grouped = grouped_metrics(y_va, pred_va)
 
-    # The probability-layer comparison (the wave's central claim)
+    # The probability-layer comparison (the central claim)
     # Re-measured, not quoted. Every arm is fitted on TRAIN and scored on validation,
     # so the exam plays no part in choosing how probabilities are produced.
     def _proba_row(name: str, model: Pipeline) -> dict:

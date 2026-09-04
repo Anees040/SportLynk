@@ -1,5 +1,5 @@
 r"""
-Train and release SportLynk model #3 — the content-based venue recommender (S.5 Wave A).
+Train and release SportLynk model #3 — the content-based venue recommender.
 
 WHAT THIS SCRIPT DOES
   1. Pulls a read-only snapshot from the Node backend's protected export endpoint
@@ -10,7 +10,7 @@ WHAT THIS SCRIPT DOES
      serves, over the SAME frozen feature contract (core/reco_features.py), so there is
      no train/serve skew by construction.
   3. Evaluates it with leave-one-out HitRate@3 / HitRate@5 / MRR against a popularity
-     baseline — the wave's requirement that reports/reco_eval.md show LIFT over popularity.
+     baseline — the requirement that reports/reco_eval.md show LIFT over popularity.
   4. Applies release GATES and writes artifacts. A timestamped copy is ALWAYS written
      (audit trail); reco_latest.joblib — the file the registry actually serves — is
      written ONLY when every gate passes. Same discipline as train_pricing / train_sentiment.
@@ -28,7 +28,7 @@ THE SMALL-CORPUS CAVEAT (why the gate is soft on the seed data)
   leave-one-out HitRate on a dozen users is a DIRECTION, not a number to publish. So the
   release gate is deliberately WAIVED below MIN_TRUST_USERS: it releases the model (the
   cold-start path is popularity anyway, so there is nothing safer to serve) but the eval
-  report and model card SAY SO — same spirit as the sentiment wave's caveated CI bound.
+  report and model card SAY SO — same spirit as the sentiment model's caveated CI bound.
   Above MIN_TRUST_USERS the gate BITES: a content model that cannot beat popularity on
   HitRate@5 is not promoted to _latest.
 
@@ -172,7 +172,7 @@ def _ranked_ids(model: VenueRecommender, user: dict, *, popularity: bool, depth:
     we rebuild a one-user recommender over the same venue catalogue with a trimmed
     history. For the popularity baseline we strip the profile entirely, which forces
     recommend() down its cold-start branch (popularity-in-city + stated sports) — exactly
-    the "no personalisation" comparison the wave asks for. `depth` requests a full ranking
+    the "no personalisation" comparison the spec asks for. `depth` requests a full ranking
     (not just top-k) so MRR sees where the held-out venue actually landed.
     """
     probe = dict(user)

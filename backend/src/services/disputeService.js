@@ -1,5 +1,5 @@
 /**
- * disputeService.js — S.7 Wave D · FR10.6 / FR10.7. The queue, the case file, and
+ * disputeService.js — FR10.6 / FR10.7. The queue, the case file, and
  * the ruling.
  *
  * Why a service and not SQL in the route
@@ -245,9 +245,9 @@ function shapeQueueRow(r, kFactor) {
  *
  * FR10.6 asks for the two submissions, the evidence and the chat log. The
  * expensive-looking part — the captain-channel archive — is a plain indexed read
- * of `chat_messages` for the one channel Wave B creates per match, which is the
- * reason Wave B was sequenced before Wave D: without it this requirement has no
- * data to satisfy it.
+ * of `chat_messages` for the one channel chat creates per match, which is the
+ * reason chat was built before the dispute desk: without it this requirement has
+ * no data to satisfy it.
  *
  * Read-only, and deliberately on the pool rather than in a transaction: nothing
  * here writes, and holding a transaction open while an admin reads is how an

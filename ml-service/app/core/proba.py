@@ -1,5 +1,5 @@
 """
-Probability wrapper for the sentiment classifier  —  S.4 Wave B
+Probability wrapper for the sentiment classifier
 
 WHY THIS EXISTS
 LinearSVC is the strongest linear model on this corpus (char-only, uncalibrated:

@@ -1,5 +1,5 @@
 """
-Sentiment + moderation endpoint  —  S.4 Wave B  (FR9.9, FR9.10)
+Sentiment + moderation endpoint  —  FR9.9, FR9.10
 
 WHAT THIS ENDPOINT IS
 `POST /predict/sentiment` scores one review with model #2 and returns three things

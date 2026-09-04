@@ -1,7 +1,7 @@
 import '../constants/api_constants.dart';
 import 'api_service.dart';
 
-/// AI pricing + demand forecast (S.3 Wave D, FR4.17 / FR4.18).
+/// AI pricing + demand forecast (FR4.17 / FR4.18).
 ///
 /// Everything in this file exists to keep one promise to the owner: the number on
 /// the card is a suggestion they can read the reasoning for, and nothing changes
@@ -62,7 +62,7 @@ class PriceFactor {
 
 /// The served model's own test-set scores, read from the artifact at request time.
 ///
-/// This is the honest version of the "quiet flex" caption. The wave brief suggested
+/// This is the honest version of the "quiet flex" caption. The spec suggested
 /// hardcoding `AUC 0.84`; the model that ships scores 0.7628, so the
 /// caption reads whatever the loaded artifact measured. A demo number that does not
 /// match `pricing_metrics.json` is the kind of thing an FYP panel asks about once.

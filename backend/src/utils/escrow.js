@@ -103,7 +103,7 @@ function round2(n) {
 /**
  * The at-risk deposit for a slot price. Computed server-side only.
  *
- * `pct` (S.7 Wave D) lets the one caller that stamps the number onto a booking row
+ * `pct` lets the one caller that stamps the number onto a booking row
  * pass the admin-configured `deposit_pct` it just read inside its transaction.
  * Every other caller omits it and gets `POLICY.DEPOSIT_PERCENT`, which
  * `setDepositPercent` keeps in step with that setting — so the copy that describes

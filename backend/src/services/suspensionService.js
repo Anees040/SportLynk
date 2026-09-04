@@ -1,5 +1,5 @@
 /**
- * suspensionService.js — S.7 Wave D · FR10.8. Suspending an account, and putting
+ * suspensionService.js — FR10.8. Suspending an account, and putting
  * it back.
  *
  * Why a service and not twenty lines in the route

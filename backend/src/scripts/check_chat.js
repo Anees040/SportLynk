@@ -8,7 +8,7 @@
  *
  * Why this script exists
  * The unit tests prove the sentences and the payload shapes with the database
- * down. What they cannot prove is the thing S.7 Wave B added: that
+ * down. What they cannot prove is what the rooms themselves do: that
  * confirming a booking opens a room, that accepting a challenge opens a different
  * room containing four specific people, that doing either twice does not open a
  * second one, and that the inbox those rooms appear in counts unread the same way
@@ -27,7 +27,7 @@
  * It drives the core functions, not HTTP. So Block 6 closes the remaining gap the
  * only way a rolled-back script can: it reads the source of every confirm,
  * cancel and no-show path and asserts each one calls the opener. A function that
- * works and is never called is the exact failure mode this wave was written to
+ * works and is never called is the exact failure mode this script was written to
  * end, so "is it wired?" is checked, not assumed.
  *
  *   ✗  a rule broke. The line names it.
@@ -337,9 +337,9 @@ async function blockIdempotent(client, ctx) {
     'worded as the venue’s action, since that is who marked it');
 
   // announceInRoom on a room that does not exist must read as "no pill", not as an
-  // error: a booking confirmed before Wave B shipped has no channel at all.
+  // error: a booking confirmed before booking rooms existed has no channel at all.
   const none = await chat.announceInRoom(client, null, 'booking_cancelled', {});
-  eq(none, null, 'a booking that predates this wave has no room, and that is not an error');
+  eq(none, null, 'a booking that predates booking rooms has no room, and that is not an error');
 }
 
 // Block 3 — the coordination room (FR8.5)
@@ -455,7 +455,7 @@ async function blockNeutralPills(client, ctx) {
     'the per-team sentences still take a side — “they challenged your team” vs “you challenged them”');
 
   // A match with no room: the pill is skipped, the transaction is untouched. This
-  // is the entire migration story for challenges accepted before Wave B.
+  // is the entire migration story for challenges accepted before captain rooms existed.
   const orphan = await mc.fanOut(client, {
     matchId: ctx.match.id, sides: [], coord: { event: 'match_settled', channelId: null },
   });
@@ -657,7 +657,7 @@ async function blockQuickReplies(client, ctx) {
   // is not in the frozen 23-label spec is a branch that can never run — the same
   // guard mlClient.assertNluLabels applies to Scout's routing.
   const labels = new Set(actions.intentLabels());
-  eq(labels.size, 23, 'the frozen spec still has 23 labels and this wave added none');
+  eq(labels.size, 23, 'the frozen spec still has 23 labels and none were added');
   const unknown = [];
   for (const [audience, table] of Object.entries(qr.QUICK_REPLIES)) {
     for (const key of Object.keys(table)) if (!labels.has(key)) unknown.push(`${audience}/${key}`);
@@ -790,7 +790,7 @@ async function blockQuickReplies(client, ctx) {
 /**
  * Everything above proves the openers work. None of it proves anything calls them,
  * and "the machinery exists and is not wired to anything" is the exact failure this
- * whole sprint is repairing. So this block reads the source of every path that
+ * whole module is repairing. So this block reads the source of every path that
  * should open or annotate a room and asserts the call is there.
  *
  * A string match is a weak proof of behaviour and a strong proof of absence: it

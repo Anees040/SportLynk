@@ -1,5 +1,5 @@
 /**
- * Sentiment backfill sweep (S.4 Wave C) — the safety net behind inline scoring.
+ * Sentiment backfill sweep — the safety net behind inline scoring.
  *
  * routes/reviews.js scores a review's text at creation. When the ml-service is down
  * at that moment the review still saves, honestly, with sentiment_label NULL (the

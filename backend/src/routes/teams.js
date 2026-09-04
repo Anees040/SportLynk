@@ -1,5 +1,5 @@
 /**
- * Teams API (S2 Wave A) — create, browse, roster, invites, join requests, roles.
+ * Teams API — create, browse, roster, invites, join requests, roles.
  *
  * Every mutating handler follows the same transaction shape as routes/wallet.js:
  *   pool.connect() → BEGIN → work → COMMIT, and a `finally` that always releases.
@@ -146,9 +146,9 @@ router.get('/mine', async (req, res, next) => {
 });
 
 /**
- * Public leaderboard (FR2.7 / FR5.13) — S2 Wave D.
+ * Public leaderboard (FR2.7 / FR5.13).
  *
- * Three things changed here in Wave D, and each one closed a real hole:
+ * Three things changed here, and each one closed a real hole:
  *
  *   • ranked only. This used to list every public team ordered by elo, which put
  *     brand-new teams on the board at the seed 1000 — the exact thing FR2.6 says
@@ -203,7 +203,7 @@ router.get('/rankings', async (req, res, next) => {
 /**
  * GET /api/teams/discover — public teams the caller is not already in.
  *
- * Transport only since S.6 Wave C: the visibility rule and the
+ * Transport only: the visibility rule and the
  * already-a-member exclusion live in services/discoveryService.js so Scout's
  * `find_teams` cannot offer a private squad or the user's own team (FR8.15).
  */
@@ -257,7 +257,7 @@ router.get('/:id', async (req, res, next) => {
     const [roster, channel, snapshot, eloHistory] = await Promise.all([
       access.fetchRoster(pool, team.id),
       pool.query(`SELECT id FROM chat_channels WHERE type='team' AND ref_id=$1`, [team.id]),
-      // Wave D item 5 — W/L/D, win rate (FR5.15), the last-5 form string and the
+      // W/L/D, win rate (FR5.15), the last-5 form string and the
       // 30-day activity count that S.5's recommender will consume as features.
       // Read here rather than from a second endpoint because the profile screen
       // needs all of it on first paint, and a second round trip would let the
@@ -336,7 +336,7 @@ router.patch('/:id', async (req, res, next) => {
   }
 });
 
-// Suggested players  (FR2.8, S.5 Wave B)
+// Suggested players  (FR2.8)
 
 /**
  * GET /api/teams/:id/suggested-players — FR2.8, the roster screen's rail.

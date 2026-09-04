@@ -88,7 +88,7 @@ class ChatService {
   Future<Map<String, dynamic>> deleteMessage(String token, String channelId, String messageId) =>
       _api.delete(ApiConstants.chatMessage(channelId, messageId), token: token);
 
-  // The inbox and the other two channel types (S.7 Wave B)
+  // The inbox and the other two channel types
 
   /// One page of the inbox, newest activity first. Pass [cursor] back exactly as
   /// the previous page returned it.
@@ -117,14 +117,14 @@ class ChatService {
   /// The room for a booking, or null when there is none.
   ///
   /// Null is a NORMAL answer, not a failure: a booking that is still pending has
-  /// no room yet, one confirmed before this wave shipped never will, and the
+  /// no room yet, one confirmed before rooms existed never will, and the
   /// server answers 404 rather than 403 for a non-member so a stranger cannot
   /// probe it. All three cases render as "no Message button", never as an error.
   Future<String?> channelForBooking(String token, String bookingId) =>
       _channelId(ApiConstants.chatForBooking(bookingId), token);
 
   /// The coordination room for a match, or null when the challenge was never
-  /// accepted (or predates this wave).
+  /// accepted (or predates the rooms).
   Future<String?> channelForMatch(String token, String matchId) =>
       _channelId(ApiConstants.chatForMatch(matchId), token);
 

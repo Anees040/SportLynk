@@ -3,7 +3,7 @@ library;
 import 'reco.dart';
 import 'team.dart' show asNum;
 
-/// Wire models for the match lifecycle (S2 Wave C).
+/// Wire models for the match lifecycle.
 ///
 /// These mirror `matchCore.shapeMatch` on the backend one field at a time. The
 /// server already computes everything viewer-relative — who "my" team is, whether
@@ -197,7 +197,7 @@ class MatchBooking {
 }
 
 /// Where and when for a match that has a tournament fixture instead of a booking
-/// (S.7 Wave A), plus which round it is.
+///, plus which round it is.
 ///
 /// A tournament fixture *reserves* a venue slot rather than creating a booking:
 /// a real booking row would appear in the owner's booking list, carry a wallet
@@ -560,7 +560,7 @@ class MatchSubmission {
 /// that only exists *because of the pairing*: the rating gap, the
 /// competitiveness score, and the trust badge (FR5.3 – FR5.5).
 ///
-/// S.5 Wave B added the breakdown fields. [competitiveness] is unchanged in
+/// The breakdown fields came with the scorer. [competitiveness] is unchanged in
 /// meaning and still obeys FR5.4 (null while either team is unranked), but its
 /// value now comes from the three-component scorer when that service answered,
 /// and from the v1 rating-gap formula when it did not. Which one produced it is
@@ -635,7 +635,7 @@ class OpponentList {
   final bool canChallenge;
   final int preferredBand;
 
-  /// S.5 Wave B — which engine ordered this list and scored its rows. The screen
+  /// Which engine ordered this list and scored its rows. The screen
   /// reads `available` before drawing any percentage, and `fallbackNote` when it
   /// is false.
   final RankingInfo ranking;

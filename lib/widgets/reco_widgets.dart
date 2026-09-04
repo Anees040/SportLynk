@@ -5,7 +5,7 @@ import '../constants/colors.dart';
 import '../models/reco.dart';
 import 'match_widgets.dart' show CompetitivenessTone, TrustBadgeChip;
 
-/// The S.5 Wave B recommender UI: the match-percentage badge, the "Why this
+/// The recommender UI: the match-percentage badge, the "Why this
 /// match?" breakdown, and the roster screen's suggested-players rail.
 ///
 /// Why the breakdown is a first-class widget and not a tooltip
@@ -133,7 +133,7 @@ class RankingSourceNote extends StatelessWidget {
 
 //  Why this match?
 
-/// The expandable breakdown row (S.5 Wave B).
+/// The expandable breakdown row.
 ///
 /// Collapsed it is one tappable line; open it lists every component the server
 /// scored, in the server's published order, with that component's weight beside

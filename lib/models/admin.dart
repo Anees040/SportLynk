@@ -1,4 +1,4 @@
-/// The shapes the four admin surfaces answer with (S.7 Wave D).
+/// The shapes the four admin surfaces answer with.
 ///
 /// Every field here is server-decided, and that is the point of the file.
 /// `severityElo` is computed with the live K-factor by `utils/elo.js`, the ruling

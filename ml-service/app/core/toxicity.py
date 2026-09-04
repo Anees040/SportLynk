@@ -1,5 +1,5 @@
 """
-Abuse / profanity guard  —  S.4 Wave B  (FR9.10)
+Abuse / profanity guard  —  FR9.10
 
 WHAT THIS IS, AND WHAT IT IS DELIBERATELY NOT
 This flags ABUSIVE LANGUAGE — profanity and slurs — in a review. It is NOT a

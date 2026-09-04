@@ -209,7 +209,7 @@ class AppRoutes {
           child: OwnerBookingRequestsScreen(),
         ),
 
-    // The deep-link surface (S.7 Wave C)
+    // The deep-link surface
     '/notifications': (_) => const AuthGuard(child: NotificationsScreen()),
     '/notification-prefs': (_) => const AuthGuard(child: NotificationPrefsScreen()),
     '/chats': (_) => const AuthGuard(child: ChatsScreen()),
@@ -268,7 +268,7 @@ class AppRoutes {
       );
     },
 
-    // The admin desk (S.7 Wave D / D5)
+    // The admin desk (D5)
     //
     // Every one of these is `requiredRole: 'admin'` except the owner's own
     // report: the notification registry emits none of them (checked — it routes

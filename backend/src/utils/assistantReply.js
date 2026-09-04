@@ -37,7 +37,7 @@ const SOURCES = Object.freeze({
 const SOURCE_VALUES = Object.freeze(Object.values(SOURCES));
 
 /**
- * Card types. The first four are the wave's; the rest are the same idea extended
+ * Card types. The first four are the original set; the rest are the same idea extended
  * to the entities Scout was asked to help discover — players, teams, tournaments
  * and a route on a map. Flutter needs a widget per value, so adding one here is a
  * change to two files, deliberately.

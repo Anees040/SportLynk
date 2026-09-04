@@ -73,11 +73,11 @@ Consequences, all of them improvements:
   * p is in (0, 1) by construction. No clipping, ever, so no dead zones.
   * Price stays effective everywhere, including at p = 0.94.
   * P(book) is monotonically non-increasing in price BY CONSTRUCTION (sigmoid is
-    monotone and the price term is negative), so Wave C's monotonic-price-response
+    monotone and the price term is negative), so the monotonic-price-response
     release gate is testing the MODEL's fidelity to the data rather than fighting
     an artifact of the data.
   * The data-generating process is now exactly logistic in its main effects,
-    which means a logistic-regression baseline is *correctly specified* — Wave C
+    which means a logistic-regression baseline is *correctly specified*
     gets a principled floor to beat rather than an arbitrary one.
 
 The multipliers keep their intuitive "x2.5" reading, but they are **odds ratios,
@@ -100,7 +100,7 @@ Production therefore prices peak slots ABOVE base. If the simulator copied that,
 `price_ratio` would be 1.2 exactly when demand drivers are strongest and 1.0
 otherwise — price would be positively correlated with demand. A model fit to that
 data would learn **"higher price => higher booking probability"**, which is not
-merely wrong, it is catastrophically actionable: Wave C's `argmax(price x P(book))`
+merely wrong, it is catastrophically actionable: the `argmax(price x P(book))` sweep
 would find its maximum at the top of the grid for every slot, and the owner
 dashboard would recommend charging the 1.50 ceiling forever. The feature would
 ship, look confident, and destroy the venue's occupancy.
@@ -122,7 +122,7 @@ Two honest caveats, both recorded in `data/README.md`:
     refuses to write the CSV.
 
 ------------------------------------------------------------------------------
-DESIGN DECISION 3 — WHERE THIS DELIBERATELY DEPARTS FROM THE WAVE PROMPT
+DESIGN DECISION 3 — WHERE THIS DELIBERATELY DEPARTS FROM THE SPEC
 ------------------------------------------------------------------------------
 Each departure is a correction, not a convenience.
 
@@ -157,17 +157,17 @@ Each departure is a correction, not a convenience.
       by the `hour` feature, which is strictly more expressive than the flag, so
       nothing is lost.
 
-  (e) Column names follow the SCHEMA, not the prompt. The prompt asks for
+  (e) Column names follow the SCHEMA, not the spec. The spec asks for
       `zone`/`rating`/`days_until_slot`; the frozen contract calls them
       `city`/`venue_rating`/`lead_days`, and the CSV is read back through
       `features.build_feature_dict`, whose key names are the contract. Emitting
-      the prompt's names would force a translation layer between training and
-      serving, which is the exact train/serve skew Wave A built the shared
-      feature module to prevent. Mapping table in `data/README.md`.
+      the spec's names would force a translation layer between training and
+      serving, which is the exact train/serve skew the shared feature module
+      exists to prevent. Mapping table in `data/README.md`.
 
-  (f) `--rows` becomes an optional CAP. The Wave A placeholder published
-      `--rows 40000 --days 240`; this wave's spec says 12 months x 20 venues,
-      which enumerates to ~81K rows and lands inside the prompt's 80-120K band
+  (f) `--rows` becomes an optional CAP. An earlier placeholder published
+      `--rows 40000 --days 240`; the spec says 12 months x 20 venues,
+      which enumerates to ~81K rows and lands inside the spec's 80-120K band
       naturally. Full enumeration is the normal path; `--rows` subsamples for a
       fast smoke run and the cap is recorded in the metadata so a capped dataset
       can never be mistaken for a complete one.
@@ -193,7 +193,7 @@ already populated ('turf' / 'indoor'), and the monsoon effect below hits outdoor
 venues only — so the excluded driver is both available and materially predictive.
 Recorded here rather than acted on, because adding a feature means bumping
 `FEATURE_SPEC_VERSION` to v2, updating `spec()`, `mlClient.js` and the harness's
-"11 features" assertion, and this wave does not get to break a verified 37/37.
+"11 features" assertion, and this generator does not get to break a verified 37/37.
 
 CLI
 ---
@@ -448,7 +448,7 @@ SUNDAY_LATE_ADJ = 0.70
 #   Dec 0.75  cold again.
 #
 # Two peaks (Mar-Apr, Sep-Oct) and two troughs (Jun-Jul, Dec-Jan) is why the
-# wave prompt's single sine wave was replaced with a table — see design
+# spec's single sine wave was replaced with a table — see design
 # DECISION 3(b). Index 0 is unused so the month number indexes directly.
 MONTH_MULT: tuple[float, ...] = (
     0.00,  # index 0 unused — months are 1-based
@@ -457,7 +457,7 @@ MONTH_MULT: tuple[float, ...] = (
 
 # Winter late-night collapse — a month x hour interaction. [ASSUMPTION]
 #
-# The wave prompt asks for a "winter dip for late-night slots" and it is right to
+# The spec asks for a "winter dip for late-night slots" and it is right to
 # separate it: a flat winter month multiplier cannot express it, because winter
 # afternoons in Islamabad are pleasant (17-20 C) while winter nights are not.
 # Folding both into MONTH_MULT would wrongly suppress the 15:00 slot and wrongly
@@ -484,7 +484,7 @@ MONSOON_INDOOR_ADJ = 1.18
 # Public holidays and the Islamic calendar. [ASSUMPTION on magnitude,
 # dates from app/core/pk_calendar.py with their own confidence labels]
 #
-# The prompt's single "holidays x1.8" is replaced by four separate effects,
+# The spec's single "holidays x1.8" is replaced by four separate effects,
 # because they do not share a sign — see design DECISION 3(c).
 #
 #   HOLIDAY_MULT 1.60
@@ -495,7 +495,7 @@ MONSOON_INDOOR_ADJ = 1.18
 #       consistent with the weekend the table already describes.
 #
 #   EID_MULT 0.35
-#       Eid empties venues. Three gazetted days of family visits. The prompt's
+#       Eid empties venues. Three gazetted days of family visits. The spec's
 #       x1.8 would have made the three emptiest days of the year the busiest.
 #
 #   EID_REBOUND_MULT 1.45
@@ -607,8 +607,8 @@ RATING_SLOPE = 0.55
 # express, and the model would look permanently miscalibrated for a reason no
 # amount of tuning could fix.
 #
-# The wave prompt specifies a single exponent of 1.2; these two bracket it, and
-# the row-weighted mean lands near it. The prompt's intent is preserved, its
+# The spec gives a single exponent of 1.2; these two bracket it, and
+# the row-weighted mean lands near it. The spec's intent is preserved, its
 # uniformity is not.
 ELASTICITY_PEAK = 0.85
 ELASTICITY_OFFPEAK = 2.20
@@ -618,13 +618,13 @@ ELASTICITY_OFFPEAK = 2.20
 # PRICE_AT_LIST_PROB: the share of rows offered at exactly the list price. Real
 # venues do not experiment on every slot, so a point mass at ratio 1.00 keeps the
 # distribution plausible; the remaining rows sweep the whole band so elasticity
-# is identified across it, including at the edges Wave C's grid will search.
+# is identified across it, including at the edges the model's grid search reaches.
 #
 # Offered prices are rounded to PKR 50 to match `mlClient.js`'s PRICE_ROUND_TO,
 # so training data lives on the same lattice the price sweep will search. Then
 # re-clamped, because rounding a boundary can cross it: base 1010 -> min 707 ->
 # rounds to 700, which is below the floor. That is the exact bug found and fixed
-# in mlClient.js's guardrail during Wave A, and it is the same arithmetic here.
+# in mlClient.js's guardrail, and it is the same arithmetic here.
 PRICE_AT_LIST_PROB = 0.30
 PRICE_ROUND_TO = 50  # mirrors backend/src/services/mlClient.js:121
 
@@ -638,7 +638,7 @@ PRICE_ROUND_TO = 50  # mirrors backend/src/services/mlClient.js:121
 #                  `venue_id` is deliberately not a feature (cold start), so this
 #                  is permanently unlearnable — exactly the point.
 # SLOT_NOISE_SD    per-row log-odds noise: who happened to be free that night.
-# CANCEL_RATE      5% of gross bookings flip to not-booked. The wave prompt asks
+# CANCEL_RATE      5% of gross bookings flip to not-booked. The spec asks
 #                  for it, and it also keeps the label from being a deterministic
 #                  function of p.
 VENUE_EFFECT_SD = 0.35
@@ -666,7 +666,7 @@ DEFAULT_OUT = Path("data/bookings_synth.csv")
 # `features.build_frame(rows)`, which constructs each record from
 # `build_feature_dict` and therefore reads only the keys the contract names. A
 # diagnostic column is structurally incapable of reaching the model — there is no
-# `df.drop(target)` anywhere in the pipeline, and Wave C must not introduce one.
+# `df.drop(target)` anywhere in the pipeline, and training must not introduce one.
 # That rule is restated in data/README.md as a must.
 #
 # LEAKY_COLUMNS are the ones that would be catastrophic: they encode the answer.
@@ -1058,7 +1058,7 @@ def simulate(seed: int, start: date, days: int, row_cap: int | None) -> Dataset:
 # stops being true is worth something.
 #
 # Every check answers a question that, answered wrongly, would silently poison
-# Wave C. They run before the CSV is accepted. On failure the data is written to
+# They run before the CSV is accepted. On failure the data is written to
 # `<out>.rejected.csv` instead — debuggable, but impossible to train on by
 # accident, because nothing in the pipeline looks for that name.
 
@@ -1540,7 +1540,7 @@ def check_elasticity_asymmetry(frame: pd.DataFrame) -> CheckResult:
 
 
 def check_row_count(frame: pd.DataFrame, capped: bool) -> CheckResult:
-    """The wave specifies 80-120K rows. Report rather than fail on a capped run."""
+    """The specifies 80-120K rows. Report rather than fail on a capped run."""
     n = len(frame)
     if capped:
         return CheckResult("row_count", True, f"{n:,} rows (CAPPED run -- not the full dataset)")
@@ -1548,7 +1548,7 @@ def check_row_count(frame: pd.DataFrame, capped: bool) -> CheckResult:
     return CheckResult(
         "row_count",
         ok,
-        f"{n:,} rows from {len(VENUES)} venues x open hours x days (wave target 80,000-120,000)",
+        f"{n:,} rows from {len(VENUES)} venues x open hours x days (target 80,000-120,000)",
     )
 
 
@@ -1584,7 +1584,7 @@ def _library_versions() -> dict[str, str]:
         "numpy": np.__version__,
         "pandas": pd.__version__,
     }
-    try:  # scikit-learn is Wave C's dependency; recorded here if already present
+    try:  # scikit-learn is the trainer's dependency; recorded here if already present
         import sklearn
 
         versions["scikit-learn"] = sklearn.__version__
@@ -1749,7 +1749,7 @@ def write_outputs(ds: Dataset, checks: list[CheckResult], out: Path) -> Path:
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Generate SportLynk's synthetic booking history (S.3 Wave B).",
+        description="Generate SportLynk's synthetic booking history.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "The default window is FIXED, not rolling, so --seed alone reproduces the\n"

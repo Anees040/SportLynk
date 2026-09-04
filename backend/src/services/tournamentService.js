@@ -109,7 +109,7 @@ const STATUS = Object.freeze({
  * means "paid and in the field". A tournament with `requires_approval = false`
  * goes straight to `accepted`, which is why `discoveryService.listTournaments`
  * counts both toward capacity: counting only one of them is how that function
- * came to report 0 spots taken for every tournament before this wave.
+ * came to report 0 spots taken for every tournament.
  */
 const REG = Object.freeze({
   REGISTERED: 'registered', ACCEPTED: 'accepted', REJECTED: 'rejected',

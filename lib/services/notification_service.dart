@@ -25,8 +25,8 @@ class NotificationPage {
 /// The notification preferences form, in one object.
 ///
 /// `categories` and `unmutable` come from the server rather than a const list here:
-/// they are derived from `notificationTypes.js`, so a category added in the next
-/// wave appears in the settings screen with no client change, and `system` is named
+/// they are derived from `notificationTypes.js`, so a category added later appears
+/// in the settings screen with no client change, and `system` is named
 /// as unmutable by the same authority that enforces it in `pushJob`.
 class NotificationPrefs {
   final bool muteAll;

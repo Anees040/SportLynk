@@ -1,5 +1,5 @@
 """
-Pricing endpoints  —  contract frozen in S.3 Wave A, inference landed in Wave D
+Pricing endpoints  —  the contract was frozen before inference landed
 
 WHAT THESE TWO ENDPOINTS ARE
 `POST /predict/price` sweeps the allowed price band for one slot and returns the
@@ -63,9 +63,9 @@ takes. `extra="forbid"`: both sides of this call live in one repo, so a field na
 the server does not recognise is a bug to surface immediately, not a value to
 silently drop.
 
-The route paths stay `/predict/price` and `/predict/demand`. The Wave D brief writes
-them as `/pricing/suggest` and `/pricing/forecast`; renaming would break the client
-and the harness that were built against the Wave A contract for no behavioural gain,
+The route paths stay `/predict/price` and `/predict/demand`. A later spec writes them
+as `/pricing/suggest` and `/pricing/forecast`; renaming would break the client and
+the harness that were built against the frozen contract for no behavioural gain,
 so the names are unchanged and the mapping is recorded in doc/PROGRESS.md.
 """
 
@@ -244,9 +244,9 @@ class DemandRequest(CamelModel):
     venue_id: str | None = Field(default=None, max_length=64)
 
 
-# Responses — declared now, returned from Wave C
+# Responses — declared ahead of the routes that return them
 #
-# Declared in Wave A on purpose: this is what makes /docs a contract the Node and
+# Declared on purpose: this is what makes /docs a contract the Node and
 # Flutter work can be written against before the model exists, and it is what
 # mlClient.js's own response shape was designed to mirror.
 

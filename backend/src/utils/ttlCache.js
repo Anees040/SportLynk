@@ -2,7 +2,7 @@
  * ttlCache.js — a small, bounded, in-memory TTL cache.
  *
  * Why this exists
- * S.3 Wave D puts two ML-backed reads on the owner dashboard: a price suggestion and
+ * The owner dashboard carries two ML-backed reads: a price suggestion and
  * a 72-hour demand forecast. Both cost a cross-process HTTP call to the Python
  * service with a 2-second timeout, and both answer questions whose answers do not
  * change minute to minute — a demand forecast for the next 72 hours is the same
@@ -47,7 +47,7 @@
 /** Entries per cache. A bound, not a tuning knob — see the note in the constructor. */
 const DEFAULT_MAX_ENTRIES = 500;
 
-/** One hour, the TTL S.3 Wave D specifies for the owner pricing reads. */
+/** One hour, the TTL specified for the owner pricing reads. */
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 class TtlCache {

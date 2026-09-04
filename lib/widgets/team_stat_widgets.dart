@@ -1,4 +1,4 @@
-/// Team stat visuals — S2 Wave D.
+/// Team stat visuals.
 ///
 /// Everything the rankings screen and the team profile draw for ratings, form
 /// and history lives here, for the same reason widgets/match_widgets.dart exists:

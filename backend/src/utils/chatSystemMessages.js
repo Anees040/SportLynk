@@ -61,7 +61,7 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
     case 'visibility_changed':
       return `${a} made the team ${v === 'private' ? 'private' : 'public'}`;
 
-    // Match lifecycle (S.2 Wave C)
+    // Match lifecycle
     // These pills are posted into both teams' chats, so `v` is always the other
     // TEAM from the perspective of the channel being written to. The two
     // asymmetric moments (who sent, who received) get their own event rather
@@ -77,7 +77,7 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
       return `The match against ${v || 'the other team'} was declined`;
     case 'match_expired':
       return `The challenge against ${v || 'the other team'} expired`;
-    // S.7 Wave D. A challenge unwound by a suspension is not an expiry and must
+    // A challenge unwound by a suspension is not an expiry and must
     // not read as one -- nobody failed to reply. The wording names SportLynk as
     // the actor without naming which side was suspended, because a ban is between
     // the platform and that account.
@@ -93,7 +93,7 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
         : `The match against ${v || 'the other team'} has been verified`;
     case 'match_disputed':
       return `The result against ${v || 'the other team'} is disputed and under review`;
-    // S.7 Wave D. The per-team half of a ruling. `match_ruled` below is the neutral
+    // The per-team half of a ruling. `match_ruled` below is the neutral
     // sentence for the shared captain room; this one names the opponent, because in
     // a team's own chat "the other team" is not a fact anybody has to guess at.
     case 'match_ruled_team':
@@ -102,7 +102,7 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
         : `SportLynk ruled on the match against ${v || 'the other team'}`;
 
 
-    // Booking rooms (S.7 Wave B)
+    // Booking rooms
     // The opening pill does double duty: it tells the player why a thread they
     // did not create just appeared, and it gives the room a last_message_preview
     // so the chat list has something to show before anybody types.
@@ -113,7 +113,7 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
     case 'booking_no_show':
       return 'The venue marked this booking as a no-show';
 
-    // The coordination room (S.7 Wave B, FR8.5)
+    // The coordination room (FR8.5)
     // Neutral wording, every one of them. A captain room holds both teams, so
     // the per-team sentences above ("you challenged them") would be wrong for
     // half the readers. These say what happened without taking a side, which is

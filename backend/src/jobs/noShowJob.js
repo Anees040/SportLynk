@@ -176,7 +176,7 @@ async function settleNoShow(bookingId) {
       body: `${b.player_name} missed their slot. PKR ${penalty} deposit credited to your wallet.`,
     });
 
-    // S.7 Wave B -- same pill as the owner's manual mark, so the room reads the
+    // Same pill as the owner's manual mark, so the room reads the
     // same whether a person or the sweep decided it.
     const nsPill = await chat.announceInRoom(
       client, await chat.bookingChannelId(client, b.id), 'booking_no_show', {},

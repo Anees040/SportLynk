@@ -1,5 +1,5 @@
 /**
- * Matches API (S.2 Wave C) — challenge, respond, result, verify, dispute, list.
+ * Matches API — challenge, respond, result, verify, dispute, list.
  *
  * The state machine — doc/API.md is the authoritative copy, chk_matches_status
  * (migration 016) is the database's copy, utils/matchCore.STATUS is the code's.
@@ -58,7 +58,7 @@ const elo = require('../utils/elo');
 const settings = require('../utils/globalSettings');
 const ml = require('../services/mlClient');
 const roster = require('../services/rosterService');
-// S.7 Wave A: the tournament hook. Only two entry points are used from here —
+// The tournament hook. Only two entry points are used from here —
 // matchContext (authority + K for a booking-less fixture) and advanceAfterMatch
 // (the bracket, in this transaction). Every tournament rule stays in the service.
 const tournaments = require('../services/tournamentService');
@@ -158,7 +158,7 @@ function parseScore(raw, label) {
 
 /**
  * How much rating this match can still move — stamped onto the dispute row when it
- * is raised (S.7 Wave D).
+ * is raised.
  *
  * Why it is stored and not computed in the queue
  * The admin queue sorts by it (`idx_disputes_queue`), and a value recomputed per
@@ -1257,7 +1257,7 @@ router.patch('/:id/verify', async (req, res, next) => {
     // Authority: the owner of the venue this match is booked at. Expressed as a
     // WHERE clause so ownership of this venue is the permission, not a role claim.
     //
-    // S.7 Wave A added a second kind of match that reaches this handler. A
+    // A second kind of match reaches this handler. A
     // tournament fixture reserves its slot instead of booking it, so there is no
     // `bookings` row to join through and the old `if (!m.booking_id) 409` refused
     // every tournament result. For those, authority comes from

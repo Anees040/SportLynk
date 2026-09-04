@@ -231,7 +231,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
                   color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         ]),
         actions: [
-          // Wave C. Admins receive notifications like anyone else -- a dispute
+          // Admins receive notifications like anyone else -- a dispute
           // raised, an owner application, a suspension they issued -- and this is
           // also the widget that starts the notification stack for the session,
           // which is why it is on all three home screens and not just the two
@@ -379,7 +379,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
                   : '$_openFlags ${_openFlags == 1 ? 'review' : 'reviews'} awaiting moderation',
               _openModeration),
           const SizedBox(height: 8),
-          // S.7 Wave D -- the admin desk
+          // The admin desk
           // Disputes first: a disputed match is frozen until someone rules on it, so
           // it is the only queue here where waiting costs the players something.
           _quickAction(Icons.gavel_rounded, 'Match Disputes',

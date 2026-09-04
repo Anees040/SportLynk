@@ -37,7 +37,7 @@
  * review targets the opposing team's captain — see routes/reviews.js), so the
  * review-based components move a captain's score as the team's representative.
  * Attendance is genuinely per-user. This matches the captain-to-captain review
- * model chosen for Wave C.
+ * model the review stack settled on.
  *
  * The functions take any pg client (a transaction client or the pool) so the
  * caller controls atomicity: the no-show and review paths call recomputeTrust

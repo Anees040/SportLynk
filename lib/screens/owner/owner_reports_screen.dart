@@ -1,4 +1,4 @@
-// owner_reports_screen.dart — S.7 Wave D · D5 / FR4.16. The financial export.
+// owner_reports_screen.dart — D5 / FR4.16. The financial export.
 //
 // One screen, two scopes. `platform: false` is the owner's own venues
 // (`GET /api/owner/reports/financial`); `platform: true` is every venue on the

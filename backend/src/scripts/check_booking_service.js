@@ -1,5 +1,5 @@
 /**
- * check_booking_service.js — proves the S.6 Wave C extraction did not change money.
+ * check_booking_service.js — proves the service extraction did not change money.
  *
  * Usage: node src/scripts/check_booking_service.js
  *

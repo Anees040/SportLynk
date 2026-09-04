@@ -1,4 +1,4 @@
-// admin_dispute_detail_screen.dart — S.7 Wave D · D5 / FR10.6, FR10.7.
+// admin_dispute_detail_screen.dart — D5 / FR10.6, FR10.7.
 //
 // The case file. Everything an admin needs to overrule two captains, on one
 // screen, in the order a human reads it: what each side claims, whether

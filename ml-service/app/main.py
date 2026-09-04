@@ -1,5 +1,5 @@
 r"""
-SportLynk ML service  —  FastAPI application  —  S.3 Wave A
+SportLynk ML service  —  FastAPI application
 
 WHAT THIS PROCESS IS
 The third tier of SportLynk (SRS CON-5). Flutter talks to Node; Node talks to
@@ -157,7 +157,7 @@ async def lifespan(app: FastAPI):
             entry.get("modelVersion") or entry.get("reason") or "",
         )
     if all(e["status"] != "ready" for e in inventory):
-        # Loud, because between Wave A and Wave B this is the EXPECTED state, and
+        # Loud, because before a model is trained this is the EXPECTED state, and
         # the Node client answering with heuristic prices must never look like the
         # model working.
         log.warning("no model is loaded — /predict/* will answer 503 model_not_loaded")
@@ -333,7 +333,7 @@ async def api_key_middleware(
 @app.get("/health", summary="Service and model inventory (public)")
 def health() -> dict[str, Any]:
     """
-    Wave requirement #1: report loaded model versions.
+    Requirement #1: report loaded model versions.
 
     `success` is true whenever the PROCESS is healthy, including when no model is
     loaded — those are different questions and conflating them would make an

@@ -2,7 +2,7 @@ library;
 
 import 'team.dart' show asNum;
 
-/// Wire models for the S.5 Wave B recommenders — the player-for-team rail (FR2.8)
+/// Wire models for the recommenders — the player-for-team rail (FR2.8)
 /// and the re-ranked opponent list (FR5.3 – FR5.5).
 ///
 /// The one rule this file exists to enforce
@@ -195,7 +195,7 @@ class RankingInfo {
 
   /// The short attribution line. Says "SportLynk ranking" and not "AI": this is a
   /// published weighted formula, not a trained model, and badging it as AI would
-  /// be the one claim the wave cannot support.
+  /// be the one claim the model cannot support.
   String get label => available ? 'SportLynk ranking' : 'Basic ordering';
 
   /// The spec's fingerprint, short enough for a footer. Present so a demo can

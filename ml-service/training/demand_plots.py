@@ -1,8 +1,8 @@
-"""The accept-criterion figure for S.3 Wave B: reports/demand_patterns.png.
+"""The accept-criterion figure for the booking simulator: reports/demand_patterns.png.
 
 WHAT THIS FIGURE IS FOR
 -----------------------
-The wave's accept criterion is not "a plot exists". It is:
+The accept criterion is not "a plot exists". It is:
 
     "curves must look like real Pakistani turf behaviour (7-11pm rush,
      Friday spikes)"
@@ -28,11 +28,11 @@ So each panel is built to be falsifiable by a domain expert at a glance:
                                 DOW_MULT (Fri 1.35 > Sun 1.30) until you account
                                 for Friday's x0.35 Jummah penalty; all three are
                                 labelled so the ordering cannot be misread. This
-                                is where the wave prompt's "Fri/Sat/Sun x1.6" was
+                                is where the spec's "Fri/Sat/Sun x1.6" was
                                 wrong: one weekend flag cannot produce this shape.
   3. MONTH                      Must be BIMODAL — spring and autumn peaks with a
                                 summer-heat and a winter trough. A single sine
-                                wave, which the prompt asked for, produces one
+                                wave, which the spec asked for, produces one
                                 hump and is visibly wrong here. TWO lines, because
                                 the raw monthly rate is confounded by Ramadan: it
                                 puts March at the annual LOW even though March is

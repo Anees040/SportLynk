@@ -1,5 +1,5 @@
 """
-Frozen feature contract for the venue recommender  —  S.5 Wave A
+Frozen feature contract for the venue recommender
 
 WHAT THIS MODULE IS
 The third frozen-contract module, after `core/features.py` (pricing) and
@@ -27,7 +27,7 @@ starts recommending the wrong thing after a data refresh:
     retrain is a retrain and not an edit to this file.
 
 WHY EACH BLOCK IS NORMALISED SEPARATELY
-The wave spec says "normalize each block", and the reason is that cosine
+The spec says "normalize each block", and the reason is that cosine
 similarity has no idea that fourteen amenity columns and one sport column are
 different kinds of statement. Left raw, a venue with eight amenities would dominate
 the similarity of every user who has ever booked anywhere, because eight ones
@@ -46,9 +46,9 @@ keeps its ordering. `indoor/outdoor` avoids the identical trap by being encoded 
 2-column one-hot rather than a single 0/1 flag.
 
 WHAT THE SCHEMA DOES NOT HAVE (stated here, not worked around silently)
-The wave spec names four inputs this database does not store. None is invented, and
+The spec names four inputs this database does not store. None is invented, and
 none is added by a migration — golden rule 1 forbids schema "improvements" outside
-the wave, and golden rule 2 forbids ad-hoc DDL:
+the task at hand, and golden rule 2 forbids ad-hoc DDL:
 
   * ZONE — there is no zone/area column. It is DERIVED from `venues.address` by
     `zone_of()` below, falling back to the city. A real derivation with a real
@@ -66,7 +66,7 @@ the wave, and golden rule 2 forbids ad-hoc DDL:
     carries exactly that signal, so a derived budget would double-count bookings
     while wearing the label of an independent statement. `spec()` publishes
     `statedBudget: null` so the gap is legible from outside Python.
-  * FAVOURITES — no favourites/wishlist table exists in the schema. The wave spec's
+  * FAVOURITES — no favourites/wishlist table exists in the schema. The spec's
     own wording ("favorited/highly-reviewed") supplies the alternative, so the 0.2
     affinity component is built from the user's OWN reviews with `rating >= 4`,
     filtered to `hidden = false` and `venue_id IS NOT NULL` per migration 017.
@@ -127,7 +127,7 @@ BLOCK_ORDER: tuple[str, ...] = (
 #: docstring: L2-normalising a 1-D block collapses it to a constant.
 L2_BLOCKS = frozenset({BLOCK_SPORT, BLOCK_PRICE, BLOCK_AMENITIES, BLOCK_ZONE, BLOCK_INDOOR})
 
-#: Number of price bins. 5 quantile bins, per the wave spec.
+#: Number of price bins. 5 quantile bins, per the spec.
 PRICE_BUCKETS = 5
 
 #: Rating scale of `venues.rating` (decimal(3,2), 1–5).
@@ -143,7 +143,7 @@ RATING_PRIOR_WEIGHT = 5.0
 #: install. 3.5/5 is deliberately mid-scale and not flattering.
 RATING_PRIOR_FALLBACK = 3.5
 
-# User-vector weights — FROZEN (the wave spec's numbers)
+# User-vector weights — FROZEN (the spec's numbers)
 
 #: 0.5 recency-weighted booking history · 0.3 stated preferences · 0.2 affinity
 #: (highly-reviewed venues). Each component is unit-normalised before the blend, so
@@ -175,7 +175,7 @@ RECENCY_HALF_LIFE_DAYS = 90.0
 
 # Display mapping — FROZEN
 
-#: `match% = round(55 + 43 x sim)`, straight from the wave spec. The point of the
+#: `match% = round(55 + 43 x sim)`, straight from the spec. The point of the
 #: floor and the span is honesty: cosine similarity on non-negative vectors lives in
 #: [0, 1], so the badge spans 55–98 and never shows 100%. A 100% match is a claim no
 #: content-based model can support, and a badge that shows it teaches the user to
@@ -193,7 +193,7 @@ LABEL_HISTORY = "For you"
 LABEL_COLD_START = "Popular nearby"
 
 #: Cold start (no bookings and no high reviews): popularity in the user's city
-#: blended with their stated sports, per the wave spec. The weights renormalise when
+#: blended with their stated sports, per the spec. The weights renormalise when
 #: nothing is stated, which leaves pure popularity.
 COLD_W_POPULARITY = 0.6
 COLD_W_SPORT = 0.4
@@ -565,7 +565,7 @@ def area_token(address: Any) -> str | None:
 def zone_of(address: Any, city: Any) -> str:
     """`"<CITY>:<AREA>"` — the derived zone key.
 
-    City-scoped on purpose. "City area" in the wave spec means an area WITHIN a city,
+    City-scoped on purpose. "City area" in the spec means an area WITHIN a city,
     and prefixing keeps two cities' identically-named blocks apart while giving the
     zone block a useful side effect: because a user's history is concentrated in one
     city, this block quietly encodes "near where you already play" as well as "the
@@ -734,7 +734,7 @@ class VenueSpace:
 
         Sorted vocabularies, deliberately: two runs over the same snapshot must
         produce byte-identical column orders, and a set's iteration order is not a
-        promise. S3-E's reproducibility demo turns on exactly this kind of detail.
+        promise. The reproducibility demo turns on exactly this kind of detail.
         """
         if not venues:
             raise RecoFeatureError("cannot fit a VenueSpace on an empty venue list")
@@ -880,7 +880,7 @@ def venue_matrix(
 def stated_vector(sports: Any, space: VenueSpace) -> np.ndarray:
     """The stated-preference component: SPORTS ONLY, and the docstring says why.
 
-    `player_profiles` stores no budget, so the wave spec's "sports + budget from
+    `player_profiles` stores no budget, so the spec's "sports + budget from
     profile" is half-supportable. The half that exists is built here; the half that
     does not is reported as `statedBudget: null` in `spec()` rather than back-filled
     from booking prices, which the history component already covers — see the module
@@ -927,7 +927,7 @@ def blend_user_vector(
 ) -> tuple[np.ndarray, dict[str, float]]:
     """`(user vector, weights actually applied)`.
 
-    Two things happen here, and the wave spec asks for both:
+    Two things happen here, and the spec asks for both:
 
     1. EACH COMPONENT IS UNIT-NORMALISED FIRST. Without it, 0.5/0.3/0.2 would be
        multiplied by whatever magnitude each component happened to have, and a
@@ -986,7 +986,7 @@ def cosine_scores(matrix: np.ndarray, row_norms: np.ndarray, user_vector: np.nda
 
 
 def match_pct(similarity: Any) -> int:
-    """`round(55 + 43 x sim)` — the wave spec's display mapping, clamped to 55–98."""
+    """`round(55 + 43 x sim)` — the spec's display mapping, clamped to 55–98."""
     value = _as_float(similarity)
     value = 0.0 if value is None else max(0.0, min(1.0, value))
     return int(round(MATCH_PCT_BASE + MATCH_PCT_SPAN * value))
@@ -1139,7 +1139,7 @@ def reco_spec_fingerprint() -> str:
 
 #: Canonical amenities this contract recognises — distinct from the fitted vocabulary
 #: inside an artifact, which lists only the ones some venue has. `water` is
-#: recognised here and named in the wave spec, but no seed venue carries a water key,
+#: recognised here and named in the spec, but no seed venue carries a water key,
 #: so it will not appear in a fitted space until an owner adds one. Publishing both
 #: lists is what makes that difference visible instead of looking like a bug.
 RECOGNISED_AMENITIES: tuple[str, ...] = tuple(sorted(set(AMENITY_ALIASES.values())))

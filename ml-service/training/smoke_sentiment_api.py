@@ -1,5 +1,5 @@
 """
-Smoke test for the sentiment endpoints  —  S.4 Wave B
+Smoke test for the sentiment endpoints
 
 WHY THIS EXISTS AS A SCRIPT AND NOT A pytest FILE
 It is the same shape as the checks in `backend/src/scripts/`: something you run,

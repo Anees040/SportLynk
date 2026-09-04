@@ -38,11 +38,11 @@
  * dashboard hides the confidence chip when it is null.
  *
  * Why `fetch` and not axios
- * The wave text said axios. Node here is v22 (`engines: >=20`), where global
+ * The spec said axios. Node here is v22 (`engines: >=20`), where global
  * `fetch` and `AbortSignal.timeout()` are stable and give the exact 2-second
- * timeout the wave asks for. scripts/run_match_flow_check.js already uses `fetch`,
+ * timeout the spec asks for. scripts/run_match_flow_check.js already uses `fetch`,
  * so this is house style, and axios would add a dependency and a supply-chain
- * surface for zero functional gain. The contract the wave specified — 2s timeout,
+ * surface for zero functional gain. The contract the specified — 2s timeout,
  * ML_* env vars, heuristic fallback, a `source` field — is implemented exactly.
  *
  * Guardrails apply to both paths
@@ -66,7 +66,7 @@
 // vars after requiring this module — and so a service started before .env was
 // finished picks up the change on restart rather than caching an empty string.
 
-/** Default 2s, exactly as the wave specifies. */
+/** Default 2s, exactly as the specifies. */
 const DEFAULT_TIMEOUT_MS = 2000;
 
 /**
@@ -86,11 +86,11 @@ const PEAK_START_HOUR = 18;
 const PEAK_END_HOUR = 22;
 
 /**
- * The peak-hour uplift, from the wave spec: peak hour -> base x 1.15.
+ * The peak-hour uplift, from the spec: peak hour -> base x 1.15.
  *
  * A stated business rule, not a measurement. It is the fallback precisely because
  * it needs no data: the live database has 22 bookings and zero price variation, so
- * there is nothing to fit a better rule to. Wave B's model replaces it as the
+ * there is nothing to fit a better rule to. The trained model replaces it as the
  * primary path; this stays as the floor.
  */
 const HEURISTIC_PEAK_MULTIPLIER = 1.15;
@@ -318,7 +318,7 @@ async function call(path, { method = 'POST', payload = null } = {}) {
         'X-API-Key': apiKey(),
       },
       body: payload === null ? undefined : JSON.stringify(payload),
-      // The wave's 2-second ceiling. AbortSignal.timeout covers DNS, connect and
+      // The specified 2-second ceiling. AbortSignal.timeout covers DNS, connect and
       // response, which a per-socket timeout option would not.
       signal: AbortSignal.timeout(timeoutMs()),
     });
@@ -414,7 +414,7 @@ function isPeakHour(hour) {
 }
 
 /**
- * The fallback rule, from the wave spec: peak hour -> base x 1.15, else base.
+ * The fallback rule, from the spec: peak hour -> base x 1.15, else base.
  *
  * Deliberately the simplest defensible rule. Something more elaborate here would
  * be a second, untrained pricing model competing with the real one, and it would
@@ -592,7 +592,7 @@ async function suggestPrice(ctx = {}) {
   if (!res.ok) {
     recordFailure();
     // Logged once per breaker cycle, not per request. A 503 here is the EXPECTED
-    // state between Wave A and Wave B (no model trained yet), so this must not
+    // state before a model is trained, so this must not
     // read as an incident.
     warnOnce(
       `price-fail-${res.status}`,
@@ -1003,10 +1003,10 @@ async function recommendVenues(userId, { limit = 20 } = {}) {
   return { source: SOURCE_MODEL, available: true, items: Array.isArray(data.items) ? data.items : [], profile: data.profile || null, label: data.label || 'For you', modelVersion: data.modelVersion || null, reason: null };
 }
 
-// Player & opponent ranking (S.5 Wave B)
+// Player & opponent ranking
 //
 // These two call `core/reco_rank.py`, which is a deterministic weighted scorer and
-// not a trained model — the wave states the weights literally, so there is nothing
+// not a trained model — the spec states the weights literally, so there is nothing
 // to fit. Hence a third `source` value: `'ranked'`. Calling it `'model'` would put
 // an "AI" badge over a weighted mean on a screen a real captain reads, and calling
 // it `'heuristic'` would be worse, because that word already means "the ml-service
@@ -1134,7 +1134,7 @@ async function rankSpec() {
  * Why the label list is not hard-coded here
  * Every other model in this file has a stable output shape; the assistant's does
  * not. `intent_spec.py` is a living artifact — it went from 15 labels
- * (assistant-intents-v1) to 23 (v2) inside one wave — and the released joblib can
+ * (assistant-intents-v1) to 23 (v2) inside one release — and the released joblib can
  * lag the module that describes it, so at any moment `/nlu/spec` may advertise
  * labels `/nlu/parse` cannot yet emit. A copy of the label list in Node would be
  * wrong for one of those two states.

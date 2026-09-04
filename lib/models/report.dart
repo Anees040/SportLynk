@@ -1,4 +1,4 @@
-/// report.dart — S.7 Wave D · FR4.16. The financial export, as the preview screen
+/// report.dart — FR4.16. The financial export, as the preview screen
 /// reads it (`?format=json` on the same two routes that stream the CSV).
 ///
 /// The COLUMNS come from the server, and so does their order.

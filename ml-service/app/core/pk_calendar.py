@@ -2,7 +2,7 @@
 
 WHY THIS FILE EXISTS
 --------------------
-S.3 Wave B has to generate a synthetic booking history that a viva committee will
+The pricing model needs a synthetic booking history that a viva committee will
 believe. "Evening slots are busier" is not enough: in Pakistan the single largest
 reshaping of evening sports demand in the year is RAMADAN, and the second largest
 is the Eid week that follows it. A simulator that ignores both produces a tidy
@@ -21,14 +21,14 @@ buried in the generator, for three reasons:
      in Pakistan (games move to post-Taraweeh), but there is no hijri calendar in
      this repo and inventing one would be a data source, not a feature."
      This module IS that data source. It does not add the feature — that needs a
-     FEATURE_SPEC_VERSION bump, which is out of scope for this wave — but it
+     FEATURE_SPEC_VERSION bump, which is out of scope here — but it
      removes the reason the feature could not exist, so v2 becomes a small change
      instead of a new dependency.
   3. When v2 does add it, the SERVING path needs the same table. A calendar that
      lived under `training/` would have to be moved on the day it became useful,
      and a moved module is a module that gets forked.
 
-AMENDMENT TO A NOTE I WROTE IN WAVE A
+AMENDMENT TO AN EARLIER NOTE
 -------------------------------------
 `training/generate_bookings.py` says "the ONLY shared code is app/core/features.py".
 That is now inaccurate by the letter and unchanged in substance. The invariant that

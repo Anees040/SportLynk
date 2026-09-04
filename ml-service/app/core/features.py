@@ -1,5 +1,5 @@
 """
-Shared feature builder for the dynamic-pricing model  —  S.3 Wave A
+Shared feature builder for the dynamic-pricing model
 
 THIS MODULE IS THE FEATURE CONTRACT. Training imports it, serving imports it, and
 neither is allowed its own copy of any derivation below. Train/serve skew — the
@@ -36,7 +36,7 @@ The live database holds 22 bookings, and every slot's price equals its venue's
 returns 1 for every venue. So the real data contains no elasticity signal at all:
 there is not one observation of the same slot offered at two prices. No model,
 however good, can learn a price response from data that never varied the price.
-training/generate_bookings.py (S.3 Wave B) therefore simulates the demand process
+training/generate_bookings.py therefore simulates the demand process
 explicitly, and reports/model_card.md must say so in those words. The honest claim
 is "the model recovers the elasticity the simulator encodes, and generalises across
 hour/day/lead-time/venue-tier", not "the model learned Pakistani market demand".
@@ -103,7 +103,7 @@ PEAK_END_HOUR = 22
 #: The price band the model is trained on, expressed as a multiple of the venue's
 #: own `price_per_hour`. One band, three consumers, on purpose:
 #:   * generate_bookings.py samples offered prices inside it;
-#:   * the Wave-C price sweep searches inside it;
+#:   * the price sweep searches inside it;
 #:   * mlClient.js clamps any suggestion into it.
 #: Because they are the same band, a suggestion can never be an extrapolation —
 #: the model is never asked about a price it has no evidence for.
@@ -443,7 +443,7 @@ def validate_frame(frame: pd.DataFrame) -> None:
 
 def spec() -> dict[str, Any]:
     """
-    The contract as JSON, for `/health`, the model card, and Wave B/C to read
+    The contract as JSON, for `/health`, the model card, and the trainers to read
     instead of hard-coding. camelCase because it goes on the wire, where every
     other SportLynk API is camelCase.
     """

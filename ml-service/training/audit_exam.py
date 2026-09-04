@@ -1,5 +1,5 @@
 r"""
-Exam audit  —  S.4 Wave B integrity + error diagnosis
+Exam audit  —  exam integrity + error diagnosis
 
 TWO QUESTIONS, ONE SCRIPT, BECAUSE THE FIRST ONE GATES THE SECOND
 

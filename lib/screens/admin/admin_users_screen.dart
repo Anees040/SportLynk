@@ -1,4 +1,4 @@
-// admin_users_screen.dart — S.7 Wave D · D5 / FR10.8.
+// admin_users_screen.dart — D5 / FR10.8.
 //
 // Find an account, see what it is doing on the platform, suspend it or bring it
 // back. Search is server-side (`q` matches name, email or phone) and paging is

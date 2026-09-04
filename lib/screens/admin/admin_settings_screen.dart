@@ -1,4 +1,4 @@
-// admin_settings_screen.dart — S.7 Wave D · D5 / FR10.9–10.11.
+// admin_settings_screen.dart — D5 / FR10.9–10.11.
 //
 // The catalogue is the server's. Every section, every field, its type, its unit,
 // its bounds, its step, its description, its default and whether it is currently
