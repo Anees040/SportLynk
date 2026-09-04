@@ -1,4 +1,4 @@
-"""Unit tests for the S.6 assistant NLU: intent classifier + rule entity extractor.
+"""Unit tests for the assistant NLU: intent classifier + rule entity extractor.
 
 WHY THIS FILE EXISTS
 --------------------
@@ -169,7 +169,7 @@ def test_artifact_fingerprints_match_the_live_modules():
 def test_artifact_declares_the_abstain_floor_the_router_applies():
     """0.45 from the spec, carried BY the artifact, not hard-coded in serving.
 
-    S.4 stranded a 0.90 sentiment threshold in a constant no artifact knew about.
+    The sentiment build stranded a 0.90 threshold in a constant no artifact knew about.
     Here the number ships with the model that was validated at it, and the router
     only supplies a default when the artifact declares none.
     """
@@ -869,7 +869,7 @@ def collect(pattern: str | None = None) -> list[tuple[str, object]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run the S.6 NLU unit tests without pytest.",
+        description="Run the NLU unit tests without pytest.",
     )
     parser.add_argument("-k", dest="pattern", default=None,
                         help="only tests whose name contains this substring")

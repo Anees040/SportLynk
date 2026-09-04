@@ -63,7 +63,7 @@ WHY THE PIPELINE IS SHAPED THIS WAY
 
 WHY SIGMOID CALIBRATION HERE, WHEN SENTIMENT SHIPPED SoftmaxSVC
 ---------------------------------------------------------------
-S.4 measured CalibratedClassifierCV and REJECTED it: Platt scaling cost the
+The sentiment build measured CalibratedClassifierCV and REJECTED it: Platt scaling cost the
 3-class sentiment model ~4 accuracy points and half its negative recall, so that
 model ships proba.SoftmaxSVC (softmax over raw OvR margins) and states plainly
 that its scores rank but are not posteriors.
@@ -1239,7 +1239,7 @@ def write_model_card(path: Path, record: dict) -> None:
               f"LogisticRegression on the same features scores {lg['val']:.4f} val / "
               f"{lg['exam']:.4f} exam, within "
               f"{rws(lg['val'] - u['val'], vn)} of the linear SVM on validation. The SVM "
-              f"ships because it is what S.4 established and because it trains in under "
+              f"ships because it is what the sentiment build established and because it trains in under "
               f"a second, NOT because it was measurably better.")
         A("")
     A("## Baselines")

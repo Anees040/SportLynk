@@ -44,7 +44,7 @@ const POLICY = {
 
 // Test-only timing overrides
 //
-// The S1 acceptance checklist asks for the 2h auto-approve rule to be tested
+// The acceptance checklist asks for the 2h auto-approve rule to be tested
 // "with a 1-min override constant". Editing the constant by hand works exactly
 // once and then risks being committed, so the override lives in the environment
 // instead: absent ⇒ the SRS defaults above, byte for byte.

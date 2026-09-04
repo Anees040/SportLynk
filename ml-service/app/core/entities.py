@@ -45,7 +45,7 @@ order:
     builds its language data once and caches it to disk. After that cache
     exists, a cold process costs 63-66 ms on its first parse and 3-4 ms after.
     Both numbers matter: 66 ms alone exceeds the whole request budget, and the
-    8.25 s returns on every fresh container, which is exactly what S.7's Render
+    8.25 s returns on every fresh container, which is exactly what the Render
     deploy is.
   * ``dateparser.parse("next friday")`` -> None.
     ``dateparser.parse("friday evening")`` -> None.

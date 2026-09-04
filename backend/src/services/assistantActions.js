@@ -1374,7 +1374,7 @@ async function tournamentDetail(ctx) {
  * `tournament_register` — the entry flow, and the only tournament money door.
  *
  * Chip-only, for a harder reason than `tournament_detail`. This one spends: the entry
- * fee leaves the captain's balance the moment it succeeds. The S.6 rule stands
+ * fee leaves the captain's balance the moment it succeeds. The rule stands
  * unchanged — money is reached by a chip and confirmed by the frozen lexicon, never by
  * a probability — so there is no trained label for it, and the classifier cannot start
  * an entry no matter what a user types. The path is: a card Scout painted → this
@@ -1611,7 +1611,7 @@ async function executeTournamentEntry(ctx) {
  * `my_tournaments` — chip-only, and a read.
  *
  * Chip-only not because it spends but because it does not exist in the released
- * classifier's 23 labels, and S.6's rule is that the label set is frozen: adding a
+ * classifier's 23 labels, and the rule is that the label set is frozen: adding a
  * trained label means retraining and re-releasing model #4, which this work does not
  * do. A user who types "meray tournaments" lands on `my_bookings`-style routing or a
  * clarify, and the chip on every tournament card gets them here in one tap.

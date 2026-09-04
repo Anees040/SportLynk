@@ -19,7 +19,7 @@ reasons, all of which matter downstream:
      'booked' or it does not. Nothing has to be aggregated, so nothing can be
      aggregated wrongly.
   2. PRICE IS AN INPUT FEATURE. That is what makes one model answer both questions
-     S.3 needs:
+     the pricing model needs:
          72-hour forecast   → hold price at the venue's current price, walk the
                               next 72 hourly slots.
          price suggestion   → hold the slot fixed, sweep a price grid, and take

@@ -1,4 +1,4 @@
-/// Team + roster models for S2.
+/// Team + roster models.
 ///
 /// Postgres returns decimal/BIGINT columns as *strings* over JSON, so every
 /// numeric field is parsed through [asNum] rather than a raw cast — a plain

@@ -665,7 +665,7 @@ async function handleTurn({
   // Money is gated by the chip and the FROZEN LEXICON -- never by the MODEL.
   // model #4 labels "haan lekin 7 baje" affirm at 0.61, which is over its own
   // threshold: read as a yes, it books the 6pm the user was correcting. verdictOf
-  // refuses that sentence on purpose (test/assistant.test.js S2), so the gate asks
+  // refuses that sentence on purpose (test/assistant.test.js), so the gate asks
   // where the affirm came from, not merely what it says.
   const decisive = decided.via === 'chip' || decided.via === 'lexicon';
   if (armed && (chipAction === 'confirm' || (!chipAction && decisive && intent === 'affirm'))) {

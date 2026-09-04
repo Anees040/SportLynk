@@ -179,7 +179,7 @@ function displayElo(team, base = 1000) {
   return Math.round(num(team && team.elo, base));
 }
 
-// Competitiveness (deterministic v1; S.5 blends this into the recommender)
+// Competitiveness (deterministic v1; the recommender blends this in)
 
 /**
  * comp = round(100 − (min(|a − b|, 400) / 400) × 95)   →  5 … 100
@@ -291,7 +291,7 @@ async function applyResult(client, {
       : { c: 'losses', o: 'wins' };
 
   // `elo_rating` is the legacy decimal from schema.sql. `elo` (int, from 013) is
-  // the authority, but the older column is still selected by pre-S2 code, so it
+  // the authority, but the older column is still selected by older code, so it
   // is kept in lockstep rather than left to drift into a contradiction.
   //
   // The same number is bound twice on purpose. `elo` is integer and `elo_rating`

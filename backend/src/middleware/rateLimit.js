@@ -64,7 +64,7 @@ const apiRateLimit = rateLimit({
     return userId ? `user:${userId}` : `ip:${ipKeyGenerator(req.ip)}`;
   },
 
-  // Uptime probes and the S.7 admin health panel poll /api/health; the realtime
+  // Uptime probes and the admin health panel poll /api/health; the realtime
   // handshake and its polling fallback live under /socket.io and carry their own
   // per-socket flood limiter. Throttling either here would make the API look
   // down (health) or silently break live chat under load (socket.io).

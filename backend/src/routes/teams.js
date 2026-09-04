@@ -258,7 +258,7 @@ router.get('/:id', async (req, res, next) => {
       access.fetchRoster(pool, team.id),
       pool.query(`SELECT id FROM chat_channels WHERE type='team' AND ref_id=$1`, [team.id]),
       // W/L/D, win rate (FR5.15), the last-5 form string and the
-      // 30-day activity count that S.5's recommender will consume as features.
+      // 30-day activity count that the recommender consumes as features.
       // Read here rather than from a second endpoint because the profile screen
       // needs all of it on first paint, and a second round trip would let the
       // header render a win rate before the chart knows the team is unranked.

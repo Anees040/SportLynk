@@ -98,7 +98,7 @@ app.use("/api/matches", matchRoutes);
 // GET /api/tournaments/mine to the detail handler as id="mine".
 app.use("/api/tournaments", tournamentRoutes);
 app.use("/api/internal", internalRoutes);
-// Scout (S.6). Requiring routes/assistant also requires services/assistantActions,
+// Scout. Requiring routes/assistant also requires services/assistantActions,
 // whose assertRoutable() throws at load time if any trained intent label has no
 // handler -- so a mismatch between model #4's labels and the action registry fails
 // the boot rather than one unlucky user's message.

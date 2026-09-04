@@ -13,7 +13,7 @@
  *
  *   rating_norm       avg(stars received) / 5           — reviews about the user
  *   attendance_rate   checked_in / (checked_in + no_show) — the user's bookings
- *   dispute_free_rate 1 − disputes_against / matches      — a pre-S.7 proxy (see below)
+ *   dispute_free_rate 1 − disputes_against / matches      — a proxy (see below)
  *   sentiment_norm    (avg(sentiment_score) + 1) / 2      — model score on review text
  *
  * Cold start. A brand-new user has no reviews, no bookings, no matches — every
@@ -25,13 +25,13 @@
  * UI can say "no data yet" rather than draw a misleading 50% bar); only the
  * aggregate substitutes the prior.
  *
- * dispute_free_rate is a proxy until S.7. Fault in a dispute is not adjudicated
+ * dispute_free_rate is a proxy. Fault in a dispute is not adjudicated
  * until an admin resolves it, so before then the metric can only count "disputes the
  * other side filed on a match this user's team played" as a soft negative
  * signal. A dispute this user's own team raised does not count against them
  * (that would punish objecting to a bad result), and a `dismissed` dispute is
  * dropped entirely. This is intentionally conservative and documented as a
- * proxy; S.7's resolution flow can refine it.
+ * proxy; the dispute resolution flow can refine it.
  *
  * Scope. Reviews target one user (a venue review has no user target; an opponent
  * review targets the opposing team's captain — see routes/reviews.js), so the

@@ -1330,7 +1330,7 @@ async function conversationG(client, ctx) {
   return ctx;
 }
 
-// H — FR8.15: one implementation, and the S.5 reads still work through it
+// H — FR8.15: one implementation, and the recommender reads still work through it
 
 /** Every .js file under src/, so a rule can be counted across the whole tree. */
 function srcFiles(dir, out = []) {
@@ -1375,7 +1375,7 @@ async function conversationH(client, ctx) {
     `\`INSERT INTO bookings\` appears in exactly ${inserts.length} of ${files.length} backend source `
     + 'files (`services/bookingService.js`), `INSERT INTO tournament_teams` and `INSERT INTO fixtures` in exactly one each (`services/tournamentService.js`), and `assistantActions.js` contains none of the nine money or tournament write primitives. Scout prepares; the shared service spends.');
 
-  // S.7 puts a second spender behind Scout, so the census has to grow with it: a
+  // A second spender now sits behind Scout, so the census has to grow with it: a
   // tournament entry is the same money rule as a booking and gets the same treatment.
   const entries = countIn(files, /INSERT INTO tournament_teams/g);
   eq(entries.length, 1, 'exactly ONE file in the whole backend enters a team in a tournament');
@@ -1417,7 +1417,7 @@ async function conversationH(client, ctx) {
   check(/penaltySplit/.test(routeBody),
     'the owner-settle route keeps its own ledger, which Scout does not expose (not duplicated logic)');
 
-  // The S.5 reads, called the way the REST routes call them
+  // The recommender reads, called the way the REST routes call them
   const vList = await discovery.searchVenues(client, { limit: 12 });
   check(vList.length > 0, `searchVenues returns ${vList.length} grounds for GET /api/venues`);
   check(vList.every((v) => v.is_active === true), 'only active grounds, as the venue list page needs');
@@ -1515,7 +1515,7 @@ async function conversationH(client, ctx) {
 // I — the milestone line  ("kal shaam football islamabad" → a booked row)
 
 /**
- * The first line of the S.6 acceptance checklist, run as one continuous chain
+ * The first line of the assistant acceptance checklist, run as one continuous chain
  * instead of argued from two halves that touch.
  *
  * Everything here is already covered: A books through the picker, and the HTTP
@@ -1655,7 +1655,7 @@ async function adminTeamFor(client, playerId) {
 // J — tournaments: a chip-only door onto a second spender
 
 /**
- * S.7 gives Scout a second way to spend a user's money, and this section is the proof
+ * Scout has a second way to spend a user's money, and this section is the proof
  * that it spends it under the same rules as the first.
  *
  * Three properties are asserted, in the order that matters:

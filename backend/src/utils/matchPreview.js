@@ -10,7 +10,7 @@
  * that no external AI API may be called. A template generator over real features
  * is the honest thing to ship at this stage: it is deterministic, it is auditable
  * sentence by sentence, and it cannot hallucinate a scoreline that never
- * happened. S.6 may optionally route this text through the LLM garnish flag for
+ * happened. This text may optionally be routed through the LLM garnish flag for
  * fluency, but the facts will still be produced here.
  *
  * Why the UI label is "Preview" and not "AI PREDICTION"

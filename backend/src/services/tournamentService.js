@@ -59,7 +59,7 @@
  * Two doors into one result path
  * A fixture can be settled two ways and they must not drift apart:
  *
- *   a. The MATCH flow (S.2, unchanged). Captains submit scorelines, the organiser
+ *   a. The MATCH flow (unchanged). Captains submit scorelines, the organiser
  *      verifies, and `routes/matches.js` calls `advanceAfterMatch` inside the same
  *      transaction that applied ELO. ELO is applied by matches.js, not here — but
  *      with the K this module supplies through `matchContext`, so a final moves a
@@ -1815,7 +1815,7 @@ async function completeTournament(client, { tournament, fixtures }) {
  * applyFixtureResult — the one place a fixture stops being upcoming.
  *
  * Both doors into the result flow end here, which is the point: the organiser
- * typing a score (FE-7) and the S.2 captain-submits → owner-verifies flow must
+ * typing a score (FE-7) and the captain-submits → owner-verifies flow must
  * produce byte-identical bracket state, or a tournament would advance differently
  * depending on which screen was used.
  *
@@ -2122,7 +2122,7 @@ async function walkover(client, {
 /**
  * matchContext — what `routes/matches.js` needs to know about a tournament match.
  *
- * S.2 answers two questions from the booking: who may verify (the owner of the
+ * The match module answers two questions from the booking: who may verify (the owner of the
  * venue the match is booked at) and what K to rate it with (the global 32). A
  * tournament match has no booking, so both answers have to come from somewhere
  * else, and this is that somewhere:

@@ -3,8 +3,8 @@
  *
  * Why not a new table
  * The user asked for the affordances a general-purpose assistant has: history,
- * new chat, switch chat, rename. That is a channel with messages, which S.5's
- * chat already is. Migration 018 therefore added `type='assistant'` to
+ * new chat, switch chat, rename. That is a channel with messages, which the chat
+ * module already is. Migration 018 therefore added `type='assistant'` to
  * chk_chat_channels_type and three columns (session_state, archived_at,
  * assistant_persona) rather than building a parallel messaging stack that would
  * need its own pagination, its own soft-delete and its own Flutter list widget.

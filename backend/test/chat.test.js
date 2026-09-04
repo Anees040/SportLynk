@@ -1,5 +1,5 @@
 /**
- * Chat unit tests  —  S.7 Wave B
+ * Chat unit tests
  *
  * Run:  npm test            (from backend/)
  *   or  node --test test/chat.test.js
@@ -34,7 +34,7 @@ const list = require('../src/utils/chatList');
 const qr = require('../src/utils/quickReplies');
 const actions = require('../src/services/assistantActions');
 
-// 1 — the opening pills: the two sentences the wave promised, verbatim
+// 1 — the opening pills: the two sentences the spec promised, verbatim
 
 test('1 — the booking room opens with the sentence a push notification can quote', () => {
   assert.equal(
@@ -117,7 +117,7 @@ test('8 — an unknown event never throws, so a missing case cannot roll back a 
   assert.equal(typeof sys.sentenceFor('nonsense_event', {}), 'string');
 });
 
-test('9 — buildSystemMessage returns a body AND structured meta for every wave-B event', () => {
+test('9 — buildSystemMessage returns a body AND structured meta for every system event', () => {
   for (const event of [...COORD_EVENTS, 'booking_confirmed', 'booking_cancelled', 'booking_no_show']) {
     const p = sys.buildSystemMessage(event, { actorName: 'Ali', targetName: 'Falcons' });
     assert.ok(p.body && p.body.length > 0, `${event} has no body`);
@@ -136,7 +136,7 @@ test('9 — buildSystemMessage returns a body AND structured meta for every wave
 
 const LABELS = new Set(actions.intentLabels());
 
-test('10 — the frozen label set is still the 23 this wave was built against', () => {
+test('10 — the frozen label set is still the 23 the code was built against', () => {
   assert.equal(LABELS.size, 23);
 });
 
@@ -371,7 +371,7 @@ test('28 — every literal and named-prefix route is declared above /:channelId'
   }
 });
 
-test('29 — the six new endpoints this wave added all exist', () => {
+test('29 — the six chat endpoints all exist', () => {
   assert.notEqual(at('get', '/'), -1, 'GET /api/chat (the inbox)');
   assert.notEqual(at('get', '/unread-count'), -1, 'GET /api/chat/unread-count');
   assert.notEqual(at('get', '/booking/:bookingId'), -1, 'GET /api/chat/booking/:bookingId');

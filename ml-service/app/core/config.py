@@ -7,7 +7,7 @@ how one of them eventually does not:
 
   1. THE SERVICE MUST NOT START WITHOUT AN API KEY. An ml-service running with
      authentication disabled is a pricing engine any process on the machine can
-     query and, once it is deployed as a second Render service (S.7), that any
+     query and, once it is deployed as a second Render service, that any
      host on the internet can query. Failing at import time is loud and happens on
      a developer's terminal; a `None` key silently compared as equal is discovered
      by someone else. So `require_api_key()` raises during startup, not on the

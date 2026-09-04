@@ -1,5 +1,5 @@
 r"""
-Inter-annotator agreement on the REL-8 exam  —  S.4
+Inter-annotator agreement on the REL-8 exam
 
 WHY THIS EXISTS
 `domain_test_200.csv` is the only number in this project that is allowed to be called

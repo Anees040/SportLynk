@@ -1,5 +1,5 @@
 /**
- * ELO engine unit tests  —  S.2 Wave B
+ * ELO engine unit tests
  *
  * Run:  npm test            (from backend/)
  *   or  node --test test/

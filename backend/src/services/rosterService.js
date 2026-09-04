@@ -20,7 +20,7 @@
  * Nothing about the ranking changed in the move. Both functions return
  * { ok, status, code, message, data } instead of writing to `res`, which is what
  * lets the assistant call them; the route unwraps that into the JSON envelope it
- * always sent, so the Flutter app sees the same bytes it saw in S.5.
+ * always sent, so the Flutter app sees the same bytes it saw before.
  *
  * What the caller still owes
  * A pg client. Neither function opens or commits anything — they are pure reads,
@@ -310,7 +310,7 @@ async function suggestPlayers(client, { teamId: teamId0, userId } = {}) {
  * `abs(t.elo - my elo)` ordering is now the fallback rather than the answer. The
  * ml-service scores 0.6 x rating proximity + 0.2 x opponent trust + 0.2 x recent
  * activity and returns a component breakdown per row; when it cannot be reached
- * the rows ship in this query's order with S.2's competitiveness formula, which is
+ * the rows ship in this query's order with the original competitiveness formula, which is
  * why the ORDER BY still has to be right. `withinBand` is reported per row on both
  * paths so the UI can mark where the good-match band ends.
  */
@@ -450,7 +450,7 @@ async function suggestOpponents(client, { teamId: teamId0, userId, q: q0 = '' } 
   //
   // If it is unreachable the rows keep the SQL's rating-proximity order and v1's
   // competitiveness, and `ranking.source` says `heuristic` — the feature degrades
-  // to exactly what S.2 shipped rather than going blank (ER2.6).
+  // to exactly what shipped before rather than going blank (ER2.6).
   const ranked = await ml.recommendOpponents({
     teamId,
     team: {

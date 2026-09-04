@@ -158,7 +158,7 @@ const teamRequestGroup = {
  * The table.
  *
  * Every key is a `type` value written by a live notify() call site, plus the four
- * S.7 additions. `entity` is the polymorphic tap target recorded on the row
+ * chat and moderation additions. `entity` is the polymorphic tap target on the row
  * (chk_notifications_entity in 020 constrains the vocabulary); `icon` is a
  * Material icon name the Flutter feed maps to an IconData.
  */
@@ -373,7 +373,7 @@ const TYPES = {
     deepLink: () => ({ route: '/assistant', args: {} }),
   },
 
-  // S.7 additions
+  // Chat and moderation additions
   // A chat message notifies only when the recipient is offline or looking at a
   // different chat (routes/chat.js checks bus.isUserViewingChannel) — a phone
   // that is already showing the message must not also buzz about it.

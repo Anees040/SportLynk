@@ -20,7 +20,7 @@
  *
  * Left unrepaired, phantom escrow is not cosmetic: it is spendable balance the
  * user cannot reach, GET /api/wallet/frozen reports a non-zero `delta` forever,
- * and the S1 acceptance check "delta = 0" can never pass honestly.
+ * and the acceptance check "delta = 0" can never pass honestly.
  *
  * What it does
  * Per wallet, inside one transaction with FOR UPDATE (golden rule 4):

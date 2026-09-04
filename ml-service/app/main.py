@@ -7,7 +7,7 @@ Postgres and, for model-backed features, to this. It serves scikit-learn models
 trained by the scripts in training/. It owns no database connection, holds no
 session, and stores nothing — given features, it returns a prediction. That
 statelessness is what makes it safe to restart mid-demo and what will make it safe
-to deploy as a second Render service in S.7.
+to deploy as a second Render service.
 
 WHY A SEPARATE PYTHON PROCESS AT ALL
 The alternative is exporting to ONNX and running inference inside Node, which

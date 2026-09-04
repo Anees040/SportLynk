@@ -478,7 +478,7 @@ def rank_players(
     }
 
 
-# Opponent ranking  (FR5.3 – FR5.5, upgrading S.2's deterministic sort)
+# Opponent ranking  (FR5.3 – FR5.5, upgrading the deterministic sort)
 
 
 def score_opponent(candidate: Mapping[str, Any], me: Mapping[str, Any]) -> dict[str, Any]:

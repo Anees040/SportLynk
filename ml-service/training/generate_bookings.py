@@ -39,7 +39,7 @@ why every parameter carries one of:
 WHAT THE MODEL WILL LEARN FROM THIS
 -----------------------------------
 P(slot booked | features, price). Price is an INPUT (`price_ratio`), so one model
-answers both of S.3's questions: the 72-hour forecast holds price at ratio 1.0
+answers both of the pricing questions: the 72-hour forecast holds price at ratio 1.0
 and sweeps hours; the price suggestion sweeps a price grid and takes
 argmax(price x P(book|price)) — expected revenue, never argmax of probability,
 because the cheapest price always wins on probability alone.

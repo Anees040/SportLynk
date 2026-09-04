@@ -20,7 +20,7 @@
  * The plan says a ruling should "refuse if `elo_applied` is already true". It
  * cannot: `POST /api/matches/:id/dispute` deliberately accepts a dispute against
  * an already-verified match and defers it here, saying the rating "stands until an
- * admin resolves it (S.7)". Refusing would make that entire class of dispute
+ * admin resolves it". Refusing would make that entire class of dispute
  * unrulable and leave `matches.winner_team` permanently contradicting `teams.elo`.
  * The operative word in that comment is silently — it objects to an unexplained
  * reversal, not to an audited one. So an already-rated match is corrected through

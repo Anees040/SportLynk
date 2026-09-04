@@ -5,7 +5,7 @@ const router = express.Router();
 
 // This export streams every player's full booking history, so it gets its own
 // dedicated secret — deliberately not ML_API_KEY. doc/claude.md records ML_API_KEY's
-// dev value as pasted in cleartext and pending rotation before S.7; reusing it here
+// dev value as pasted in cleartext and pending rotation; reusing it here
 // would widen that known-exposed key's blast radius into read access to all bookings.
 // Keep them separate.
 const MIN_KEY_LEN = 16;

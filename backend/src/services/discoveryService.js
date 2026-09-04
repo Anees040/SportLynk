@@ -25,8 +25,8 @@
  *
  * Tournaments have no route yet
  * `listTournaments` is the first reader of the `tournaments` table (013). It is
- * written here rather than in the assistant so that when S.7 adds the tournament
- * screens they call this function instead of starting a second opinion about what
+ * written here rather than in the assistant so that the tournament
+ * screens call this function instead of starting a second opinion about what
  * "open for registration" means.
  */
 const pool = require('../db/pool');

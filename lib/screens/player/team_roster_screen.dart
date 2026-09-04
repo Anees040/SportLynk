@@ -648,7 +648,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
 
   // Stats cards
 
-  /// Last-5 form + 30-day activity — the two features S.5's recommender will read,
+  /// Last-5 form + 30-day activity — the two features the recommender reads,
   /// shown here so they are visibly real rather than only present in JSON.
   Widget _formCard(TeamStats s) => Container(
         padding: const EdgeInsets.all(14),

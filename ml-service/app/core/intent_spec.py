@@ -1,9 +1,9 @@
-"""Intent contract and dataset vocabulary for the SportLynk assistant (S.6).
+"""Intent contract and dataset vocabulary for the SportLynk assistant.
 
 THIS MODULE IS THE LABEL CONTRACT FOR MODEL #4.
 It is the fourth member of the ``app/core`` contract family -- ``features.py``
 (model #1, pricing), ``text_norm.py`` (model #2, sentiment), ``reco_features.py``
-and ``reco_rank.py`` (model #3 and the S.5 scorer) -- and it follows the same
+and ``reco_rank.py`` (model #3 and the recommender scorer) -- and it follows the same
 rule: one definition, imported by the generator, by training, by evaluation and
 later by serving, with a version string and a source fingerprint stamped into
 every artifact so that a silent edit becomes a load-time ``incompatible``
@@ -567,14 +567,14 @@ EXAM_LANG_QUOTA: dict[str, int] = {"ru": 4, "mix": 3, "en": 3}
 #: The cost, stated plainly: with ~18 templates per intent, 20% is 3-4 held-out
 #: phrasings, so the validation score has real variance and is not a headline
 #: number. The hand-written exam is the headline instrument. Same reasoning as
-#: the S.3 time-split: the honest measurement is the one that can go down.
+#: the pricing time-split: the honest measurement is the one that can go down.
 VAL_FRACTION: float = 0.20
 VAL_FRACTION_MIN: float = 0.15
 VAL_FRACTION_MAX: float = 0.25
 
 #: Contamination gate. A corpus row this close to an exam row is dropped from the
 #: corpus -- never from the exam. Same threshold and same two-metric rule as the
-#: S.4 sentiment build: character shingles miss word reordering, word sets miss
+#: The sentiment build: character shingles miss word reordering, word sets miss
 #: spelling drift, so the gate takes the max of both.
 NEAR_DUP_CONTAM: float = 0.80
 
@@ -1281,7 +1281,7 @@ def self_check() -> list[tuple[str, str]]:
 
     # 1. The label contract
     assert len(INTENTS) == 23, (
-        f"INTENTS has {len(INTENTS)} entries; the S.6 contract fixes the v2 label "
+        f"INTENTS has {len(INTENTS)} entries; the assistant contract fixes the v2 label "
         f"set at 23. Adding a twenty-fourth is a model-invalidating change: bump "
         f"INTENT_SPEC_VERSION and retrain, do not just append"
     )
@@ -1298,7 +1298,7 @@ def self_check() -> list[tuple[str, str]]:
     assert "out_of_scope" in INTENTS, (
         "out_of_scope is not optional -- without it the classifier must assign "
         "'order pizza' to one of the fourteen real intents, and the assistant "
-        "cannot fall back gracefully (S.6 spec)"
+        "cannot fall back gracefully (assistant spec)"
     )
     receipts.append(("intents", f"{len(INTENTS)} unique, alphabetical, incl out_of_scope"))
 
@@ -1313,7 +1313,7 @@ def self_check() -> list[tuple[str, str]]:
         f"tuples hold the same {len(INTENTS)} names in two different ORDERS on purpose -- "
         f"INTENTS is alphabetical because that is model.classes_ order and so the "
         f"order every confusion-matrix axis must use, while the catalog keeps the "
-        f"S.6 spec's presentation order (discovery, booking, account, team, info) "
+        f"the spec's presentation order (discovery, booking, account, team, info) "
         f"because that is what reads well in --intents and in the report. What may "
         f"NOT differ is the membership"
     )

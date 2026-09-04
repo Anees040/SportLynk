@@ -2,7 +2,7 @@
  * test/assistant.test.js — the parts of Scout that can be proved without a database.
  *
  * What this file is for
- * Wave C's risk is not in the SQL; it is in the decisions. A slot merge that keeps a
+ * The risk here is not in the SQL; it is in the decisions. A slot merge that keeps a
  * stale slotId puts a confirm card in front of the wrong hour, an affirmation lexicon
  * that says yes to "haan lekin 7 baje" spends the user's money on the wrong slot, and
  * a policy template with a typo'd placeholder tells a user they get a "{refund_pct}%"
@@ -37,9 +37,9 @@ test('assertRoutable: every intent label the model can emit has a handler', () =
 });
 
 // The three tournament actions are executable but untrained, and that is the whole
-// point: model #4 v2 was released with 23 labels and S.7 does not retrain it, so the
-// classifier cannot start a tournament entry no matter what a user types. If a later
-// wave ever adds a label for one of these, this test is where it has to be argued.
+// point: model #4 v2 was released with 23 labels and nothing retrains it, so the
+// classifier cannot start a tournament entry no matter what a user types. If a label
+// is ever added for one of these, this test is where it has to be argued.
 test('the tournament actions are reachable by chip only, never by the classifier', () => {
   for (const key of ['tournament_detail', 'tournament_register', 'my_tournaments']) {
     assert.equal(actions.isAction(key), true, `${key} has no handler`);
@@ -570,7 +570,7 @@ test('money(): a price is grouped and prefixed, never a bare float', () => {
 
 // 10. The REFUND sentence — "PKR 1,600 back (80%)" must be arithmetic
 //
-// The wave spec asks the cancel flow to quote the refund before executing. Scout quotes
+// The spec asks the cancel flow to quote the refund before executing. Scout quotes
 // bookingService.previewCancellation, which derives its numbers from these two escrow
 // functions -- so the number in the question is the number in the ledger by
 // construction, not by two implementations agreeing.
@@ -655,7 +655,7 @@ test('decodeCursor(): a junk cursor is "no cursor", not a 400', () => {
   assert.equal(threads.decodeCursor(42), null);
 });
 
-// 12. CARDS — every action card has buttons (the wave spec's hard rule)
+// 12. CARDS — every action card has buttons (the spec's hard rule)
 
 const VENUE_ROW = {
   id: 'v1', name: 'Rawal Cricket Ground', city: 'Islamabad', address: 'Sector G-9',
@@ -740,7 +740,7 @@ test('SCREENS: the deep-link map is a contract with Flutter, and `screen` surviv
 //
 // The entity extractor runs beside the classifier, not inside it, so a turn can
 // abstain on the intent while holding a flawless "football, Islamabad, tomorrow 6pm".
-// Wave E's measured case: "kal shaam football islamabad" parsed all four entities and
+// The measured case: "kal shaam football islamabad" parsed all four entities and
 // still scored find_venue 0.364 against a 0.45 floor. The corpus fix (eight verbless
 // keyword templates, retrained to intent-v2-20260828-2315) took that to 0.81, and this
 // is the belt to its braces for the abstentions that remain.

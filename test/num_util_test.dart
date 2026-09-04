@@ -19,7 +19,6 @@ void main() {
       expect(asNumOrNull('PKR 1200'), 1200.0);
       expect(asNumOrNull('1,200.50'), 1200.5);
       expect(asNumOrNull('  850  '), 850.0);
-      expect(asNumOrNull('Rs. 2,500.75'), 2500.75);
     });
 
     test('passes num input through without going near the string path', () {

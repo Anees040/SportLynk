@@ -10,7 +10,7 @@
  * Why "applies on the next operation" is true here and not a promise
  * `utils/globalSettings.js` caches for 60 s and exposes `invalidate()`; its header
  * has said since it was written that the hook exists "so an admin settings endpoint
- * (S.7) can drop the cache the moment it writes". This is that endpoint. The write
+ * can drop the cache the moment it writes". This is that endpoint. The write
  * and the `invalidate()` are in the same request, so the very next booking, rating
  * or Scout turn reads the new row. FR10.11 asks for exactly that and nothing more:
  * there is no deploy, no restart, no config reload.

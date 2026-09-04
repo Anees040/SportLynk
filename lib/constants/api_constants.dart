@@ -70,7 +70,7 @@ class ApiConstants {
     return b.endsWith('/api') ? b.substring(0, b.length - 4) : b;
   }
 
-  // Teams (S2)
+  // Teams
   static const String teams = '/teams';
   static const String myTeams = '/teams/mine';
   static const String teamRankings = '/teams/rankings';
@@ -87,7 +87,7 @@ class ApiConstants {
   static String leaveTeam(String id) => '/teams/$id/members/me';
   static String teamSuggestedPlayers(String id) => '/teams/$id/suggested-players';
 
-  // Chat (S2)
+  // Chat
   static String chatForTeam(String teamId) => '/chat/team/$teamId';
   static String chatMessages(String channelId) => '/chat/$channelId/messages';
   static String chatRead(String channelId) => '/chat/$channelId/read';

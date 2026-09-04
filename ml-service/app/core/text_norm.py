@@ -1,4 +1,4 @@
-"""Shared text normalisation for the SportLynk review sentiment model (S.4).
+"""Shared text normalisation for the SportLynk review sentiment model.
 
 THIS MODULE IS THE FEATURE CONTRACT FOR MODEL #2.
 Training imports it, serving imports it, and neither is allowed its own copy of

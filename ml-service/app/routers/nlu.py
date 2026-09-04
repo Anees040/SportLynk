@@ -18,7 +18,7 @@ never a wrong booking.
 WHY THE ABSTAIN FLOOR LIVES IN THE ARTIFACT AND IS APPLIED HERE
 The classifier's serving rule is `confidence < threshold -> out_of_scope`, and
 the threshold is READ FROM THE JOBLIB (`artifact["confidenceThreshold"]`, 0.45 as
-trained), never hard-coded in this file. S.4 taught that lesson expensively: the
+trained), never hard-coded in this file. The sentiment build taught that lesson expensively: the
 sentiment router carried its own 0.90 strong-negative constant, the trainer's C
 changed, the model's margins narrowed, and the rule silently stopped firing. A
 number that describes ONE model's score distribution has to travel with that

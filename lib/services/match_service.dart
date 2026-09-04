@@ -163,7 +163,7 @@ class MatchService {
       _api.patch(ApiConstants.matchVerify(id), const {}, token: token);
 
   /// FR5.17 — flag a result inside the 24h window. The reason is required and has
-  /// a minimum length: an admin has to be able to act on it in S.7.
+  /// a minimum length: an admin has to be able to act on it.
   Future<Map<String, dynamic>> dispute(String token, String id, String reason) =>
       _api.post(ApiConstants.matchDispute(id), {'reason': reason}, token: token);
 }

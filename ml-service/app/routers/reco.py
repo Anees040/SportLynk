@@ -107,7 +107,7 @@ def recommend_players(body: PoolRequest) -> dict[str, Any]:
 
 @router.post("/reco/opponents")
 def recommend_opponents(body: PoolRequest) -> dict[str, Any]:
-    """FR5.3 — rank candidate opponents, replacing S.2's |ELO gap| sort.
+    """FR5.3 — rank candidate opponents, replacing the deterministic |ELO gap| sort.
 
     Each item carries its own `components` breakdown; the app renders it as the
     expandable "Why this match?" row. `competitiveness` is null whenever either

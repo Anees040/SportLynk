@@ -1,11 +1,11 @@
-"""Validate and fingerprint the S.6 assistant intent exam (assistant_test.csv).
+"""Validate and fingerprint the assistant intent exam (assistant_test.csv).
 
 WHY THIS EXISTS
 ---------------
 `data/assistant/assistant_test.csv` is the *exam* for Model #4 (the SportLynk
 assistant's intent classifier). It is 150 utterances written by hand, never
 generated from a template, and never trained on. Every number the intent model
-eventually reports -- accuracy, the per-class confusion matrix the S.6 definition
+eventually reports -- accuracy, the per-class confusion matrix the assistant definition
 of done asks for -- is only as trustworthy as this file.
 
 So before any training run reports a figure against it, we must be able to prove

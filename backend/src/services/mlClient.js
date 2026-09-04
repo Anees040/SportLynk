@@ -2,7 +2,7 @@
  * mlClient.js — the backend's only door to the Python ML service.
  *
  * Why this file is allowed to exist at all
- * SportLynk gained a third process in S.3 (ml-service/, FastAPI + scikit-learn).
+ * SportLynk gained a third process (ml-service/, FastAPI + scikit-learn).
  * A third process is a third thing that can be down, and the owner dashboard is
  * not allowed to break because a Python service on port 8000 is not running —
  * which, in development, is most of the time.
@@ -1107,7 +1107,7 @@ async function recommendPlayers(ctx = {}) {
   return rankViaMl('/reco/players', ctx);
 }
 
-/** FR5.3 — rank candidate opponents, replacing S.2's |ELO gap| sort as the % shown. */
+/** FR5.3 — rank candidate opponents, replacing the deterministic |ELO gap| sort as the % shown. */
 async function recommendOpponents(ctx = {}) {
   return rankViaMl('/reco/opponents', ctx);
 }

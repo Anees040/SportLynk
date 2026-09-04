@@ -10,11 +10,11 @@ WHY THIS SCRIPT EXISTS SEPARATELY FROM build_reco.py
   database, and its leave-one-out ran over the seed snapshot — which had 2 evaluable
   users. Two users is a direction, not a measurement: one user flips HitRate@5 by 50
   points. This script EVALUATES, needs no backend and no database, and gets its
-  statistical power from the S.3 synthetic world instead. It reads:
+  statistical power from the synthetic world instead. It reads:
 
     1. models/reco_latest.joblib  — the RELEASED artifact, so the thing measured is
        the thing served (the frozen catalogue AND the frozen real-user snapshot).
-    2. data/bookings_synth.csv    — the S.3 simulator's world, hash-verified and NEVER
+    2. data/bookings_synth.csv    — the simulator's world, hash-verified and NEVER
        regenerated here (a new CSV = a new sha256 = a broken provenance gate).
 
   Run order for a full refresh is therefore: build_reco.py (train) -> eval_reco.py
@@ -23,7 +23,7 @@ WHY THIS SCRIPT EXISTS SEPARATELY FROM build_reco.py
   time, so re-run this after any retrain or the card will understate the evidence.
 
 THE SYNTHETIC POPULATION, AND WHY IT IS NOT A RIGGED TEST
-  The CSV is SLOT-level (venue x slot x booked), with no user column — the S.3
+  The CSV is SLOT-level (venue x slot x booked), with no user column — the synthetic
   simulator modelled demand, not identity. So this script adds the missing layer: it
   draws users with a latent taste (home city, primary sport, target price, rating
   sensitivity) and samples each booking from the CSV's OWN booked rows in proportion
@@ -147,7 +147,7 @@ CSV_COLUMNS = ("venue_id", "sport", "city", "venue_rating", "base_price", "groun
 
 @dataclass
 class World:
-    """The S.3 world reshaped into the recommender's own input contract."""
+    """The synthetic world reshaped into the recommender's own input contract."""
 
     venues: list[dict]
     dates_by_venue: dict[str, list[str]]
@@ -699,7 +699,7 @@ version `build_reco.py` writes at train time — re-run this script after any re
   released `reco_latest.joblib`, so the thing measured is the thing served.
 - **Feature spec:** `{a['recoSpecVersion']}` · fingerprint `{a['recoSpecFingerprint']}`
 - **Evaluated:** {ctx['evaluatedAt']}  ·  **seed:** `{EVAL_CONFIG['seed']}` (re-runs reproduce exactly)
-- **Synthetic corpus:** the S.3 world — {len(w.venues)} venues, {w.rows:,} slots
+- **Synthetic corpus:** the synthetic world — {len(w.venues)} venues, {w.rows:,} slots
   ({w.booked_rows:,} booked), `bookings_synth.csv` sha256 `{w.csv_sha256[:16]}...` (read-only,
   never regenerated). {ctx['synthUsers']} simulated players, {ctx['synthEligible']} with >={EVAL_CONFIG['minBookings']} bookings.
 - **Real corpus:** the seeded snapshot frozen inside the artifact — {a['dataset']['venues']} venues,
@@ -771,7 +771,7 @@ weight dict in memory; the frozen feature file is never edited, so the fingerpri
 ## What this evaluation cannot tell you
 
 - **The synthetic players are simulated.** Venue attributes, per-venue demand and booking
-  dates all come from the frozen S.3 world, but the *user* layer is generated here (taste
+  dates all come from the frozen synthetic world, but the *user* layer is generated here (taste
   weights are printed in `reco_eval_metrics.json` under `config.taste`). It measures the
   ranking function on a population whose ground-truth preference is known — not real
   Pakistani players' behaviour.
@@ -928,7 +928,7 @@ def guard_line(guard: dict) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Leave-last-out evaluation of the venue recommender.")
-    ap.add_argument("--csv", default=str(ROOT / "data" / "bookings_synth.csv"), help="frozen S.3 world (read-only)")
+    ap.add_argument("--csv", default=str(ROOT / "data" / "bookings_synth.csv"), help="frozen synthetic world (read-only)")
     ap.add_argument("--model", default=str(ROOT / "models" / "reco_latest.joblib"), help="released artifact to evaluate")
     ap.add_argument("--reports-dir", default=str(ROOT / "reports"))
     ap.add_argument("--users", type=int, default=EVAL_CONFIG["synthUsers"], help="simulated players")

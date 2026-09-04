@@ -235,7 +235,7 @@ async function rankedCities(db, { sport = null } = {}) {
  * the win rate, and the FR2.6 pair.
  *
  * activity_30d counts matches that reached a terminal state inside the window,
- * and is the feature S.5's recommender will consume. It counts DISPUTED
+ * and is the feature the recommender consumes. It counts DISPUTED
  * alongside COMPLETED on purpose: the question it answers is "is this team
  * playing?", and a disputed fixture was still played.
  */

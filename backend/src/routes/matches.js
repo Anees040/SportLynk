@@ -16,7 +16,7 @@
  *         ↓                                        │  │ ELO exchange runs — ER2.2)
  *      disputed ←──(either captain, within 24h)────────completed
  *         │                                            FR5.17
- *         └─(admin resolves — S.7)──→ completed
+ *         └─(admin resolves)──→ completed
  *
  * Four rules that shape every handler
  *
@@ -40,7 +40,7 @@
  *      that is not committed yet, and it reads the old one.
  *
  * What this file deliberately does not cover
- *   • Admin dispute resolution. S.7 owns that UI; this file's job is to make
+ *   • Admin dispute resolution. The admin desk owns that UI; this file's job is to make
  *     sure a disputed match cannot have ELO applied to it in the meantime.
  *   • Any score override by the venue owner. The owner verifies what two
  *     captains already agreed on; adjudicating a disagreement is the admin's
@@ -1242,7 +1242,7 @@ router.patch('/:id/verify', async (req, res, next) => {
       return bail(client, res, 409, 'This match has already been verified.');
     }
     if (m.status === STATUS.DISPUTED) {
-      // The backend rule S.7's UI relies on: a disputed match cannot be rated.
+      // The backend rule the admin UI relies on: a disputed match cannot be rated.
       return bail(client, res, 409, 'This match is disputed. An admin has to resolve it first.');
     }
     if (m.status !== STATUS.AWAITING_OWNER) {
@@ -1504,7 +1504,7 @@ router.post('/:id/dispute', async (req, res, next) => {
 
     // Freezes ELO if it has not been applied yet: `disputed` is not a status the
     // verify endpoint accepts, so the exchange can no longer run. If it has been
-    // applied, the rating stands until an admin resolves it (S.7) — silently
+    // applied, the rating stands until an admin resolves it — silently
     // reversing a verified result would move two ratings with no audit row
     // explaining why, and the elo_history ledger is the thing that makes a
     // rating explainable at all.

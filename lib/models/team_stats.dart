@@ -144,7 +144,7 @@ class RankingsPage {
       );
 }
 
-/// The team profile's stat snapshot (FR5.15) plus the two S.5 recommender
+/// The team profile's stat snapshot (FR5.15) plus the two recommender
 /// features (last-5 form string, 30-day activity count).
 class TeamStats with RatingDisplay {
   final int wins, losses, draws, played, winRate;

@@ -192,7 +192,7 @@ const EXPECTED = [
     migration: '020_notifications_admin.sql',
     // user_devices replaces the vestigial users.fcm_token (one token per user,
     // "last login wins") with one row per phone, revocable one at a time.
-    // admin_audit is the before/after trail behind every admin write in S.7 D.
+    // admin_audit is the before/after trail behind every admin write.
     tables: ['user_devices', 'admin_audit'],
     // ux_notifications_group is the load-bearing one: notify() collapses with
     // ON CONFLICT (user_id, group_key) WHERE group_key IS NOT NULL AND

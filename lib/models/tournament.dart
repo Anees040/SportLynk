@@ -167,7 +167,7 @@ class TeamRecord {
 /// column names migration 019 gave them rather than the tournament payload's
 /// shorter keys.
 ///
-/// An extension, and on this side of the import, so that the S.2 team model does
+/// An extension, and on this side of the import, so that the team model does
 /// not have to learn about the tournament module to carry four integers: the
 /// dependency runs tournament → team, never back.
 extension TeamTournamentRecord on Team {

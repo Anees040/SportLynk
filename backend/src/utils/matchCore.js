@@ -274,7 +274,7 @@ function shapeMatch(row, { viewerTeamIds = [], viewerUserId = null, base = 1000 
       venueName: row.venue_name || null,
       venueCity: row.venue_city || null,
     } : null,
-    // S.7: the same two facts a friendly reads off its booking — where and when —
+    // The same two facts a friendly reads off its booking — where and when —
     // for a match that has a fixture instead of one. Published as a separate block
     // rather than a fake `booking`, because a client that saw a booking id it could
     // not fetch would be worse than a client that knows this is a fixture.

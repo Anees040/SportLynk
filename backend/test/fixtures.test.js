@@ -1,5 +1,5 @@
 /**
- * Tournament maths unit tests  —  S.7 Wave A
+ * Tournament maths unit tests
  *
  * Run:  npm test            (from backend/)
  *   or  node --test test/fixtures.test.js
@@ -415,7 +415,7 @@ test('13 — standings(): head-to-head splits teams level on points and goals', 
 
 test('14 — splitPool(): the worked example, to the rupee', () => {
   // 8 teams at PKR 4,000, seven one-hour slots at PKR 2,000. These are the exact
-  // numbers in the wave plan and in doc/CLAUDE.md, and they are the argument for
+  // numbers in doc/CLAUDE.md, and they are the argument for
   // the whole waterfall: the owner clears 21,200 on inventory that would have
   // fetched 14,000 at the counter.
   const e = f.splitPool({ entryFee: 4000, teams: 8, slotTotal: 14000 });

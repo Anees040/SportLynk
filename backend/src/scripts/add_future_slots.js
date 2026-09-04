@@ -3,7 +3,7 @@
  *
  * Why this exists
  * A venue with no future slot cannot be booked, so with zero future slots the
- * entire S1 acceptance suite is untestable: book → approve → QR check-in, both
+ * entire acceptance suite is untestable: book → approve → QR check-in, both
  * cancel paths, the two-account slot lock, and the 1-minute auto-approve and
  * no-show tests all begin with "player books a slot".
  *

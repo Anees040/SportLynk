@@ -27,7 +27,7 @@
  *
  * Cached for TTL_MS because a match verification reads it once per request and
  * these values change roughly never. `invalidate()` exists so an admin settings
- * endpoint (S.7) can drop the cache the moment it writes.
+ * endpoint can drop the cache the moment it writes.
  */
 
 const pool = require('../db/pool');
@@ -281,7 +281,7 @@ async function match({ client = null, fresh = false } = {}) {
 
 
 /**
- * Scout's settings (S.6), validated and camelCased.
+ * Scout's settings, validated and camelCased.
  *
  *   name              what the assistant calls itself in its own replies
  *   confidenceFloor   below this the dialog manager shows the capability menu

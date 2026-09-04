@@ -87,7 +87,7 @@ const ev = evidence.recorder({
   title: 'S.7 Wave A -- the tournament module, driven through `tournamentService`',
   subtitle: 'Five tournaments -- one cancelled under its minimum, an 8-team knockout played to a '
     + 'champion, a 5-team knockout with byes, a 4-team round-robin decided on goal difference, and '
-    + 'one driven through the S.2 captain-submit door -- created, paid into, drawn onto real venue '
+    + 'one driven through the captain-submit door -- created, paid into, drawn onto real venue '
     + 'hours, played out and audited, all inside ONE transaction that is rolled back at the end. '
     + 'Every money assertion reads the WALLET and the LEDGER rather than the return value: the '
     + 'return value is the thing under test, not the evidence.',
@@ -1507,11 +1507,11 @@ async function block8(client, ctx) {
     `earning ${leagueSplit.ownerEarning} vs venue cost ${leagueSplit.venueCost}`);
 }
 
-// Block 9 — the other door: the S.2 MATCH flow
+// Block 9 — the other door: the MATCH flow
 
 /**
  * Two doors, one bracket. Block 6 proved the organiser's door; this one proves the
- * captain-submits → organiser-verifies door that S.2 already built, because a
+ * captain-submits → organiser-verifies door that the match module already built, because a
  * tournament whose bracket advanced differently depending on which screen was used
  * would be worse than one with a single door.
  *
@@ -1519,7 +1519,7 @@ async function block8(client, ctx) {
  * is asserted is the contract it depends on, in the order it uses it:
  *
  *   1. `matchContext` answers who may verify and with what K — and answers `null`
- *      for a friendly, which is the branch that keeps the S.2 path unchanged;
+ *      for a friendly, which is the branch that keeps the match path unchanged;
  *   2. the ELO exchange is applied once, by the caller, with that K;
  *   3. `advanceAfterMatch` moves the bracket and does not rate the game a second
  *      time — the one mistake that leaves no trace afterwards;
@@ -1527,7 +1527,7 @@ async function block8(client, ctx) {
  *      that has no booking at all.
  */
 async function block9(client, ctx) {
-  section('9 · THE MATCH-FLOW DOOR (S.2 verify → advanceAfterMatch)');
+  section('9 · THE MATCH-FLOW DOOR (match verify → advanceAfterMatch)');
   const four = ctx.cast.slice(0, 4);
   const created = await probe(client, () => T.create(client, {
     ownerId: ctx.venue.owner_id, venueId: ctx.venue.id,
@@ -1655,7 +1655,7 @@ async function block9(client, ctx) {
       'and both rating deltas are visible on the row', `${v.ct_delta} / ${v.ot_delta}`);
   }
 
-  // The friendly branch: the S.2 path must be untouched
+  // The friendly branch: the match path must be untouched
   // A tournament hook that changed how a friendly behaves would be a regression
   // dressed as a feature, so the null answer is asserted rather than assumed.
   const { rows: fr } = await client.query(
@@ -1665,7 +1665,7 @@ async function block9(client, ctx) {
     [four[0].teamId, four[1].teamId, t.sport, four[0].captainId]);
   const friendly = fr[0].id;
   eq(await T.matchContext(client, friendly), null,
-    'matchContext returns NULL for a match with no tournament — the S.2 path is unchanged');
+    'matchContext returns NULL for a match with no tournament — the match path is unchanged');
   const frAdv = await probe(client, () => T.advanceAfterMatch(client, friendly));
   eq(frAdv.out && frAdv.out.code, 'not_tournament',
     'advanceAfterMatch declines a friendly, so matches.js can call it unconditionally');
