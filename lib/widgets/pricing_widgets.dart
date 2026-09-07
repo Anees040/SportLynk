@@ -77,16 +77,23 @@ class AiPriceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Row(children: [
-              const Text('✨', style: TextStyle(fontSize: 16)),
-              const SizedBox(width: 6),
-              Text(
-                'AI Suggested Price',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
-              ),
-            ]),
-            if (s != null) _sourceBadge(s),
+            Flexible(
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Text('✨', style: TextStyle(fontSize: 16)),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'AI Suggested Price',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
+                  ),
+                ),
+              ]),
+            ),
+            if (s != null) ...[
+              const SizedBox(width: 4),
+              _sourceBadge(s),
+            ],
           ]),
           const SizedBox(height: 10),
           if (loading && s == null)
@@ -150,10 +157,12 @@ class AiPriceCard extends StatelessWidget {
       // owner decides on — "PKR 2,600" means nothing without "up 30% from
       // your 2,000" beside it.
       Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Text(
-          'PKR ${_fmt(s.suggestedPrice)}',
-          style: GoogleFonts.poppins(
-              fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary),
+        Flexible(
+          child: Text(
+            'PKR ${_fmt(s.suggestedPrice)}',
+            style: GoogleFonts.poppins(
+                fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary),
+          ),
         ),
         const SizedBox(width: 4),
         Padding(
@@ -163,14 +172,16 @@ class AiPriceCard extends StatelessWidget {
         ),
         const Spacer(),
         if (s.basePrice > 0)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              '${s.deltaLabel} vs PKR ${_fmt(s.basePrice)}',
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: s.deltaPct >= 0 ? AppColors.success : AppColors.error,
+          Flexible(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                '${s.deltaLabel} vs PKR ${_fmt(s.basePrice)}',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: s.deltaPct >= 0 ? AppColors.success : AppColors.error,
+                ),
               ),
             ),
           ),
@@ -192,14 +203,18 @@ class AiPriceCard extends StatelessWidget {
         ),
         const SizedBox(height: 5),
         Row(children: [
-          Text('${s.confidenceLabel} confidence',
-              style: GoogleFonts.poppins(
-                  fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+          Flexible(
+            child: Text('${s.confidenceLabel} confidence',
+                style: GoogleFonts.poppins(
+                    fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+          ),
           if (demandPct != null) ...[
             Text(' · ',
                 style: GoogleFonts.poppins(fontSize: 10.5, color: AppColors.textSecondary)),
-            Text('$demandPct% chance this slot books',
-                style: GoogleFonts.poppins(fontSize: 10.5, color: AppColors.textSecondary)),
+            Flexible(
+              child: Text('$demandPct% chance this slot books',
+                  style: GoogleFonts.poppins(fontSize: 10.5, color: AppColors.textSecondary)),
+            ),
           ],
         ]),
       ],
@@ -321,9 +336,11 @@ class AiPriceCard extends StatelessWidget {
           color: f.isUp ? AppColors.success : AppColors.error,
         ),
         const SizedBox(width: 5),
-        Text(f.label,
-            style: GoogleFonts.poppins(
-                fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+        Flexible(
+          child: Text(f.label,
+              style: GoogleFonts.poppins(
+                  fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+        ),
         // Only a measured factor shows a number. The heuristic's single chip is a
         // rule with no measured effect; printing "0 pts" beside it would present a
         // rule as a measurement of nothing.
@@ -369,10 +386,12 @@ class DemandForecastSection extends StatelessWidget {
         Row(children: [
           const Icon(Icons.insights_rounded, size: 16, color: AppColors.accent),
           const SizedBox(width: 6),
-          Text('Demand — next 72 hours',
-              style: GoogleFonts.poppins(
-                  fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-          const Spacer(),
+          Expanded(
+            child: Text('Demand — next 72 hours',
+                style: GoogleFonts.poppins(
+                    fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          ),
+          const SizedBox(width: 6),
           Text('PKT',
               style: GoogleFonts.poppins(
                   fontSize: 9.5, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
