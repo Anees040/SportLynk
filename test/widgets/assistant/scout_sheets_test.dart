@@ -234,8 +234,10 @@ void main() {
     /// next, so each rename case discards its own tree rather than the next one paying
     /// for it.
     Future<void> discardTree(WidgetTester tester) async {
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
     }
 
     // Pinned as it behaves, not as it should. `_rename` disposes its
@@ -266,9 +268,8 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Refunds');
         await tester.tap(find.text('Save'));
         await settleSheet(tester);
-        expect(errors.first,
-            contains('A TextEditingController was used after being disposed'),
-            reason: 'disposed mid-dismissal: scout_sheets.dart:100');
+        expect(errors, isEmpty,
+            reason: 'controller is cleanly disposed with the dialog state');
         expect(api.method(1), 'PATCH');
         expect(api.endpoint(1), '/assistant/threads/t1');
         expect(api.body(1), {'title': 'Refunds'},
@@ -297,7 +298,7 @@ void main() {
 
     testWidgets('a rename that is cancelled sends nothing', (tester) async {
       final api = FakeApi()..ok({'threads': [thread()]});
-      captureErrors();
+      final errors = captureErrors();
       await api.run(() async {
         await openThreads(tester);
         await settleSheet(tester);
@@ -307,6 +308,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Refunds');
         await tester.tap(find.text('Cancel'));
         await settleSheet(tester);
+        expect(errors, isEmpty);
         expect(api.sent.length, 1);
         expect(find.text('Refund question'), findsOneWidget,
             reason: 'the list is left exactly as it was');
@@ -386,6 +388,10 @@ void main() {
       List<ScoutCapability> capabilities, {
       double textScale = 1.0,
     }) async {
+      if (find.byType(Scaffold).evaluate().isNotEmpty) {
+        Navigator.of(tester.element(find.byType(Scaffold))).popUntil((route) => route.isFirst);
+        await tester.pumpAndSettle();
+      }
       final picked = <ScoutChip>[];
       await pumpApp(
         tester,
@@ -393,8 +399,8 @@ void main() {
           builder: (context) => Scaffold(
             backgroundColor: ScoutTheme.canvas,
             body: Center(
-              child: ElevatedButton(
-                onPressed: () => showScoutHelpSheet(
+              child: GestureDetector(
+                onTap: () => showScoutHelpSheet(
                   context,
                   capabilities: capabilities,
                   onPick: picked.add,

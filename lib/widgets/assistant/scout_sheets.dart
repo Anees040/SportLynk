@@ -71,33 +71,10 @@ class _ThreadsSheetState extends State<_ThreadsSheet> {
   }
 
   Future<void> _rename(ScoutThread t) async {
-    final ctrl = TextEditingController(text: t.title);
     final name = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: ScoutTheme.card,
-        title: const Text('Rename chat', style: TextStyle(color: ScoutTheme.ink, fontSize: 16)),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          maxLength: 60,
-          style: const TextStyle(color: ScoutTheme.ink),
-          decoration: const InputDecoration(hintText: 'Chat name'),
-          onSubmitted: (v) => Navigator.pop(dialogContext, v.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, ctrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (dialogContext) => _RenameDialog(initialTitle: t.title),
     );
-    ctrl.dispose();
     if (name == null || name.isEmpty || name == t.title) return;
     setState(() => _busy = true);
     await widget.controller.renameThread(t.id, name);
@@ -422,3 +399,56 @@ class _CapabilityRow extends StatelessWidget {
         ),
       );
 }
+
+class _RenameDialog extends StatefulWidget {
+  final String initialTitle;
+
+  const _RenameDialog({required this.initialTitle});
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialTitle);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: ScoutTheme.card,
+      title: const Text('Rename chat',
+          style: TextStyle(color: ScoutTheme.ink, fontSize: 16)),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        maxLength: 60,
+        style: const TextStyle(color: ScoutTheme.ink),
+        decoration: const InputDecoration(hintText: 'Chat name'),
+        onSubmitted: (v) => Navigator.pop(context, v.trim()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _ctrl.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
