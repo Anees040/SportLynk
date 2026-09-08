@@ -216,20 +216,28 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
         backgroundColor: AppColors.primary,
         automaticallyImplyLeading: false,
         elevation: 0,
-        title: Row(children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 20),
             ),
-            child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Text('Admin Panel',
-              style: GoogleFonts.poppins(
-                  color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-        ]),
+            const SizedBox(width: 10),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('Admin Panel',
+                    style: GoogleFonts.poppins(
+                        color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+              ),
+            ),
+          ],
+        ),
         actions: [
           // Admins receive notifications like anyone else -- a dispute
           // raised, an owner application, a suspension they issued -- and this is
