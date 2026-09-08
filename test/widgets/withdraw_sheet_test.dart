@@ -26,9 +26,10 @@
 // specific number the player needs, and that none of them reach the network — a request
 // that was going to be refused is a slower way of saying nothing.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sportlynk/constants/colors.dart';
 import 'package:sportlynk/widgets/withdraw_sheet.dart';
 
 import '../services/http_seam.dart';
@@ -512,18 +513,21 @@ void main() {
     // open when the test ends is reported as a leaked timer instead of a busy button.
     testWidgets('the button becomes a spinner and cannot be pressed twice',
         (tester) async {
+      final completer = Completer<void>();
       final api = FakeApi()
         ..ok(withdrawals())
-        ..fail('Payouts are paused for maintenance.');
+        ..fail('Payouts are paused for maintenance.', defer: completer.future);
       await api.run(() async {
         await pumpSheet(tester);
-        await fillAndSubmit(tester);
+        await fillAndSubmit(tester); // taps the button and pumps
         expect(find.text('Request Withdrawal'), findsNothing);
         expect(
           tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
           isNull,
           reason: 'a second tap would be a second payout request',
         );
+        completer.complete();
+        await tester.pump();
         await tester.pump();
         expect(api.sent.length, 2,
             reason: 'the disabled button let nothing further out');
@@ -754,32 +758,38 @@ void main() {
     // the DELETE open, which would leak ApiClient's timeout timer past the test.
     testWidgets('the button reports itself busy and cannot be pressed twice',
         (tester) async {
+      final completer = Completer<void>();
       final api = FakeApi()
         ..ok(withdrawals(inFlight: pending()))
-        ..fail('This payout has already been sent.');
+        ..fail('This payout has already been sent.', defer: completer.future);
       await api.run(() async {
         await pumpSheet(tester);
         await tester.tap(find.text('Cancel Withdrawal'));
-        await tester.pump();
+        await tester.pump(); // frame where _busy = true
         expect(find.text('Cancelling…'), findsOneWidget);
         expect(
           tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
           isNull,
         );
-        await tester.pump();
+        completer.complete();
+        await tester.pump(); // process the microtasks for the failure
+        await tester.pump(); // render the frame with _busy = false
         expect(api.sent.length, 2, reason: 'no second cancel was sent');
       });
     });
 
     testWidgets('a refused cancel keeps the withdrawal on screen', (tester) async {
+      final completer = Completer<void>();
       final api = FakeApi()
         ..ok(withdrawals(inFlight: pending()))
-        ..fail('This payout has already been sent.');
+        ..fail('This payout has already been sent.', defer: completer.future);
       await api.run(() async {
         await pumpSheet(tester);
         await tester.tap(find.text('Cancel Withdrawal'));
-        await tester.pump();
-        await tester.pump();
+        await tester.pump(); // frame where _busy = true
+        completer.complete();
+        await tester.pump(); // process the failure
+        await tester.pump(); // render the final frame
         expect(find.text('This payout has already been sent.'), findsOneWidget);
         expect(find.text('Withdrawal in Progress'), findsOneWidget);
         expect(find.text('Cancel Withdrawal'), findsOneWidget);
