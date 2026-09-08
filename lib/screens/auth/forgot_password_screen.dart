@@ -111,7 +111,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       const SizedBox(height: 32),
       SportTextField(
         label: 'New Password *',
-        hint: 'Min 8 characters',
+        hint: '8+ characters',
         prefixIcon: Icons.lock_outline,
         controller: _newPass,
         obscure: _obscureNew,

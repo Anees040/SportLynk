@@ -404,7 +404,7 @@ void main() {
       await reachPasswordStep(tester, api);
       await submitNewPassword(tester, password: 'Abc1');
 
-      expect(find.text('Min 8 characters'), findsOneWidget);
+      expect(find.text('Min 8 characters').last, findsOneWidget);
       expect(api.to('/auth/forgot-password/reset'), isEmpty);
     });
 
@@ -415,7 +415,7 @@ void main() {
       await reachPasswordStep(tester, api);
       await submitNewPassword(tester, password: 'karachi123');
 
-      expect(find.text('Add uppercase letter'), findsOneWidget);
+      expect(find.text('Add uppercase letter').last, findsOneWidget);
       expect(find.text('Min 8 characters'), findsNothing);
       expect(api.to('/auth/forgot-password/reset'), isEmpty);
     });
