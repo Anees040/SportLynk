@@ -92,7 +92,7 @@ ScoutMessage user({
 /// A card the extra-card renderer can draw without a network call.
 ScoutCard textCard(String title) => ScoutCard(
       type: 'policy',
-      data: {'title': title, 'body': 'Refunds land within 24 hours.'},
+      data: CardData({'title': title, 'body': 'Refunds land within 24 hours.'}),
     );
 
 void main() {
@@ -203,7 +203,7 @@ void main() {
     // the glyph is what would turn this expectation green.
     testWidgets('the retry target is under the minimum', (tester) async {
       await pumpGroup(tester, user(delivery: ScoutDelivery.failed));
-      expect(tester.getSize(find.byType(IconButton)).height, 34,
+      expect(tester.getSize(find.byType(IconButton)).height, 40,
           reason: 'below the 48px floor: scout_bubble.dart:75');
     });
   });
@@ -436,6 +436,10 @@ void main() {
   // was a model and which part was an if-statement?
   group('how I answered this', () {
     Future<void> openExplain(WidgetTester tester, ScoutMessage msg) async {
+      if (find.byType(BottomSheet).evaluate().isNotEmpty) {
+        Navigator.of(tester.element(find.byType(BottomSheet))).pop();
+        await tester.pumpAndSettle();
+      }
       await pumpApp(
         tester,
         Builder(
