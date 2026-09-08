@@ -7,7 +7,7 @@ class OwnerPendingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
+    return PopScope<Object?>(
       canPop: false,
       child: Scaffold(
         backgroundColor: AppColors.background,
