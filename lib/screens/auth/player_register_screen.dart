@@ -247,12 +247,17 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                             size: 16,
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            'Player Account',
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              color: AppColors.accent,
-                              fontWeight: FontWeight.w700,
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'Player Account',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  color: AppColors.accent,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -300,7 +305,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                   // Password
                   SportTextField(
                     label: 'Password *',
-                    hint: 'Min 8 characters',
+                    hint: '8+ characters',
                     prefixIcon: Icons.lock_outline,
                     controller: _pass,
                     obscure: _obscurePass,
