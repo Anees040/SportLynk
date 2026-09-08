@@ -719,8 +719,10 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
               child: Icon(icon, color: iconColor, size: 20),
             ),
             const SizedBox(width: 10),
-            Text(label, style: GoogleFonts.poppins(
-              fontSize: 13, fontWeight: FontWeight.w600, color: iconColor)),
+            Flexible(
+              child: Text(label, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(
+                fontSize: 13, fontWeight: FontWeight.w600, color: iconColor)),
+            ),
           ]),
         ),
       ),
