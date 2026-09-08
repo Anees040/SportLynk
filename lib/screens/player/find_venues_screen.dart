@@ -47,8 +47,18 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
     super.dispose();
   }
 
+  String _lastSearch = '';
+
   void _onSearch() {
-    if (_searchCtrl.text.length >= 2 || _searchCtrl.text.isEmpty) _load();
+    final query = _searchCtrl.text.trim();
+    if (query == _lastSearch) return;
+    if (query.isEmpty) {
+      _lastSearch = '';
+      _load();
+    } else if (query.length >= 2) {
+      _lastSearch = query;
+      _load();
+    }
   }
 
   List<String> _userPrefs = [];
@@ -427,7 +437,7 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
                   color: AppColors.accent,
                   onRefresh: _load,
                   child: CustomScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                    physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
                       if (_recommended.isNotEmpty) ...[
                         SliverToBoxAdapter(
