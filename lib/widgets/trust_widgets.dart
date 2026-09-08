@@ -63,60 +63,65 @@ class TrustGauge extends StatelessWidget {
       tween: Tween(begin: 0, end: target),
       duration: const Duration(milliseconds: 850),
       curve: Curves.easeOutCubic,
-      builder: (context, value, _) => SizedBox(
-        width: size,
-        height: size,
-        child: CustomPaint(
-          painter: _TrustRingPainter(fraction: value, color: tone.color),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // The animating number, so a 50 and an 88 don't just differ in arc
-                // length — they count up differently too.
-                Text(
-                  score == null ? '—' : '${(value * 100).round()}',
-                  style: GoogleFonts.poppins(
-                    fontSize: size * 0.26,
-                    fontWeight: FontWeight.bold,
-                    height: 1,
-                    color: score == null ? AppColors.textSecondary : AppColors.textPrimary,
-                  ),
-                ),
-                if (score != null)
-                  Text(
-                    'out of 100',
-                    style: GoogleFonts.poppins(
-                      fontSize: size * 0.055,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
+      builder: (context, value, _) => Center(
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: CustomPaint(
+            painter: _TrustRingPainter(fraction: value, color: tone.color),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // The animating number, so a 50 and an 88 don't just differ in arc
+                    // length — they count up differently too.
+                    Text(
+                      score == null ? '—' : '${(value * 100).round()}',
+                      style: GoogleFonts.poppins(
+                        fontSize: size * 0.26,
+                        fontWeight: FontWeight.bold,
+                        height: 1,
+                        color: score == null ? AppColors.textSecondary : AppColors.textPrimary,
+                      ),
                     ),
-                  ),
-                SizedBox(height: size * 0.03),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: size * 0.06, vertical: size * 0.02),
-                  decoration: BoxDecoration(
-                    color: tone.color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    tone.label.toUpperCase(),
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: size * 0.058,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                      color: tone.color,
+                    if (score != null)
+                      Text(
+                        'out of 100',
+                        style: GoogleFonts.poppins(
+                          fontSize: size * 0.055,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    SizedBox(height: size * 0.03),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: size * 0.06, vertical: size * 0.02),
+                      decoration: BoxDecoration(
+                        color: tone.color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        tone.label.toUpperCase(),
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: size * 0.058,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: tone.color,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _TrustRingPainter extends CustomPainter {
@@ -346,16 +351,6 @@ class SentimentChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Unavailable + nothing scored → the "added shortly" state.
-    if (source == 'unavailable' && label == null) {
-      return _pill(
-        icon: Icons.schedule,
-        color: AppColors.textSecondary,
-        text: 'Sentiment added shortly',
-        muted: true,
-      );
-    }
-
     // Flagged → lead with the escalation.
     if (flagged) {
       final pct = score == null ? null : (score!.abs() * 100).round();
@@ -363,6 +358,16 @@ class SentimentChip extends StatelessWidget {
         icon: Icons.flag_rounded,
         color: AppColors.warning,
         text: pct == null ? 'Flagged for review' : 'Flagged for review · $pct%',
+      );
+    }
+
+    // Unavailable + nothing scored → the "added shortly" state.
+    if (source == 'unavailable' && label == null) {
+      return _pill(
+        icon: Icons.schedule,
+        color: AppColors.textSecondary,
+        text: 'Sentiment added shortly',
+        muted: true,
       );
     }
 
@@ -857,13 +862,17 @@ class TeamReputationStrip extends StatelessWidget {
             children: [
               const Icon(Icons.groups_rounded, size: 15, color: Colors.white70),
               const SizedBox(width: 6),
-              Text(
-                teamName == null ? 'TEAM REPUTATION' : teamName!.toUpperCase(),
-                style: GoogleFonts.poppins(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: Colors.white70,
+              Expanded(
+                child: Text(
+                  teamName == null ? 'TEAM REPUTATION' : teamName!.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: Colors.white70,
+                  ),
                 ),
               ),
             ],
@@ -961,12 +970,16 @@ class TeamReputationStrip extends StatelessWidget {
         children: [
           Icon(s.$2, size: 12, color: Colors.white),
           const SizedBox(width: 4),
-          Text(
-            score == null ? s.$3 : '${s.$3} · $score',
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+          Flexible(
+            child: Text(
+              score == null ? s.$3 : '${s.$3} · $score',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
           ),
         ],

@@ -21,8 +21,8 @@
 // the fallback is what keeps older callers from rendering a dash where a score exists.
 //
 // The missing fourth state is pinned as behaviour rather than fixed. `ReviewService.
-// userReviews` returns `UserReviews.empty` on any failure (lib/services/review_service.
-// dart:102), and `_load` stores it without recording that anything went wrong, so a 500
+// userReviews` returns `UserReviews.empty` on any failure (review_service.dart
+// line 102), and `_load` stores it without recording that anything went wrong, so a 500
 // renders an unrated gauge and "No reviews about you yet" — a screen that reads as a
 // new player rather than a failed request. The fix is an `_error` field on the screen,
 // a distinguishable failure return from the service, and a retry.
@@ -113,6 +113,7 @@ void main() {
 
       expectLoading(tester);
       expect(find.text('—'), findsNothing);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
 
     testWidgets('the fetch starts without waiting for a gesture', (tester) async {

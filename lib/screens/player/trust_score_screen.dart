@@ -116,7 +116,7 @@ class _TrustScoreScreenState extends State<TrustScoreScreen> {
               color: AppColors.accent,
               onRefresh: _load,
               child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -222,10 +222,13 @@ class _TrustScoreScreenState extends State<TrustScoreScreen> {
                         children: [
                           Icon(Icons.verified_outlined, size: 13, color: tone.color),
                           const SizedBox(width: 4),
-                          Text(
-                            tone.label,
-                            style: GoogleFonts.poppins(
-                                fontSize: 11, fontWeight: FontWeight.w700, color: tone.color),
+                          Flexible(
+                            child: Text(
+                              tone.label,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                  fontSize: 11, fontWeight: FontWeight.w700, color: tone.color),
+                            ),
                           ),
                         ],
                       ),
