@@ -309,8 +309,7 @@ void main() {
     testWidgets('an expanded answer does not clip', (tester) async {
       await pumpScreen(tester, const HelpSupportScreen(), textScale: 2.0);
 
-      await tester.tap(find.text('How does the escrow work?'));
-      await tester.pump();
+      await tapVisible(tester, find.text('How does the escrow work?'));
       await tester.pump(const Duration(milliseconds: 400));
 
       expectNoOverflow(tester);
