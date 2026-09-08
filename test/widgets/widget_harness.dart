@@ -29,6 +29,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 import 'package:sportlynk/constants/app_theme.dart';
+import 'package:sportlynk/services/realtime_service.dart';
 
 /// Records every named route the widget under test navigated to, in order.
 ///
@@ -78,17 +79,18 @@ Future<RouteLog> pumpApp(
             child: child,
           ),
         );
-  await tester.pumpWidget(
-    MaterialApp(
+  final app = MaterialApp(
       theme: AppTheme.light,
       // The widget under test is the home route rather than a generated one, so a
       // second `pumpApp` inside one test replaces it instead of leaving the first
       // tree standing behind an already-built route.
-      home: providers.isEmpty
-          ? scaled
-          : MultiProvider(providers: providers, child: scaled),
+      home: scaled,
       onGenerateRoute: log.onGenerateRoute,
-    ),
+    );
+  await tester.pumpWidget(
+    providers.isEmpty
+        ? app
+        : MultiProvider(providers: providers, child: app),
   );
   return log;
 }
@@ -99,7 +101,10 @@ Future<RouteLog> pumpApp(
 void useDeviceSurface(WidgetTester tester, {Size size = const Size(412, 915)}) {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
-  addTearDown(tester.view.reset);
+  addTearDown(() {
+    tester.view.reset();
+    RealtimeService().disconnect();
+  });
 }
 
 /// The rendered size of the single widget [finder] matches.
