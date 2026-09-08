@@ -228,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     // Sign Up
                     RichText(
                       text: TextSpan(
-                        style: GoogleFonts.poppins(fontSize: 14),
+                        style: GoogleFonts.poppins(fontSize: 12),
                         children: [
                           const TextSpan(text: "Don't have an account? ", style: TextStyle(color: AppColors.textSecondary)),
                           TextSpan(
