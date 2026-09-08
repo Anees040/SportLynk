@@ -205,26 +205,31 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: List.generate(items.length, (i) {
               final selected = _tab == i;
-              return GestureDetector(
-                onTap: () => _onTabChanged(i),
-                behavior: HitTestBehavior.opaque,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.accent.withValues(alpha: 0.1) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(selected ? items[i].$2 : items[i].$3,
-                      color: selected ? AppColors.accent : const Color(0xFF94A3B8),
-                      size: 24),
-                    const SizedBox(height: 3),
-                    Text(items[i].$1,
-                      style: GoogleFonts.poppins(fontSize: 10,
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => _onTabChanged(i),
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: selected ? AppColors.accent.withValues(alpha: 0.1) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(selected ? items[i].$2 : items[i].$3,
                         color: selected ? AppColors.accent : const Color(0xFF94A3B8),
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.normal)),
-                  ]),
+                        size: 24),
+                      const SizedBox(height: 3),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(items[i].$1,
+                          style: GoogleFonts.poppins(fontSize: 10,
+                            color: selected ? AppColors.accent : const Color(0xFF94A3B8),
+                            fontWeight: selected ? FontWeight.w700 : FontWeight.normal)),
+                      ),
+                    ]),
+                  ),
                 ),
               );
             }),

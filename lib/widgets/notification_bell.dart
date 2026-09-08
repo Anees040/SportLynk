@@ -42,6 +42,14 @@ class NotificationBell extends StatefulWidget {
 }
 
 class _NotificationBellState extends State<NotificationBell> {
+  NotificationProvider? _notifications;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _notifications = Provider.of<NotificationProvider>(context, listen: false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -66,7 +74,7 @@ class _NotificationBellState extends State<NotificationBell> {
     // /welcome and removes the stack), so this is where the socket subscription and
     // the cached summary are dropped. Without it a logged-out app keeps re-reading
     // /summary on every frame the old token is still in flight for.
-    context.read<NotificationProvider>().detach();
+    _notifications?.detach();
     super.dispose();
   }
 

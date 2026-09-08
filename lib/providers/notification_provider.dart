@@ -97,7 +97,11 @@ class NotificationProvider extends ChangeNotifier {
     _cursor = null;
     _hasMore = false;
     _lastFrame = null;
-    notifyListeners();
+    scheduleMicrotask(() {
+      if (_token == null) {
+        notifyListeners();
+      }
+    });
   }
 
   void _onFrame(Map<String, dynamic> frame) {

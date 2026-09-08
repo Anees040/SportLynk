@@ -90,15 +90,10 @@ void main() {
         ],
       );
 
-  /// Replaces the bell with an empty box, keeping the providers above it mounted, and
-  /// consumes the exception described in the file header.
+  /// Replaces the bell with an empty box, keeping the providers above it mounted.
   Future<void> close(WidgetTester tester) async {
     await pumpBell(tester, child: const SizedBox.shrink());
-    expect(
-      tester.takeException(),
-      isA<FlutterError>(),
-      reason: 'dispose reads a deactivated ancestor: notification_bell.dart:69',
-    );
+    expect(tester.takeException(), isNull);
   }
 
   group('what the header shows', () {
@@ -184,15 +179,11 @@ void main() {
       await close(tester);
     });
 
-    // Recorded as the defect it is: logout unmounts the home screen, and the
-    // subscription that should be dropped here survives because `dispose` throws
-    // before it reaches `detach`. Until the widget holds its own reference to the
-    // provider, a signed-out app keeps re-reading /summary for the old token.
-    testWidgets('unmounting does not drop the subscription today', (tester) async {
+    testWidgets('unmounting drops the subscription cleanly', (tester) async {
       await pumpBell(tester);
       await close(tester);
       expect(find.byType(NotificationBell), findsNothing);
-      expect(notifications.detaches, 0);
+      expect(notifications.detaches, 1);
     });
   });
 }

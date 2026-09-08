@@ -197,6 +197,11 @@ void main() {
 
   group('with a session', () {
     testWidgets('an admin lands on the admin console', (tester) async {
+      api.ok('/admin/stats', {});
+      api.ok('/admin/registrations', []);
+      api.ok('/admin/venues/pending', []);
+      api.ok('/admin/disputes', {'disputes': [], 'hasMore': false});
+      api.ok('/reviews/moderation', []);
       await pumpScreen(tester, const AuthWrapper(),
           auth: _WrapperAuth(role: 'admin'));
       await settleData(tester);
@@ -204,8 +209,6 @@ void main() {
       expect(find.byType(AdminHomeScreen), findsOneWidget);
       expect(find.byType(PlayerHomeScreen), findsNothing);
 
-      // The console loads on mount and this test stubs nothing for it; anything it
-      // reports about its own data belongs to its own suite.
       tester.takeException();
     });
 
