@@ -282,7 +282,7 @@ class _AdminRegistrationDetailScreenState
         top: false,
         child: Row(children: [
           Expanded(
-            child: OutlinedButton.icon(
+            child: OutlinedButton(
               onPressed: _processing ? null : _showRejectDialog,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.error,
@@ -291,15 +291,22 @@ class _AdminRegistrationDetailScreenState
                     borderRadius: BorderRadius.circular(28)),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              icon: const Icon(Icons.cancel_outlined, size: 18),
-              label: Text('Reject',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cancel_outlined, size: 18),
+                  const SizedBox(width: 6),
+                  Text('Reject',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             flex: 2,
-            child: ElevatedButton.icon(
+            child: ElevatedButton(
               onPressed: _processing ? null : _approve,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accent,
@@ -309,16 +316,31 @@ class _AdminRegistrationDetailScreenState
                 elevation: 4,
                 shadowColor: AppColors.accent.withValues(alpha: 0.4),
               ),
-              icon: _processing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.check_circle_outline, size: 18),
-              label: Text(_processing ? 'Processing...' : 'Approve & Create Venue',
-                  style: GoogleFonts.poppins(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_processing)
+                    const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                  else
+                    const Icon(Icons.check_circle_outline, size: 18),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _processing ? 'Processing...' : 'Approve & Create Venue',
+                        style: GoogleFonts.poppins(
+                            color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ]),
@@ -355,9 +377,15 @@ class _AdminRegistrationDetailScreenState
         Row(children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(width: 8),
-          Text(title,
-              style: GoogleFonts.poppins(
-                  color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(title,
+                  style: GoogleFonts.poppins(
+                      color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+          ),
         ]),
         if (status == 'rejected' && reason != null) ...[
           const SizedBox(height: 6),
