@@ -119,8 +119,10 @@ class _ResultSheetState extends State<_ResultSheet> {
             context, 'Result submitted. Waiting for the other captain.');
       }
     } else {
-      SnackbarUtil.showError(
-          context, r['message']?.toString() ?? 'Could not submit the result.');
+      final msg = (r['statusCode'] == 0 || r['message'] == null)
+          ? 'Could not submit the result.'
+          : r['message'].toString();
+      SnackbarUtil.showError(context, msg);
     }
   }
 
@@ -402,8 +404,10 @@ class _DisputeSheetState extends State<_DisputeSheet> {
       SnackbarUtil.showSuccess(context,
           'Flagged for review. Ratings from this match stay frozen until an admin decides.');
     } else {
-      SnackbarUtil.showError(
-          context, r['message']?.toString() ?? 'Could not file the dispute.');
+      final msg = (r['statusCode'] == 0 || r['message'] == null)
+          ? 'Could not file the dispute.'
+          : r['message'].toString();
+      SnackbarUtil.showError(context, msg);
     }
   }
 

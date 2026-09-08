@@ -452,7 +452,7 @@ class EloHistoryChart extends StatelessWidget {
   /// One point cannot make a line. Say what is missing rather than drawing an
   /// empty frame that looks broken.
   Widget _tooShort() => Container(
-        height: height * 0.62,
+        constraints: BoxConstraints(minHeight: height * 0.62),
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
@@ -535,7 +535,8 @@ class MatchHistoryTile extends StatelessWidget {
                         fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                   ),
                   const SizedBox(height: 2),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
                         p.headline,
