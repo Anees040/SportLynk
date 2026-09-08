@@ -116,7 +116,9 @@ class _ApplyPriceSheetState extends State<_ApplyPriceSheet> {
     if (r['success'] != true) {
       setState(() {
         _loading = false;
-        _error = r['message']?.toString() ?? 'Could not load slots for this day.';
+        _error = (r['statusCode'] == 0 || r['message'] == null)
+            ? 'Could not load slots for this day.'
+            : r['message'].toString();
       });
       return;
     }
@@ -208,7 +210,9 @@ class _ApplyPriceSheetState extends State<_ApplyPriceSheet> {
 
     setState(() {
       _submitting = false;
-      _error = r['message']?.toString() ?? 'Could not apply the price.';
+      _error = (r['statusCode'] == 0 || r['message'] == null)
+          ? 'Could not apply the price.'
+          : r['message'].toString();
     });
   }
 
@@ -389,6 +393,7 @@ class _ApplyPriceSheetState extends State<_ApplyPriceSheet> {
             ? null
             : () => setState(() => selected ? _selected.remove(s.id) : _selected.add(s.id)),
         child: Container(
+          constraints: const BoxConstraints(minHeight: 48),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
           decoration: BoxDecoration(
             color: selected ? AppColors.accentLight : Colors.transparent,
