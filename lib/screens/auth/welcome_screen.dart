@@ -146,7 +146,7 @@ class WelcomeScreen extends StatelessWidget {
                       Center(
                         child: RichText(
                           text: TextSpan(
-                            style: GoogleFonts.poppins(fontSize: 13),
+                            style: GoogleFonts.poppins(fontSize: 12),
                             children: [
                               TextSpan(
                                 text: 'Already have an account? ',
