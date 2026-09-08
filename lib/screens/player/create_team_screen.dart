@@ -213,11 +213,11 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                 }
               })),
           const SizedBox(height: 10),
-          Center(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
             const Icon(Icons.shield_outlined, size: 14, color: AppColors.textSecondary),
             const SizedBox(width: 6),
-            Text('You will be assigned as Captain', style: GoogleFonts.poppins(
-              fontSize: 12, color: AppColors.textSecondary)),
+            Flexible(child: Text('You will be assigned as Captain', style: GoogleFonts.poppins(
+              fontSize: 12, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis)),
           ])),
           const SizedBox(height: 24),
         ]),

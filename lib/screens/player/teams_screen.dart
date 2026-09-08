@@ -56,7 +56,12 @@ class _TeamsScreenState extends State<TeamsScreen> {
     super.dispose();
   }
 
-  void _reload() => setState(() => _future = _service.mine(_token));
+  Future<void> _reload() {
+    setState(() {
+      _future = _service.mine(_token);
+    });
+    return _future ?? Future.value();
+  }
 
   Future<void> _openChat(Team t) async {
     await Navigator.push(
@@ -213,7 +218,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
         },
       ),
       body: RefreshIndicator(
-        onRefresh: () async => _reload(),
+        onRefresh: _reload,
         child: FutureBuilder<List<Team>>(
           future: _future,
           builder: (context, s) {
@@ -287,10 +292,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
                           style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                       const SizedBox(height: 8),
                       Row(children: [
-                        _stat('ELO', t.elo),
-                        _stat('W', t.wins),
-                        _stat('L', t.losses),
-                        _stat('D', t.draws),
+                        Expanded(child: _stat('ELO', t.elo)),
+                        Expanded(child: _stat('W', t.wins)),
+                        Expanded(child: _stat('L', t.losses)),
+                        Expanded(child: _stat('D', t.draws)),
                       ]),
                       // Counted achievements rather than a second rating: a
                       // tournament match moves this same ELO harder (K 40–56)
@@ -329,8 +334,9 @@ class _TeamsScreenState extends State<TeamsScreen> {
       );
 
   Widget _stat(String label, num value) => Padding(
-        padding: const EdgeInsets.only(right: 14),
+        padding: const EdgeInsets.only(right: 4),
         child: Text('$label $value',
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
                 fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
       );
