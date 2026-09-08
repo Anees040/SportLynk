@@ -794,8 +794,11 @@ void main() {
         s: suggestion(trustBand: null, trustLabel: null, trustScore: null),
       );
       expect(find.byType(TrustBadgeChip), findsOneWidget);
-      expect(find.textContaining('·'), findsNothing,
-          reason: 'the chip renders nothing without a band');
+      expect(
+        find.descendant(of: find.byType(TrustBadgeChip), matching: find.textContaining('·')),
+        findsNothing,
+        reason: 'the chip renders nothing without a band',
+      );
     });
 
     testWidgets('the invite button hands back the candidate it belongs to',
@@ -923,7 +926,10 @@ void main() {
         s: suggestion(matchPct: null, components: null, reasons: const []),
       );
       expect(
-        find.text('Ranking service unavailable — showing recent players first'),
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('Ranking service unavailable — showing recent players first'),
+        ),
         findsOneWidget,
       );
       expect(find.byType(WhyThisMatch), findsNothing);

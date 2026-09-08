@@ -151,15 +151,16 @@ class CompetitivenessGauge extends StatelessWidget {
     // Sweeps in from zero on first paint and re-sweeps when the opponent changes,
     // which is the whole reason the gauge earns its space over a second bar: the
     // motion is what makes a 40 feel different from an 85.
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: target),
-      duration: const Duration(milliseconds: 750),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, _) => SizedBox(
-        width: size,
-        // A half-circle plus room for the readout under it.
-        height: size * 0.62,
-        child: CustomPaint(
+    return Center(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: target),
+        duration: const Duration(milliseconds: 750),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, _) => SizedBox(
+          width: size,
+          // A half-circle plus room for the readout under it.
+          height: size * 0.62,
+          child: CustomPaint(
           painter: _GaugePainter(fraction: value, color: tone.color),
           child: Center(
             child: Column(
@@ -187,6 +188,7 @@ class CompetitivenessGauge extends StatelessWidget {
                 ),
               ],
             ),
+          ),
           ),
         ),
       ),
@@ -301,12 +303,16 @@ class TrustBadgeChip extends StatelessWidget {
         children: [
           Icon(style.$2, size: 11, color: color),
           const SizedBox(width: 4),
-          Text(
-            text,
-            style: GoogleFonts.poppins(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: color,
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
             ),
           ),
         ],
@@ -472,23 +478,38 @@ class ChallengeCountdown extends StatefulWidget {
 
   const ChallengeCountdown({super.key, required this.expiresAt, this.compact = false});
 
+  /// Pure formatter for a remaining duration. Exposed on the widget so tests
+  /// can assert the boundary strings without pumping a live timer.
+  static String format(Duration d) {
+    if (d.isNegative) return 'Expired';
+    if (d.inDays >= 1) return '${d.inDays}d ${d.inHours % 24}h left';
+    if (d.inHours >= 1) return '${d.inHours}h ${d.inMinutes % 60}m left';
+    if (d.inMinutes >= 1) return '${d.inMinutes}m ${d.inSeconds % 60}s left';
+    return '${d.inSeconds}s left';
+  }
+
   @override
   State<ChallengeCountdown> createState() => _ChallengeCountdownState();
 }
 
 class _ChallengeCountdownState extends State<ChallengeCountdown> {
   Timer? _timer;
+  Duration? _remaining;
 
   @override
   void initState() {
     super.initState();
+    _remaining = widget.expiresAt?.difference(DateTime.now());
     _schedule();
   }
 
   @override
   void didUpdateWidget(ChallengeCountdown old) {
     super.didUpdateWidget(old);
-    if (old.expiresAt != widget.expiresAt) _schedule();
+    if (old.expiresAt != widget.expiresAt) {
+      _remaining = widget.expiresAt?.difference(DateTime.now());
+      _schedule();
+    }
   }
 
   @override
@@ -499,34 +520,31 @@ class _ChallengeCountdownState extends State<ChallengeCountdown> {
 
   void _schedule() {
     _timer?.cancel();
-    final left = _left;
+    final left = _remaining;
     if (left == null || left.isNegative) return;
     // Under an hour, tick every second so the number is never stale enough to
     // mislead; above it, once a minute is plenty and costs nothing.
     final period = left.inHours < 1 ? const Duration(seconds: 1) : const Duration(minutes: 1);
     _timer = Timer.periodic(period, (_) {
       if (!mounted) return;
-      setState(() {});
-      final now = _left;
+      final current = _remaining;
+      if (current == null) {
+        _timer?.cancel();
+        return;
+      }
+      final next = current - period;
+      setState(() {
+        _remaining = next;
+      });
       // Crossing the hour boundary needs the faster timer.
-      if (now != null && now.inHours < 1 && period.inSeconds != 1) _schedule();
-      if (now == null || now.isNegative) _timer?.cancel();
+      if (next.inHours < 1 && period.inSeconds != 1) _schedule();
+      if (next.isNegative) _timer?.cancel();
     });
-  }
-
-  Duration? get _left => widget.expiresAt?.difference(DateTime.now());
-
-  static String format(Duration d) {
-    if (d.isNegative) return 'Expired';
-    if (d.inDays >= 1) return '${d.inDays}d ${d.inHours % 24}h left';
-    if (d.inHours >= 1) return '${d.inHours}h ${d.inMinutes % 60}m left';
-    if (d.inMinutes >= 1) return '${d.inMinutes}m ${d.inSeconds % 60}s left';
-    return '${d.inSeconds}s left';
   }
 
   @override
   Widget build(BuildContext context) {
-    final left = _left;
+    final left = _remaining;
     if (left == null) return const SizedBox.shrink();
 
     final expired = left.isNegative;
@@ -542,7 +560,7 @@ class _ChallengeCountdownState extends State<ChallengeCountdown> {
         Icon(expired ? Icons.timer_off : Icons.timer_outlined, size: widget.compact ? 11 : 13, color: color),
         const SizedBox(width: 4),
         Text(
-          format(left),
+          ChallengeCountdown.format(left),
           style: GoogleFonts.poppins(
             fontSize: widget.compact ? 10.5 : 12,
             fontWeight: urgent ? FontWeight.bold : FontWeight.w600,
@@ -568,13 +586,15 @@ class TeamCrest extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final has = logoUrl != null && logoUrl!.isNotEmpty;
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: background ?? AppColors.inputFill,
-      backgroundImage: has ? CachedNetworkImageProvider(logoUrl!) : null,
-      child: has
-          ? null
-          : Icon(Icons.shield_outlined, size: radius * 0.9, color: AppColors.primary),
+    return Center(
+      child: CircleAvatar(
+        radius: radius,
+        backgroundColor: background ?? AppColors.inputFill,
+        backgroundImage: has ? CachedNetworkImageProvider(logoUrl!) : null,
+        child: has
+            ? null
+            : Icon(Icons.shield_outlined, size: radius * 0.9, color: AppColors.primary),
+      ),
     );
   }
 }

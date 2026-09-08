@@ -42,37 +42,43 @@ class MatchPctBadge extends StatelessWidget {
     final p = pct;
     if (p == null) return const SizedBox.shrink();
     final tone = CompetitivenessTone.of(p);
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: compact ? 7 : 9, vertical: compact ? 3 : 5),
-      decoration: BoxDecoration(
-        color: tone.color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: tone.color.withValues(alpha: 0.30)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (caption != null) ...[
-            Text(
-              caption!,
-              style: TextStyle(
-                fontSize: compact ? 8 : 8.5,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.8,
-                color: tone.color.withValues(alpha: 0.85),
-              ),
-            ),
-            const SizedBox(width: 4),
-          ],
-          Text(
-            '$p%',
-            style: TextStyle(
-              fontSize: compact ? 11 : 12.5,
-              fontWeight: FontWeight.bold,
-              color: tone.color,
-            ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 90),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: compact ? 7 : 9, vertical: compact ? 3 : 5),
+          decoration: BoxDecoration(
+            color: tone.color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: tone.color.withValues(alpha: 0.30)),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (caption != null) ...[
+                Text(
+                  caption!,
+                  style: TextStyle(
+                    fontSize: compact ? 8 : 8.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: tone.color.withValues(alpha: 0.85),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                '$p%',
+                style: TextStyle(
+                  fontSize: compact ? 11 : 12.5,
+                  fontWeight: FontWeight.bold,
+                  color: tone.color,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -185,16 +191,20 @@ class _WhyThisMatchState extends State<WhyThisMatch> {
               children: [
                 const Icon(Icons.help_outline, size: 14, color: AppColors.primary),
                 const SizedBox(width: 6),
-                const Text(
-                  'Why this match?',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
+                const Flexible(
+                  child: Text(
+                    'Why this match?',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
                 const Spacer(),
-                if (!_open && widget.reasons.isNotEmpty)
+                if ((!_open || widget.reasons.length == 1) && widget.reasons.isNotEmpty)
                   Flexible(
                     child: Text(
                       widget.reasons.first,
@@ -213,12 +223,7 @@ class _WhyThisMatchState extends State<WhyThisMatch> {
             ),
           ),
         ),
-        AnimatedCrossFade(
-          duration: const Duration(milliseconds: 200),
-          crossFadeState: _open ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-          firstChild: _panel(),
-          secondChild: const SizedBox(width: double.infinity),
-        ),
+        if (_open) _panel(),
       ],
     );
   }
@@ -585,15 +590,21 @@ class _SuggestionCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   height: 30,
-                  child: FilledButton.icon(
+                  child: FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.accent,
                       padding: EdgeInsets.zero,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
-                    icon: const Icon(Icons.link, size: 13),
-                    label: const Text('Invite', style: TextStyle(fontSize: 11.5)),
                     onPressed: busy ? null : onInvite,
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.link, size: 13),
+                        SizedBox(width: 4),
+                        Text('Invite', style: TextStyle(fontSize: 11.5)),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -727,20 +738,26 @@ class PlayerSuggestionSheet {
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
+                child: FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.accent,
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                   ),
-                  icon: const Icon(Icons.link, size: 17),
-                  label: Text(onInvite == null ? 'Working…' : 'Create invite link'),
                   onPressed: onInvite == null
                       ? null
                       : () {
                           Navigator.pop(ctx);
                           onInvite();
                         },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.link, size: 17),
+                      const SizedBox(width: 6),
+                      Text(onInvite == null ? 'Working…' : 'Create invite link'),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
