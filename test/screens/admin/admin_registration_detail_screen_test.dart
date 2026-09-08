@@ -59,7 +59,7 @@ Map<String, dynamic> reg({
       'price_per_hour': price,
       'operating_hours_from': '06:00',
       'operating_hours_to': '23:00',
-      if (rejectionReason != null) 'rejection_reason': rejectionReason,
+      'rejection_reason': ?rejectionReason,
       'created_at': '2026-09-01T09:00:00Z',
     };
 

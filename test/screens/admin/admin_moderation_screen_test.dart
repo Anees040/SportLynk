@@ -56,25 +56,25 @@ Map<String, dynamic> flagged({
     {
       'id': id,
       'stars': stars,
-      if (text != null) 'text': text,
+      'text': ?text,
       'reviewerName': reviewerName,
       'reviewType': reviewType,
-      if (reviewedUserName != null) 'reviewedUserName': reviewedUserName,
-      if (venueName != null) 'venueName': venueName,
+      'reviewedUserName': ?reviewedUserName,
+      'venueName': ?venueName,
       'sentimentLabel': sentimentLabel,
-      if (sentimentScore != null) 'sentimentScore': sentimentScore,
+      'sentimentScore': ?sentimentScore,
       'flagged': flagged,
       'hidden': hidden,
       'openFlagCount': openFlagCount,
       'flags': flags,
-      if (createdAt != null) 'createdAt': createdAt,
+      'createdAt': ?createdAt,
     };
 
 /// One human report row inside a review's `flags` list.
 Map<String, dynamic> report({String reason = 'Abusive language', String? by = 'Sana'}) =>
     {
       'reason': reason,
-      if (by != null) 'flaggedByName': by,
+      'flaggedByName': ?by,
       'createdAt': '2026-09-01T11:00:00Z',
     };
 

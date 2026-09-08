@@ -51,7 +51,7 @@ Map<String, dynamic> numberField({
       'key': key,
       'label': label,
       'type': 'number',
-      if (description != null) 'description': description,
+      'description': ?description,
       'unit': unit,
       'step': step,
       'min': min,
@@ -71,7 +71,7 @@ Map<String, dynamic> section({
     {
       'key': key,
       'label': label,
-      if (hint != null) 'hint': hint,
+      'hint': ?hint,
       'fields': fields,
     };
 

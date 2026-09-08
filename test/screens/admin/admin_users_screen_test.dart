@@ -47,7 +47,7 @@ Map<String, dynamic> user({
       'email': email,
       'phone': phone,
       'suspended': suspended,
-      if (suspendedReason != null) 'suspendedReason': suspendedReason,
+      'suspendedReason': ?suspendedReason,
       'counts': {'bookings': bookings, 'venues': venues},
       'wallet': {'balance': balance, 'frozen': frozen},
     };

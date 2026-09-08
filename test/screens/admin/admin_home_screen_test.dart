@@ -19,7 +19,6 @@
 // zero, not a crash — but the five are stubbed here so the loaded state is the real
 // one and not a fallback.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sportlynk/screens/admin/admin_home_screen.dart';
 

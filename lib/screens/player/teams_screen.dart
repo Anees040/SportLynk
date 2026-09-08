@@ -60,7 +60,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
     setState(() {
       _future = _service.mine(_token);
     });
-    return _future ?? Future.value();
+    return _future;
   }
 
   Future<void> _openChat(Team t) async {

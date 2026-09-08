@@ -185,7 +185,7 @@ Finder rowSurface() => find
     .descendant(of: find.byType(Dismissible), matching: find.byType(Material))
     .first;
 
-Future<RouteLog> pumpFeed(
+Future<RouteLog> _pumpFeed(
   WidgetTester tester,
   _Feed feed, {
   FakeAuth? auth,
@@ -219,7 +219,7 @@ void main() {
     testWidgets('attaches the session before it fetches', (tester) async {
       final feed = _Feed();
 
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       expect(feed.calls, <String>['attach:test-token', 'refresh']);
     });
@@ -232,7 +232,7 @@ void main() {
         (tester) async {
       final feed = _Feed();
 
-      await pumpFeed(tester, feed, auth: FakeAuth(token: null));
+      await _pumpFeed(tester, feed, auth: FakeAuth(token: null));
 
       expect(feed.calls, <String>['attach:null', 'refresh']);
     });
@@ -240,7 +240,7 @@ void main() {
 
   group('while the feed is being fetched', () {
     testWidgets('shows a spinner over an empty feed', (tester) async {
-      await pumpFeed(tester, _Feed(loading: true));
+      await _pumpFeed(tester, _Feed(loading: true));
 
       expectLoading(tester);
       expect(find.byType(ListView), findsNothing);
@@ -249,7 +249,7 @@ void main() {
     // A reload replaces the rows when it lands, not when it starts. Swapping the list
     // for a spinner on every pull would make a refresh look like a page load.
     testWidgets('keeps the rows visible while it reloads', (tester) async {
-      await pumpFeed(tester, _Feed(loading: true, feed: feedOf(3)));
+      await _pumpFeed(tester, _Feed(loading: true, feed: feedOf(3)));
 
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(find.text('Row 0'), findsOneWidget);
@@ -258,7 +258,7 @@ void main() {
 
   group('when there is nothing to show', () {
     testWidgets('says so on a fresh account', (tester) async {
-      await pumpFeed(tester, _Feed());
+      await _pumpFeed(tester, _Feed());
 
       expect(find.text('No notifications yet.'), findsOneWidget);
       expect(find.byIcon(Icons.notifications_none), findsOneWidget);
@@ -268,20 +268,20 @@ void main() {
     // have no notifications while a chip is hiding nine of them is a lie the chip row
     // makes easy to walk into.
     testWidgets('names the filter rather than the account', (tester) async {
-      await pumpFeed(tester, _Feed(selected: 'wallet'));
+      await _pumpFeed(tester, _Feed(selected: 'wallet'));
 
       expect(find.text('Nothing here with this filter.'), findsOneWidget);
       expect(find.text('No notifications yet.'), findsNothing);
     });
 
     testWidgets('names the filter when only unread rows are shown', (tester) async {
-      await pumpFeed(tester, _Feed(unreadFilter: true));
+      await _pumpFeed(tester, _Feed(unreadFilter: true));
 
       expect(find.text('Nothing here with this filter.'), findsOneWidget);
     });
 
     testWidgets('shows the failure instead of the empty line', (tester) async {
-      await pumpFeed(tester, _Feed(failure: 'Could not load notifications'));
+      await _pumpFeed(tester, _Feed(failure: 'Could not load notifications'));
 
       expect(find.text('Could not load notifications'), findsOneWidget);
       expect(find.byIcon(Icons.cloud_off), findsOneWidget);
@@ -295,7 +295,7 @@ void main() {
     // does not say so either. A `TextButton('Retry')` under the message, calling the
     // same `p.refresh`, is the fix.
     testWidgets('offers no retry button when the fetch failed', (tester) async {
-      await pumpFeed(tester, _Feed(failure: 'Could not load notifications'));
+      await _pumpFeed(tester, _Feed(failure: 'Could not load notifications'));
 
       expect(find.byType(TextButton), findsNothing);
       expect(find.byType(FilledButton), findsNothing);
@@ -306,13 +306,13 @@ void main() {
 
   group('the filter chips', () {
     testWidgets('draws nothing on a fresh account', (tester) async {
-      await pumpFeed(tester, _Feed());
+      await _pumpFeed(tester, _Feed());
 
       expect(find.byType(FilterChip), findsNothing);
     });
 
     testWidgets('draws only the categories that have rows', (tester) async {
-      await pumpFeed(
+      await _pumpFeed(
         tester,
         _Feed(counts: const {'booking': 2, 'chat': 1}),
       );
@@ -325,7 +325,7 @@ void main() {
     // The chip the user is filtering by has to stay reachable, or the only way out of
     // an empty filtered feed is the app bar's unrelated toggle.
     testWidgets('keeps the selected chip when its count is zero', (tester) async {
-      await pumpFeed(
+      await _pumpFeed(
         tester,
         _Feed(counts: const {'booking': 2}, selected: 'wallet'),
       );
@@ -340,7 +340,7 @@ void main() {
     // its way down.
     testWidgets('draws them in the registry order, not the response order',
         (tester) async {
-      await pumpFeed(
+      await _pumpFeed(
         tester,
         _Feed(counts: const {'wallet': 3, 'booking': 2, 'chat': 1}),
       );
@@ -353,7 +353,7 @@ void main() {
     });
 
     testWidgets('shows the chip selected when it is the filter', (tester) async {
-      await pumpFeed(
+      await _pumpFeed(
         tester,
         _Feed(counts: const {'booking': 2, 'chat': 1}, selected: 'chat'),
       );
@@ -365,7 +365,7 @@ void main() {
 
     testWidgets('a tap sends the category to the provider', (tester) async {
       final feed = _Feed(counts: const {'booking': 2, 'chat': 1});
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.tap(find.text('Chat 1'));
       await tester.pump();
@@ -378,7 +378,7 @@ void main() {
     // how the chip row and the feed start disagreeing about what is filtered.
     testWidgets('a tap on the selected chip sends it again', (tester) async {
       final feed = _Feed(counts: const {'booking': 2}, selected: 'booking');
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.tap(find.text('Bookings 2'));
       await tester.pump();
@@ -389,14 +389,14 @@ void main() {
 
   group('the unread filter', () {
     testWidgets('offers to hide the read rows', (tester) async {
-      await pumpFeed(tester, _Feed());
+      await _pumpFeed(tester, _Feed());
 
       expect(find.byTooltip('Unread only'), findsOneWidget);
       expect(find.byIcon(Icons.filter_alt_outlined), findsOneWidget);
     });
 
     testWidgets('offers to show them again once it is on', (tester) async {
-      await pumpFeed(tester, _Feed(unreadFilter: true));
+      await _pumpFeed(tester, _Feed(unreadFilter: true));
 
       expect(find.byTooltip('Show all'), findsOneWidget);
       expect(find.byIcon(Icons.filter_alt), findsOneWidget);
@@ -404,7 +404,7 @@ void main() {
 
     testWidgets('a tap turns it on', (tester) async {
       final feed = _Feed();
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.tap(find.byTooltip('Unread only'));
       await tester.pump();
@@ -414,7 +414,7 @@ void main() {
 
     testWidgets('a tap turns it back off', (tester) async {
       final feed = _Feed(unreadFilter: true);
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.tap(find.byTooltip('Show all'));
       await tester.pump();
@@ -427,7 +427,7 @@ void main() {
     // Disabled rather than hidden: a control that vanishes when there is nothing to do
     // moves the two buttons beside it, and the row of actions must not reflow.
     testWidgets('is disabled with nothing unread', (tester) async {
-      await pumpFeed(tester, _Feed(feed: feedOf(2)));
+      await _pumpFeed(tester, _Feed(feed: feedOf(2)));
 
       final button =
           tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.done_all));
@@ -435,7 +435,7 @@ void main() {
     });
 
     testWidgets('is enabled while something is unread', (tester) async {
-      await pumpFeed(tester, _Feed(feed: feedOf(2), unreadCount: 2));
+      await _pumpFeed(tester, _Feed(feed: feedOf(2), unreadCount: 2));
 
       final button =
           tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.done_all));
@@ -444,7 +444,7 @@ void main() {
 
     testWidgets('a tap marks everything read', (tester) async {
       final feed = _Feed(feed: feedOf(2), unreadCount: 2);
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.tap(find.byTooltip('Mark all read'));
       await tester.pump();
@@ -455,7 +455,7 @@ void main() {
 
   group('the overflow menu', () {
     testWidgets('offers the settings and the clear', (tester) async {
-      await pumpFeed(tester, _Feed());
+      await _pumpFeed(tester, _Feed());
 
       await openMenu(tester);
 
@@ -483,7 +483,7 @@ void main() {
         });
       api.install();
       ignoreOverflow();
-      await pumpFeed(tester, _Feed());
+      await _pumpFeed(tester, _Feed());
 
       await openMenu(tester);
       await tester.tap(find.text('Notification settings'));
@@ -498,7 +498,7 @@ void main() {
     // the last hour.
     testWidgets('the clear item asks first', (tester) async {
       final feed = _Feed(feed: feedOf(2));
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await openMenu(tester);
       await tester.tap(find.text('Clear read'));
@@ -518,7 +518,7 @@ void main() {
 
     testWidgets('cancelling clears nothing', (tester) async {
       final feed = _Feed(feed: feedOf(2));
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await openMenu(tester);
       await tester.tap(find.text('Clear read'));
@@ -534,7 +534,7 @@ void main() {
 
     testWidgets('confirming clears the read rows', (tester) async {
       final feed = _Feed(feed: feedOf(2));
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await openMenu(tester);
       await tester.tap(find.text('Clear read'));
@@ -550,7 +550,7 @@ void main() {
 
   group('a row', () {
     testWidgets('shows the title, the body and the age', (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif()]));
+      await _pumpFeed(tester, _Feed(feed: [notif()]));
 
       expect(find.text('Booking confirmed'), findsOneWidget);
       expect(find.text('Green Turf, seven to eight'), findsOneWidget);
@@ -558,19 +558,19 @@ void main() {
     });
 
     testWidgets('marks an unread row with a dot', (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif()]));
+      await _pumpFeed(tester, _Feed(feed: [notif()]));
 
       expect(unreadDot(), findsOneWidget);
     });
 
     testWidgets('leaves a read row without one', (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif(isRead: true)]));
+      await _pumpFeed(tester, _Feed(feed: [notif(isRead: true)]));
 
       expect(unreadDot(), findsNothing);
     });
 
     testWidgets('tints an unread row', (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif()]));
+      await _pumpFeed(tester, _Feed(feed: [notif()]));
 
       expect(
         tester.widget<Material>(rowSurface()).color,
@@ -579,7 +579,7 @@ void main() {
     });
 
     testWidgets('leaves a read row on the card colour', (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif(isRead: true)]));
+      await _pumpFeed(tester, _Feed(feed: [notif(isRead: true)]));
 
       expect(tester.widget<Material>(rowSurface()).color, AppColors.cardBg);
     });
@@ -587,27 +587,27 @@ void main() {
     // The server has already rewritten the body to "3 new messages"; the badge says
     // which fact was collapsed so the row does not look like it lost two of them.
     testWidgets('says how many events a grouped row collapses', (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif(groupCount: 3)]));
+      await _pumpFeed(tester, _Feed(feed: [notif(groupCount: 3)]));
 
       expect(find.text('3'), findsOneWidget);
     });
 
     testWidgets('shows no count on a row that groups nothing', (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif()]));
+      await _pumpFeed(tester, _Feed(feed: [notif()]));
 
       expect(find.text('1'), findsNothing);
     });
 
     testWidgets('draws the actor initials where there is a person behind it',
         (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif(actorName: 'Ali Raza')]));
+      await _pumpFeed(tester, _Feed(feed: [notif(actorName: 'Ali Raza')]));
 
       expect(find.text('AR'), findsOneWidget);
       expect(find.byType(CircleAvatar), findsOneWidget);
     });
 
     testWidgets('draws the registry icon where there is not', (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif()]));
+      await _pumpFeed(tester, _Feed(feed: [notif()]));
 
       expect(find.byIcon(Icons.event_available), findsOneWidget);
       expect(find.byType(CircleAvatar), findsNothing);
@@ -617,13 +617,13 @@ void main() {
     // registry lives on the server and the client is always one release behind it.
     testWidgets('falls back to a bell for an icon name it does not know',
         (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif(icon: 'a_name_from_a_later_release')]));
+      await _pumpFeed(tester, _Feed(feed: [notif(icon: 'a_name_from_a_later_release')]));
 
       expect(find.byIcon(Icons.notifications), findsOneWidget);
     });
 
     testWidgets('labels an expired row', (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif(isExpired: true)]));
+      await _pumpFeed(tester, _Feed(feed: [notif(isExpired: true)]));
 
       expect(find.text('Expired'), findsOneWidget);
     });
@@ -639,7 +639,7 @@ void main() {
           }),
         ],
       );
-      final log = await pumpFeed(tester, feed, followLinks: true);
+      final log = await _pumpFeed(tester, feed, followLinks: true);
       addTearDown(DeepLink.clear);
 
       await tester.tap(find.text('Booking confirmed'));
@@ -658,7 +658,7 @@ void main() {
       final feed = _Feed(
         feed: [notif(deepLink: const {'route': '/a-screen-that-was-renamed'})],
       );
-      final log = await pumpFeed(tester, feed, followLinks: true);
+      final log = await _pumpFeed(tester, feed, followLinks: true);
       addTearDown(DeepLink.clear);
 
       await tester.tap(find.text('Booking confirmed'));
@@ -678,7 +678,7 @@ void main() {
           ),
         ],
       );
-      final log = await pumpFeed(tester, feed, followLinks: true);
+      final log = await _pumpFeed(tester, feed, followLinks: true);
       addTearDown(DeepLink.clear);
 
       await tester.tap(find.text('Booking confirmed'));
@@ -697,7 +697,7 @@ void main() {
     // notice with no link that stayed unread would keep the badge lit for good.
     testWidgets('marks a row with nowhere to go read anyway', (tester) async {
       final feed = _Feed(feed: [notif()]);
-      final log = await pumpFeed(tester, feed, followLinks: true);
+      final log = await _pumpFeed(tester, feed, followLinks: true);
       addTearDown(DeepLink.clear);
 
       await tester.tap(find.text('Booking confirmed'));
@@ -711,7 +711,7 @@ void main() {
 
     testWidgets('a long press marks an unread row read', (tester) async {
       final feed = _Feed(feed: [notif()]);
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.longPress(find.text('Booking confirmed'));
       await tester.pump();
@@ -721,7 +721,7 @@ void main() {
 
     testWidgets('a long press marks a read row unread', (tester) async {
       final feed = _Feed(feed: [notif(isRead: true)]);
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.longPress(find.text('Booking confirmed'));
       await tester.pump();
@@ -733,7 +733,7 @@ void main() {
   group('dismissing a row', () {
     testWidgets('a swipe towards the start dismisses it', (tester) async {
       final feed = _Feed(feed: [notif()]);
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.drag(find.byType(Dismissible), const Offset(-500, 0));
       await tester.pump();
@@ -746,7 +746,7 @@ void main() {
     // the gesture the user makes to go back.
     testWidgets('a swipe the other way does nothing', (tester) async {
       final feed = _Feed(feed: [notif()]);
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.drag(find.byType(Dismissible), const Offset(500, 0));
       await tester.pump();
@@ -759,20 +759,20 @@ void main() {
 
   group('paging', () {
     testWidgets('adds a spinner row while there is more to fetch', (tester) async {
-      await pumpFeed(tester, _Feed(feed: feedOf(3), more: true));
+      await _pumpFeed(tester, _Feed(feed: feedOf(3), more: true));
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
     testWidgets('shows no spinner row at the end of the feed', (tester) async {
-      await pumpFeed(tester, _Feed(feed: feedOf(3)));
+      await _pumpFeed(tester, _Feed(feed: feedOf(3)));
 
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
     testWidgets('fetches the next page as the end comes into view', (tester) async {
       final feed = _Feed(feed: feedOf(20), more: true);
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.drag(find.byType(ListView), const Offset(0, -900));
       await tester.pump();
@@ -782,7 +782,7 @@ void main() {
 
     testWidgets('does not fetch a page before the end is near', (tester) async {
       final feed = _Feed(feed: feedOf(20), more: true);
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.drag(find.byType(ListView), const Offset(0, -40));
       await tester.pump();
@@ -792,7 +792,7 @@ void main() {
 
     testWidgets('a pull reloads the feed', (tester) async {
       final feed = _Feed(feed: feedOf(20));
-      await pumpFeed(tester, feed);
+      await _pumpFeed(tester, feed);
 
       await tester.drag(find.byType(ListView), const Offset(0, 400));
       await tester.pump();
@@ -808,7 +808,7 @@ void main() {
     // button paints a forty-pixel box and is padded out to the interactive floor by
     // `_InputPadding`, which sits above the tooltip in the tree.
     testWidgets('the filter button is big enough to hit', (tester) async {
-      await pumpFeed(tester, _Feed());
+      await _pumpFeed(tester, _Feed());
 
       expectTapTarget(
         tester,
@@ -817,13 +817,13 @@ void main() {
     });
 
     testWidgets('the mark-all-read button is big enough to hit', (tester) async {
-      await pumpFeed(tester, _Feed(feed: feedOf(2), unreadCount: 2));
+      await _pumpFeed(tester, _Feed(feed: feedOf(2), unreadCount: 2));
 
       expectTapTarget(tester, find.widgetWithIcon(IconButton, Icons.done_all));
     });
 
     testWidgets('a row is big enough to hit', (tester) async {
-      await pumpFeed(tester, _Feed(feed: [notif()]));
+      await _pumpFeed(tester, _Feed(feed: [notif()]));
 
       expectTapTarget(tester, find.byType(Dismissible));
     });
@@ -837,7 +837,7 @@ void main() {
     testWidgets('keeps the rows readable at a doubled text scale', (tester) async {
       ignoreOverflow();
 
-      await pumpFeed(tester, _Feed(feed: [notif()]), textScale: 2.0);
+      await _pumpFeed(tester, _Feed(feed: [notif()]), textScale: 2.0);
 
       expect(find.text('Booking confirmed'), findsOneWidget);
       expect(find.byTooltip('Unread only'), findsOneWidget);

@@ -15,7 +15,6 @@
 // queue read is indistinguishable from a genuinely empty one — a defect (there is no
 // error-with-retry state) pinned by a test below rather than fixed.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sportlynk/screens/admin/admin_disputes_screen.dart';
 
@@ -63,14 +62,14 @@ Map<String, dynamic> dispute({
       'ageHours': ageHours,
       'severityElo': severityElo,
       'bothSidesDisputed': bothSidesDisputed,
-      if (ruling != null) 'ruling': ruling,
+      'ruling': ?ruling,
       'match': {
         'status': 'disputed',
         'resultsIn': resultsIn,
-        if (scoreline != null) 'scoreline': scoreline,
+        'scoreline': ?scoreline,
         'eloApplied': eloApplied,
         'isFixture': isFixture,
-        if (tournamentName != null) 'tournamentName': tournamentName,
+        'tournamentName': ?tournamentName,
       },
       'challenger': team(id: 't-1', name: challengerName, elo: challengerElo),
       'opponent': team(

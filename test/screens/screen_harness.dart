@@ -51,7 +51,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
-import 'package:sportlynk/constants/api_constants.dart';
 import 'package:sportlynk/constants/app_theme.dart';
 import 'package:sportlynk/models/user.dart';
 import 'package:sportlynk/providers/auth_provider.dart';

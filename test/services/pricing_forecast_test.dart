@@ -33,7 +33,7 @@ Map<String, dynamic> _point(int hour, double p,
       'slotDate': date,
       'hour': hour,
       'bookProbability': p,
-      if (level != null) 'level': level,
+      'level': ?level,
     };
 
 void main() {
