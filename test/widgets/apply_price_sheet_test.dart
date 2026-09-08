@@ -29,6 +29,8 @@
 // The endpoint, the bearer, the slot ids and the price are all pinned, because a sheet
 // that renders perfectly and sends the wrong body is the worst outcome available here.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -76,7 +78,7 @@ Map<String, dynamic> slot({
       'id': id,
       'start_time': '${hour.toString().padLeft(2, '0')}:00:00',
       'status': status,
-      if (effective != null) 'effective_status': effective,
+      'effective_status': ?effective,
       'price': price,
     };
 
@@ -221,7 +223,8 @@ void main() {
 
     testWidgets('a spinner stands in while the day is being fetched',
         (tester) async {
-      final api = FakeApi()..ok([slot()]);
+      final completer = Completer<void>();
+      final api = FakeApi()..ok([slot()], defer: completer.future);
       await api.run(() async {
         await openSheet(tester);
         await settleSheet(tester);
@@ -229,6 +232,8 @@ void main() {
         expect(find.text('Apply PKR 1,500/hr'), findsOneWidget,
             reason: 'the heading is known before the request answers');
         expect(find.text('Nothing selected'), findsOneWidget);
+        completer.complete();
+        await tester.pump();
       });
     });
   });
@@ -669,7 +674,12 @@ void main() {
         await tester.pump();
         expect(find.text('Apply price'), findsNothing);
         expect(find.byType(CircularProgressIndicator), findsOneWidget);
-        final button = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+        final button = tester.widget<ElevatedButton>(
+          find.ancestor(
+            of: find.byType(CircularProgressIndicator),
+            matching: find.byType(ElevatedButton),
+          ),
+        );
         expect(button.onPressed, isNull,
             reason: 'a double tap would issue the write twice');
       });
