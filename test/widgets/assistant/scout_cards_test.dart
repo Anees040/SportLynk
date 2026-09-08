@@ -46,7 +46,7 @@ ScoutCard card(String type, Map<String, dynamic> data) =>
 
 Map<String, dynamic> chip(String label, String action,
         [Map<String, dynamic>? args]) =>
-    {'label': label, 'action': action, if (args != null) 'args': args};
+    {'label': label, 'action': action, 'args': ?args};
 
 Map<String, dynamic> venue({
   String name = 'Karachi Sports Arena',
@@ -69,7 +69,7 @@ Map<String, dynamic> venue({
       'pricePerHour': price,
       'rating': rating,
       'totalReviews': reviews,
-      if (matchPct != null) 'matchPct': matchPct,
+      'matchPct': ?matchPct,
       'reasons': reasons,
       'buttons': buttons ?? [chip('Book', 'book_venue', {'venueId': 'v1'})],
     };
@@ -117,10 +117,10 @@ Map<String, dynamic> confirm({
             {'label': 'Ground', 'value': 'Karachi Sports Arena'},
             {'label': 'Day', 'value': 'Sat 21 Mar'},
           ],
-      if (total != null) 'total': total,
-      if (deposit != null) 'deposit': deposit,
-      if (depositPct != null) 'depositPct': depositPct,
-      if (note != null) 'note': note,
+      'total': ?total,
+      'deposit': ?deposit,
+      'depositPct': ?depositPct,
+      'note': ?note,
       'buttons': buttons ??
           [chip('Confirm', 'confirm'), chip('Cancel', 'cancel_confirm')],
     };
@@ -143,7 +143,7 @@ Map<String, dynamic> booking({
       'dateLabel': dateLabel,
       'timeLabel': timeLabel,
       'status': status,
-      if (total != null) 'total': total,
+      'total': ?total,
       'buttons': buttons ?? const [],
     };
 

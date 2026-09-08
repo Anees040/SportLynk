@@ -488,6 +488,7 @@ class _DetailRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
+            flex: 2,
             child: Text(
               label,
               style: TextStyle(
@@ -498,13 +499,16 @@ class _DetailRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              color: tone ?? ScoutTheme.ink,
-              fontSize: emphasis ? 13.5 : 12,
-              fontWeight: emphasis ? FontWeight.w700 : FontWeight.w500,
+          Expanded(
+            flex: 3,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: tone ?? ScoutTheme.ink,
+                fontSize: emphasis ? 13.5 : 12,
+                fontWeight: emphasis ? FontWeight.w700 : FontWeight.w500,
+              ),
             ),
           ),
         ],
