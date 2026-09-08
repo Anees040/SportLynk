@@ -242,12 +242,18 @@ class ScoutReasons extends StatelessWidget {
                 children: [
                   const Icon(Icons.check_rounded, size: 11, color: ScoutTheme.accent),
                   const SizedBox(width: 3),
-                  Text(
-                    r,
-                    style: const TextStyle(
-                      color: ScoutTheme.inkSoft,
-                      fontSize: 10.5,
-                      height: 1.25,
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        r,
+                        style: const TextStyle(
+                          color: ScoutTheme.inkSoft,
+                          fontSize: 10.5,
+                          height: 1.25,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -292,12 +298,18 @@ class ScoutFacts extends StatelessWidget {
               children: [
                 Icon(f.icon, size: fontSize + 1.5, color: f.color ?? ScoutTheme.inkFaint),
                 const SizedBox(width: 3.5),
-                Text(
-                  f.text,
-                  style: TextStyle(
-                    color: f.color ?? ScoutTheme.inkSoft,
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.w500,
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      f.text,
+                      style: TextStyle(
+                        color: f.color ?? ScoutTheme.inkSoft,
+                        fontSize: fontSize,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
                 ),
               ],

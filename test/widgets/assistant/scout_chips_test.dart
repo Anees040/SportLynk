@@ -284,22 +284,15 @@ void main() {
       expectNoOverflow(tester);
     });
 
-    // Pinned as it behaves, not as it should. The chip's label is neither flexible nor
-    // ellipsised, so at a doubled text scale a two-word chip is wider than the bubble
-    // it sits in and the row overflows — against the project's own rule that text
-    // scales without clipping. The exception is consumed here so the defect is recorded
-    // rather than left to fail a screen test later; wrapping the label in a `Flexible`
-    // with an ellipsis is what would turn this expectation green.
+    // The fix the comment above anticipated is now in — the label is wrapped in a
+    // `Flexible` with `TextOverflow.ellipsis`, so a doubled text scale no longer
+    // overflows the row. The assertion now proves the defect is gone.
     testWidgets('at a doubled text scale a chip is wider than its bubble',
         (tester) async {
       await pumpWrap(tester, onTap: (_) {}, textScale: 2.0);
       expect(find.text('Book it'), findsOneWidget);
       expect(find.text('Other times'), findsOneWidget);
-      expect(
-        tester.takeException(),
-        isA<FlutterError>(),
-        reason: 'the label has no ellipsis: scout_chips.dart, ScoutChipButton',
-      );
+      expectNoOverflow(tester);
     });
   });
 }

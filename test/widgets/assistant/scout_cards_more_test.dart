@@ -54,7 +54,7 @@ ScoutCard card(String type, Map<String, dynamic> data) =>
 
 Map<String, dynamic> chip(String label, String action,
         [Map<String, dynamic>? args]) =>
-    {'label': label, 'action': action, if (args != null) 'args': args};
+    {'label': label, 'action': action, 'args': ?args};
 
 void main() {
   /// Records what a tap posted, so "the card authored this" is an assertion.
@@ -185,14 +185,14 @@ void main() {
         {
           'id': 'u1',
           'name': name,
-          if (city != null) 'city': city,
-          if (position != null) 'position': position,
-          if (skill != null) 'skill': skill,
-          if (trust != null) 'trustScore': trust,
-          if (played != null) 'matchesPlayed': played,
-          if (matchPct != null) 'matchPct': matchPct,
+          'city': ?city,
+          'position': ?position,
+          'skill': ?skill,
+          'trustScore': ?trust,
+          'matchesPlayed': ?played,
+          'matchPct': ?matchPct,
           'reasons': reasons,
-          if (buttons != null) 'buttons': buttons,
+          'buttons': ?buttons,
         };
 
     testWidgets('the name, city and facts read in one card', (tester) async {
@@ -297,7 +297,6 @@ void main() {
     testWidgets('a tap posts the chip the backend minted', (tester) async {
       final button = chip('Invite', 'invite_player', {'userId': 'u1'});
       final c = card(ScoutCardType.player, player(buttons: [button]));
-      final minted = c.data.buttons().single;
 
       await pumpCard(tester, c);
       await tester.tap(find.text('Invite'));
@@ -346,16 +345,16 @@ void main() {
         {
           'id': 't1',
           'name': name,
-          if (sport != null) 'sport': sport,
-          if (city != null) 'city': city,
-          if (ranked != null) 'isRanked': ranked,
-          if (displayElo != null) 'displayElo': displayElo,
-          if (elo != null) 'elo': elo,
-          if (wins != null) 'wins': wins,
-          if (losses != null) 'losses': losses,
-          if (members != null) 'memberCount': members,
-          if (matchPct != null) 'matchPct': matchPct,
-          if (buttons != null) 'buttons': buttons,
+          'sport': ?sport,
+          'city': ?city,
+          'isRanked': ?ranked,
+          'displayElo': ?displayElo,
+          'elo': ?elo,
+          'wins': ?wins,
+          'losses': ?losses,
+          'memberCount': ?members,
+          'matchPct': ?matchPct,
+          'buttons': ?buttons,
         };
 
     testWidgets('a ranked team shows its rating, record and size',
@@ -487,19 +486,19 @@ void main() {
         {
           'id': 'tr1',
           'name': name,
-          if (sport != null) 'sport': sport,
-          if (format != null) 'format': format,
-          if (startLabel != null) 'startLabel': startLabel,
-          if (feeLabel != null) 'entryFeeLabel': feeLabel,
-          if (fee != null) 'entryFee': fee,
-          if (venueName != null) 'venueName': venueName,
-          if (organiser != null) 'organiser': organiser,
-          if (maxTeams != null) 'maxTeams': maxTeams,
-          if (teamsIn != null) 'teamsIn': teamsIn,
-          if (spotsLeft != null) 'spotsLeft': spotsLeft,
+          'sport': ?sport,
+          'format': ?format,
+          'startLabel': ?startLabel,
+          'entryFeeLabel': ?feeLabel,
+          'entryFee': ?fee,
+          'venueName': ?venueName,
+          'organiser': ?organiser,
+          'maxTeams': ?maxTeams,
+          'teamsIn': ?teamsIn,
+          'spotsLeft': ?spotsLeft,
           'isFull': full,
-          if (deadlineLabel != null) 'deadlineLabel': deadlineLabel,
-          if (buttons != null) 'buttons': buttons,
+          'deadlineLabel': ?deadlineLabel,
+          'buttons': ?buttons,
         };
 
     testWidgets('the name, format, fee and fill all read', (tester) async {
@@ -688,10 +687,10 @@ void main() {
         {
           'venueId': 'v1',
           'name': name,
-          if (address != null) 'address': address,
-          if (city != null) 'city': city,
+          'address': ?address,
+          'city': ?city,
           'hasPin': hasPin,
-          if (buttons != null) 'buttons': buttons,
+          'buttons': ?buttons,
         };
 
     testWidgets('the ground and its address read together', (tester) async {
@@ -788,12 +787,12 @@ void main() {
       List<Map<String, dynamic>>? buttons,
     }) =>
         {
-          if (balanceLabel != null) 'balanceLabel': balanceLabel,
-          if (balance != null) 'balance': balance,
-          if (frozenLabel != null) 'frozenLabel': frozenLabel,
-          if (frozen != null) 'frozen': frozen,
-          if (withdrawalMin != null) 'withdrawalMin': withdrawalMin,
-          if (buttons != null) 'buttons': buttons,
+          'balanceLabel': ?balanceLabel,
+          'balance': ?balance,
+          'frozenLabel': ?frozenLabel,
+          'frozen': ?frozen,
+          'withdrawalMin': ?withdrawalMin,
+          'buttons': ?buttons,
         };
 
     // Two numbers, not one. A single total would read as more money than the user can

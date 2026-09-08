@@ -501,13 +501,17 @@ class _WalletCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 3),
-          Text(
-            d.label('balanceLabel', 'balance'),
-            style: const TextStyle(
-              color: ScoutTheme.money,
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              height: 1.1,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              d.label('balanceLabel', 'balance'),
+              style: const TextStyle(
+                color: ScoutTheme.money,
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
+              ),
             ),
           ),
           if (frozen > 0) ...[
@@ -523,18 +527,28 @@ class _WalletCard extends StatelessWidget {
                 children: [
                   const Icon(Icons.lock_outline_rounded, size: 13, color: ScoutTheme.inkSoft),
                   const SizedBox(width: 6),
-                  const Expanded(
-                    child: Text(
-                      'Held in escrow',
-                      style: TextStyle(color: ScoutTheme.inkSoft, fontSize: 11.5),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: const Text(
+                        'Held in escrow',
+                        style: TextStyle(color: ScoutTheme.inkSoft, fontSize: 11.5),
+                      ),
                     ),
                   ),
-                  Text(
-                    d.label('frozenLabel', 'frozen'),
-                    style: const TextStyle(
-                      color: ScoutTheme.ink,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        d.label('frozenLabel', 'frozen'),
+                        style: const TextStyle(
+                          color: ScoutTheme.ink,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ],

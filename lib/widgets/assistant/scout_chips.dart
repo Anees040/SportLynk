@@ -112,13 +112,16 @@ class ScoutChipButton extends StatelessWidget {
                   Icon(icon, size: dense ? 13 : 15, color: fg),
                   const SizedBox(width: 6),
                 ],
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: fg,
-                    fontSize: dense ? 11.5 : 12.5,
-                    fontWeight: primary ? FontWeight.w700 : FontWeight.w600,
-                    height: 1.1,
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: dense ? 11.5 : 12.5,
+                      fontWeight: primary ? FontWeight.w700 : FontWeight.w600,
+                      height: 1.1,
+                    ),
                   ),
                 ),
               ],
