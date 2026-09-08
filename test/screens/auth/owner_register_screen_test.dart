@@ -858,13 +858,13 @@ void main() {
     // has. Under the test font it overflows that width by 103 pixels; under Poppins it
     // fits, which is why this is a robustness defect rather than a clip on the phone.
     // Fixed by the same `Flexible`.
-    testWidgets('the submit button does not fit its own footer', (tester) async {
+    testWidgets('the submit button fits its own footer without overflowing', (tester) async {
       await reachGroundStep(tester);
       await fillStep1(tester, suppressOverflow: false);
       await tapContinue(tester);
 
       expect(find.text('Verification Documents'), findsOneWidget);
-      expect(drainOverflows(tester).first, contains('overflowed'));
+      expect(drainOverflows(tester), isEmpty);
     });
 
     testWidgets('the first step lays out on a short screen', (tester) async {

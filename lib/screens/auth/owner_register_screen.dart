@@ -130,7 +130,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
       SportTextField(label: 'Email (optional)', hint: 'email@example.com', prefixIcon: Icons.mail_outline, controller: _emailCtrl, keyboardType: TextInputType.emailAddress,
         validator: (v) { if (v == null || v.trim().isEmpty) return null; if (!RegExp(r'^[\w.]+@[\w]+\.\w+$').hasMatch(v.trim())) return 'Invalid email'; return null; }),
       const SizedBox(height: 16),
-      SportTextField(label: 'Password *', hint: 'Min 8 characters', prefixIcon: Icons.lock_outline, controller: _passCtrl, obscure: _obscurePass,
+      SportTextField(label: 'Password *', hint: '8+ characters', prefixIcon: Icons.lock_outline, controller: _passCtrl, obscure: _obscurePass,
         suffix: IconButton(icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility, size: 20, color: AppColors.textSecondary), onPressed: () => setState(() => _obscurePass = !_obscurePass)),
         validator: (v) { if (v == null || v.isEmpty) return 'Required'; if (v.length < 8) return 'Min 8 chars'; if (!v.contains(RegExp(r'[A-Z]'))) return 'Need uppercase'; if (!v.contains(RegExp(r'[0-9]'))) return 'Need digit'; return null; }),
       const SizedBox(height: 8),
