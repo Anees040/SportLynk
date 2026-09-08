@@ -170,7 +170,7 @@ class BookingsScreenState extends State<BookingsScreen>
     }
     return RefreshIndicator(color: AppColors.accent, onRefresh: _load,
       child: ListView.builder(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         itemCount: items.length,
         itemBuilder: (_, i) => _bookingCard(items[i], upcoming: upcoming),
@@ -227,18 +227,18 @@ class BookingsScreenState extends State<BookingsScreen>
         // Body
         Padding(padding: const EdgeInsets.all(14), child: Column(children: [
           Row(children: [
-            _infoItem(Icons.calendar_today_outlined,
-              _fmtSlotDate(b['slot_date'] ?? '')),
-            const SizedBox(width: 20),
-            _infoItem(Icons.access_time_outlined,
-              '${_safeTime(b['start_time'])} – ${_safeTime(b['end_time'])}'),
+            Expanded(child: _infoItem(Icons.calendar_today_outlined,
+              _fmtSlotDate(b['slot_date'] ?? ''))),
+            const SizedBox(width: 8),
+            Expanded(child: _infoItem(Icons.access_time_outlined,
+              '${_safeTime(b['start_time'])} – ${_safeTime(b['end_time'])}')),
           ]),
           const SizedBox(height: 8),
           Row(children: [
-            _infoItem(Icons.location_on_outlined, b['city'] ?? ''),
-            const SizedBox(width: 20),
-            _infoItem(Icons.currency_rupee,
-              'PKR ${asNum(b['total_amount']).toStringAsFixed(0)}'),
+            Expanded(child: _infoItem(Icons.location_on_outlined, b['city'] ?? '')),
+            const SizedBox(width: 8),
+            Expanded(child: _infoItem(Icons.currency_rupee,
+              'PKR ${asNum(b['total_amount']).toStringAsFixed(0)}')),
           ]),
           if (upcoming && status == 'confirmed') ...[
             const SizedBox(height: 12),
@@ -263,9 +263,9 @@ class BookingsScreenState extends State<BookingsScreen>
   }
 
   Widget _infoItem(IconData icon, String text) => Row(mainAxisSize: MainAxisSize.min, children: [
-    Icon(icon, size: 13, color: AppColors.textSecondary),
+    Icon(icon, size: 14, color: AppColors.textSecondary),
     const SizedBox(width: 4),
-    Text(text, style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
+    Expanded(child: Text(text, style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis)),
   ]);
 
   Color _statusColor(String s) => switch(s) {

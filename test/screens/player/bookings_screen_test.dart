@@ -84,15 +84,14 @@ void main() {
 
   group('while the bookings are being fetched', () {
     testWidgets('a spinner is shown rather than an empty list', (tester) async {
-      // An empty state drawn during the fetch tells the player they have no bookings,
-      // which is a claim the screen cannot make yet.
-      api.ok('/bookings/my', [booking()],
+      api.ok('/bookings/my', <dynamic>[],
           delay: const Duration(milliseconds: 300));
 
       await pumpScreen(tester, const BookingsScreen());
 
       expectLoading(tester);
       expect(find.text('No upcoming bookings'), findsNothing);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
 
     testWidgets('the fetch starts without waiting for a gesture', (tester) async {
@@ -113,6 +112,7 @@ void main() {
 
       expect(find.text('Upcoming'), findsOneWidget);
       expect(find.text('Past'), findsOneWidget);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
   });
 
@@ -776,6 +776,7 @@ void main() {
       await tester.pump();
 
       expectLoading(tester);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
   });
 
