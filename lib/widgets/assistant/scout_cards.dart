@@ -469,24 +469,34 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (label.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Text(
+          value,
+          style: TextStyle(
+            color: tone ?? ScoutTheme.ink,
+            fontSize: emphasis ? 13.5 : 12,
+            fontWeight: emphasis ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (label.isNotEmpty)
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: emphasis ? ScoutTheme.inkSoft : ScoutTheme.inkFaint,
-                  fontSize: emphasis ? 12 : 11.5,
-                  fontWeight: emphasis ? FontWeight.w600 : FontWeight.w400,
-                ),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: emphasis ? ScoutTheme.inkSoft : ScoutTheme.inkFaint,
+                fontSize: emphasis ? 12 : 11.5,
+                fontWeight: emphasis ? FontWeight.w600 : FontWeight.w400,
               ),
-            )
-          else
-            const Spacer(),
+            ),
+          ),
           const SizedBox(width: 10),
           Text(
             value,
@@ -545,7 +555,7 @@ class _BookingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = _tone(b.status);
-    final ref = b.id.length > 8 ? b.id.substring(0, 8) : b.id;
+    final ref = b.id.length > 7 ? b.id.substring(0, 7) : b.id;
 
     return ScoutCardFrame(
       tint: t.color,

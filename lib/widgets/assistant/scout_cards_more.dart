@@ -614,7 +614,7 @@ class _PolicyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final figures = _figures();
-    final extra = d.strOrNull('extra');
+    final extra = d.strOrNull('extra') ?? d.strOrNull('body');
 
     // `topup_help` puts both policy sentences in the reply and in the card; only show
     // the second one when the bubble above has not already said it.
@@ -675,7 +675,7 @@ class _FigureTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         decoration: BoxDecoration(
           color: ScoutTheme.canvas.withValues(alpha: 0.55),
           borderRadius: BorderRadius.circular(10),
@@ -688,7 +688,7 @@ class _FigureTile extends StatelessWidget {
               value,
               style: const TextStyle(
                 color: ScoutTheme.ink,
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w800,
                 height: 1.1,
               ),
@@ -698,9 +698,9 @@ class _FigureTile extends StatelessWidget {
               label,
               style: const TextStyle(
                 color: ScoutTheme.inkFaint,
-                fontSize: 9.5,
+                fontSize: 6.8,
                 fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
+                letterSpacing: 0.1,
               ),
             ),
           ],
