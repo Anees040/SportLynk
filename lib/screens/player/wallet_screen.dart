@@ -157,9 +157,12 @@ class _WalletScreenState extends State<WalletScreen> {
                     Text('TOTAL BALANCE', style: GoogleFonts.poppins(
                       color: Colors.white60, fontSize: 11, letterSpacing: 1)),
                     const SizedBox(height: 6),
-                    Text('PKR ${asNum(_wallet?['balance']).toStringAsFixed(0)}',
-                      style: GoogleFonts.poppins(color: Colors.white,
-                        fontSize: 36, fontWeight: FontWeight.bold)),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('PKR ${asNum(_wallet?['balance']).toStringAsFixed(0)}',
+                        style: GoogleFonts.poppins(color: Colors.white,
+                          fontSize: 36, fontWeight: FontWeight.bold)),
+                    ),
                     const SizedBox(height: 20),
                     Row(children: [
                       Expanded(child: Container(
@@ -171,14 +174,22 @@ class _WalletScreenState extends State<WalletScreen> {
                           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                             const Icon(Icons.account_balance_wallet,
                               color: AppColors.accent, size: 16),
-                            const SizedBox(width: 6),
-                            Text('AVAILABLE FUNDS', style: GoogleFonts.poppins(
-                              color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('AVAILABLE FUNDS', style: GoogleFonts.poppins(
+                                  color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
+                              ),
+                            ),
                           ]),
                           const SizedBox(height: 4),
-                          Text('PKR ${asNum(_wallet?['balance']).toStringAsFixed(0)}',
-                            style: GoogleFonts.poppins(color: AppColors.accent,
-                              fontSize: 16, fontWeight: FontWeight.bold)),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('PKR ${asNum(_wallet?['balance']).toStringAsFixed(0)}',
+                              style: GoogleFonts.poppins(color: AppColors.accent,
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                          ),
                         ])),
                       ),
                       const SizedBox(width: 12),
@@ -196,17 +207,25 @@ class _WalletScreenState extends State<WalletScreen> {
                           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                             const Icon(Icons.lock_outline,
                               color: Colors.white60, size: 14),
-                            const SizedBox(width: 6),
-                            Text('FROZEN', style: GoogleFonts.poppins(
-                              color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
                             const SizedBox(width: 4),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('FROZEN', style: GoogleFonts.poppins(
+                                  color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
+                              ),
+                            ),
+                            const SizedBox(width: 2),
                             const Icon(Icons.chevron_right,
                               color: Colors.white38, size: 13),
                           ]),
                           const SizedBox(height: 4),
-                          Text('PKR ${asNum(_wallet?['frozen_balance']).toStringAsFixed(0)}',
-                            style: GoogleFonts.poppins(color: Colors.white70,
-                              fontSize: 16, fontWeight: FontWeight.bold)),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('PKR ${asNum(_wallet?['frozen_balance']).toStringAsFixed(0)}',
+                              style: GoogleFonts.poppins(color: Colors.white70,
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                          ),
                         ])),
                       )),
                     ]),
@@ -216,38 +235,64 @@ class _WalletScreenState extends State<WalletScreen> {
 
                 // ACTIONS
                 Row(children: [
-                  Expanded(child: ElevatedButton.icon(
-                    icon: const Icon(Icons.add, size: 18),
-                    label: Text('Top Up Wallet', style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
+                  Expanded(child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28)),
-                      padding: const EdgeInsets.symmetric(vertical: 13)),
+                      padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8)),
                     onPressed: _showTopUpSheet,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.add, size: 18),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Top Up Wallet', style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600, fontSize: 13)),
+                          ),
+                        ),
+                      ],
+                    ),
                   )),
                   const SizedBox(width: 10),
-                  Expanded(child: OutlinedButton.icon(
-                    icon: const Icon(Icons.north_east, size: 18),
-                    label: Text('Withdraw', style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
+                  Expanded(child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.accent,
                       side: const BorderSide(color: AppColors.accent),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28)),
-                      padding: const EdgeInsets.symmetric(vertical: 13)),
+                      padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8)),
                     onPressed: _showWithdrawSheet,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.north_east, size: 18),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Withdraw', style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600, fontSize: 13)),
+                          ),
+                        ),
+                      ],
+                    ),
                   )),
                 ]),
                 const SizedBox(height: 24),
 
                 // Recent transactions
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Text('Recent Transactions', style: GoogleFonts.poppins(
-                    fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  Expanded(
+                    child: Text('Recent Transactions', style: GoogleFonts.poppins(
+                      fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  ),
                   TextButton(
                     onPressed: () => Navigator.push(context, MaterialPageRoute(
                       builder: (_) => const WalletHistoryScreen())),
@@ -303,9 +348,15 @@ class _WalletScreenState extends State<WalletScreen> {
           Text(fmtTxnDate(t['created_at'] as String?),
             style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
         ])),
-        Text(isFrozen ? 'Frozen ${amount.abs().toStringAsFixed(0)}' : '${isCredit ? '+' : ''}PKR ${amount.abs().toStringAsFixed(0)}',
-          style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
-            color: color)),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 150),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(isFrozen ? 'Frozen ${amount.abs().toStringAsFixed(0)}' : '${isCredit ? '+' : ''}PKR ${amount.abs().toStringAsFixed(0)}',
+              style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
+                color: color)),
+          ),
+        ),
         const SizedBox(width: 4),
         const Icon(Icons.chevron_right, size: 16, color: AppColors.textSecondary),
       ]),
