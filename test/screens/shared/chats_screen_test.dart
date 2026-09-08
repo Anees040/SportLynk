@@ -705,7 +705,8 @@ void main() {
     });
 
     testWidgets('a timestamp today is a clock time', (tester) async {
-      api.ok('/chat', page([chan(lastMessageAt: at(const Duration(minutes: 90)))]));
+      api.ok('/chat',
+          page([chan(lastMessageAt: DateTime.now().toIso8601String())]));
 
       await pumpInbox(tester);
       await settleData(tester);
