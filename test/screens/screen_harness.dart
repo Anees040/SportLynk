@@ -51,10 +51,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
+import 'package:sportlynk/constants/api_constants.dart';
 import 'package:sportlynk/constants/app_theme.dart';
 import 'package:sportlynk/models/user.dart';
 import 'package:sportlynk/providers/auth_provider.dart';
+import 'package:sportlynk/providers/notification_provider.dart';
 import 'package:sportlynk/services/api_service.dart';
+import 'package:sportlynk/services/realtime_service.dart';
 
 /// One request a screen made, as recorded by [FakeApi].
 class RecordedRequest {
@@ -584,13 +587,16 @@ Future<RouteLog> pumpScreen(
   FakeAuth? auth,
   List<SingleChildWidget> providers = const [],
   double textScale = 1.0,
-  Size size = const Size(412, 915),
+  Size size = const Size(430, 915),
   GlobalKey<NavigatorState>? navigatorKey,
 }) async {
   GoogleFonts.config.allowRuntimeFetching = false;
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
-  addTearDown(tester.view.reset);
+  addTearDown(() {
+    tester.view.reset();
+    RealtimeService().disconnect();
+  });
 
   final log = RouteLog();
   final Widget scaled = textScale == 1.0
@@ -608,6 +614,7 @@ Future<RouteLog> pumpScreen(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthProvider>.value(value: auth ?? FakeAuth()),
+        ChangeNotifierProvider<NotificationProvider>(create: (_) => NotificationProvider()),
         ...providers,
       ],
       child: MaterialApp(
