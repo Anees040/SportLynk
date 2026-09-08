@@ -29,7 +29,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter_test/flutter_test.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:sportlynk/constants/api_constants.dart';
@@ -45,6 +45,7 @@ class _Answer {
 
   final Map<String, String> headers;
   final Object? error;
+  final Future<void>? defer;
 
   const _Answer({
     this.status = 200,
@@ -52,6 +53,7 @@ class _Answer {
     this.bytes,
     this.headers = const {},
     this.error,
+    this.defer,
   });
 }
 
@@ -64,8 +66,8 @@ class FakeApi {
 
   /// Queues a raw body with an explicit status — for the responses that are not
   /// this API's envelope at all (an HTML error page, a CSV, an empty 500).
-  void raw(String body, {int status = 200, Map<String, String>? headers}) =>
-      _answers.add(_Answer(status: status, body: body, headers: headers ?? const {}));
+  void raw(String body, {int status = 200, Map<String, String>? headers, Future<void>? defer}) =>
+      _answers.add(_Answer(status: status, body: body, headers: headers ?? const {}, defer: defer));
 
   /// Queues a response whose bytes reach the caller untouched, for the one route
   /// whose leading BOM is part of the contract.
@@ -74,20 +76,23 @@ class FakeApi {
 
   /// Queues a JSON body verbatim, which is how a malformed or unexpected shape is
   /// set up without hand-writing the encoder.
-  void json(Object? body, {int status = 200}) =>
-      raw(jsonEncode(body), status: status);
+  void json(Object? body, {int status = 200, Future<void>? defer}) =>
+      raw(jsonEncode(body), status: status, defer: defer);
 
   /// Queues the success envelope the backend sends: `{success: true, data: …}`.
-  void ok(Object? data, {int status = 200, Map<String, dynamic>? extra}) => json({
+  void ok(Object? data, {int status = 200, Map<String, dynamic>? extra, Future<void>? defer}) => json({
         'success': true,
         'data': data,
         ...?extra,
-      }, status: status);
+      }, status: status, defer: defer);
 
   /// Queues the failure envelope, carrying the sentence a screen is expected to
   /// show the user.
-  void fail(String message, {int status = 400}) =>
-      json({'success': false, 'message': message}, status: status);
+  void fail(String message, {int status = 400, Future<void>? defer}) =>
+      _answers.add(_Answer(
+          status: status,
+          body: jsonEncode({'success': false, 'message': message}),
+          defer: defer));
 
   /// Queues a transport failure — no response at all, which is what a dead server
   /// or a missing `adb reverse` produces.
@@ -97,8 +102,12 @@ class FakeApi {
   /// Queues a timeout, for the budgets a service enforces itself.
   void hang() => _answers.add(const _Answer(error: _NeverAnswers()));
 
+  final List<Completer<void>> _pendingHangs = <Completer<void>>[];
+
   /// Runs [body] with every HTTP call answered from the queue.
-  Future<T> run<T>(Future<T> Function() body) => http.runWithClient(body, () {
+  Future<T> run<T>(Future<T> Function() body) async {
+    try {
+      return await http.runWithClient(body, () {
         return MockClient((request) async {
           sent.add(request);
           if (_answers.isEmpty) {
@@ -106,9 +115,15 @@ class FakeApi {
           }
           final answer = _answers.length == 1 ? _answers.first : _answers.removeAt(0);
           if (answer.error is _NeverAnswers) {
-            // A never-completing future rather than a long delay: a pending timer would
-            // outlive a widget test and be reported as a leak instead of a timeout.
-            await Completer<void>().future;
+            // A tracked completer so ApiClient's .timeout() timer gets cancelled when the
+            // test body finishes, rather than lingering and failing the !timersPending check.
+            final completer = Completer<void>();
+            _pendingHangs.add(completer);
+            await completer.future;
+            return http.Response('', 504);
+          }
+          if (answer.defer != null) {
+            await answer.defer;
           }
           if (answer.error != null) throw answer.error!;
           final bytes = answer.bytes;
@@ -117,6 +132,13 @@ class FakeApi {
               : http.Response.bytes(bytes, answer.status, headers: answer.headers);
         });
       });
+    } finally {
+      for (final c in _pendingHangs) {
+        if (!c.isCompleted) c.complete();
+      }
+      _pendingHangs.clear();
+    }
+  }
 
   /// The one request that was sent, when a test asserts there was only one.
   http.Request get only => sent.single;
