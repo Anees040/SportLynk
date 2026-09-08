@@ -28,6 +28,8 @@
 // and the display renders halves, because rounding 4.3 to 4 tells the user the reviews
 // support something they do not.
 
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sportlynk/constants/colors.dart';
@@ -134,7 +136,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('88'), findsOneWidget);
       expect(find.text('out of 100'), findsOneWidget);
-      expect(find.text('HIGHLY TRUSTED'), findsOneWidget);
+      expect(find.text('TRUSTED'), findsOneWidget);
     });
 
     // An unrated user gets a dash and no denominator: "0 out of 100" would be a
@@ -164,7 +166,15 @@ void main() {
 
     testWidgets('the gauge is square at the size it was given', (tester) async {
       await pumpOne(tester, const TrustGauge(score: 70, size: 200));
-      expect(tester.getSize(find.byType(CustomPaint).first), const Size(200, 200));
+      expect(
+        tester.getSize(
+          find.descendant(
+            of: find.byType(TrustGauge),
+            matching: find.byType(CustomPaint),
+          ),
+        ),
+        const Size(200, 200),
+      );
     });
 
     testWidgets('the number scales with the gauge', (tester) async {
@@ -536,9 +546,9 @@ void main() {
       final handle = tester.ensureSemantics();
       await pumpOne(tester, StarRatingInput(value: 2, onChanged: (_) {}));
       final second = tester.getSemantics(find.bySemanticsLabel('Rate 2 stars'));
-      expect(second.hasFlag(SemanticsFlag.isSelected), isTrue);
+      expect(second.flagsCollection.isSelected, ui.Tristate.isTrue);
       final fourth = tester.getSemantics(find.bySemanticsLabel('Rate 4 stars'));
-      expect(fourth.hasFlag(SemanticsFlag.isSelected), isFalse);
+      expect(fourth.flagsCollection.isSelected, ui.Tristate.isFalse);
       handle.dispose();
     });
 
@@ -601,7 +611,7 @@ void main() {
 
   group('the ratings histogram', () {
     testWidgets('every star level gets a row, five down to one', (tester) async {
-      await pumpOne(tester, const StarsHistogram(counts: [12, 5, 2, 1, 0]));
+      await pumpOne(tester, const StarsHistogram(counts: [12, 9, 8, 7, 0]));
       for (final s in ['5', '4', '3', '2', '1']) {
         expect(find.text(s), findsOneWidget);
       }

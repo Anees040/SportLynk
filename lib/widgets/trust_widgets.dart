@@ -389,12 +389,17 @@ class SentimentChip extends StatelessWidget {
         children: [
           Text(f.emoji, style: TextStyle(fontSize: compact ? 12 : 15)),
           const SizedBox(width: 5),
-          Text(
-            text,
-            style: GoogleFonts.poppins(
-              fontSize: compact ? 10.5 : 12.5,
-              fontWeight: FontWeight.w600,
-              color: f.color,
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                text,
+                style: GoogleFonts.poppins(
+                  fontSize: compact ? 10.5 : 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: f.color,
+                ),
+              ),
             ),
           ),
         ],
@@ -420,12 +425,17 @@ class SentimentChip extends StatelessWidget {
         children: [
           Icon(icon, size: compact ? 12 : 14, color: color),
           const SizedBox(width: 5),
-          Text(
-            text,
-            style: GoogleFonts.poppins(
-              fontSize: compact ? 10.5 : 12.5,
-              fontWeight: FontWeight.w600,
-              color: color,
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                text,
+                style: GoogleFonts.poppins(
+                  fontSize: compact ? 10.5 : 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
             ),
           ),
         ],
@@ -552,18 +562,23 @@ class StarsHistogram extends StatelessWidget {
             children: [
               SizedBox(
                 width: 26,
-                child: Row(
-                  children: [
-                    Text(
-                      '$star',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$star',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
-                    const Icon(Icons.star_rounded, size: 11, color: AppColors.warning),
-                  ],
+                      const Icon(Icons.star_rounded, size: 11, color: AppColors.warning),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -591,13 +606,17 @@ class StarsHistogram extends StatelessWidget {
               ),
               SizedBox(
                 width: 30,
-                child: Text(
-                  '$count',
-                  textAlign: TextAlign.end,
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '$count',
+                    textAlign: TextAlign.end,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
               ),
