@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
@@ -89,6 +90,7 @@ class RealtimeService {
   /// reused, a stale-token socket is replaced.
   void ensureConnected(String token) {
     if (token.isEmpty) return;
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     if (_socket != null && _token == token) {
       if (!_socket!.connected) _socket!.connect();
       return;
