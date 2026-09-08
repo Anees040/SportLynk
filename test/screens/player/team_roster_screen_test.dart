@@ -259,6 +259,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
 
     testWidgets('the title is present before the team arrives', (tester) async {
@@ -268,6 +269,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
 
       expect(find.text('Group info'), findsOneWidget);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
 
     testWidgets('the edit action is withheld until the role is known',
@@ -280,6 +282,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
 
       expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
 
     testWidgets('it asks for the team once', (tester) async {
@@ -744,6 +747,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
+      await tester.ensureVisible(find.byIcon(Icons.more_vert));
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -767,6 +771,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
+      await tester.ensureVisible(find.byIcon(Icons.more_vert));
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -793,6 +798,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
+      await tester.ensureVisible(find.byIcon(Icons.more_vert));
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -823,6 +829,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
+      await tester.ensureVisible(find.byIcon(Icons.more_vert));
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -932,6 +939,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
+      await tester.ensureVisible(find.text('Leave team'));
       await tester.tap(find.text('Leave team'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -954,6 +962,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
+      await tester.ensureVisible(find.text('Leave team'));
       await tester.tap(find.text('Leave team'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -971,6 +980,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
+      await tester.ensureVisible(find.text('Leave team'));
       await tester.tap(find.text('Leave team'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -1221,7 +1231,7 @@ void main() {
       api.ok('/teams/t-1/requests', const []);
       api.ok('/teams/t-1/invites', [invite()]);
       api.ok('/teams/t-1/suggested-players', suggested(),
-          delay: const Duration(milliseconds: 400));
+          delay: const Duration(milliseconds: 800));
 
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleData(tester);
@@ -1455,7 +1465,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
-      await tester.fling(find.byType(ListView), const Offset(0, 320), 1000);
+      await tester.fling(find.byType(SingleChildScrollView), const Offset(0, 320), 1000);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await settleConsole(tester);
@@ -1472,7 +1482,7 @@ void main() {
       await settleConsole(tester);
 
       api.fail('/teams/t-1', 'boom');
-      await tester.fling(find.byType(ListView), const Offset(0, 320), 1000);
+      await tester.fling(find.byType(SingleChildScrollView), const Offset(0, 320), 1000);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await settleConsole(tester);
@@ -1490,7 +1500,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
-      await tester.fling(find.byType(ListView), const Offset(0, 320), 1000);
+      await tester.fling(find.byType(SingleChildScrollView), const Offset(0, 320), 1000);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await settleConsole(tester);

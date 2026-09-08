@@ -395,6 +395,7 @@ class SuggestedPlayersRail extends StatelessWidget {
   /// True while an invite is being minted, so the buttons can be disabled.
   final bool busy;
 
+  final String? retryLabel;
   final Future<void> Function() onRetry;
   final void Function(PlayerSuggestion) onInvite;
 
@@ -406,6 +407,7 @@ class SuggestedPlayersRail extends StatelessWidget {
     this.loading = false,
     this.failed = false,
     this.busy = false,
+    this.retryLabel,
   });
 
   @override
@@ -483,7 +485,7 @@ class SuggestedPlayersRail extends StatelessWidget {
             if (retry)
               TextButton(
                 onPressed: () => onRetry(),
-                child: const Text('Retry', style: TextStyle(fontSize: 12)),
+                child: Text(retryLabel ?? 'Retry', style: const TextStyle(fontSize: 12)),
               ),
           ],
         ),

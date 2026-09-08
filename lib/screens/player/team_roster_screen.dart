@@ -186,13 +186,26 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     });
   }
 
-  List<Map<String, dynamic>> _listOf(Map<String, dynamic> r) =>
-      r['success'] == true
-          ? (r['data'] as List? ?? [])
-              .whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList()
-          : <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _listOf(Map<String, dynamic> r) {
+    if (r['success'] != true) return <Map<String, dynamic>>[];
+    final data = r['data'];
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    if (data is Map) {
+      final list = data['invites'] ?? data['requests'] ?? data['items'] ?? data['data'];
+      if (list is List) {
+        return list
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    }
+    return <Map<String, dynamic>>[];
+  }
 
   // Writes
   Future<void> _run(Future<Map<String, dynamic>> Function() action,
@@ -483,56 +496,61 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
               ? _errorView()
               : RefreshIndicator(
                   onRefresh: _refresh,
-                  child: ListView(
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                    children: [
-                      _header(),
-                      if ((_team!.bio ?? '').isNotEmpty) _bioCard(),
-                      if (_team!.amAdmin) ...[
-                        _sectionTitle('Invite'),
-                        _inviteSection(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _header(),
+                        if ((_team!.bio ?? '').isNotEmpty) _bioCard(),
+                        if (_team!.amAdmin) ...[
+                          _sectionTitle('Invite'),
+                          _inviteSection(),
+                        ],
+                        if (_team!.amAdmin && _requests.isNotEmpty) ...[
+                          _sectionTitle('Requests to join (${_requests.length})'),
+                          ..._requests.map(_requestTile),
+                        ],
+                        // FR2.8 — suggested players. Admin-only (the server gates it
+                        // too), and sat between the invite console and the team's own
+                        // stats: it is a captain's tool, so it belongs with the other
+                        // captain's tools, not down among the record a visitor came for.
+                        if (_team!.amAdmin) ...[
+                          _sectionTitle('Suggested players'),
+                          SuggestedPlayersRail(
+                            data: _suggested,
+                            loading: _suggestLoading,
+                            failed: _suggestFailed,
+                            busy: _busy,
+                            retryLabel: 'Try again',
+                            onRetry: _loadSuggested,
+                            onInvite: (p) => _createInvite('Suggested: ${p.name}'),
+                          ),
+                        ],
+                        // Placed below the admin console so a captain's actions stay
+                        // where they were, and above Members because a visitor
+                        // arriving from the leaderboard came for the record, not the
+                        // roster.
+                        if (_stats != null) ...[
+                          _sectionTitle('Form'),
+                          _formCard(_stats!),
+                        ],
+                        _sectionTitle('Rating history'),
+                        _chartCard(),
+                        if (_history.isNotEmpty) ...[
+                          _sectionTitle('Recent matches (${_history.length})'),
+                          _historyCard(),
+                        ],
+                        _sectionTitle('Members (${_team!.roster.length})'),
+                        _membersCard(),
+                        const SizedBox(height: 20),
+                        // Only a member can leave. This screen is now reachable from
+                        // the leaderboard, so a visitor would otherwise be offered a
+                        // button that can only fail.
+                        if (_team!.role != null) _leaveButton(),
                       ],
-                      if (_team!.amAdmin && _requests.isNotEmpty) ...[
-                        _sectionTitle('Requests to join (${_requests.length})'),
-                        ..._requests.map(_requestTile),
-                      ],
-                      // FR2.8 — suggested players. Admin-only (the server gates it
-                      // too), and sat between the invite console and the team's own
-                      // stats: it is a captain's tool, so it belongs with the other
-                      // captain's tools, not down among the record a visitor came for.
-                      if (_team!.amAdmin) ...[
-                        _sectionTitle('Suggested players'),
-                        SuggestedPlayersRail(
-                          data: _suggested,
-                          loading: _suggestLoading,
-                          failed: _suggestFailed,
-                          busy: _busy,
-                          onRetry: _loadSuggested,
-                          onInvite: (p) => _createInvite('Suggested: ${p.name}'),
-                        ),
-                      ],
-                      // Placed below the admin console so a captain's actions stay
-                      // where they were, and above Members because a visitor
-                      // arriving from the leaderboard came for the record, not the
-                      // roster.
-                      if (_stats != null) ...[
-                        _sectionTitle('Form'),
-                        _formCard(_stats!),
-                      ],
-                      _sectionTitle('Rating history'),
-                      _chartCard(),
-                      if (_history.isNotEmpty) ...[
-                        _sectionTitle('Recent matches (${_history.length})'),
-                        _historyCard(),
-                      ],
-                      _sectionTitle('Members (${_team!.roster.length})'),
-                      _membersCard(),
-                      const SizedBox(height: 20),
-                      // Only a member can leave. This screen is now reachable from
-                      // the leaderboard, so a visitor would otherwise be offered a
-                      // button that can only fail.
-                      if (_team!.role != null) _leaveButton(),
-                    ],
+                    ),
                   ),
                 ),
     );
