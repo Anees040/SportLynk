@@ -386,25 +386,39 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
     return SizedBox(
       height: 42,
       child: outlined
-          ? OutlinedButton.icon(
+          ? OutlinedButton(
               onPressed: onTap,
-              icon: Icon(icon, size: 17, color: color),
-              label: Text(label,
-                  style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: color.withValues(alpha: 0.5)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 17, color: color),
+                  const SizedBox(width: 8),
+                  Text(label,
+                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
+                ],
+              ),
             )
-          : ElevatedButton.icon(
+          : ElevatedButton(
               onPressed: onTap,
-              icon: Icon(icon, size: 17, color: Colors.white),
-              label: Text(label,
-                  style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: color,
                 elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 17, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(label,
+                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+                ],
               ),
             ),
     );
