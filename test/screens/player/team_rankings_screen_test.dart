@@ -119,6 +119,7 @@ void main() {
       await pumpScreen(tester, const TeamRankingsScreen());
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
 
     testWidgets('it is titled before any data arrives', (tester) async {
@@ -128,6 +129,7 @@ void main() {
       await pumpScreen(tester, const TeamRankingsScreen());
 
       expect(find.text('Rankings'), findsOneWidget);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
 
     testWidgets('it shows no city chips yet', (tester) async {
@@ -139,6 +141,7 @@ void main() {
       await pumpScreen(tester, const TeamRankingsScreen());
 
       expect(find.text('All cities'), findsNothing);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
 
     testWidgets('it asks the ranked-only endpoint once', (tester) async {
@@ -853,13 +856,14 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await settleData(tester);
+      await tester.pump(const Duration(seconds: 1));
 
       api.ok('/teams/rankings', rankingsPage());
       await tester.fling(find.byType(ListView), const Offset(0, 320), 1000);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await settleData(tester);
-
+      await tester.pump(const Duration(seconds: 1));
       expect(
         find.text('Showing the last loaded board — pull down to retry.'),
         findsNothing,

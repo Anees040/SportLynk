@@ -135,7 +135,7 @@ class _TeamRankingsScreenState extends State<TeamRankingsScreen> {
 
     final teams = page.teams;
     return ListView(
-      physics: const BouncingScrollPhysics(),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [
         // A refresh failed but the previous board is still held. Say so instead of
@@ -145,10 +145,14 @@ class _TeamRankingsScreenState extends State<TeamRankingsScreen> {
         const SizedBox(height: 20),
         Row(
           children: [
-            Text('Leaderboard',
-                style: GoogleFonts.poppins(
-                    fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-            const Spacer(),
+            Flexible(
+              child: Text('Leaderboard',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                      fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+            ),
+            const SizedBox(width: 8),
             Text('${teams.length} ranked',
                 style: GoogleFonts.poppins(fontSize: 11.5, color: AppColors.textSecondary)),
           ],
@@ -232,8 +236,12 @@ class _TeamRankingsScreenState extends State<TeamRankingsScreen> {
         children: [
           const Icon(Icons.swap_vert, size: 13, color: AppColors.textSecondary),
           const SizedBox(width: 4),
-          Text('Movement vs ${page.movementWindowDays} days ago',
-              style: GoogleFonts.poppins(fontSize: 10.5, color: AppColors.textSecondary)),
+          Expanded(
+            child: Text('Movement vs ${page.movementWindowDays} days ago',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(fontSize: 10.5, color: AppColors.textSecondary)),
+          ),
         ],
       );
 
