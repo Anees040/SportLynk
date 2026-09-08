@@ -208,8 +208,11 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                   SnackbarUtil.showSuccess(context, 'Team created.');
                   Navigator.pop(context, true);
                 } else {
+                  final msg = response['message']?.toString();
                   SnackbarUtil.showError(context,
-                      response['message']?.toString() ?? 'Could not create team.');
+                      (msg == null || msg == 'That request could not be completed.')
+                          ? 'Could not create team.'
+                          : msg);
                 }
               })),
           const SizedBox(height: 10),
