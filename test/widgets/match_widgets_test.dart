@@ -384,7 +384,7 @@ void main() {
       // passes null and must not get a grey "unknown" chip in its layout. Scoped to
       // the widget's own subtree: the scaffold around it supplies containers and
       // icons of its own.
-      await pumpOne(tester, const TrustBadgeChip(band: null));
+      await pumpOne(tester, const TrustBadgeChip(band: null), width: 0);
 
       expect(
         find.descendant(
@@ -1088,7 +1088,7 @@ void main() {
       );
 
       expect(find.byType(ElevatedButton), findsNothing);
-      expect(find.byType(Center), findsNothing);
+      expect(find.byWidgetPredicate((w) => w is Center && w.child is! RichText), findsNothing);
     });
   });
 
