@@ -68,6 +68,7 @@ void main() {
 
       expectLoading(tester);
       expect(find.text('No transactions found'), findsNothing);
+      await settleData(tester, step: const Duration(milliseconds: 300));
     });
 
     testWidgets('the fetch starts without waiting for a gesture', (tester) async {

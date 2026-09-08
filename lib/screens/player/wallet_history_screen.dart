@@ -88,25 +88,37 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
       body: _loading
         ? const CustomLoader()
         : _txns.isEmpty
-          ? Center(child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Icon(_error == null ? Icons.receipt_long_outlined : Icons.cloud_off,
-                  size: 64, color: _error == null ? AppColors.disabled : AppColors.error),
-                const SizedBox(height: 12),
-                Text(_error ?? 'No transactions found', textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(fontSize: 15, color: AppColors.textSecondary)),
-                if (_error != null) ...[
+          ? Center(
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(32),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(_error == null ? Icons.receipt_long_outlined : Icons.cloud_off,
+                    size: 64, color: _error == null ? AppColors.disabled : AppColors.error),
                   const SizedBox(height: 12),
-                  TextButton.icon(onPressed: _load,
-                    icon: const Icon(Icons.refresh, size: 18, color: AppColors.accent),
-                    label: Text('Try again', style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600, color: AppColors.accent))),
-                ],
-              ])))
+                  Text(_error ?? 'No transactions found', textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(fontSize: 15, color: AppColors.textSecondary)),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: _load,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.refresh, size: 18, color: AppColors.accent),
+                          const SizedBox(width: 8),
+                          Text('Try again', style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600, color: AppColors.accent)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ]),
+              ),
+            )
           : RefreshIndicator(color: AppColors.accent, onRefresh: _load,
               child: ListView.separated(
-                physics: const BouncingScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 itemCount: _txns.length,
                 separatorBuilder: (_, index) => const SizedBox(height: 8),
@@ -152,15 +164,28 @@ class _WalletHistoryScreenState extends State<WalletHistoryScreen> {
             Text(fmtTxnDate(t['created_at'] as String?),
               style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary)),
           ])),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(isFrozen ? 'Frozen ${amount.abs().toStringAsFixed(0)}' : '${isCredit ? '+' : ''}PKR ${amount.abs().toStringAsFixed(0)}',
-              style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
-                color: color)),
-            if (t['reference_id'] != null)
-              Text('#${(t['reference_id'] as String).replaceAll('TRX-','')}',
-                style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textSecondary)),
-            const Icon(Icons.chevron_right, size: 14, color: AppColors.textSecondary),
-          ]),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  isFrozen ? 'Frozen ${amount.abs().toStringAsFixed(0)}' : '${isCredit ? '+' : ''}PKR ${amount.abs().toStringAsFixed(0)}',
+                  style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
+                    color: color),
+                ),
+              ),
+              if (t['reference_id'] != null)
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '#${(t['reference_id'] as String).replaceAll('TRX-','')}',
+                    style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textSecondary),
+                  ),
+                ),
+              const Icon(Icons.chevron_right, size: 14, color: AppColors.textSecondary),
+            ]),
+          ),
         ]),
       ),
     );
