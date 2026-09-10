@@ -381,3 +381,274 @@ au-379,is ground me aik waqt me kitne bande khel sakte hain,venue_info,ru,questi
 au-380,is venue ki rating kitni hai aur price kya hai,venue_info,mix,question;boundary,venue rating is not an elo question
 au-381,app me mera available balance kitna dikha raha hai,wallet_balance,mix,question;boundary,balance number asked with app wording
 au-382,escrow me kitna paisa rooka hua hai is waqt,wallet_balance,ru,question;boundary,held amount rather than the escrow rule
+au-383,can I get a turf at 5pm today anywhere in islamabad,check_availability,en,question;multi_slot,fresh
+au-384,is there a morning slot available at jinnah sports complex on thursday,check_availability,en,question;multi_slot,fresh
+au-385,checking if the 9:30pm time at centaurus kickoff is still open,check_availability,en,question;multi_slot,fresh
+au-386,any slot between 4 and 7pm free at bahria cricket arena this sunday,check_availability,en,question;multi_slot;numeric,fresh
+au-387,has anyone taken the last slot at diamond cricket ground tonight,check_availability,en,question;negation,fresh
+au-388,what are my options for a 2 hour booking tomorrow afternoon,check_availability,en,question;numeric;multi_slot,fresh
+au-389,do you have any turf open after midnight on weekends,check_availability,en,question;multi_slot;boundary,fresh
+au-390,is the pitch at margalla cricket club occupied on friday evening,check_availability,en,question;multi_slot,fresh
+au-391,tell me if rawalpindi cricket nets has a free slot around noon,check_availability,en,imperative;multi_slot,fresh
+au-392,is every single slot taken this weekend or is there a gap somewhere,check_availability,en,question;negation;run_on,fresh
+au-393,any morning openings for cricket in f-10 area,check_availability,en,question;short,fresh
+au-394,can i check if theres a spot for indoor futsal tonight,check_availability,en,question;multi_slot,fresh
+au-395,whats available after iftaar time on wednesday,check_availability,en,question;multi_slot,fresh
+au-396,is the 6:30 still up for grabs at shalimar academy,check_availability,en,question;multi_slot;short,fresh
+au-397,need to know if there is any cricket ground free on 15th september,check_availability,en,question;multi_slot;numeric,fresh
+au-398,kal subah 6 baje kuch milega kya f-11 me,check_availability,mix,code_switch;question;multi_slot,fresh
+au-399,bhai check karo koi slot bacha hai bahria me ya sab bhar gaye,check_availability,mix,code_switch;question;negation;run_on,fresh
+au-400,aaj ke liye kuch available hai ya raat tak sab full ho jayega,check_availability,mix,code_switch;question;negation;run_on,fresh
+au-401,weekend pe koi cricket ground free hai near me,check_availability,mix,code_switch;question;multi_slot,fresh
+au-402,rawalpindi side me koi futsal turf khali hai tonight,check_availability,mix,code_switch;question;multi_slot,fresh
+au-403,margalla club pe friday 8pm check karo available hai kya,check_availability,mix,code_switch;imperative;question,fresh
+au-404,any slot available hai is wednesday ko after 5,check_availability,mix,code_switch;question;multi_slot,fresh
+au-405,bro kal kuch khali padaa hai centaurus pe or not,check_availability,mix,code_switch;question;slang,fresh
+au-406,confirm karo 7pm free hai ya nahi dha phase 2 pe,check_availability,mix,code_switch;imperative;negation,fresh
+au-407,diamond ground pe saturday subah slots bache hain kya koi,check_availability,mix,code_switch;question;multi_slot,fresh
+au-408,shalimar pe kal koi slot milega ya pura booked hai,check_availability,mix,code_switch;question;negation,fresh
+au-409,koi jagah baqi hai ya cancel kardun plan,check_availability,mix,code_switch;question;negation;boundary,fresh
+au-410,kal dopahar 2 baje ke aas paas kuch khali hai,check_availability,ru,question;multi_slot;numeric,fresh
+au-411,jinnah complex me shaam wale slots khatam to nahi hue,check_availability,ru,question;negation,fresh
+au-412,aaj raat koi slot bach raha hai kahi bhi,check_availability,ru,question;multi_slot,fresh
+au-413,parso ke liye kuch dekh lo available hai ya nahi,check_availability,ru,imperative;negation,fresh
+au-414,sunday ko subah 5 baje se kuch milega kahi,check_availability,ru,question;multi_slot;numeric,fresh
+au-415,islamabad me kahin bhi koi ground khali hai batao,check_availability,ru,imperative;multi_slot,fresh
+au-416,f-11 wale ground pe aaj slot bacha hai ya chutti hai,check_availability,ru,question;negation;run_on,fresh
+au-417,sab jagah full ho gaya hai ya abhi kuch bachaa hai,check_availability,ru,question;negation,fresh
+au-418,shaam 7 baje se koi ground mil sakta hai pindi me,check_availability,ru,question;multi_slot,fresh
+au-419,mangal ko koi opening hai ya sirf weekend pe milta hai,check_availability,ru,question;negation;run_on,fresh
+au-420,2 ghante ke liye kahi jagah khali hai bata do,check_availability,ru,imperative;numeric;multi_slot,fresh
+au-421,kya 5 september ko futsal ka slot bacha hai,check_availability,ru,question;multi_slot;numeric,fresh
+au-422,subah subah koi cricket ground available ho ga kya,check_availability,ru,question;multi_slot,fresh
+au-423,raat ke waqt koi bhi ground khali milta hai ya nahi,check_availability,ru,question;negation;multi_slot,fresh
+au-424,abhi is waqt koi slot khali hai kahi pe bhi,check_availability,ru,question;multi_slot;boundary,fresh
+au-425,shalimar me kal 4 baje se kuch available hai ya nahi dekho,check_availability,ru,imperative;negation;numeric,fresh
+au-426,bahria me aaj 3 baje ke baad koi slot milega ya nahi,check_availability,ru,question;negation;numeric,fresh
+au-427,koi aisi jagah hai jahan aaj hi booking ho jaye,check_availability,ru,question;indirect,fresh
+au-428,just want to know availability not booking yet,check_availability,en,boundary;negation;short,fresh
+au-429,kuch dikhao available wale slots mujhe book nahi karna abhi,check_availability,mix,boundary;negation;code_switch,fresh
+au-430,pehle bata do khali hai kya phir book karwaunga,check_availability,ru,boundary;run_on,fresh
+au-431,sirf check kar raha hoon abhi booking nahi karni,check_availability,ru,boundary;negation,fresh
+au-432,just checking if anything is free im not ready to book,check_availability,en,boundary;negation;run_on,fresh
+au-433,i want to reserve the 7pm slot at bahria cricket arena for saturday,book_venue,en,imperative;multi_slot,fresh
+au-434,please lock in the 6am nets session for tomorrow morning,book_venue,en,politeness;imperative;multi_slot,fresh
+au-435,go ahead and confirm the centaurus kickoff 8pm friday,book_venue,en,imperative;multi_slot;short,fresh
+au-436,take the one at dha phase 2 arena for 2 hours starting at 5,book_venue,en,imperative;numeric;multi_slot,fresh
+au-437,book the cheapest ground you showed me earlier,book_venue,en,imperative;boundary;ellipsis,fresh
+au-438,lets lock in the weekend morning slot at shalimar academy,book_venue,en,imperative;multi_slot,fresh
+au-439,i want that cricket pitch at diamond ground 3pm sharp,book_venue,en,imperative;multi_slot,fresh
+au-440,reserve the second option you listed just now,book_venue,en,imperative;boundary;ellipsis,fresh
+au-441,put my name down for sunday morning futsal at jinnah complex,book_venue,en,imperative;multi_slot;run_on,fresh
+au-442,alright confirm it then dont ask me again,book_venue,en,imperative;boundary;negation,fresh
+au-443,yes book the 5:30pm one right now before it goes,book_venue,en,imperative;multi_slot;run_on,fresh
+au-444,finalize the slot you recommended a minute ago,book_venue,en,imperative;ellipsis;boundary,fresh
+au-445,grab me 2 back to back slots at bahria futsal for tonight,book_venue,en,imperative;numeric;multi_slot,fresh
+au-446,book the indoor one not the outdoor,book_venue,en,imperative;boundary;negation,fresh
+au-447,i am ready to pay just confirm the booking,book_venue,en,imperative;boundary,fresh
+au-448,margalla wala book kardo 6pm ka,book_venue,mix,code_switch;imperative;multi_slot;short,fresh
+au-449,bhai jo first option dikhai thi wohi confirm karo,book_venue,mix,code_switch;imperative;ellipsis,fresh
+au-450,saturday evening ka slot lock kardo centaurus pe,book_venue,mix,code_switch;imperative;multi_slot,fresh
+au-451,wo jinnah wala 8 baje ka book kar do na bhai please,book_venue,mix,code_switch;politeness;numeric;run_on,fresh
+au-452,confirm karo yaar bahria ka 7pm wala jaldi,book_venue,mix,code_switch;slang;imperative,fresh
+au-453,done hai bhai isi ko le lo aur booking finalize kardo,book_venue,mix,code_switch;imperative;run_on,fresh
+au-454,f-11 pe kal subah 6 ka book karna hai please,book_venue,mix,code_switch;politeness;numeric,fresh
+au-455,rawalpindi nets pe friday shaam ka slot mere naam kar do,book_venue,mix,code_switch;imperative;multi_slot,fresh
+au-456,haan wohi jo 2000 wala tha woh pakka karo,book_venue,mix,code_switch;ellipsis;boundary,fresh
+au-457,pindi side me ek slot book karo jo sabse sasta ho aaj ka,book_venue,mix,code_switch;imperative;boundary,fresh
+au-458,kal parso nahi aaj ka chahiye book karo jaldi,book_venue,mix,code_switch;negation;boundary;imperative,fresh
+au-459,ye sab choro aur 9pm wala lock karo bus,book_venue,ru,negation;imperative;boundary,fresh
+au-460,acha kar do jaldi paise wallet se le lena,book_venue,ru,imperative;short;run_on,fresh
+au-461,jinnah sports complex me kal subah 7 baje ka pakka karo bhai,book_venue,ru,imperative;numeric;multi_slot;slang,fresh
+au-462,haan bhai wohi le rahe hain jaldi confirm karo,book_venue,ru,imperative;short;ellipsis,fresh
+au-463,book ho jaye to message kar dena,book_venue,ru,imperative;indirect,fresh
+au-464,pehla wala theek tha wohi kar do,book_venue,ru,imperative;ellipsis;short,fresh
+au-465,aglay jumme ka slot pakka karna hai shalimar pe,book_venue,ru,imperative;multi_slot,fresh
+au-466,2 ghante ke liye kuch bhi mil jaye aaj shaam book kardo,book_venue,ru,imperative;numeric;multi_slot;boundary,fresh
+au-467,meri taraf se done hai bas booking laga do,book_venue,ru,imperative;short,fresh
+au-468,wallet se paisa kaat ke booking pakki karo,book_venue,ru,imperative;boundary,fresh
+au-469,yaar itna mat socho seedha book karo 7 baje wala,book_venue,ru,imperative;slang;negation;numeric,fresh
+au-470,diamond ground pe cricket ke liye shaam ka slot chahiye book karo,book_venue,ru,imperative;multi_slot;run_on,fresh
+au-471,mere liye bhi ek slot rakh lo kal subah ka,book_venue,ru,imperative;multi_slot;indirect,fresh
+au-472,bus confirm karo kuch aur nahi dekhna mujhe,book_venue,ru,imperative;negation;boundary,fresh
+au-473,haan payment bhi ready hai bas book karo,book_venue,ru,imperative;boundary;short,fresh
+au-474,faisla hogaya hai 6 baje wala pakka karo,book_venue,ru,imperative;numeric;short,fresh
+au-475,lock it in i dont want to lose the 9pm slot,book_venue,en,imperative;negation;multi_slot,fresh
+au-476,lets do the friday one thats the best option,book_venue,en,imperative;ellipsis;boundary,fresh
+au-477,isi pe final karo bahria ka 5pm,book_venue,mix,code_switch;imperative;short,fresh
+au-478,reservation pakki karo yaar aur sochne ki zaroorat nahi,book_venue,ru,imperative;slang;negation;run_on,fresh
+au-479,mujhe koi cheez check nahi karni seedha book karo,book_venue,ru,negation;boundary;imperative,fresh
+au-480,just book already stop showing me options,book_venue,en,imperative;negation;boundary,fresh
+au-481,booking karni hai checking nahi,book_venue,mix,boundary;negation;code_switch;short,fresh
+au-482,mere against koi team dhoondo is sunday ko,find_opponents,mix,code_switch;imperative,fresh
+au-483,anyone looking for a cricket match this weekend in islamabad,find_opponents,en,question;multi_slot,fresh
+au-484,we have a full squad but no one to play against,find_opponents,en,run_on;negation,fresh
+au-485,hamari team ready hai friday ko koi hai hamare khilaf khelne wala,find_opponents,ru,question;multi_slot;run_on,fresh
+au-486,can you set up a friendly football match against another team,find_opponents,en,question;imperative,fresh
+au-487,kisi team ko challenge bhejo hamare taraf se,find_opponents,ru,imperative,fresh
+au-488,we need a rival team for saturday night futsal at bahria,find_opponents,en,multi_slot;run_on,fresh
+au-489,bhai hamari team ke against koi arrange karo na,find_opponents,mix,code_switch;imperative;politeness,fresh
+au-490,is there any team looking to play 11 a side cricket,find_opponents,en,question;numeric,fresh
+au-491,kal ke match ke liye opposite team chahiye bhai,find_opponents,ru,imperative;slang,fresh
+au-492,koi team dhundh rahi hai opponents jo hamare level ki ho,find_opponents,mix,code_switch;question;run_on,fresh
+au-493,we are 7 players ready to go but we need a full team to play against,find_opponents,en,numeric;run_on;negation,fresh
+au-494,opponent dhundho jo hamare area me ho pindi me,find_opponents,mix,code_switch;imperative;multi_slot,fresh
+au-495,kya koi team hamare se match khelna chahegi elo 1300 ke aas paas,find_opponents,ru,question;numeric;run_on,fresh
+au-496,hamara ground booked hai bas team nahi mili match ke liye,find_opponents,mix,code_switch;negation;run_on;boundary,fresh
+au-497,agar kisi team ne bhi ground book kiya hai to match karwa do,find_opponents,ru,run_on;indirect,fresh
+au-498,looking for competition not teammates we are already a complete team,find_opponents,en,negation;boundary,fresh
+au-499,koi aise log hain jo match khelna chahte hain hamare khilaf,find_opponents,ru,question;run_on,fresh
+au-500,we are challenging any team our elo range for this weekend,find_opponents,en,boundary;multi_slot,fresh
+au-501,app pe koi team hai jo challenge accept kare is friday,find_opponents,mix,code_switch;question;multi_slot,fresh
+au-502,kal 7pm pe ground booked hai hamara bas rival team dhundho,find_opponents,mix,code_switch;imperative;boundary;numeric,fresh
+au-503,koi bhi team ho khelne ko tayar hain hum weekend pe,find_opponents,ru,question;multi_slot;boundary,fresh
+au-504,hamare khilaf kaun kaun khelna chahta hai sunday ko,find_opponents,ru,question;multi_slot,fresh
+au-505,bhai kisi team se mila do jo cricket khele f-11 area me,find_opponents,mix,code_switch;imperative;multi_slot,fresh
+au-506,need a cricket team near bahria who wants to play sunday,find_opponents,en,multi_slot;question,fresh
+au-507,hum 5 a side futsal ke liye tayar hain koi hai saamne se,find_opponents,ru,numeric;question,fresh
+au-508,is there a team that wants to challenge us for a night match,find_opponents,en,question;multi_slot,fresh
+au-509,rivals chahiye match ke liye players nahi hamari team poori hai,find_opponents,mix,negation;boundary;code_switch,fresh
+au-510,hum kisi se bhi haar nahi mante dhundho koi team,find_opponents,ru,imperative;slang;boundary,fresh
+au-511,hamare rating se milti julti team dhoond ke batao,find_opponents,ru,imperative;boundary,fresh
+au-512,can you match us with a team thats better than us we want a challenge,find_opponents,en,question;run_on;boundary,fresh
+au-513,kal futsal ke liye koi team ready hai opposing us,find_opponents,mix,code_switch;question;multi_slot,fresh
+au-514,team poori hai hamare paas players nahi chahiye match chahiye,find_opponents,ru,negation;boundary,fresh
+au-515,mujhe apni team ke liye ek aur player chahiye,find_players,ru,imperative;short,fresh
+au-516,looking for one more person for evening cricket at diamond ground,find_players,en,multi_slot;numeric,fresh
+au-517,we are 10 need one more to make it 11 a side,find_players,en,numeric;run_on,fresh
+au-518,ek goalkeeper chahiye futsal ke liye kal shaam,find_players,mix,code_switch;numeric;multi_slot,fresh
+au-519,can you find 3 guys who want to play football tonight,find_players,en,question;numeric;multi_slot,fresh
+au-520,bhai do bande chahiye cricket ke liye kal,find_players,mix,code_switch;numeric;imperative,fresh
+au-521,hamari side me khiladi kam pad rahe hain 4 aur chahiye,find_players,ru,numeric;run_on,fresh
+au-522,anyone available to fill in for a no show tonight,find_players,en,question;short,fresh
+au-523,squad me ek batsman ki jagah khali hai koi available hai,find_players,mix,code_switch;question;run_on,fresh
+au-524,koi extra player available hai jo replace kar sake aaj,find_players,mix,code_switch;question;multi_slot,fresh
+au-525,ek fast bowler mil jaye kahi se cricket ke liye,find_players,ru,imperative;indirect,fresh
+au-526,2 spots open in my team for sunday match anyone interested,find_players,en,numeric;multi_slot;question,fresh
+au-527,mere paas 8 log hain aur 3 chahiye poori team ke liye,find_players,ru,numeric;run_on,fresh
+au-528,can someone play as a sub we lost a player,find_players,en,question;run_on,fresh
+au-529,kal morning match ke liye 2 defenders chahiye,find_players,mix,code_switch;numeric;multi_slot,fresh
+au-530,individual players dhoond raha hoon team nahi chahiye,find_players,mix,code_switch;negation;boundary,fresh
+au-531,team ke liye ek acha all rounder chahiye koi hai,find_players,ru,question;boundary,fresh
+au-532,aaj raat ke match me hamare 2 bande nahi aa rahe replace dhoondo,find_players,ru,numeric;imperative;run_on,fresh
+au-533,anyone in rawalpindi who plays cricket as a keeper,find_players,en,question;multi_slot,fresh
+au-534,football ke liye 5 players chahiye meri team adhoori hai,find_players,mix,code_switch;numeric;run_on,fresh
+au-535,yaar 1 banda aur mil jaye to match ho jayega dhoond do,find_players,ru,imperative;numeric;slang;run_on,fresh
+au-536,need one last player to complete the roster for friday,find_players,en,numeric;multi_slot,fresh
+au-537,koi experienced cricketer hai jo hamare sath khele,find_players,ru,question;indirect,fresh
+au-538,bhai spare player ka intezaam kardo ek,find_players,mix,code_switch;imperative;numeric,fresh
+au-539,looking for 2 fielders for tomorrows match at bahria,find_players,en,numeric;multi_slot,fresh
+au-540,player chahiye not team opponent nahi chahiye,find_players,mix,negation;boundary;code_switch,fresh
+au-541,hamari team me ab 6 hi reh gaye 5 aur chahiye kal ke liye,find_players,ru,numeric;multi_slot;run_on,fresh
+au-542,ek hi aur khiladi chahiye woh bhi goalkeeper,find_players,ru,numeric;boundary;short,fresh
+au-543,koi casual player mil jayega jo kal free ho,find_players,ru,question;indirect;multi_slot,fresh
+au-544,i dont need a whole team just 2 players for tonight,find_players,en,negation;boundary;numeric;multi_slot,fresh
+au-545,khiladi chahiye opponent team nahi,find_players,ru,negation;boundary;short,fresh
+au-546,3 logon ki kami hai cricket ke liye sunday ko,find_players,mix,code_switch;numeric;multi_slot,fresh
+au-547,hamein ek striker aur ek mid chahiye football match ke liye,find_players,mix,code_switch;numeric;run_on,fresh
+au-548,find me a lefty batsman for tomorrows match if possible,find_players,en,imperative;multi_slot;indirect,fresh
+au-549,hamare match se ek din pehle 2 log cancel kar gaye replacements dhundho,find_players,ru,numeric;imperative;run_on,fresh
+au-550,koi hai jo extra khiladi ke tor pe aa sake,find_players,ru,question;indirect,fresh
+au-551,shaam 5 baje ka match hai aur 3 bande abhi tak confirm nahi hue koi arrange karo,find_players,ru,numeric;run_on;negation;imperative,fresh
+au-552,sirf players chahiye team se match nahi karwana,find_players,ru,negation;boundary,fresh
+au-553,we lost 4 players to injuries need replacements fast,find_players,en,numeric;run_on;boundary,fresh
+au-554,yeah lets do it,affirm,en,short;slang,fresh
+au-555,confirmed,affirm,en,short,fresh
+au-556,absolutely go for it,affirm,en,short,fresh
+au-557,yep that works for me,affirm,en,short,fresh
+au-558,alright sounds like a plan,affirm,en,short,fresh
+au-559,perfect lets move forward,affirm,en,short,fresh
+au-560,yes exactly what i wanted,affirm,en,short,fresh
+au-561,yeah why not,affirm,en,short;question,fresh
+au-562,of course proceed,affirm,en,short;politeness,fresh
+au-563,ok im in,affirm,en,short;slang,fresh
+au-564,yea thats the one,affirm,en,short;ellipsis,fresh
+au-565,yes yes yes do it quickly,affirm,en,short;run_on,fresh
+au-566,right on lets go,affirm,en,short;slang,fresh
+au-567,thats what im looking for,affirm,en,short;ellipsis,fresh
+au-568,you read my mind go ahead,affirm,en,short;run_on,fresh
+au-569,haan bhai bilkul,affirm,mix,short;code_switch;slang,fresh
+au-570,ji haan proceed karo,affirm,mix,code_switch;politeness,fresh
+au-571,yes yaar wohi chahiye tha,affirm,mix,code_switch;slang;ellipsis,fresh
+au-572,haan confirm it bhai,affirm,mix,code_switch;imperative;slang,fresh
+au-573,ok done chalo aage,affirm,mix,code_switch;short,fresh
+au-574,exactly wohi hai jo chahiye,affirm,mix,code_switch;ellipsis,fresh
+au-575,perfect hai yaar,affirm,mix,code_switch;slang;short,fresh
+au-576,han bhai theek,affirm,mix,code_switch;short;slang,fresh
+au-577,yep han wohi,affirm,mix,code_switch;short,fresh
+au-578,ok fine kar do,affirm,mix,code_switch;imperative;short,fresh
+au-579,haan bhai wahi sahi raha,affirm,mix,code_switch;slang;short,fresh
+au-580,hundred percent agree,affirm,mix,code_switch;short;slang,fresh
+au-581,bilkul sahi farmaya aage chalein,affirm,ru,politeness;run_on,fresh
+au-582,jee haan manzoor hai,affirm,ru,politeness;short,fresh
+au-583,haan bhai bas wahi karo,affirm,ru,imperative;slang;short,fresh
+au-584,sahi hai yaar agay barho,affirm,ru,slang;short,fresh
+au-585,han ji koi masla nahi,affirm,ru,politeness;negation;short,fresh
+au-586,bilkul theek kaha aap ne,affirm,ru,politeness;short,fresh
+au-587,haan mujhe koi aitraz nahi hai is pe,affirm,ru,negation;short,fresh
+au-588,wohi sahi hai jaldi karo,affirm,ru,imperative;short;ellipsis,fresh
+au-589,bus yehi chahiye tha,affirm,ru,short;ellipsis,fresh
+au-590,haan ji aage barhein koi rukawat nahi,affirm,ru,politeness;negation;short,fresh
+au-591,pakka wahi karo jo abhi bataya,affirm,ru,imperative;ellipsis,fresh
+au-592,haan haan sahi hai,affirm,ru,short,fresh
+au-593,han ji chalein,affirm,ru,politeness;short,fresh
+au-594,mujhe koi problem nahi hai chalo,affirm,ru,negation;short,fresh
+au-595,theek bilkul approved,affirm,mix,code_switch;short,fresh
+au-596,ban gaya deal lets go,affirm,mix,code_switch;slang;short,fresh
+au-597,💯 haan,affirm,mix,emoji;short,fresh
+au-598,haan 👍 done,affirm,mix,emoji;short;code_switch,fresh
+au-599,han final hai,affirm,ru,short,fresh
+au-600,jee jee theek hai,affirm,ru,short;politeness,fresh
+au-601,haan chalo phir,affirm,ru,short,fresh
+au-602,agreed 100 percent,affirm,en,short,fresh
+au-603,yup go for it no second thoughts,affirm,en,short;negation;run_on,fresh
+au-604,sahi pakray hain aap ne chalein,affirm,ru,slang;politeness,fresh
+au-605,jee zaroor chalein,affirm,ru,politeness;short,fresh
+au-606,haan bhai done deal,affirm,mix,code_switch;slang;short,fresh
+au-607,mujhe sab theek lagta hai karo,affirm,ru,imperative;short,fresh
+au-608,ok i trust you just do it,affirm,en,short;imperative;boundary,fresh
+au-609,looking for a team to play 7 a side at centaurus this friday,find_opponents,en,multi_slot;numeric,fresh
+au-610,any squad available for a practice match tomorrow,find_opponents,en,question;multi_slot,fresh
+au-611,we want a real match not just practice get us opponents,find_opponents,en,negation;boundary;imperative,fresh
+au-612,set up a game between us and whoever is free,find_opponents,en,imperative;boundary,fresh
+au-613,we are a newly formed team and looking for a match,find_opponents,en,run_on;boundary,fresh
+au-614,can you arrange a match for our cricket team this thursday,find_opponents,en,question;imperative;multi_slot,fresh
+au-615,any team ready to play against beginners,find_opponents,en,question;boundary,fresh
+au-616,want to play against a stronger team so we improve,find_opponents,en,boundary;run_on,fresh
+au-617,koi team hai jo futsal ke liye ready hai parso shaam,find_opponents,mix,code_switch;question;multi_slot,fresh
+au-618,app pe jo teams register hain un me se kisi ko bolo hamare sath match khele,find_opponents,mix,code_switch;run_on;imperative,fresh
+au-619,bahria me koi team actively matches dhoond rahi hai kya,find_opponents,mix,code_switch;question;multi_slot,fresh
+au-620,pindi se koi cricket team chahiye hamare against,find_opponents,mix,code_switch;multi_slot,fresh
+au-621,bhai kal friendly match ho jaye kisi bhi team ke sath,find_opponents,mix,code_switch;boundary;slang,fresh
+au-622,hamare elo se milta julta koi team dhundh ke match set karo,find_opponents,mix,code_switch;imperative;run_on,fresh
+au-623,koi cricket team mil sakti hai jinnah pe is haftay,find_opponents,mix,code_switch;question;multi_slot,fresh
+au-624,match chahiye practice nahi koi competitive team dhoondo,find_opponents,ru,negation;boundary;imperative,fresh
+au-625,hamari team ka challenge kaun accept karega sunday ko,find_opponents,ru,question;multi_slot,fresh
+au-626,koi team dhundho jo serious khele mazaak nahi,find_opponents,ru,imperative;negation;boundary,fresh
+au-627,hamein match khelna hai koi bhi team chale gi kal ke liye,find_opponents,ru,boundary;multi_slot;run_on,fresh
+au-628,hum tayar hain kisi bhi team ke khilaf 7 baje pe,find_opponents,ru,boundary;multi_slot;numeric,fresh
+au-629,ek team dhundho jis ke paas apna ground bhi ho,find_opponents,ru,imperative;boundary;run_on,fresh
+au-630,hamari team naya naya join hui hai koi aisi team chahiye jo friendly khele,find_opponents,ru,boundary;run_on,fresh
+au-631,i need 4 more players for my football team tomorrow,find_players,en,numeric;multi_slot,fresh
+au-632,is there a way to hire a substitute player from the app,find_players,en,question;indirect,fresh
+au-633,find me a midfielder who is free tonight,find_players,en,imperative;multi_slot,fresh
+au-634,we have 9 but need 2 more to play a full match,find_players,en,numeric;run_on,fresh
+au-635,anyone willing to join a casual cricket game at 4pm,find_players,en,question;multi_slot,fresh
+au-636,our captain backed out last minute we need a leader,find_players,en,run_on;boundary,fresh
+au-637,looking for experienced players only no beginners please,find_players,en,boundary;negation;politeness,fresh
+au-638,do you have a pool of players i can pick from,find_players,en,question;boundary,fresh
+au-639,koi player mil jayega jo right arm fast bowl kare,find_players,mix,code_switch;question;indirect,fresh
+au-640,bhai ek aur khiladi dhoondo hamare match se pehle,find_players,mix,code_switch;imperative;run_on,fresh
+au-641,hamari team me 2 jagah khali hain futsal ke liye friday,find_players,mix,code_switch;numeric;multi_slot,fresh
+au-642,ek batter chahiye koi experienced jo kal aa sake,find_players,mix,code_switch;indirect;multi_slot,fresh
+au-643,player chahiye urgently aaj shaam ke match ke liye bhai,find_players,mix,code_switch;imperative;slang,fresh
+au-644,ek goalkeeper mil jaye to hamare liye kaafi hai,find_players,mix,code_switch;numeric;indirect,fresh
+au-645,3 log chahiye cricket ke liye rawalpindi se koi bhi,find_players,mix,code_switch;numeric;multi_slot;boundary,fresh
+au-646,koi aisa banda hai jo kal subah khelne aa sake,find_players,ru,question;indirect;multi_slot,fresh
+au-647,hamare ek khiladi ne cancel kiya hai ek aur chahiye jaldi,find_players,ru,numeric;run_on;imperative,fresh
+au-648,2 khiladi chahiye jo football khelein bahria me shaam ko,find_players,ru,numeric;multi_slot;run_on,fresh
+au-649,cricket ke liye 5 bande chahiye kal subah 6 baje,find_players,ru,numeric;multi_slot,fresh
+au-650,jaldi se koi extra khiladi ka intezaam karo match 2 ghante me hai,find_players,ru,imperative;numeric;run_on,fresh
+au-651,hamari team me sirf 4 reh gaye hain 7 a side ke liye 3 aur chahiye,find_players,ru,numeric;run_on,fresh
+au-652,koi accha wicket keeper dhoondo yaar hamari bowling bekar ho rahi hai,find_players,ru,imperative;slang;run_on,fresh
+au-653,ek substitute chahiye kal ke cricket match ke liye,find_players,ru,numeric;multi_slot,fresh

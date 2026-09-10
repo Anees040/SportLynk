@@ -1,8 +1,8 @@
 # Model Card -- SportLynk Sentiment Classifier (Model #2)
 
 - **Model key**: `sentiment`  
-- **Version**: `sentiment-wordchar-linsvc-softmax-20260826-1306`  
-- **Trained (UTC)**: 2026-08-26T13:06:07+00:00  
+- **Version**: `sentiment-wordchar-linsvc-softmax-20260909-0735`  
+- **Trained (UTC)**: 2026-09-09T07:35:44+00:00  
 - **Normalizer contract**: `sentiment-norm-v1` (`b96e65df85f9692b`)  
 - **Released** (passed all gates): **True**
 
@@ -12,26 +12,26 @@ Maps raw review text (English / Roman Urdu / code-switched) to `negative` / `neu
 
 | metric | value |
 |---|---|
-| accuracy | **0.8250** |
-| macro F1 | 0.8247 |
-| accuracy 95% CI (bootstrap) | [0.7700, 0.8750] |
+| accuracy | **0.8800** |
+| macro F1 | 0.8803 |
+| accuracy 95% CI (bootstrap) | [0.8300, 0.9250] |
 | acceptance gate | >= 0.80 -> PASS |
 
 ### Per class (exam)
 
 | class | precision | recall | f1 | support |
 |---|---|---|---|---|
-| negative | 0.844 | 0.794 | 0.818 | 68 |
-| neutral | 0.841 | 0.791 | 0.815 | 67 |
-| positive | 0.795 | 0.892 | 0.841 | 65 |
+| negative | 0.841 | 0.853 | 0.847 | 68 |
+| neutral | 0.905 | 0.851 | 0.877 | 67 |
+| positive | 0.897 | 0.938 | 0.917 | 65 |
 
 ### Per language (exam)
 
 | lang | n | accuracy | macro F1 |
 |---|---|---|---|
-| en | 50 | 0.7600 | 0.7581 |
-| mixed | 70 | 0.8286 | 0.8281 |
-| ru | 80 | 0.8625 | 0.8606 |
+| en | 50 | 0.8200 | 0.8194 |
+| mixed | 70 | 0.8857 | 0.8847 |
+| ru | 80 | 0.9125 | 0.9132 |
 
 ## Is the model actually learning? (sanity checks)
 
@@ -39,11 +39,11 @@ Maps raw review text (English / Roman Urdu / code-switched) to `negative` / `neu
 |---|---|
 | baseline: predict train-majority (`neutral`) | 0.3350 |
 | baseline: predict exam-majority (`negative`) | 0.3400 |
-| ablation: word_only (at this run's C) | 0.7800 |
-| ablation: char_only (at this run's C) | 0.7650 |
-| ablation: word+char (at this run's C) | 0.8100 |
-| held-out validation accuracy | 0.6447 |
-| **shipped model** | **0.8250** |
+| ablation: word_only (at this run's C) | 0.8950 |
+| ablation: char_only (at this run's C) | 0.8650 |
+| ablation: word+char (at this run's C) | 0.9000 |
+| held-out validation accuracy | 0.6316 |
+| **shipped model** | **0.8800** |
 
 The shipped model clearing both baselines by a wide margin — and doing so on an exam it never saw, with a held-out validation accuracy nowhere near 1.0 — is the evidence that it learned sentiment rather than a label prior. Each single-view ablation sitting below the union is the evidence that both feature views contribute.
 
@@ -57,16 +57,16 @@ The shipped model clearing both baselines by a wide margin — and doing so on a
 | corpus provenance | PASS | sha match, fp match |
 | exam provenance | PASS | sha match, validated=True |
 | predict_proba present | PASS | softmax(decision_function), uncalibrated |
-| no leakage | PASS | val acc 0.6447 <= 0.995 |
-| beats baseline | PASS | exam 0.8250 vs baseline 0.3400 (+0.10 margin) |
-| domain >= 0.80 | PASS | exam accuracy 0.8250 (target 0.80) |
+| no leakage | PASS | val acc 0.6316 <= 0.995 |
+| beats baseline | PASS | exam 0.8800 vs baseline 0.3400 (+0.10 margin) |
+| domain >= 0.80 | PASS | exam accuracy 0.8800 (target 0.80) |
 
 ## Training data
 
-- Corpus: `train.csv` (21405 rows), sha256 `408b4c528d40118cf20c277a06854d0e3436cb4015c79b1a82ff63356305a068`
-- Label counts: {'negative': 5494, 'neutral': 9030, 'positive': 6881}
-- Language counts: {'en': 9295, 'mixed': 219, 'ru': 11891}
-- Source counts: {'authored': 690, 'rusa': 11719, 'tweeteval': 8996}
+- Corpus: `train.csv` (22213 rows), sha256 `445a9e8d88d7c2bafcdcc7250eec71aa3d112e5225253a88d46f8b99a732ea59`
+- Label counts: {'negative': 5771, 'neutral': 9287, 'positive': 7155}
+- Language counts: {'en': 9572, 'mixed': 497, 'ru': 12144}
+- Source counts: {'authored': 1498, 'rusa': 11719, 'tweeteval': 8996}
 - Assembled by `build_sentiment_corpus.py` from RUSA (Roman Urdu), TweetEval (English 3-class), and hand-authored in-domain venue rows. The exam is excluded by a contamination gate and never trained on.
 
 ## Toxicity guard (FR9.10)
@@ -74,32 +74,32 @@ The shipped model clearing both baselines by a wide margin — and doing so on a
 - Lexicon: `abuse_lexicon.txt` (32 terms), sha256 `7f456aef337d4600c6e8885b7b5c850b9a2718cb7db35baf28401192e9d4f653`
 - **Abuse and negative sentiment are separate signals.** A review is flagged toxic ONLY when it hits the abuse lexicon (profanity / slurs); the module names the matched terms so a moderation flag is explainable. A clean angry review is negative, not toxic.
 - Independently, the serving layer treats P(negative) > 0.70 as a STRONG-NEGATIVE escalation (prioritise owner attention) — a distinct signal from abuse, never merged into the toxic flag.
-- On the exam that threshold escalates **18 of 200** rows. The count is reported because a threshold on its own does not say whether the rule is live: these are softmax scores over uncalibrated margins, so how sharp they get depends on C, and a cutoff that fired usefully for one configuration can go silently inert for another. The value was set by measuring — it is the loosest cut that escalated only true negatives on the exam (`training/validate_neg_threshold.py`) — and must be re-measured whenever C, the branch set, or the corpus changes.
+- On the exam that threshold escalates **36 of 200** rows. The count is reported because a threshold on its own does not say whether the rule is live: these are softmax scores over uncalibrated margins, so how sharp they get depends on C, and a cutoff that fired usefully for one configuration can go silently inert for another. The value was set by measuring — it is the loosest cut that escalated only true negatives on the exam (`training/validate_neg_threshold.py`) — and must be re-measured whenever C, the branch set, or the corpus changes.
 
 ## Error analysis (up to 20 exam misses)
 
 | id | lang | actual | predicted | text |
 |---|---|---|---|---|
-| dt-021 | ru | negative | neutral | opponent team ne beimani ki aur owner ne kuch nahi kaha |
 | dt-023 | ru | negative | positive | bohot mehnga hai is quality ke liye, sasta options behtar hain |
-| dt-034 | ru | neutral | positive | pitch theek thi, thora better ho sakti thi |
-| dt-039 | ru | neutral | negative | lights hain magar ghaas thori kam thi |
 | dt-043 | ru | neutral | negative | washroom saaf tha lekin canteen band thi |
 | dt-049 | ru | neutral | positive | owner ne waqt pe slot diya, ground thora purana hai |
-| dt-050 | ru | neutral | positive | na maza aya na bura laga, bas khel liya |
-| dt-053 | ru | neutral | positive | booking asan thi, ground theek theek tha |
-| dt-054 | ru | neutral | negative | thora shor tha bahar se lekin khel mein farq nahi para |
-| dt-069 | ru | positive | neutral | mast ground hai yaar, dosron ko bhi bataya |
+| dt-050 | ru | neutral | negative | na maza aya na bura laga, bas khel liya |
+| dt-069 | ru | positive | negative | mast ground hai yaar, dosron ko bhi bataya |
+| dt-073 | ru | positive | negative | owner ne slot late tak barha diya, bohat mehrbani |
 | dt-077 | ru | positive | negative | refund bina poochhe hi kar diya jab slot cancel karna para |
-| dt-083 | mixed | negative | neutral | paid 3500 for nothing, ghaas hi nahi thi ground pe |
-| dt-093 | mixed | negative | positive | asked for a morning slot, unhon ne evening ka de diya without telling |
+| dt-088 | mixed | negative | neutral | no parking, no washroom, kuch bhi theek nahi |
+| dt-093 | mixed | negative | neutral | asked for a morning slot, unhon ne evening ka de diya without telling |
 | dt-095 | mixed | negative | positive | good location but everything else bakwas |
 | dt-097 | mixed | negative | positive | overpriced for the quality, 4000 mein bohat behtar milta hai |
-| dt-098 | mixed | negative | positive | app pe slot show ho raha tha, owner ne kaha wo purana hai |
-| dt-099 | mixed | negative | neutral | horrible turf, chhoti chhoti kankar puri ground pe |
+| dt-104 | mixed | negative | neutral | nice photos on the app lekin haqeeqat mein ganda hai |
 | dt-107 | mixed | neutral | negative | lights are good but ghaas thori kam thi |
 | dt-114 | mixed | neutral | negative | clean washroom but canteen band thi |
-| dt-118 | mixed | neutral | positive | the turf is old but abhi bhi khelne ke qabil hai |
+| dt-127 | mixed | neutral | negative | good size ground lekin ghaas patli thi jagah jagah |
+| dt-158 | en | negative | neutral | Overpriced for what you get. Better options nearby for less. |
+| dt-162 | en | negative | neutral | No parking, no changing room, nothing as advertised. |
+| dt-164 | en | negative | neutral | The pictures on the app look nothing like the actual ground. |
+| dt-167 | en | negative | positive | Absolutely not recommended for a serious match. |
+| dt-171 | en | neutral | positive | Played two hours, no issues, no highlights. |
 
 ## How C was chosen
 

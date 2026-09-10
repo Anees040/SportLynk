@@ -1,7 +1,7 @@
 {
   "modelKey": "intent",
-  "modelVersion": "intent-v2-20260828-2315",
-  "trainedAt": "2026-08-28T23:15:00+00:00",
+  "modelVersion": "intent-v2-20260909-0712",
+  "trainedAt": "2026-09-09T07:12:58+00:00",
   "released": true,
   "seed": 20260824,
   "confidenceThreshold": 0.45,
@@ -73,29 +73,29 @@
       "calibrationFolds": "group"
     },
     "features": {
-      "word": 6878,
-      "char": 11971,
-      "total": 18849
+      "word": 7985,
+      "char": 13250,
+      "total": 21235
     },
     "fitSeconds": {
-      "split": 1.4,
-      "fullRefit": 1.97
+      "split": 1.33,
+      "fullRefit": 2.01
     }
   },
   "corpus": {
     "file": "data\\assistant\\intents.csv",
     "rows": 2576,
-    "sha256": "64395ec8026c89c74f97ff88eac1f595fba47dee3bc88b8047422465063be6e0",
-    "train": 2038,
-    "val": 538,
+    "sha256": "cd07c68b969eefd547714a11346f4e5c58696e75735d69fbcee0b370f0eabfc1",
+    "train": 2041,
+    "val": 535,
     "langs": {
       "en": 1035,
       "mix": 644,
       "ru": 897
     },
     "sources": {
-      "authored": 382,
-      "template": 2194
+      "authored": 653,
+      "template": 1923
     },
     "splitGroupedBy": "template_id",
     "generatedBy": "training/gen_intents.py"
@@ -109,36 +109,36 @@
   "contamination": {
     "exactCollisions": 0,
     "examples": [],
-    "maxNearDup": 0.7143,
+    "maxNearDup": 0.75,
     "maxNearDupMetric": "word_set",
     "maxNearDupPair": {
-      "exam": "recruiting teams ki list dikha do",
-      "corpus": "Pindi ki teams ki list dikha do"
+      "exam": "haan yehi sahi hai",
+      "corpus": "haan haan sahi hai"
     },
     "threshold": 0.8
   },
   "validation": {
-    "accuracy": 0.8085501858736059,
-    "macro_f1": 0.8042272635756417,
-    "weighted_f1": 0.8043316004565886,
+    "accuracy": 0.8411214953271028,
+    "macro_f1": 0.8350047681860672,
+    "weighted_f1": 0.8353964471866687,
     "per_class": {
       "affirm": {
-        "precision": 0.7391304347826086,
-        "recall": 0.68,
-        "f1-score": 0.7083333333333334,
-        "support": 25
+        "precision": 0.7619047619047619,
+        "recall": 0.6956521739130435,
+        "f1-score": 0.7272727272727273,
+        "support": 23
       },
       "app_help": {
-        "precision": 0.8461538461538461,
+        "precision": 0.88,
         "recall": 0.9565217391304348,
-        "f1-score": 0.8979591836734694,
+        "f1-score": 0.9166666666666666,
         "support": 23
       },
       "book_venue": {
-        "precision": 0.7894736842105263,
-        "recall": 0.6,
-        "f1-score": 0.6818181818181818,
-        "support": 25
+        "precision": 0.85,
+        "recall": 0.7727272727272727,
+        "f1-score": 0.8095238095238095,
+        "support": 22
       },
       "cancel_booking": {
         "precision": 0.9545454545454546,
@@ -147,46 +147,46 @@
         "support": 27
       },
       "check_availability": {
-        "precision": 0.4864864864864865,
-        "recall": 0.782608695652174,
-        "f1-score": 0.6,
+        "precision": 0.75,
+        "recall": 0.9130434782608695,
+        "f1-score": 0.8235294117647058,
         "support": 23
       },
       "contact_owner": {
-        "precision": 0.8461538461538461,
+        "precision": 0.9166666666666666,
         "recall": 0.9166666666666666,
-        "f1-score": 0.88,
+        "f1-score": 0.9166666666666666,
         "support": 24
       },
       "create_team_help": {
-        "precision": 0.9583333333333334,
-        "recall": 1.0,
-        "f1-score": 0.9787234042553191,
+        "precision": 0.9565217391304348,
+        "recall": 0.9565217391304348,
+        "f1-score": 0.9565217391304348,
         "support": 23
       },
       "deny": {
-        "precision": 0.7727272727272727,
+        "precision": 0.6538461538461539,
         "recall": 0.7727272727272727,
-        "f1-score": 0.7727272727272727,
+        "f1-score": 0.7083333333333334,
         "support": 22
       },
       "elo_help": {
-        "precision": 1.0,
+        "precision": 0.9166666666666666,
         "recall": 1.0,
-        "f1-score": 1.0,
+        "f1-score": 0.9565217391304348,
         "support": 22
       },
       "find_opponents": {
-        "precision": 0.6363636363636364,
-        "recall": 0.6363636363636364,
-        "f1-score": 0.6363636363636364,
+        "precision": 0.7241379310344828,
+        "recall": 0.9545454545454546,
+        "f1-score": 0.8235294117647058,
         "support": 22
       },
       "find_players": {
-        "precision": 0.6666666666666666,
-        "recall": 0.7272727272727273,
-        "f1-score": 0.6956521739130435,
-        "support": 22
+        "precision": 0.6896551724137931,
+        "recall": 0.8333333333333334,
+        "f1-score": 0.7547169811320755,
+        "support": 24
       },
       "find_teams": {
         "precision": 0.9,
@@ -195,21 +195,21 @@
         "support": 26
       },
       "find_venue": {
-        "precision": 0.8148148148148148,
+        "precision": 0.8461538461538461,
         "recall": 0.9565217391304348,
-        "f1-score": 0.88,
+        "f1-score": 0.8979591836734694,
         "support": 23
       },
       "greeting": {
-        "precision": 0.6896551724137931,
-        "recall": 0.9090909090909091,
-        "f1-score": 0.7843137254901961,
+        "precision": 0.875,
+        "recall": 0.9545454545454546,
+        "f1-score": 0.9130434782608695,
         "support": 22
       },
       "my_bookings": {
-        "precision": 0.88,
+        "precision": 0.8461538461538461,
         "recall": 0.9565217391304348,
-        "f1-score": 0.9166666666666666,
+        "f1-score": 0.8979591836734694,
         "support": 23
       },
       "navigate": {
@@ -219,21 +219,21 @@
         "support": 22
       },
       "out_of_scope": {
-        "precision": 1.0,
-        "recall": 0.4090909090909091,
-        "f1-score": 0.5806451612903226,
+        "precision": 0.7692307692307693,
+        "recall": 0.45454545454545453,
+        "f1-score": 0.5714285714285714,
         "support": 22
       },
       "refund_policy": {
-        "precision": 0.78125,
+        "precision": 0.9259259259259259,
         "recall": 1.0,
-        "f1-score": 0.8771929824561403,
+        "f1-score": 0.9615384615384616,
         "support": 25
       },
       "team_stats": {
-        "precision": 1.0,
+        "precision": 0.9523809523809523,
         "recall": 0.8333333333333334,
-        "f1-score": 0.9090909090909091,
+        "f1-score": 0.8888888888888888,
         "support": 24
       },
       "topup_help": {
@@ -249,15 +249,15 @@
         "support": 23
       },
       "venue_info": {
-        "precision": 0.7692307692307693,
+        "precision": 0.9090909090909091,
         "recall": 0.4166666666666667,
-        "f1-score": 0.5405405405405406,
+        "f1-score": 0.5714285714285714,
         "support": 24
       },
       "wallet_balance": {
-        "precision": 0.95,
-        "recall": 0.8636363636363636,
-        "f1-score": 0.9047619047619048,
+        "precision": 0.9,
+        "recall": 0.8181818181818182,
+        "f1-score": 0.8571428571428571,
         "support": 22
       }
     },
@@ -289,116 +289,111 @@
       ],
       "matrix": [
         [
-          17,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          8,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        [
-          0,
-          22,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
+          16,
+          1,
           1,
           0,
           0,
-          0
-        ],
-        [
-          0,
-          0,
-          15,
-          0,
-          5,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          5,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        [
-          0,
-          0,
-          1,
-          21,
-          0,
-          0,
-          0,
-          5,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        [
           0,
           0,
           3,
           0,
-          18,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          1,
           0,
           0,
           0,
           0,
           0,
+          0
+        ],
+        [
+          0,
+          22,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          17,
+          0,
+          1,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          2,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          21,
+          0,
+          0,
+          0,
+          5,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          21,
           0,
           0,
           0,
@@ -407,6 +402,11 @@
           0,
           0,
           2,
+          0,
+          0,
+          0,
+          0,
+          0,
           0,
           0,
           0,
@@ -423,6 +423,12 @@
           0,
           0,
           0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
           1,
           0,
           0,
@@ -430,12 +436,6 @@
           0,
           0,
           0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
           0
         ],
         [
@@ -445,7 +445,7 @@
           0,
           0,
           0,
-          23,
+          22,
           0,
           0,
           0,
@@ -457,7 +457,7 @@
           0,
           0,
           0,
-          0,
+          1,
           0,
           0,
           0,
@@ -518,38 +518,13 @@
           0,
           0,
           0,
-          7,
           0,
           0,
           0,
           0,
-          14,
+          0,
+          21,
           1,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        [
-          0,
-          0,
-          0,
-          0,
-          6,
-          0,
-          0,
-          0,
-          0,
-          0,
-          16,
           0,
           0,
           0,
@@ -573,7 +548,32 @@
           1,
           0,
           0,
+          2,
+          20,
           0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
           6,
           18,
           0,
@@ -585,65 +585,13 @@
           0,
           0,
           0,
-          1,
-          0
-        ],
-        [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-          22,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        [
-          1,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          20,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
           0,
           0
         ],
         [
           0,
           0,
-          0,
           1,
-          0,
           0,
           0,
           0,
@@ -661,6 +609,8 @@
           0,
           0,
           0,
+          0,
+          0,
           0
         ],
         [
@@ -675,6 +625,56 @@
           0,
           0,
           0,
+          0,
+          0,
+          21,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          22,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
           0,
           0,
           0,
@@ -690,11 +690,8 @@
         ],
         [
           0,
-          4,
+          2,
           0,
-          0,
-          0,
-          1,
           0,
           0,
           0,
@@ -705,7 +702,10 @@
           0,
           2,
           0,
-          9,
+          0,
+          2,
+          0,
+          10,
           0,
           0,
           3,
@@ -748,14 +748,14 @@
           0,
           0,
           0,
-          4,
+          2,
           0,
           0,
           0,
           0,
           0,
           0,
-          0,
+          2,
           0,
           20,
           0,
@@ -818,7 +818,7 @@
           0,
           0,
           0,
-          0,
+          3,
           1,
           0,
           0,
@@ -829,21 +829,21 @@
           0,
           0,
           0,
-          7,
+          6,
           0,
-          5,
+          2,
           0,
           0,
           0,
           10,
-          1
+          2
         ],
         [
           0,
           0,
           0,
           0,
-          1,
+          2,
           0,
           0,
           0,
@@ -861,16 +861,16 @@
           2,
           0,
           0,
-          19
+          18
         ]
       ]
     },
-    "ece": 0.1788,
-    "n": 538
+    "ece": 0.1826,
+    "n": 535
   },
   "validation_grouped": {
-    "accuracy": 0.8569,
-    "macro_f1": 0.8478,
+    "accuracy": 0.8991,
+    "macro_f1": 0.8887,
     "confusion_matrix": {
       "labels": [
         "discovery",
@@ -884,29 +884,29 @@
       ],
       "matrix": [
         [
-          61,
-          3,
+          66,
+          1,
           0,
           1,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          3,
+          63,
+          0,
+          0,
+          0,
+          0,
+          0,
+          6
+        ],
+        [
           2,
           0,
-          1,
-          0
-        ],
-        [
-          10,
-          60,
-          0,
-          0,
-          0,
-          0,
-          0,
-          5
-        ],
-        [
-          1,
-          0,
-          44,
+          43,
           0,
           0,
           1,
@@ -914,21 +914,21 @@
           0
         ],
         [
-          13,
-          0,
-          0,
-          103,
           1,
           0,
           0,
-          0
-        ],
-        [
-          7,
-          1,
-          2,
+          115,
+          0,
           3,
-          103,
+          0,
+          0
+        ],
+        [
+          9,
+          1,
+          3,
+          3,
+          100,
           0,
           1,
           0
@@ -939,29 +939,29 @@
           3,
           2,
           5,
-          29,
-          2,
-          1
+          31,
+          1,
+          0
         ],
         [
-          0,
+          1,
           0,
           0,
           1,
-          1,
+          0,
           0,
           22,
           0
         ],
         [
           0,
+          1,
           0,
           0,
+          1,
+          2,
           0,
-          0,
-          8,
-          0,
-          39
+          41
         ]
       ]
     }
@@ -977,163 +977,163 @@
     {
       "lo": 0.1,
       "hi": 0.2,
-      "n": 4,
-      "accuracy": 0.0,
-      "meanConfidence": 0.1624
+      "n": 2,
+      "accuracy": 0.5,
+      "meanConfidence": 0.1521
     },
     {
       "lo": 0.2,
       "hi": 0.3,
-      "n": 14,
-      "accuracy": 0.1429,
-      "meanConfidence": 0.2505
+      "n": 17,
+      "accuracy": 0.2353,
+      "meanConfidence": 0.2582
     },
     {
       "lo": 0.3,
       "hi": 0.4,
-      "n": 28,
-      "accuracy": 0.1429,
-      "meanConfidence": 0.3563
+      "n": 34,
+      "accuracy": 0.4118,
+      "meanConfidence": 0.3467
     },
     {
       "lo": 0.4,
       "hi": 0.5,
-      "n": 66,
-      "accuracy": 0.5758,
-      "meanConfidence": 0.4583
+      "n": 53,
+      "accuracy": 0.4906,
+      "meanConfidence": 0.4515
     },
     {
       "lo": 0.5,
       "hi": 0.6,
-      "n": 70,
-      "accuracy": 0.7429,
-      "meanConfidence": 0.5544
+      "n": 74,
+      "accuracy": 0.7432,
+      "meanConfidence": 0.5529
     },
     {
       "lo": 0.6,
       "hi": 0.7,
-      "n": 104,
-      "accuracy": 0.8846,
-      "meanConfidence": 0.6477
+      "n": 93,
+      "accuracy": 0.957,
+      "meanConfidence": 0.6538
     },
     {
       "lo": 0.7,
       "hi": 0.8,
-      "n": 100,
-      "accuracy": 0.98,
-      "meanConfidence": 0.7537
+      "n": 119,
+      "accuracy": 0.9916,
+      "meanConfidence": 0.7551
     },
     {
       "lo": 0.8,
       "hi": 0.9,
-      "n": 139,
-      "accuracy": 0.9784,
-      "meanConfidence": 0.8438
+      "n": 138,
+      "accuracy": 1.0,
+      "meanConfidence": 0.8445
     },
     {
       "lo": 0.9,
       "hi": 1.0,
-      "n": 13,
+      "n": 5,
       "accuracy": 1.0,
-      "meanConfidence": 0.9111
+      "meanConfidence": 0.9073
     }
   ],
   "threshold_sweep_validation": [
     {
       "threshold": 0.0,
       "coverage": 1.0,
-      "answered": 538,
-      "answeredAccuracy": 0.8086,
-      "confidentErrors": 103,
-      "servedAccuracy": 0.8086,
-      "abstainAsMiss": 0.8086
+      "answered": 535,
+      "answeredAccuracy": 0.8411,
+      "confidentErrors": 85,
+      "servedAccuracy": 0.8411,
+      "abstainAsMiss": 0.8411
     },
     {
       "threshold": 0.3,
-      "coverage": 0.9665,
-      "answered": 520,
-      "answeredAccuracy": 0.8327,
-      "confidentErrors": 87,
-      "servedAccuracy": 0.8104,
-      "abstainAsMiss": 0.8048
+      "coverage": 0.9645,
+      "answered": 516,
+      "answeredAccuracy": 0.8624,
+      "confidentErrors": 71,
+      "servedAccuracy": 0.8355,
+      "abstainAsMiss": 0.8318
     },
     {
       "threshold": 0.35,
-      "coverage": 0.9461,
-      "answered": 509,
-      "answeredAccuracy": 0.8448,
-      "confidentErrors": 79,
-      "servedAccuracy": 0.8048,
-      "abstainAsMiss": 0.7993
+      "coverage": 0.9327,
+      "answered": 499,
+      "answeredAccuracy": 0.8798,
+      "confidentErrors": 60,
+      "servedAccuracy": 0.8299,
+      "abstainAsMiss": 0.8206
     },
     {
       "threshold": 0.4,
-      "coverage": 0.9145,
-      "answered": 492,
-      "answeredAccuracy": 0.872,
-      "confidentErrors": 63,
-      "servedAccuracy": 0.8067,
-      "abstainAsMiss": 0.7974
+      "coverage": 0.9009,
+      "answered": 482,
+      "answeredAccuracy": 0.8942,
+      "confidentErrors": 51,
+      "servedAccuracy": 0.815,
+      "abstainAsMiss": 0.8056
     },
     {
       "threshold": 0.45,
-      "coverage": 0.8662,
-      "answered": 466,
-      "answeredAccuracy": 0.8863,
-      "confidentErrors": 53,
-      "servedAccuracy": 0.777,
-      "abstainAsMiss": 0.7677
+      "coverage": 0.8598,
+      "answered": 460,
+      "answeredAccuracy": 0.913,
+      "confidentErrors": 40,
+      "servedAccuracy": 0.7963,
+      "abstainAsMiss": 0.785
     },
     {
       "threshold": 0.5,
-      "coverage": 0.7918,
-      "answered": 426,
-      "answeredAccuracy": 0.9178,
-      "confidentErrors": 35,
-      "servedAccuracy": 0.7361,
-      "abstainAsMiss": 0.7268
+      "coverage": 0.8019,
+      "answered": 429,
+      "answeredAccuracy": 0.9441,
+      "confidentErrors": 24,
+      "servedAccuracy": 0.772,
+      "abstainAsMiss": 0.757
     },
     {
       "threshold": 0.55,
-      "coverage": 0.7361,
-      "answered": 396,
-      "answeredAccuracy": 0.9343,
-      "confidentErrors": 26,
-      "servedAccuracy": 0.7045,
-      "abstainAsMiss": 0.6877
+      "coverage": 0.7346,
+      "answered": 393,
+      "answeredAccuracy": 0.9669,
+      "confidentErrors": 13,
+      "servedAccuracy": 0.7364,
+      "abstainAsMiss": 0.7103
     },
     {
       "threshold": 0.6,
-      "coverage": 0.6617,
-      "answered": 356,
-      "answeredAccuracy": 0.9522,
-      "confidentErrors": 17,
-      "servedAccuracy": 0.6543,
-      "abstainAsMiss": 0.6301
+      "coverage": 0.6636,
+      "answered": 355,
+      "answeredAccuracy": 0.9859,
+      "confidentErrors": 5,
+      "servedAccuracy": 0.6841,
+      "abstainAsMiss": 0.6542
     },
     {
       "threshold": 0.7,
-      "coverage": 0.4684,
-      "answered": 252,
-      "answeredAccuracy": 0.9802,
-      "confidentErrors": 5,
-      "servedAccuracy": 0.5,
-      "abstainAsMiss": 0.4591
+      "coverage": 0.4897,
+      "answered": 262,
+      "answeredAccuracy": 0.9962,
+      "confidentErrors": 1,
+      "servedAccuracy": 0.529,
+      "abstainAsMiss": 0.4879
     }
   ],
   "floor_validation": {
     "threshold": 0.45,
-    "coverage": 0.8662,
-    "answered": 466,
-    "answeredAccuracy": 0.8863,
-    "confidentErrors": 53,
-    "servedAccuracy": 0.777,
-    "abstainAsMiss": 0.7677
+    "coverage": 0.8598,
+    "answered": 460,
+    "answeredAccuracy": 0.913,
+    "confidentErrors": 40,
+    "servedAccuracy": 0.7963,
+    "abstainAsMiss": 0.785
   },
   "exam_scores": {
-    "accuracy": 0.6695652173913044,
-    "macro_f1": 0.6608333724555991,
-    "weighted_f1": 0.660833372455599,
+    "accuracy": 0.7043478260869566,
+    "macro_f1": 0.6950688250319835,
+    "weighted_f1": 0.6950688250319834,
     "per_class": {
       "affirm": {
         "precision": 0.6923076923076923,
@@ -1142,15 +1142,15 @@
         "support": 10
       },
       "app_help": {
-        "precision": 0.6,
+        "precision": 0.5625,
         "recall": 0.9,
-        "f1-score": 0.72,
+        "f1-score": 0.6923076923076923,
         "support": 10
       },
       "book_venue": {
-        "precision": 0.5,
-        "recall": 0.4,
-        "f1-score": 0.4444444444444444,
+        "precision": 0.5333333333333333,
+        "recall": 0.8,
+        "f1-score": 0.64,
         "support": 10
       },
       "cancel_booking": {
@@ -1160,9 +1160,9 @@
         "support": 10
       },
       "check_availability": {
-        "precision": 0.5384615384615384,
-        "recall": 0.7,
-        "f1-score": 0.6086956521739131,
+        "precision": 0.5,
+        "recall": 0.8,
+        "f1-score": 0.6153846153846154,
         "support": 10
       },
       "contact_owner": {
@@ -1178,9 +1178,9 @@
         "support": 10
       },
       "deny": {
-        "precision": 0.5833333333333334,
+        "precision": 0.7777777777777778,
         "recall": 0.7,
-        "f1-score": 0.6363636363636364,
+        "f1-score": 0.7368421052631579,
         "support": 10
       },
       "elo_help": {
@@ -1190,39 +1190,39 @@
         "support": 10
       },
       "find_opponents": {
-        "precision": 0.5,
-        "recall": 0.4,
-        "f1-score": 0.4444444444444444,
+        "precision": 0.7,
+        "recall": 0.7,
+        "f1-score": 0.7,
         "support": 10
       },
       "find_players": {
-        "precision": 0.7272727272727273,
-        "recall": 0.8,
-        "f1-score": 0.7619047619047619,
+        "precision": 0.7142857142857143,
+        "recall": 1.0,
+        "f1-score": 0.8333333333333334,
         "support": 10
       },
       "find_teams": {
-        "precision": 0.8,
-        "recall": 0.8,
-        "f1-score": 0.8,
+        "precision": 0.875,
+        "recall": 0.7,
+        "f1-score": 0.7777777777777778,
         "support": 10
       },
       "find_venue": {
-        "precision": 0.8,
-        "recall": 0.8,
-        "f1-score": 0.8,
+        "precision": 0.7777777777777778,
+        "recall": 0.7,
+        "f1-score": 0.7368421052631579,
         "support": 10
       },
       "greeting": {
-        "precision": 0.8,
+        "precision": 0.8888888888888888,
         "recall": 0.8,
-        "f1-score": 0.8,
+        "f1-score": 0.8421052631578947,
         "support": 10
       },
       "my_bookings": {
-        "precision": 0.3,
+        "precision": 0.3333333333333333,
         "recall": 0.3,
-        "f1-score": 0.3,
+        "f1-score": 0.3157894736842105,
         "support": 10
       },
       "navigate": {
@@ -1232,27 +1232,27 @@
         "support": 10
       },
       "out_of_scope": {
-        "precision": 0.4666666666666667,
-        "recall": 0.7,
-        "f1-score": 0.56,
+        "precision": 0.6153846153846154,
+        "recall": 0.8,
+        "f1-score": 0.6956521739130435,
         "support": 10
       },
       "refund_policy": {
-        "precision": 0.6363636363636364,
-        "recall": 0.7,
-        "f1-score": 0.6666666666666666,
+        "precision": 0.6,
+        "recall": 0.6,
+        "f1-score": 0.6,
         "support": 10
       },
       "team_stats": {
-        "precision": 0.6666666666666666,
+        "precision": 0.8571428571428571,
         "recall": 0.6,
-        "f1-score": 0.631578947368421,
+        "f1-score": 0.7058823529411765,
         "support": 10
       },
       "topup_help": {
-        "precision": 0.5454545454545454,
+        "precision": 0.6,
         "recall": 0.6,
-        "f1-score": 0.5714285714285714,
+        "f1-score": 0.6,
         "support": 10
       },
       "tournament_list": {
@@ -1268,9 +1268,9 @@
         "support": 10
       },
       "wallet_balance": {
-        "precision": 0.4,
+        "precision": 0.6666666666666666,
         "recall": 0.2,
-        "f1-score": 0.26666666666666666,
+        "f1-score": 0.3076923076923077,
         "support": 10
       }
     },
@@ -1354,15 +1354,9 @@
         [
           0,
           0,
-          4,
+          8,
           0,
           1,
-          0,
-          0,
-          3,
-          0,
-          0,
-          0,
           0,
           0,
           0,
@@ -1371,7 +1365,13 @@
           1,
           0,
           0,
-          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
           0,
           0,
           0
@@ -1379,9 +1379,9 @@
         [
           0,
           0,
-          1,
+          2,
           4,
-          1,
+          0,
           0,
           1,
           0,
@@ -1404,11 +1404,9 @@
         [
           0,
           0,
-          1,
+          2,
           0,
-          7,
-          0,
-          0,
+          8,
           0,
           0,
           0,
@@ -1423,8 +1421,10 @@
           0,
           0,
           0,
-          1,
-          1
+          0,
+          0,
+          0,
+          0
         ],
         [
           0,
@@ -1528,7 +1528,6 @@
         ],
         [
           0,
-          0,
           1,
           0,
           0,
@@ -1536,16 +1535,17 @@
           0,
           0,
           0,
-          4,
-          1,
-          1,
           0,
-          1,
+          7,
+          2,
           0,
           0,
-          1,
           0,
-          1,
+          0,
+          0,
+          0,
+          0,
+          0,
           0,
           0,
           0,
@@ -1553,6 +1553,68 @@
         ],
         [
           0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          10,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          7,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          7,
           0,
           0,
           0,
@@ -1562,68 +1624,6 @@
           0,
           0,
           2,
-          8,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-          0,
-          0,
-          0,
-          8,
-          1,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-          8,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
           0
         ],
         [
@@ -1654,7 +1654,7 @@
         [
           0,
           1,
-          1,
+          2,
           0,
           2,
           0,
@@ -1674,7 +1674,7 @@
           0,
           0,
           0,
-          1
+          0
         ],
         [
           0,
@@ -1713,14 +1713,14 @@
           0,
           0,
           0,
-          0,
-          0,
-          0,
           1,
           0,
-          7,
           0,
-          1,
+          0,
+          0,
+          8,
+          0,
+          0,
           0,
           1,
           0,
@@ -1731,7 +1731,7 @@
           1,
           0,
           0,
-          0,
+          1,
           0,
           0,
           0,
@@ -1744,7 +1744,7 @@
           0,
           0,
           1,
-          7,
+          6,
           0,
           1,
           0,
@@ -1811,9 +1811,9 @@
           0,
           0,
           0,
-          0,
-          0,
           1,
+          0,
+          0,
           0,
           0,
           2,
@@ -1829,7 +1829,7 @@
         [
           0,
           0,
-          0,
+          1,
           0,
           0,
           0,
@@ -1843,7 +1843,7 @@
           0,
           0,
           1,
-          3,
+          2,
           1,
           0,
           0,
@@ -1878,12 +1878,12 @@
         ]
       ]
     },
-    "ece": 0.1077,
+    "ece": 0.0784,
     "n": 230
   },
   "exam_grouped": {
-    "accuracy": 0.7652,
-    "macro_f1": 0.7624,
+    "accuracy": 0.8,
+    "macro_f1": 0.8068,
     "confusion_matrix": {
       "labels": [
         "discovery",
@@ -1897,24 +1897,24 @@
       ],
       "matrix": [
         [
-          24,
-          1,
-          1,
-          1,
+          25,
+          2,
+          0,
+          0,
           3,
           0,
           0,
           0
         ],
         [
-          4,
-          15,
-          2,
-          2,
-          2,
-          2,
+          3,
+          21,
           0,
-          3
+          3,
+          2,
+          1,
+          0,
+          0
         ],
         [
           3,
@@ -1927,32 +1927,32 @@
           0
         ],
         [
-          1,
-          1,
-          1,
-          42,
           2,
+          0,
+          1,
+          43,
+          3,
+          1,
+          0,
+          0
+        ],
+        [
+          2,
+          3,
+          2,
+          1,
+          39,
           3,
           0,
           0
         ],
         [
-          1,
-          2,
-          2,
-          1,
-          40,
-          4,
           0,
-          0
-        ],
-        [
           0,
-          1,
           0,
           1,
           1,
-          15,
+          16,
           0,
           2
         ],
@@ -1990,65 +1990,65 @@
     {
       "lo": 0.1,
       "hi": 0.2,
-      "n": 1,
-      "accuracy": 0.0,
-      "meanConfidence": 0.1928
+      "n": 3,
+      "accuracy": 0.3333,
+      "meanConfidence": 0.1836
     },
     {
       "lo": 0.2,
       "hi": 0.3,
-      "n": 16,
-      "accuracy": 0.375,
-      "meanConfidence": 0.2513
+      "n": 14,
+      "accuracy": 0.3571,
+      "meanConfidence": 0.2514
     },
     {
       "lo": 0.3,
       "hi": 0.4,
-      "n": 21,
-      "accuracy": 0.2381,
-      "meanConfidence": 0.3405
+      "n": 23,
+      "accuracy": 0.3043,
+      "meanConfidence": 0.3438
     },
     {
       "lo": 0.4,
       "hi": 0.5,
-      "n": 31,
-      "accuracy": 0.3548,
-      "meanConfidence": 0.4623
+      "n": 23,
+      "accuracy": 0.4348,
+      "meanConfidence": 0.4532
     },
     {
       "lo": 0.5,
       "hi": 0.6,
-      "n": 28,
-      "accuracy": 0.4643,
-      "meanConfidence": 0.5464
+      "n": 31,
+      "accuracy": 0.5806,
+      "meanConfidence": 0.5528
     },
     {
       "lo": 0.6,
       "hi": 0.7,
       "n": 30,
-      "accuracy": 0.8667,
-      "meanConfidence": 0.6521
+      "accuracy": 0.7333,
+      "meanConfidence": 0.646
     },
     {
       "lo": 0.7,
       "hi": 0.8,
-      "n": 38,
-      "accuracy": 0.8158,
-      "meanConfidence": 0.7564
+      "n": 35,
+      "accuracy": 0.8857,
+      "meanConfidence": 0.7535
     },
     {
       "lo": 0.8,
       "hi": 0.9,
-      "n": 60,
-      "accuracy": 0.95,
-      "meanConfidence": 0.8553
+      "n": 58,
+      "accuracy": 0.9483,
+      "meanConfidence": 0.8535
     },
     {
       "lo": 0.9,
       "hi": 1.0,
-      "n": 5,
+      "n": 13,
       "accuracy": 1.0,
-      "meanConfidence": 0.9132
+      "meanConfidence": 0.9101
     }
   ],
   "threshold_sweep_exam": [
@@ -2056,150 +2056,150 @@
       "threshold": 0.0,
       "coverage": 1.0,
       "answered": 230,
-      "answeredAccuracy": 0.6696,
-      "confidentErrors": 76,
-      "servedAccuracy": 0.6696,
-      "abstainAsMiss": 0.6696
+      "answeredAccuracy": 0.7043,
+      "confidentErrors": 68,
+      "servedAccuracy": 0.7043,
+      "abstainAsMiss": 0.7043
     },
     {
       "threshold": 0.3,
       "coverage": 0.9261,
       "answered": 213,
-      "answeredAccuracy": 0.6948,
-      "confidentErrors": 65,
-      "servedAccuracy": 0.6478,
-      "abstainAsMiss": 0.6435
+      "answeredAccuracy": 0.7324,
+      "confidentErrors": 57,
+      "servedAccuracy": 0.6826,
+      "abstainAsMiss": 0.6783
     },
     {
       "threshold": 0.35,
-      "coverage": 0.8565,
-      "answered": 197,
-      "answeredAccuracy": 0.731,
-      "confidentErrors": 53,
-      "servedAccuracy": 0.6304,
-      "abstainAsMiss": 0.6261
+      "coverage": 0.8609,
+      "answered": 198,
+      "answeredAccuracy": 0.7727,
+      "confidentErrors": 45,
+      "servedAccuracy": 0.6739,
+      "abstainAsMiss": 0.6652
     },
     {
       "threshold": 0.4,
-      "coverage": 0.8348,
-      "answered": 192,
-      "answeredAccuracy": 0.7448,
-      "confidentErrors": 49,
-      "servedAccuracy": 0.6261,
-      "abstainAsMiss": 0.6217
+      "coverage": 0.8261,
+      "answered": 190,
+      "answeredAccuracy": 0.7842,
+      "confidentErrors": 41,
+      "servedAccuracy": 0.6565,
+      "abstainAsMiss": 0.6478
     },
     {
       "threshold": 0.45,
-      "coverage": 0.787,
-      "answered": 181,
-      "answeredAccuracy": 0.7735,
-      "confidentErrors": 41,
-      "servedAccuracy": 0.6217,
-      "abstainAsMiss": 0.6087
+      "coverage": 0.7783,
+      "answered": 179,
+      "answeredAccuracy": 0.8101,
+      "confidentErrors": 34,
+      "servedAccuracy": 0.6391,
+      "abstainAsMiss": 0.6304
     },
     {
       "threshold": 0.5,
-      "coverage": 0.7,
-      "answered": 161,
-      "answeredAccuracy": 0.8199,
-      "confidentErrors": 29,
-      "servedAccuracy": 0.587,
-      "abstainAsMiss": 0.5739
+      "coverage": 0.7261,
+      "answered": 167,
+      "answeredAccuracy": 0.8323,
+      "confidentErrors": 28,
+      "servedAccuracy": 0.6174,
+      "abstainAsMiss": 0.6043
     },
     {
       "threshold": 0.55,
-      "coverage": 0.6217,
-      "answered": 143,
-      "answeredAccuracy": 0.8601,
-      "confidentErrors": 20,
-      "servedAccuracy": 0.5478,
-      "abstainAsMiss": 0.5348
+      "coverage": 0.6652,
+      "answered": 153,
+      "answeredAccuracy": 0.8497,
+      "confidentErrors": 23,
+      "servedAccuracy": 0.5783,
+      "abstainAsMiss": 0.5652
     },
     {
       "threshold": 0.6,
-      "coverage": 0.5783,
-      "answered": 133,
-      "answeredAccuracy": 0.8947,
-      "confidentErrors": 14,
-      "servedAccuracy": 0.5304,
-      "abstainAsMiss": 0.5174
+      "coverage": 0.5913,
+      "answered": 136,
+      "answeredAccuracy": 0.8897,
+      "confidentErrors": 15,
+      "servedAccuracy": 0.5435,
+      "abstainAsMiss": 0.5261
     },
     {
       "threshold": 0.7,
-      "coverage": 0.4478,
-      "answered": 103,
-      "answeredAccuracy": 0.9029,
-      "confidentErrors": 10,
-      "servedAccuracy": 0.4304,
-      "abstainAsMiss": 0.4043
+      "coverage": 0.4609,
+      "answered": 106,
+      "answeredAccuracy": 0.934,
+      "confidentErrors": 7,
+      "servedAccuracy": 0.4565,
+      "abstainAsMiss": 0.4304
     }
   ],
   "floor_exam": {
     "threshold": 0.45,
-    "coverage": 0.787,
-    "answered": 181,
-    "answeredAccuracy": 0.7735,
-    "confidentErrors": 41,
-    "servedAccuracy": 0.6217,
-    "abstainAsMiss": 0.6087
+    "coverage": 0.7783,
+    "answered": 179,
+    "answeredAccuracy": 0.8101,
+    "confidentErrors": 34,
+    "servedAccuracy": 0.6391,
+    "abstainAsMiss": 0.6304
   },
   "exam_split_fit": {
     "accuracy": 0.6652,
-    "macro_f1": 0.6566,
-    "coverage": 0.7652,
-    "answered": 176,
-    "answeredAccuracy": 0.7557,
-    "confidentErrors": 43,
-    "servedAccuracy": 0.5913,
-    "abstainAsMiss": 0.5783
+    "macro_f1": 0.6531,
+    "coverage": 0.7522,
+    "answered": 173,
+    "answeredAccuracy": 0.763,
+    "confidentErrors": 41,
+    "servedAccuracy": 0.5826,
+    "abstainAsMiss": 0.5739
   },
   "exam_accuracy_ci95": {
-    "lo": 0.6087,
-    "hi": 0.7261,
+    "lo": 0.6435,
+    "hi": 0.7609,
     "resamples": 2000
   },
   "exam_per_language": {
     "en": {
       "n": 69,
-      "accuracy": 0.5942,
-      "macro_f1": 0.5622
+      "accuracy": 0.6232,
+      "macro_f1": 0.5963
     },
     "mix": {
       "n": 69,
-      "accuracy": 0.8261,
-      "macro_f1": 0.8232
+      "accuracy": 0.8696,
+      "macro_f1": 0.8639
     },
     "ru": {
       "n": 92,
-      "accuracy": 0.6087,
-      "macro_f1": 0.5846
+      "accuracy": 0.6413,
+      "macro_f1": 0.6112
     }
   },
   "exam_per_phenomenon": {
     "boundary": {
       "n": 90,
-      "accuracy": 0.6222,
-      "macro_f1": 0.6532
+      "accuracy": 0.6333,
+      "macro_f1": 0.6582
     },
     "code_switch": {
       "n": 58,
-      "accuracy": 0.8621,
-      "macro_f1": 0.7469
+      "accuracy": 0.8966,
+      "macro_f1": 0.7747
     },
     "ellipsis": {
       "n": 25,
-      "accuracy": 0.72,
-      "macro_f1": 0.5596
+      "accuracy": 0.76,
+      "macro_f1": 0.5727
     },
     "imperative": {
       "n": 15,
-      "accuracy": 0.8667,
-      "macro_f1": 0.3768
+      "accuracy": 1.0,
+      "macro_f1": 0.4348
     },
     "indirect": {
       "n": 55,
       "accuracy": 0.4909,
-      "macro_f1": 0.4792
+      "macro_f1": 0.4316
     },
     "misspelled_venue": {
       "n": 2,
@@ -2208,18 +2208,18 @@
     },
     "multi_slot": {
       "n": 13,
-      "accuracy": 0.7692,
-      "macro_f1": 0.1178
+      "accuracy": 0.6923,
+      "macro_f1": 0.1099
     },
     "negation": {
       "n": 35,
-      "accuracy": 0.5143,
-      "macro_f1": 0.2811
+      "accuracy": 0.6571,
+      "macro_f1": 0.3935
     },
     "numeric": {
       "n": 26,
-      "accuracy": 0.6154,
-      "macro_f1": 0.2954
+      "accuracy": 0.6538,
+      "macro_f1": 0.3159
     },
     "plain": {
       "n": 15,
@@ -2234,41 +2234,35 @@
     "question": {
       "n": 82,
       "accuracy": 0.7439,
-      "macro_f1": 0.6395
+      "macro_f1": 0.6275
     },
     "run_on": {
       "n": 47,
-      "accuracy": 0.5745,
-      "macro_f1": 0.4634
+      "accuracy": 0.6596,
+      "macro_f1": 0.5221
     },
     "short": {
       "n": 34,
-      "accuracy": 0.6471,
-      "macro_f1": 0.4256
+      "accuracy": 0.6765,
+      "macro_f1": 0.46
     },
     "slang": {
       "n": 15,
-      "accuracy": 0.6667,
-      "macro_f1": 0.3159
+      "accuracy": 0.8667,
+      "macro_f1": 0.3826
     },
     "sms_speak": {
       "n": 6,
-      "accuracy": 0.5,
-      "macro_f1": 0.1159
+      "accuracy": 0.6667,
+      "macro_f1": 0.1304
     },
     "typo": {
       "n": 7,
-      "accuracy": 0.7143,
-      "macro_f1": 0.1594
+      "accuracy": 0.8571,
+      "macro_f1": 0.1739
     }
   },
   "exam_top_confusions": [
-    {
-      "gold": "book_venue",
-      "pred": "deny",
-      "count": 3,
-      "declaredConfusable": false
-    },
     {
       "gold": "deny",
       "pred": "affirm",
@@ -2276,9 +2270,9 @@
       "declaredConfusable": true
     },
     {
-      "gold": "venue_info",
-      "pred": "out_of_scope",
-      "count": 3,
+      "gold": "cancel_booking",
+      "pred": "book_venue",
+      "count": 2,
       "declaredConfusable": false
     },
     {
@@ -2288,10 +2282,28 @@
       "declaredConfusable": false
     },
     {
-      "gold": "find_players",
-      "pred": "find_opponents",
+      "gold": "check_availability",
+      "pred": "book_venue",
       "count": 2,
       "declaredConfusable": true
+    },
+    {
+      "gold": "find_opponents",
+      "pred": "find_players",
+      "count": 2,
+      "declaredConfusable": true
+    },
+    {
+      "gold": "find_venue",
+      "pred": "venue_info",
+      "count": 2,
+      "declaredConfusable": true
+    },
+    {
+      "gold": "my_bookings",
+      "pred": "book_venue",
+      "count": 2,
+      "declaredConfusable": false
     },
     {
       "gold": "my_bookings",
@@ -2310,44 +2322,32 @@
       "pred": "my_bookings",
       "count": 2,
       "declaredConfusable": false
-    },
-    {
-      "gold": "wallet_balance",
-      "pred": "my_bookings",
-      "count": 2,
-      "declaredConfusable": false
-    },
-    {
-      "gold": "wallet_balance",
-      "pred": "topup_help",
-      "count": 2,
-      "declaredConfusable": true
     }
   ],
   "proba_comparison": {
     "softmax": {
-      "val_accuracy": 0.8086,
+      "val_accuracy": 0.8393,
       "coverage": 0.0,
       "answeredAccuracy": null,
-      "ece": 0.6658,
-      "max_confidence": 0.345,
-      "median_confidence": 0.1276
+      "ece": 0.6937,
+      "max_confidence": 0.3428,
+      "median_confidence": 0.1344
     },
     "sigmoid_random": {
-      "val_accuracy": 0.8086,
-      "coverage": 0.855,
-      "answeredAccuracy": 0.8761,
-      "ece": 0.1432,
-      "max_confidence": 0.9274,
-      "median_confidence": 0.6943
+      "val_accuracy": 0.843,
+      "coverage": 0.8561,
+      "answeredAccuracy": 0.917,
+      "ece": 0.172,
+      "max_confidence": 0.9218,
+      "median_confidence": 0.7184
     },
     "sigmoid_sgroup": {
-      "val_accuracy": 0.8086,
-      "coverage": 0.8662,
-      "answeredAccuracy": 0.8863,
-      "ece": 0.1788,
-      "max_confidence": 0.9241,
-      "median_confidence": 0.6775
+      "val_accuracy": 0.8411,
+      "coverage": 0.8598,
+      "answeredAccuracy": 0.913,
+      "ece": 0.1826,
+      "max_confidence": 0.9097,
+      "median_confidence": 0.6964
     }
   },
   "proba_comparison_recorded": {
@@ -2369,26 +2369,26 @@
   },
   "ablation": {
     "word_only": {
-      "val": 0.7621,
-      "exam": 0.6348
+      "val": 0.8037,
+      "exam": 0.6522
     },
     "char_only": {
-      "val": 0.8067,
-      "exam": 0.6348
+      "val": 0.8355,
+      "exam": 0.6609
     },
     "word+char": {
-      "val": 0.8086,
-      "exam": 0.6435
+      "val": 0.8393,
+      "exam": 0.6609
     },
     "word+char_logreg": {
-      "val": 0.7844,
-      "exam": 0.6609
+      "val": 0.8037,
+      "exam": 0.6652
     }
   },
   "baselines": {
     "uniform_random": 0.0435,
     "predict_train_majority": {
-      "label": "deny",
+      "label": "book_venue",
       "accuracy": 0.0435
     },
     "predict_exam_majority": {
@@ -2476,7 +2476,7 @@
     {
       "name": "corpus provenance",
       "ok": true,
-      "detail": "2576 rows, sha 64395ec8026c, meta all_passed, fingerprints match"
+      "detail": "2576 rows, sha cd07c68b969e, meta all_passed, fingerprints match"
     },
     {
       "name": "exam provenance",
@@ -2486,37 +2486,37 @@
     {
       "name": "exam uncontaminated",
       "ok": true,
-      "detail": "0 exact, max near-dup 0.7143 (word_set) < 0.8"
+      "detail": "0 exact, max near-dup 0.7500 (word_set) < 0.8"
     },
     {
       "name": "no leakage",
       "ok": true,
-      "detail": "val accuracy 0.8086 <= 0.995 (a near-perfect val score on a template-grouped split would mean the split leaked)"
+      "detail": "val accuracy 0.8411 <= 0.995 (a near-perfect val score on a template-grouped split would mean the split leaked)"
     },
     {
       "name": "beats baseline",
       "ok": true,
-      "detail": "exam 0.6696 >= majority 0.0435 + 0.1"
+      "detail": "exam 0.7043 >= majority 0.0435 + 0.1"
     },
     {
       "name": "exam floor",
       "ok": true,
-      "detail": "exam accuracy 0.6696 >= 0.55"
+      "detail": "exam accuracy 0.7043 >= 0.55"
     },
     {
       "name": "answers well",
       "ok": true,
-      "detail": "exam accuracy on the 181 rows it answers 0.7735 >= 0.65"
+      "detail": "exam accuracy on the 179 rows it answers 0.8101 >= 0.65"
     },
     {
       "name": "answers at all",
       "ok": true,
-      "detail": "val coverage at floor 0.45 = 0.8662 >= 0.6"
+      "detail": "val coverage at floor 0.45 = 0.8598 >= 0.6"
     },
     {
       "name": "calibrated",
       "ok": true,
-      "detail": "val ECE 0.1788 <= 0.25 (10-bin, top-label)"
+      "detail": "val ECE 0.1826 <= 0.25 (10-bin, top-label)"
     }
   ],
   "libraries": {
@@ -2526,5 +2526,5 @@
     "scipy": "1.18.1",
     "joblib": "1.5.3"
   },
-  "elapsedSeconds": 30.6
+  "elapsedSeconds": 30.9
 }

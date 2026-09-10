@@ -1,28 +1,28 @@
 {
   "generated_by": "build_sentiment_corpus.py",
-  "generated_at": "2026-08-26T12:35:51+00:00",
+  "generated_at": "2026-09-09T07:35:14+00:00",
   "norm_spec_version": "sentiment-norm-v1",
   "norm_spec_fingerprint": "b96e65df85f9692b",
-  "rows": 21405,
+  "rows": 22213,
   "labels": {
-    "negative": 5494,
-    "neutral": 9030,
-    "positive": 6881
+    "negative": 5771,
+    "neutral": 9287,
+    "positive": 7155
   },
   "langs": {
-    "en": 9295,
-    "mixed": 219,
-    "ru": 11891
+    "en": 9572,
+    "mixed": 497,
+    "ru": 12144
   },
   "sources": {
-    "authored": 690,
+    "authored": 1498,
     "rusa": 11719,
     "tweeteval": 8996
   },
   "source_x_label": {
-    "authored|negative": 238,
-    "authored|neutral": 217,
-    "authored|positive": 235,
+    "authored|negative": 515,
+    "authored|neutral": 474,
+    "authored|positive": 509,
     "tweeteval|negative": 2998,
     "tweeteval|neutral": 2998,
     "tweeteval|positive": 3000,
@@ -31,45 +31,45 @@
     "rusa|positive": 3646
   },
   "lang_x_label": {
-    "en|negative": 3096,
-    "en|neutral": 3091,
-    "en|positive": 3108,
-    "mixed|negative": 73,
-    "mixed|neutral": 74,
-    "mixed|positive": 72,
-    "ru|negative": 2325,
-    "ru|neutral": 5865,
-    "ru|positive": 3701
+    "en|negative": 3188,
+    "en|neutral": 3197,
+    "en|positive": 3187,
+    "mixed|negative": 159,
+    "mixed|neutral": 153,
+    "mixed|positive": 185,
+    "ru|negative": 2424,
+    "ru|neutral": 5937,
+    "ru|positive": 3783
   },
   "independence": {
     "source_vs_label": {
-      "n": 21405,
-      "chi2": 762.011,
+      "n": 22213,
+      "chi2": 803.114,
       "dof": 4,
-      "cramers_v": 0.1334
+      "cramers_v": 0.1345
     },
     "lang_vs_label": {
-      "n": 21405,
-      "chi2": 721.382,
+      "n": 22213,
+      "chi2": 707.531,
       "dof": 4,
-      "cramers_v": 0.1298
+      "cramers_v": 0.1262
     },
     "tvd_by_source": {
-      "authored": 0.1074,
-      "tweeteval": 0.0886,
-      "rusa": 0.0743
+      "authored": 0.1017,
+      "tweeteval": 0.0848,
+      "rusa": 0.0781
     },
     "note": "chi2 statistic + Cramer's V, deliberately not a p-value: at this n the null is rejected by associations too weak to matter, so effect size is the informative number. High Cramer's V / TVD flags a language-or-source => label shortcut."
   },
   "dedup": {
-    "loaded": 21957,
+    "loaded": 22766,
     "exact_dup_dropped": 539,
     "empty_after_normalize": 12
   },
   "contamination_gate": {
     "exam_file": "domain_test_200.csv",
     "exam_sha256": "7e388c841fb8f9e98ce9f7c71f0c390c5f824e765c67e1d80cb03f53d77abd46",
-    "exact_matches_removed": 0,
+    "exact_matches_removed": 1,
     "authored_near_dup_removed": 1,
     "authored_near_dup_by_metric": {
       "word_set": 1
@@ -92,12 +92,12 @@
       "empty": 0
     },
     "authored": {
-      "seen": 693,
-      "kept": 693,
+      "seen": 1502,
+      "kept": 1502,
       "bad_label": 0,
       "empty": 0
     }
   },
-  "sha256": "408b4c528d40118cf20c277a06854d0e3436cb4015c79b1a82ff63356305a068",
+  "sha256": "445a9e8d88d7c2bafcdcc7250eec71aa3d112e5225253a88d46f8b99a732ea59",
   "output": "train.csv"
 }

@@ -1,8 +1,8 @@
 {
   "modelKey": "sentiment",
-  "modelVersion": "sentiment-wordchar-linsvc-softmax-20260826-1306",
+  "modelVersion": "sentiment-wordchar-linsvc-softmax-20260909-0735",
   "family": "wordchar-linsvc-softmax",
-  "trainedAt": "2026-08-26T13:06:07+00:00",
+  "trainedAt": "2026-09-09T07:35:44+00:00",
   "seed": 42,
   "upweightAuthored": 40.0,
   "released": true,
@@ -51,31 +51,31 @@
   },
   "split": {
     "val_fraction": 0.2,
-    "train_rows": 17124,
-    "val_rows": 4281
+    "train_rows": 17770,
+    "val_rows": 4443
   },
   "validation": {
-    "accuracy": 0.644709180098108,
-    "macro_f1": 0.6383860538314138,
-    "weighted_f1": 0.6440507886901446,
+    "accuracy": 0.6315552554580238,
+    "macro_f1": 0.6262407013435544,
+    "weighted_f1": 0.630860645484202,
     "per_class": {
       "negative": {
-        "precision": 0.6201923076923077,
-        "recall": 0.5868971792538672,
-        "f1-score": 0.603085553997195,
-        "support": 1099
+        "precision": 0.6324222431668237,
+        "recall": 0.5814558058925476,
+        "f1-score": 0.6058690744920994,
+        "support": 1154
       },
       "neutral": {
-        "precision": 0.6530825496342738,
-        "recall": 0.6921373200442967,
-        "f1-score": 0.6720430107526881,
-        "support": 1806
+        "precision": 0.6419878296146044,
+        "recall": 0.6813778256189451,
+        "f1-score": 0.6610966057441253,
+        "support": 1858
       },
       "positive": {
-        "precision": 0.651846269781462,
-        "recall": 0.6286337209302325,
-        "f1-score": 0.6400295967443581,
-        "support": 1376
+        "precision": 0.6163120567375886,
+        "recall": 0.6072676450034941,
+        "f1-score": 0.6117564237944386,
+        "support": 1431
       }
     },
     "confusion_matrix": {
@@ -86,44 +86,44 @@
       ],
       "matrix": [
         [
-          645,
-          297,
-          157
+          671,
+          287,
+          196
         ],
         [
-          251,
-          1250,
-          305
+          247,
+          1266,
+          345
         ],
         [
-          144,
-          367,
-          865
+          143,
+          419,
+          869
         ]
       ]
     }
   },
   "domain_test_200": {
-    "accuracy": 0.825,
-    "macro_f1": 0.8247153812371204,
-    "weighted_f1": 0.8245240701327659,
+    "accuracy": 0.88,
+    "macro_f1": 0.8803105461576456,
+    "weighted_f1": 0.8797727431999425,
     "per_class": {
       "negative": {
-        "precision": 0.84375,
-        "recall": 0.7941176470588235,
-        "f1-score": 0.8181818181818182,
+        "precision": 0.8405797101449275,
+        "recall": 0.8529411764705882,
+        "f1-score": 0.8467153284671532,
         "support": 68
       },
       "neutral": {
-        "precision": 0.8412698412698413,
-        "recall": 0.7910447761194029,
-        "f1-score": 0.8153846153846154,
+        "precision": 0.9047619047619048,
+        "recall": 0.8507462686567164,
+        "f1-score": 0.8769230769230769,
         "support": 67
       },
       "positive": {
-        "precision": 0.7945205479452054,
-        "recall": 0.8923076923076924,
-        "f1-score": 0.8405797101449275,
+        "precision": 0.8970588235294118,
+        "recall": 0.9384615384615385,
+        "f1-score": 0.9172932330827067,
         "support": 65
       }
     },
@@ -135,49 +135,49 @@
       ],
       "matrix": [
         [
-          54,
+          58,
           6,
-          8
+          4
         ],
         [
           7,
-          53,
-          7
+          57,
+          3
         ],
         [
-          3,
           4,
-          58
+          0,
+          61
         ]
       ]
     }
   },
   "domain_accuracy_ci95": {
-    "lo": 0.77,
-    "hi": 0.875,
+    "lo": 0.83,
+    "hi": 0.925,
     "resamples": 2000
   },
   "domain_per_language": {
     "en": {
       "n": 50,
-      "accuracy": 0.76,
-      "macro_f1": 0.7581
+      "accuracy": 0.82,
+      "macro_f1": 0.8194
     },
     "mixed": {
       "n": 70,
-      "accuracy": 0.8286,
-      "macro_f1": 0.8281
+      "accuracy": 0.8857,
+      "macro_f1": 0.8847
     },
     "ru": {
       "n": 80,
-      "accuracy": 0.8625,
-      "macro_f1": 0.8606
+      "accuracy": 0.9125,
+      "macro_f1": 0.9132
     }
   },
   "ablation_exam_accuracy": {
-    "word_only": 0.78,
-    "char_only": 0.765,
-    "word+char": 0.81
+    "word_only": 0.895,
+    "char_only": 0.865,
+    "word+char": 0.9
   },
   "baselines": {
     "predict_train_majority": {
@@ -191,32 +191,11 @@
   },
   "error_analysis": [
     {
-      "id": "dt-021",
-      "lang": "ru",
-      "actual": "negative",
-      "predicted": "neutral",
-      "text": "opponent team ne beimani ki aur owner ne kuch nahi kaha"
-    },
-    {
       "id": "dt-023",
       "lang": "ru",
       "actual": "negative",
       "predicted": "positive",
       "text": "bohot mehnga hai is quality ke liye, sasta options behtar hain"
-    },
-    {
-      "id": "dt-034",
-      "lang": "ru",
-      "actual": "neutral",
-      "predicted": "positive",
-      "text": "pitch theek thi, thora better ho sakti thi"
-    },
-    {
-      "id": "dt-039",
-      "lang": "ru",
-      "actual": "neutral",
-      "predicted": "negative",
-      "text": "lights hain magar ghaas thori kam thi"
     },
     {
       "id": "dt-043",
@@ -236,29 +215,22 @@
       "id": "dt-050",
       "lang": "ru",
       "actual": "neutral",
-      "predicted": "positive",
-      "text": "na maza aya na bura laga, bas khel liya"
-    },
-    {
-      "id": "dt-053",
-      "lang": "ru",
-      "actual": "neutral",
-      "predicted": "positive",
-      "text": "booking asan thi, ground theek theek tha"
-    },
-    {
-      "id": "dt-054",
-      "lang": "ru",
-      "actual": "neutral",
       "predicted": "negative",
-      "text": "thora shor tha bahar se lekin khel mein farq nahi para"
+      "text": "na maza aya na bura laga, bas khel liya"
     },
     {
       "id": "dt-069",
       "lang": "ru",
       "actual": "positive",
-      "predicted": "neutral",
+      "predicted": "negative",
       "text": "mast ground hai yaar, dosron ko bhi bataya"
+    },
+    {
+      "id": "dt-073",
+      "lang": "ru",
+      "actual": "positive",
+      "predicted": "negative",
+      "text": "owner ne slot late tak barha diya, bohat mehrbani"
     },
     {
       "id": "dt-077",
@@ -268,17 +240,17 @@
       "text": "refund bina poochhe hi kar diya jab slot cancel karna para"
     },
     {
-      "id": "dt-083",
+      "id": "dt-088",
       "lang": "mixed",
       "actual": "negative",
       "predicted": "neutral",
-      "text": "paid 3500 for nothing, ghaas hi nahi thi ground pe"
+      "text": "no parking, no washroom, kuch bhi theek nahi"
     },
     {
       "id": "dt-093",
       "lang": "mixed",
       "actual": "negative",
-      "predicted": "positive",
+      "predicted": "neutral",
       "text": "asked for a morning slot, unhon ne evening ka de diya without telling"
     },
     {
@@ -296,18 +268,11 @@
       "text": "overpriced for the quality, 4000 mein bohat behtar milta hai"
     },
     {
-      "id": "dt-098",
-      "lang": "mixed",
-      "actual": "negative",
-      "predicted": "positive",
-      "text": "app pe slot show ho raha tha, owner ne kaha wo purana hai"
-    },
-    {
-      "id": "dt-099",
+      "id": "dt-104",
       "lang": "mixed",
       "actual": "negative",
       "predicted": "neutral",
-      "text": "horrible turf, chhoti chhoti kankar puri ground pe"
+      "text": "nice photos on the app lekin haqeeqat mein ganda hai"
     },
     {
       "id": "dt-107",
@@ -324,11 +289,46 @@
       "text": "clean washroom but canteen band thi"
     },
     {
-      "id": "dt-118",
+      "id": "dt-127",
       "lang": "mixed",
       "actual": "neutral",
+      "predicted": "negative",
+      "text": "good size ground lekin ghaas patli thi jagah jagah"
+    },
+    {
+      "id": "dt-158",
+      "lang": "en",
+      "actual": "negative",
+      "predicted": "neutral",
+      "text": "Overpriced for what you get. Better options nearby for less."
+    },
+    {
+      "id": "dt-162",
+      "lang": "en",
+      "actual": "negative",
+      "predicted": "neutral",
+      "text": "No parking, no changing room, nothing as advertised."
+    },
+    {
+      "id": "dt-164",
+      "lang": "en",
+      "actual": "negative",
+      "predicted": "neutral",
+      "text": "The pictures on the app look nothing like the actual ground."
+    },
+    {
+      "id": "dt-167",
+      "lang": "en",
+      "actual": "negative",
       "predicted": "positive",
-      "text": "the turf is old but abhi bhi khelne ke qabil hai"
+      "text": "Absolutely not recommended for a serious match."
+    },
+    {
+      "id": "dt-171",
+      "lang": "en",
+      "actual": "neutral",
+      "predicted": "positive",
+      "text": "Played two hours, no issues, no highlights."
     }
   ],
   "toxicity": {
@@ -336,25 +336,25 @@
     "terms": 32,
     "sha256": "7f456aef337d4600c6e8885b7b5c850b9a2718cb7db35baf28401192e9d4f653",
     "negativeProbabilityThreshold": 0.7,
-    "examEscalations": 18,
+    "examEscalations": 36,
     "examRows": 200
   },
   "dataset": {
     "source": "train.csv",
-    "sha256": "408b4c528d40118cf20c277a06854d0e3436cb4015c79b1a82ff63356305a068",
-    "rows": 21405,
+    "sha256": "445a9e8d88d7c2bafcdcc7250eec71aa3d112e5225253a88d46f8b99a732ea59",
+    "rows": 22213,
     "labels": {
-      "negative": 5494,
-      "neutral": 9030,
-      "positive": 6881
+      "negative": 5771,
+      "neutral": 9287,
+      "positive": 7155
     },
     "langs": {
-      "en": 9295,
-      "mixed": 219,
-      "ru": 11891
+      "en": 9572,
+      "mixed": 497,
+      "ru": 12144
     },
     "sources": {
-      "authored": 690,
+      "authored": 1498,
       "rusa": 11719,
       "tweeteval": 8996
     },
@@ -392,17 +392,17 @@
     {
       "name": "no leakage",
       "ok": true,
-      "detail": "val acc 0.6447 <= 0.995"
+      "detail": "val acc 0.6316 <= 0.995"
     },
     {
       "name": "beats baseline",
       "ok": true,
-      "detail": "exam 0.8250 vs baseline 0.3400 (+0.10 margin)"
+      "detail": "exam 0.8800 vs baseline 0.3400 (+0.10 margin)"
     },
     {
       "name": "domain >= 0.80",
       "ok": true,
-      "detail": "exam accuracy 0.8250 (target 0.80)"
+      "detail": "exam accuracy 0.8800 (target 0.80)"
     }
   ]
 }

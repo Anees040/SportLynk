@@ -1,6 +1,6 @@
-# Resolved environment for the intent training run.
-# requirements.txt is the install contract; THIS file is what actually ran.
-
+# Resolved environment at train time, transitives included.
+# python 3.14.4 on Windows-11-10.0.26200-SP0
+# written by training/train_pricing.py at 2026-09-09T07:56:10+00:00
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.14.2
@@ -21,6 +21,7 @@ numpy==2.5.2
 packaging==26.3
 pandas==3.0.5
 pillow==12.3.0
+psycopg2-binary==2.9.12
 pydantic==2.13.4
 pydantic_core==2.46.4
 pyparsing==3.3.2
