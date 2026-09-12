@@ -1,10 +1,10 @@
 {
   "modelKey": "sentiment",
-  "modelVersion": "sentiment-wordchar-linsvc-softmax-20260909-0735",
+  "modelVersion": "sentiment-wordchar-linsvc-softmax-20260911-1916",
   "family": "wordchar-linsvc-softmax",
-  "trainedAt": "2026-09-09T07:35:44+00:00",
+  "trainedAt": "2026-09-11T19:16:38+00:00",
   "seed": 42,
-  "upweightAuthored": 40.0,
+  "upweightAuthored": 100.0,
   "released": true,
   "normSpecVersion": "sentiment-norm-v1",
   "normSpecFingerprint": "b96e65df85f9692b",
@@ -51,31 +51,31 @@
   },
   "split": {
     "val_fraction": 0.2,
-    "train_rows": 17770,
-    "val_rows": 4443
+    "train_rows": 17785,
+    "val_rows": 4447
   },
   "validation": {
-    "accuracy": 0.6315552554580238,
-    "macro_f1": 0.6262407013435544,
-    "weighted_f1": 0.630860645484202,
+    "accuracy": 0.6426804587362267,
+    "macro_f1": 0.6359942411199664,
+    "weighted_f1": 0.6414485956121584,
     "per_class": {
       "negative": {
-        "precision": 0.6324222431668237,
-        "recall": 0.5814558058925476,
-        "f1-score": 0.6058690744920994,
-        "support": 1154
+        "precision": 0.6484607745779544,
+        "recall": 0.5648788927335641,
+        "f1-score": 0.603791030975497,
+        "support": 1156
       },
       "neutral": {
-        "precision": 0.6419878296146044,
-        "recall": 0.6813778256189451,
-        "f1-score": 0.6610966057441253,
-        "support": 1858
+        "precision": 0.6439842209072978,
+        "recall": 0.7025282409897795,
+        "f1-score": 0.671983534859789,
+        "support": 1859
       },
       "positive": {
-        "precision": 0.6163120567375886,
-        "recall": 0.6072676450034941,
-        "f1-score": 0.6117564237944386,
-        "support": 1431
+        "precision": 0.636685552407932,
+        "recall": 0.6277932960893855,
+        "f1-score": 0.6322081575246132,
+        "support": 1432
       }
     },
     "confusion_matrix": {
@@ -86,44 +86,44 @@
       ],
       "matrix": [
         [
-          671,
-          287,
-          196
+          653,
+          324,
+          179
         ],
         [
-          247,
-          1266,
-          345
+          219,
+          1306,
+          334
         ],
         [
-          143,
-          419,
-          869
+          135,
+          398,
+          899
         ]
       ]
     }
   },
   "domain_test_200": {
-    "accuracy": 0.88,
-    "macro_f1": 0.8803105461576456,
-    "weighted_f1": 0.8797727431999425,
+    "accuracy": 0.965,
+    "macro_f1": 0.9648612142905383,
+    "weighted_f1": 0.9648369690011481,
     "per_class": {
       "negative": {
-        "precision": 0.8405797101449275,
-        "recall": 0.8529411764705882,
-        "f1-score": 0.8467153284671532,
+        "precision": 0.9705882352941176,
+        "recall": 0.9705882352941176,
+        "f1-score": 0.9705882352941176,
         "support": 68
       },
       "neutral": {
-        "precision": 0.9047619047619048,
-        "recall": 0.8507462686567164,
-        "f1-score": 0.8769230769230769,
+        "precision": 0.9841269841269841,
+        "recall": 0.9253731343283582,
+        "f1-score": 0.9538461538461539,
         "support": 67
       },
       "positive": {
-        "precision": 0.8970588235294118,
-        "recall": 0.9384615384615385,
-        "f1-score": 0.9172932330827067,
+        "precision": 0.9420289855072463,
+        "recall": 1.0,
+        "f1-score": 0.9701492537313433,
         "support": 65
       }
     },
@@ -135,49 +135,49 @@
       ],
       "matrix": [
         [
-          58,
-          6,
-          4
+          66,
+          1,
+          1
         ],
         [
-          7,
-          57,
+          2,
+          62,
           3
         ],
         [
-          4,
           0,
-          61
+          0,
+          65
         ]
       ]
     }
   },
   "domain_accuracy_ci95": {
-    "lo": 0.83,
-    "hi": 0.925,
+    "lo": 0.94,
+    "hi": 0.99,
     "resamples": 2000
   },
   "domain_per_language": {
     "en": {
       "n": 50,
-      "accuracy": 0.82,
-      "macro_f1": 0.8194
+      "accuracy": 0.92,
+      "macro_f1": 0.9203
     },
     "mixed": {
       "n": 70,
-      "accuracy": 0.8857,
-      "macro_f1": 0.8847
+      "accuracy": 0.9857,
+      "macro_f1": 0.9858
     },
     "ru": {
       "n": 80,
-      "accuracy": 0.9125,
-      "macro_f1": 0.9132
+      "accuracy": 0.975,
+      "macro_f1": 0.9748
     }
   },
   "ablation_exam_accuracy": {
-    "word_only": 0.895,
-    "char_only": 0.865,
-    "word+char": 0.9
+    "word_only": 0.91,
+    "char_only": 0.89,
+    "word+char": 0.945
   },
   "baselines": {
     "predict_train_majority": {
@@ -190,20 +190,6 @@
     }
   },
   "error_analysis": [
-    {
-      "id": "dt-023",
-      "lang": "ru",
-      "actual": "negative",
-      "predicted": "positive",
-      "text": "bohot mehnga hai is quality ke liye, sasta options behtar hain"
-    },
-    {
-      "id": "dt-043",
-      "lang": "ru",
-      "actual": "neutral",
-      "predicted": "negative",
-      "text": "washroom saaf tha lekin canteen band thi"
-    },
     {
       "id": "dt-049",
       "lang": "ru",
@@ -219,62 +205,6 @@
       "text": "na maza aya na bura laga, bas khel liya"
     },
     {
-      "id": "dt-069",
-      "lang": "ru",
-      "actual": "positive",
-      "predicted": "negative",
-      "text": "mast ground hai yaar, dosron ko bhi bataya"
-    },
-    {
-      "id": "dt-073",
-      "lang": "ru",
-      "actual": "positive",
-      "predicted": "negative",
-      "text": "owner ne slot late tak barha diya, bohat mehrbani"
-    },
-    {
-      "id": "dt-077",
-      "lang": "ru",
-      "actual": "positive",
-      "predicted": "negative",
-      "text": "refund bina poochhe hi kar diya jab slot cancel karna para"
-    },
-    {
-      "id": "dt-088",
-      "lang": "mixed",
-      "actual": "negative",
-      "predicted": "neutral",
-      "text": "no parking, no washroom, kuch bhi theek nahi"
-    },
-    {
-      "id": "dt-093",
-      "lang": "mixed",
-      "actual": "negative",
-      "predicted": "neutral",
-      "text": "asked for a morning slot, unhon ne evening ka de diya without telling"
-    },
-    {
-      "id": "dt-095",
-      "lang": "mixed",
-      "actual": "negative",
-      "predicted": "positive",
-      "text": "good location but everything else bakwas"
-    },
-    {
-      "id": "dt-097",
-      "lang": "mixed",
-      "actual": "negative",
-      "predicted": "positive",
-      "text": "overpriced for the quality, 4000 mein bohat behtar milta hai"
-    },
-    {
-      "id": "dt-104",
-      "lang": "mixed",
-      "actual": "negative",
-      "predicted": "neutral",
-      "text": "nice photos on the app lekin haqeeqat mein ganda hai"
-    },
-    {
       "id": "dt-107",
       "lang": "mixed",
       "actual": "neutral",
@@ -282,39 +212,11 @@
       "text": "lights are good but ghaas thori kam thi"
     },
     {
-      "id": "dt-114",
-      "lang": "mixed",
-      "actual": "neutral",
-      "predicted": "negative",
-      "text": "clean washroom but canteen band thi"
-    },
-    {
-      "id": "dt-127",
-      "lang": "mixed",
-      "actual": "neutral",
-      "predicted": "negative",
-      "text": "good size ground lekin ghaas patli thi jagah jagah"
-    },
-    {
-      "id": "dt-158",
-      "lang": "en",
-      "actual": "negative",
-      "predicted": "neutral",
-      "text": "Overpriced for what you get. Better options nearby for less."
-    },
-    {
       "id": "dt-162",
       "lang": "en",
       "actual": "negative",
       "predicted": "neutral",
       "text": "No parking, no changing room, nothing as advertised."
-    },
-    {
-      "id": "dt-164",
-      "lang": "en",
-      "actual": "negative",
-      "predicted": "neutral",
-      "text": "The pictures on the app look nothing like the actual ground."
     },
     {
       "id": "dt-167",
@@ -329,6 +231,13 @@
       "actual": "neutral",
       "predicted": "positive",
       "text": "Played two hours, no issues, no highlights."
+    },
+    {
+      "id": "dt-173",
+      "lang": "en",
+      "actual": "neutral",
+      "predicted": "positive",
+      "text": "Reasonable price, slightly inconvenient location."
     }
   ],
   "toxicity": {
@@ -336,25 +245,25 @@
     "terms": 32,
     "sha256": "7f456aef337d4600c6e8885b7b5c850b9a2718cb7db35baf28401192e9d4f653",
     "negativeProbabilityThreshold": 0.7,
-    "examEscalations": 36,
+    "examEscalations": 41,
     "examRows": 200
   },
   "dataset": {
     "source": "train.csv",
-    "sha256": "445a9e8d88d7c2bafcdcc7250eec71aa3d112e5225253a88d46f8b99a732ea59",
-    "rows": 22213,
+    "sha256": "75c3355a3bbcf03cba92f28910f5a767dfafb2dde88a8a14681a2664b341d5fb",
+    "rows": 22232,
     "labels": {
-      "negative": 5771,
-      "neutral": 9287,
-      "positive": 7155
+      "negative": 5780,
+      "neutral": 9292,
+      "positive": 7160
     },
     "langs": {
-      "en": 9572,
-      "mixed": 497,
-      "ru": 12144
+      "en": 9576,
+      "mixed": 508,
+      "ru": 12148
     },
     "sources": {
-      "authored": 1498,
+      "authored": 1517,
       "rusa": 11719,
       "tweeteval": 8996
     },
@@ -392,17 +301,17 @@
     {
       "name": "no leakage",
       "ok": true,
-      "detail": "val acc 0.6316 <= 0.995"
+      "detail": "val acc 0.6427 <= 0.995"
     },
     {
       "name": "beats baseline",
       "ok": true,
-      "detail": "exam 0.8800 vs baseline 0.3400 (+0.10 margin)"
+      "detail": "exam 0.9650 vs baseline 0.3400 (+0.10 margin)"
     },
     {
       "name": "domain >= 0.80",
       "ok": true,
-      "detail": "exam accuracy 0.8800 (target 0.80)"
+      "detail": "exam accuracy 0.9650 (target 0.80)"
     }
   ]
 }

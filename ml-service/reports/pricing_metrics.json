@@ -1,7 +1,7 @@
 {
   "modelKey": "pricing",
-  "modelVersion": "pricing-v1-20260909-0756",
-  "trainedAt": "2026-09-09T07:56:05+00:00",
+  "modelVersion": "pricing-v1-20260911-1927",
+  "trainedAt": "2026-09-11T19:27:28+00:00",
   "seed": 42,
   "released": true,
   "featureSpecVersion": "pricing-features-v1",
@@ -24,258 +24,284 @@
     "nanStrategy": "native",
     "params": {
       "learning_rate": 0.05,
-      "max_leaf_nodes": 63,
-      "min_samples_leaf": 20,
-      "max_iter": 500,
+      "max_leaf_nodes": 15,
+      "min_samples_leaf": 200,
+      "max_iter": 600,
       "l2_regularization": 1.0
     },
-    "validBrier": 0.116914
+    "validBrier": 0.075194
   },
   "dataset": {
-    "path": "D:\\sportlynk\\ml-service\\data\\bookings_real.csv",
+    "path": "D:\\sportlynk\\ml-service\\data\\bookings_synth.csv",
     "source": "synthetic",
-    "rows": 144,
+    "rows": 81395,
     "seed": 42,
-    "csvSha256": "583b4606e1cd3faf516a49b53966b1564bd0ac946f72bf939519a67bb862d04b",
-    "metaSha256": "72bf46846eef530196afc9926e2284b53bb540135f6bcc1681aa75b48720f1f0",
-    "shaMatchesMeta": false,
-    "bookedRate": 0.25,
-    "unratedShare": 0.0,
+    "csvSha256": "c1dc240f496628999ff89a404b19abe9665b374cc66f93129489b5998873cd5b",
+    "metaSha256": "c1dc240f496628999ff89a404b19abe9665b374cc66f93129489b5998873cd5b",
+    "shaMatchesMeta": true,
+    "bookedRate": 0.34007,
+    "unratedShare": 0.188341,
     "generator": "training/generate_bookings.py",
     "featureSpecVersionAtGeneration": "pricing-features-v1"
   },
   "split": {
     "key": "slot_date",
     "why": "as_of <= slot_date, so a slot_date tail split guarantees both that every training label was realised by the cutoff AND that every training decision was made by it; an as_of split only gives the second",
-    "dataStart": "2026-07-03",
-    "dataEnd": "2026-09-02",
-    "cutoff": "2026-08-26",
-    "testStart": "2026-08-27",
-    "validStart": "2026-08-20",
+    "dataStart": "2025-08-01",
+    "dataEnd": "2026-07-31",
+    "cutoff": "2026-07-03",
+    "testStart": "2026-07-04",
+    "validStart": "2026-06-06",
     "testWindowDays": 28,
-    "trainRows": 105,
-    "testRows": 39,
-    "testColdRows": 39,
-    "validRows": 42,
-    "trainBookedRate": 0.219048,
-    "testBookedRate": 0.333333
+    "trainRows": 75151,
+    "testRows": 6244,
+    "testColdRows": 4789,
+    "validRows": 6244,
+    "trainBookedRate": 0.348272,
+    "testBookedRate": 0.241352
   },
   "metrics": {
     "test": {
-      "n": 39,
-      "positives": 13,
-      "baseRate": 0.333333,
-      "rocAuc": 0.89645,
-      "prAuc": 0.753846,
-      "brier": 0.123108,
-      "brierBaseRate": 0.222222,
-      "brierSkill": 0.446012,
-      "logLoss": 0.370008,
-      "accuracy": 0.846154,
+      "n": 6244,
+      "positives": 1507,
+      "baseRate": 0.241352,
+      "rocAuc": 0.980418,
+      "prAuc": 0.942751,
+      "brier": 0.063492,
+      "brierBaseRate": 0.183101,
+      "brierSkill": 0.65324,
+      "logLoss": 0.195413,
+      "accuracy": 0.90631,
       "confusionAt0_5": {
-        "tn": 22,
-        "fp": 4,
-        "fn": 2,
-        "tp": 11
+        "tn": 4211,
+        "fp": 526,
+        "fn": 59,
+        "tp": 1448
       },
-      "meanPredicted": 0.379719,
-      "stdPredicted": 0.357215
+      "meanPredicted": 0.30814,
+      "stdPredicted": 0.393947
     },
     "trainInSample": {
-      "n": 105,
-      "positives": 23,
-      "baseRate": 0.219048,
-      "rocAuc": 0.989926,
-      "prAuc": 0.944236,
-      "brier": 0.037832,
-      "brierBaseRate": 0.171066,
-      "brierSkill": 0.778846,
-      "logLoss": 0.133029,
-      "accuracy": 0.961905,
+      "n": 75151,
+      "positives": 26173,
+      "baseRate": 0.348272,
+      "rocAuc": 0.98513,
+      "prAuc": 0.973255,
+      "brier": 0.046658,
+      "brierBaseRate": 0.226979,
+      "brierSkill": 0.794439,
+      "logLoss": 0.153057,
+      "accuracy": 0.935437,
       "confusionAt0_5": {
-        "tn": 81,
-        "fp": 1,
-        "fn": 3,
-        "tp": 20
+        "tn": 46510,
+        "fp": 2468,
+        "fn": 2384,
+        "tp": 23789
       },
-      "meanPredicted": 0.220278,
-      "stdPredicted": 0.332382
+      "meanPredicted": 0.348311,
+      "stdPredicted": 0.411404
     },
-    "testCold": null,
-    "ceiling": {
-      "n": 39,
-      "positives": 13,
-      "baseRate": 0.333333,
-      "rocAuc": 1.0,
-      "prAuc": 1.0,
-      "brier": 0.0,
-      "brierBaseRate": 0.222222,
-      "brierSkill": 1.0,
-      "logLoss": 0.0,
-      "accuracy": 1.0,
+    "testCold": {
+      "n": 4789,
+      "positives": 1233,
+      "baseRate": 0.257465,
+      "rocAuc": 0.979301,
+      "prAuc": 0.944199,
+      "brier": 0.067632,
+      "brierBaseRate": 0.191177,
+      "brierSkill": 0.646231,
+      "logLoss": 0.207409,
+      "accuracy": 0.899979,
       "confusionAt0_5": {
-        "tn": 26,
-        "fp": 0,
-        "fn": 0,
-        "tp": 13
+        "tn": 3119,
+        "fp": 437,
+        "fn": 42,
+        "tp": 1191
       },
-      "meanPredicted": 0.333333,
-      "stdPredicted": 0.471405,
-      "bayesBrierFloor": 0.0
+      "meanPredicted": 0.328679,
+      "stdPredicted": 0.402415
+    },
+    "ceiling": {
+      "n": 6244,
+      "positives": 1507,
+      "baseRate": 0.241352,
+      "rocAuc": 0.990761,
+      "prAuc": 0.972905,
+      "brier": 0.033033,
+      "brierBaseRate": 0.183101,
+      "brierSkill": 0.819594,
+      "logLoss": 0.105431,
+      "accuracy": 0.952594,
+      "confusionAt0_5": {
+        "tn": 4584,
+        "fp": 153,
+        "fn": 143,
+        "tp": 1364
+      },
+      "meanPredicted": 0.243946,
+      "stdPredicted": 0.391542,
+      "bayesBrierFloor": 0.031131
     },
     "baselineLogistic": {
-      "n": 39,
-      "positives": 13,
-      "baseRate": 0.333333,
-      "rocAuc": 0.56213,
-      "prAuc": 0.374271,
-      "brier": 0.256738,
-      "brierBaseRate": 0.222222,
-      "brierSkill": -0.15532,
-      "logLoss": 0.709017,
-      "accuracy": 0.615385,
+      "n": 6244,
+      "positives": 1507,
+      "baseRate": 0.241352,
+      "rocAuc": 0.939301,
+      "prAuc": 0.809946,
+      "brier": 0.099522,
+      "brierBaseRate": 0.183101,
+      "brierSkill": 0.456463,
+      "logLoss": 0.328754,
+      "accuracy": 0.871076,
       "confusionAt0_5": {
-        "tn": 16,
-        "fp": 10,
-        "fn": 5,
-        "tp": 8
+        "tn": 4092,
+        "fp": 645,
+        "fn": 160,
+        "tp": 1347
       },
-      "meanPredicted": 0.403183,
-      "stdPredicted": 0.234773
+      "meanPredicted": 0.352464,
+      "stdPredicted": 0.344527
     },
-    "baselinePriceRatioCoefficient": -0.802016
+    "baselinePriceRatioCoefficient": -0.748533
   },
   "calibration": [
     {
       "bin": 0,
-      "n": 4,
-      "predictedMean": 0.000677,
+      "n": 625,
+      "predictedMean": 2e-05,
       "observedRate": 0.0,
-      "gap": -0.000677
+      "gap": -2e-05
     },
     {
       "bin": 1,
-      "n": 4,
-      "predictedMean": 0.004293,
+      "n": 624,
+      "predictedMean": 9.2e-05,
       "observedRate": 0.0,
-      "gap": -0.004293
+      "gap": -9.2e-05
     },
     {
       "bin": 2,
-      "n": 4,
-      "predictedMean": 0.017977,
+      "n": 624,
+      "predictedMean": 0.000342,
       "observedRate": 0.0,
-      "gap": -0.017977
+      "gap": -0.000342
     },
     {
       "bin": 3,
-      "n": 4,
-      "predictedMean": 0.040088,
+      "n": 625,
+      "predictedMean": 0.001621,
       "observedRate": 0.0,
-      "gap": -0.040088
+      "gap": -0.001621
     },
     {
       "bin": 4,
-      "n": 5,
-      "predictedMean": 0.270425,
-      "observedRate": 0.4,
-      "gap": 0.129575
+      "n": 624,
+      "predictedMean": 0.010323,
+      "observedRate": 0.0,
+      "gap": -0.010323
     },
     {
       "bin": 5,
-      "n": 3,
-      "predictedMean": 0.395921,
-      "observedRate": 0.0,
-      "gap": -0.395921
+      "n": 624,
+      "predictedMean": 0.07742,
+      "observedRate": 0.008013,
+      "gap": -0.069407
     },
     {
       "bin": 6,
-      "n": 7,
-      "predictedMean": 0.711014,
-      "observedRate": 0.714286,
-      "gap": 0.003272
+      "n": 625,
+      "predictedMean": 0.363013,
+      "observedRate": 0.1248,
+      "gap": -0.238213
+    },
+    {
+      "bin": 7,
+      "n": 624,
+      "predictedMean": 0.724012,
+      "observedRate": 0.464744,
+      "gap": -0.259268
     },
     {
       "bin": 8,
-      "n": 6,
-      "predictedMean": 0.856841,
-      "observedRate": 0.666667,
-      "gap": -0.190174
+      "n": 624,
+      "predictedMean": 0.920648,
+      "observedRate": 0.822115,
+      "gap": -0.098533
     },
     {
       "bin": 9,
-      "n": 2,
-      "predictedMean": 0.949437,
-      "observedRate": 1.0,
-      "gap": 0.050563
+      "n": 625,
+      "predictedMean": 0.983725,
+      "observedRate": 0.9936,
+      "gap": 0.009875
     }
   ],
   "latentCalibration": {
     "note": "latent_p is the TRUE probability each label was drawn from. Used here for evaluation only -- never a feature.",
-    "meanAbsoluteError": 0.231039,
-    "correlation": 0.679566,
-    "meanPredicted": 0.379719,
-    "meanTrue": 0.333333
+    "meanAbsoluteError": 0.083502,
+    "correlation": 0.915077,
+    "meanPredicted": 0.30814,
+    "meanTrue": 0.243946
   },
   "nanStrategyComparison": {
     "native": {
       "params": {
         "learning_rate": 0.05,
-        "max_leaf_nodes": 63,
-        "min_samples_leaf": 20,
-        "max_iter": 500,
+        "max_leaf_nodes": 15,
+        "min_samples_leaf": 200,
+        "max_iter": 600,
         "l2_regularization": 1.0
       },
-      "validBrier": 0.116914,
+      "validBrier": 0.075194,
       "test": {
-        "n": 39,
-        "positives": 13,
-        "baseRate": 0.333333,
-        "rocAuc": 0.89645,
-        "prAuc": 0.753846,
-        "brier": 0.123108,
-        "brierBaseRate": 0.222222,
-        "brierSkill": 0.446012,
-        "logLoss": 0.370008,
-        "accuracy": 0.846154,
+        "n": 6244,
+        "positives": 1507,
+        "baseRate": 0.241352,
+        "rocAuc": 0.980418,
+        "prAuc": 0.942751,
+        "brier": 0.063492,
+        "brierBaseRate": 0.183101,
+        "brierSkill": 0.65324,
+        "logLoss": 0.195413,
+        "accuracy": 0.90631,
         "confusionAt0_5": {
-          "tn": 22,
-          "fp": 4,
-          "fn": 2,
-          "tp": 11
+          "tn": 4211,
+          "fp": 526,
+          "fn": 59,
+          "tp": 1448
         },
-        "meanPredicted": 0.379719,
-        "stdPredicted": 0.357215
+        "meanPredicted": 0.30814,
+        "stdPredicted": 0.393947
       }
     },
     "median": {
       "params": {
-        "learning_rate": 0.05,
-        "max_leaf_nodes": 63,
-        "min_samples_leaf": 20,
-        "max_iter": 500,
+        "learning_rate": 0.1,
+        "max_leaf_nodes": 15,
+        "min_samples_leaf": 80,
+        "max_iter": 300,
         "l2_regularization": 1.0
       },
-      "validBrier": 0.116914,
+      "validBrier": 0.077601,
       "test": {
-        "n": 39,
-        "positives": 13,
-        "baseRate": 0.333333,
-        "rocAuc": 0.89645,
-        "prAuc": 0.753846,
-        "brier": 0.123108,
-        "brierBaseRate": 0.222222,
-        "brierSkill": 0.446012,
-        "logLoss": 0.370008,
-        "accuracy": 0.846154,
+        "n": 6244,
+        "positives": 1507,
+        "baseRate": 0.241352,
+        "rocAuc": 0.979973,
+        "prAuc": 0.94153,
+        "brier": 0.064611,
+        "brierBaseRate": 0.183101,
+        "brierSkill": 0.647128,
+        "logLoss": 0.198593,
+        "accuracy": 0.904869,
         "confusionAt0_5": {
-          "tn": 22,
-          "fp": 4,
-          "fn": 2,
-          "tp": 11
+          "tn": 4200,
+          "fp": 537,
+          "fn": 57,
+          "tp": 1450
         },
-        "meanPredicted": 0.379719,
-        "stdPredicted": 0.357215
+        "meanPredicted": 0.309633,
+        "stdPredicted": 0.394098
       }
     }
   },
@@ -284,97 +310,13 @@
       "nanStrategy": "native",
       "params": {
         "learning_rate": 0.05,
-        "max_leaf_nodes": 63,
-        "min_samples_leaf": 20,
-        "max_iter": 500,
-        "l2_regularization": 1.0
-      },
-      "validBrier": 0.116914,
-      "validRocAuc": 0.913265
-    },
-    {
-      "nanStrategy": "median",
-      "params": {
-        "learning_rate": 0.05,
-        "max_leaf_nodes": 63,
-        "min_samples_leaf": 20,
-        "max_iter": 500,
-        "l2_regularization": 1.0
-      },
-      "validBrier": 0.116914,
-      "validRocAuc": 0.913265
-    },
-    {
-      "nanStrategy": "native",
-      "params": {
-        "learning_rate": 0.1,
-        "max_leaf_nodes": 31,
-        "min_samples_leaf": 40,
-        "max_iter": 300,
-        "l2_regularization": 0.0
-      },
-      "validBrier": 0.258503,
-      "validRocAuc": 0.5
-    },
-    {
-      "nanStrategy": "native",
-      "params": {
-        "learning_rate": 0.1,
-        "max_leaf_nodes": 15,
-        "min_samples_leaf": 80,
-        "max_iter": 300,
-        "l2_regularization": 1.0
-      },
-      "validBrier": 0.258503,
-      "validRocAuc": 0.5
-    },
-    {
-      "nanStrategy": "native",
-      "params": {
-        "learning_rate": 0.05,
-        "max_leaf_nodes": 31,
-        "min_samples_leaf": 40,
-        "max_iter": 500,
-        "l2_regularization": 0.0
-      },
-      "validBrier": 0.258503,
-      "validRocAuc": 0.5
-    },
-    {
-      "nanStrategy": "native",
-      "params": {
-        "learning_rate": 0.2,
-        "max_leaf_nodes": 15,
-        "min_samples_leaf": 80,
-        "max_iter": 200,
-        "l2_regularization": 0.0
-      },
-      "validBrier": 0.258503,
-      "validRocAuc": 0.5
-    },
-    {
-      "nanStrategy": "native",
-      "params": {
-        "learning_rate": 0.05,
         "max_leaf_nodes": 15,
         "min_samples_leaf": 200,
         "max_iter": 600,
         "l2_regularization": 1.0
       },
-      "validBrier": 0.258503,
-      "validRocAuc": 0.5
-    },
-    {
-      "nanStrategy": "median",
-      "params": {
-        "learning_rate": 0.1,
-        "max_leaf_nodes": 31,
-        "min_samples_leaf": 40,
-        "max_iter": 300,
-        "l2_regularization": 0.0
-      },
-      "validBrier": 0.258503,
-      "validRocAuc": 0.5
+      "validBrier": 0.075194,
+      "validRocAuc": 0.979926
     },
     {
       "nanStrategy": "median",
@@ -385,32 +327,8 @@
         "max_iter": 300,
         "l2_regularization": 1.0
       },
-      "validBrier": 0.258503,
-      "validRocAuc": 0.5
-    },
-    {
-      "nanStrategy": "median",
-      "params": {
-        "learning_rate": 0.05,
-        "max_leaf_nodes": 31,
-        "min_samples_leaf": 40,
-        "max_iter": 500,
-        "l2_regularization": 0.0
-      },
-      "validBrier": 0.258503,
-      "validRocAuc": 0.5
-    },
-    {
-      "nanStrategy": "median",
-      "params": {
-        "learning_rate": 0.2,
-        "max_leaf_nodes": 15,
-        "min_samples_leaf": 80,
-        "max_iter": 200,
-        "l2_regularization": 0.0
-      },
-      "validBrier": 0.258503,
-      "validRocAuc": 0.5
+      "validBrier": 0.077601,
+      "validRocAuc": 0.979421
     },
     {
       "nanStrategy": "median",
@@ -421,40 +339,158 @@
         "max_iter": 600,
         "l2_regularization": 1.0
       },
-      "validBrier": 0.258503,
-      "validRocAuc": 0.5
+      "validBrier": 0.077677,
+      "validRocAuc": 0.97844
+    },
+    {
+      "nanStrategy": "native",
+      "params": {
+        "learning_rate": 0.2,
+        "max_leaf_nodes": 15,
+        "min_samples_leaf": 80,
+        "max_iter": 200,
+        "l2_regularization": 0.0
+      },
+      "validBrier": 0.077813,
+      "validRocAuc": 0.978423
+    },
+    {
+      "nanStrategy": "native",
+      "params": {
+        "learning_rate": 0.1,
+        "max_leaf_nodes": 15,
+        "min_samples_leaf": 80,
+        "max_iter": 300,
+        "l2_regularization": 1.0
+      },
+      "validBrier": 0.078161,
+      "validRocAuc": 0.978947
+    },
+    {
+      "nanStrategy": "median",
+      "params": {
+        "learning_rate": 0.05,
+        "max_leaf_nodes": 31,
+        "min_samples_leaf": 40,
+        "max_iter": 500,
+        "l2_regularization": 0.0
+      },
+      "validBrier": 0.078806,
+      "validRocAuc": 0.978669
+    },
+    {
+      "nanStrategy": "native",
+      "params": {
+        "learning_rate": 0.05,
+        "max_leaf_nodes": 31,
+        "min_samples_leaf": 40,
+        "max_iter": 500,
+        "l2_regularization": 0.0
+      },
+      "validBrier": 0.079006,
+      "validRocAuc": 0.97874
+    },
+    {
+      "nanStrategy": "median",
+      "params": {
+        "learning_rate": 0.1,
+        "max_leaf_nodes": 31,
+        "min_samples_leaf": 40,
+        "max_iter": 300,
+        "l2_regularization": 0.0
+      },
+      "validBrier": 0.079077,
+      "validRocAuc": 0.978803
+    },
+    {
+      "nanStrategy": "median",
+      "params": {
+        "learning_rate": 0.2,
+        "max_leaf_nodes": 15,
+        "min_samples_leaf": 80,
+        "max_iter": 200,
+        "l2_regularization": 0.0
+      },
+      "validBrier": 0.079622,
+      "validRocAuc": 0.978572
+    },
+    {
+      "nanStrategy": "native",
+      "params": {
+        "learning_rate": 0.1,
+        "max_leaf_nodes": 31,
+        "min_samples_leaf": 40,
+        "max_iter": 300,
+        "l2_regularization": 0.0
+      },
+      "validBrier": 0.079975,
+      "validRocAuc": 0.97898
+    },
+    {
+      "nanStrategy": "median",
+      "params": {
+        "learning_rate": 0.05,
+        "max_leaf_nodes": 63,
+        "min_samples_leaf": 20,
+        "max_iter": 500,
+        "l2_regularization": 1.0
+      },
+      "validBrier": 0.080488,
+      "validRocAuc": 0.976912
+    },
+    {
+      "nanStrategy": "native",
+      "params": {
+        "learning_rate": 0.05,
+        "max_leaf_nodes": 63,
+        "min_samples_leaf": 20,
+        "max_iter": 500,
+        "l2_regularization": 1.0
+      },
+      "validBrier": 0.08055,
+      "validRocAuc": 0.977114
     }
   ],
   "featureImportance": [
     {
-      "feature": "price_ratio",
-      "brierIncreaseMean": 0.173698,
-      "brierIncreaseStd": 0.020366
-    },
-    {
-      "feature": "lead_days",
-      "brierIncreaseMean": 0.085586,
-      "brierIncreaseStd": 0.023062
-    },
-    {
       "feature": "hour",
-      "brierIncreaseMean": 0.069027,
-      "brierIncreaseStd": 0.048799
+      "brierIncreaseMean": 0.233377,
+      "brierIncreaseStd": 0.002646
+    },
+    {
+      "feature": "price_ratio",
+      "brierIncreaseMean": 0.026219,
+      "brierIncreaseStd": 0.000847
     },
     {
       "feature": "dow",
-      "brierIncreaseMean": 0.000856,
-      "brierIncreaseStd": 0.002385
+      "brierIncreaseMean": 0.023453,
+      "brierIncreaseStd": 0.001155
     },
     {
-      "feature": "is_weekend",
-      "brierIncreaseMean": 0.0,
-      "brierIncreaseStd": 0.0
+      "feature": "lead_days",
+      "brierIncreaseMean": 0.017653,
+      "brierIncreaseStd": 0.000436
     },
     {
-      "feature": "is_peak",
-      "brierIncreaseMean": 0.0,
-      "brierIncreaseStd": 0.0
+      "feature": "venue_rating",
+      "brierIncreaseMean": 0.011855,
+      "brierIncreaseStd": 0.000651
+    },
+    {
+      "feature": "sport",
+      "brierIncreaseMean": 0.004904,
+      "brierIncreaseStd": 0.000798
+    },
+    {
+      "feature": "city",
+      "brierIncreaseMean": 0.004475,
+      "brierIncreaseStd": 0.000353
+    },
+    {
+      "feature": "base_price",
+      "brierIncreaseMean": 0.000471,
+      "brierIncreaseStd": 5.9e-05
     },
     {
       "feature": "month",
@@ -462,35 +498,213 @@
       "brierIncreaseStd": 0.0
     },
     {
-      "feature": "venue_rating",
-      "brierIncreaseMean": 0.0,
-      "brierIncreaseStd": 0.0
+      "feature": "is_weekend",
+      "brierIncreaseMean": -6e-06,
+      "brierIncreaseStd": 2e-06
     },
     {
-      "feature": "base_price",
-      "brierIncreaseMean": 0.0,
-      "brierIncreaseStd": 0.0
-    },
-    {
-      "feature": "sport",
-      "brierIncreaseMean": 0.0,
-      "brierIncreaseStd": 0.0
-    },
-    {
-      "feature": "city",
-      "brierIncreaseMean": 0.0,
-      "brierIncreaseStd": 0.0
+      "feature": "is_peak",
+      "brierIncreaseMean": -0.00024,
+      "brierIncreaseStd": 2.2e-05
     }
   ],
   "slices": {
-    "isPeak": [],
-    "sport": [],
-    "city": [],
-    "isWeekend": [],
-    "leadDaysBucket": [],
-    "priceRatioBucket": []
+    "isPeak": [
+      {
+        "group": "0",
+        "n": 4228,
+        "baseRate": 0.044939,
+        "brier": 0.029365,
+        "meanPredicted": 0.089959,
+        "calibrationGap": -0.045021,
+        "rocAuc": 0.984112
+      },
+      {
+        "group": "1",
+        "n": 2016,
+        "baseRate": 0.653274,
+        "brier": 0.135065,
+        "meanPredicted": 0.765714,
+        "calibrationGap": -0.112441,
+        "rocAuc": 0.916097
+      }
+    ],
+    "sport": [
+      {
+        "group": "cricket",
+        "n": 3192,
+        "baseRate": 0.149749,
+        "brier": 0.054789,
+        "meanPredicted": 0.214165,
+        "calibrationGap": -0.064416,
+        "rocAuc": 0.978033
+      },
+      {
+        "group": "football",
+        "n": 3052,
+        "baseRate": 0.337156,
+        "brier": 0.072595,
+        "meanPredicted": 0.406426,
+        "calibrationGap": -0.06927,
+        "rocAuc": 0.97916
+      }
+    ],
+    "city": [
+      {
+        "group": "Islamabad",
+        "n": 3416,
+        "baseRate": 0.262881,
+        "brier": 0.045665,
+        "meanPredicted": 0.300011,
+        "calibrationGap": -0.03713,
+        "rocAuc": 0.987232
+      },
+      {
+        "group": "Rawalpindi",
+        "n": 1484,
+        "baseRate": 0.179245,
+        "brier": 0.071659,
+        "meanPredicted": 0.267234,
+        "calibrationGap": -0.087989,
+        "rocAuc": 0.975569
+      },
+      {
+        "group": "Lahore",
+        "n": 812,
+        "baseRate": 0.23399,
+        "brier": 0.10924,
+        "meanPredicted": 0.382232,
+        "calibrationGap": -0.148242,
+        "rocAuc": 0.977259
+      },
+      {
+        "group": "Karachi",
+        "n": 532,
+        "baseRate": 0.287594,
+        "brier": 0.085353,
+        "meanPredicted": 0.361358,
+        "calibrationGap": -0.073764,
+        "rocAuc": 0.964302
+      }
+    ],
+    "isWeekend": [
+      {
+        "group": "0",
+        "n": 4460,
+        "baseRate": 0.207848,
+        "brier": 0.064781,
+        "meanPredicted": 0.275438,
+        "calibrationGap": -0.06759,
+        "rocAuc": 0.976851
+      },
+      {
+        "group": "1",
+        "n": 1784,
+        "baseRate": 0.325112,
+        "brier": 0.06027,
+        "meanPredicted": 0.389897,
+        "calibrationGap": -0.064784,
+        "rocAuc": 0.98614
+      }
+    ],
+    "leadDaysBucket": [
+      {
+        "group": "8-30d",
+        "n": 2057,
+        "baseRate": 0.151677,
+        "brier": 0.062374,
+        "meanPredicted": 0.224377,
+        "calibrationGap": -0.072699,
+        "rocAuc": 0.974938
+      },
+      {
+        "group": "4-7d",
+        "n": 1697,
+        "baseRate": 0.250442,
+        "brier": 0.063705,
+        "meanPredicted": 0.314515,
+        "calibrationGap": -0.064073,
+        "rocAuc": 0.979601
+      },
+      {
+        "group": "1-3d",
+        "n": 1686,
+        "baseRate": 0.300119,
+        "brier": 0.068372,
+        "meanPredicted": 0.369564,
+        "calibrationGap": -0.069445,
+        "rocAuc": 0.980461
+      },
+      {
+        "group": "same day",
+        "n": 779,
+        "baseRate": 0.337612,
+        "brier": 0.057153,
+        "meanPredicted": 0.390057,
+        "calibrationGap": -0.052445,
+        "rocAuc": 0.985767
+      }
+    ],
+    "priceRatioBucket": [
+      {
+        "group": "0.85-1.00",
+        "n": 2695,
+        "baseRate": 0.263822,
+        "brier": 0.067847,
+        "meanPredicted": 0.334036,
+        "calibrationGap": -0.070214,
+        "rocAuc": 0.978557
+      },
+      {
+        "group": "1.15-1.50",
+        "n": 1946,
+        "baseRate": 0.161357,
+        "brier": 0.055963,
+        "meanPredicted": 0.217271,
+        "calibrationGap": -0.055914,
+        "rocAuc": 0.977496
+      },
+      {
+        "group": "0.70-0.85",
+        "n": 851,
+        "baseRate": 0.385429,
+        "brier": 0.074984,
+        "meanPredicted": 0.467506,
+        "calibrationGap": -0.082077,
+        "rocAuc": 0.980442
+      },
+      {
+        "group": "1.00-1.15",
+        "n": 752,
+        "baseRate": 0.204787,
+        "brier": 0.054363,
+        "meanPredicted": 0.270138,
+        "calibrationGap": -0.065351,
+        "rocAuc": 0.987502
+      }
+    ],
+    "isHoliday (not a feature)": [
+      {
+        "group": "0",
+        "n": 6244,
+        "baseRate": 0.241352,
+        "brier": 0.063492,
+        "meanPredicted": 0.30814,
+        "calibrationGap": -0.066789,
+        "rocAuc": 0.980418
+      }
+    ]
   },
-  "ramadanBlindSpot": {},
+  "ramadanBlindSpot": {
+    "note": "in-sample, on TRAIN -- the test window contains no Ramadan, so the headline metrics are silent on this failure mode",
+    "ramadanRowsInTest": 0,
+    "ramadanRowsInTrain": 6467,
+    "ramadanBrier": 0.073785,
+    "normalBrier": 0.044104,
+    "ratio": 1.673,
+    "ramadanObserved": 0.136539,
+    "ramadanPredicted": 0.255001
+  },
   "pricing": {
     "sweepSteps": 17,
     "trainedBand": [
@@ -502,3153 +716,3173 @@
     "profiles": 24,
     "profileVenues": 6,
     "profileVenuesExpected": 6,
-    "suggestedRatioMin": 1.0,
-    "suggestedRatioMax": 1.0,
-    "profilesHittingPolicyCap": 0
+    "suggestedRatioMin": 0.7,
+    "suggestedRatioMax": 1.3,
+    "profilesHittingPolicyCap": 7
   },
   "priceExamples": [
     {
-      "label": "7146b7b9-6335-436a-b7cd-42397e00a470 Sat 20:00 peak",
+      "label": "v08 Sat 20:00 peak",
       "sport": "cricket",
       "city": "Rawalpindi",
-      "slotDate": "2026-08-29",
+      "slotDate": "2026-07-25",
       "hour": 20,
       "isPeak": 1,
       "basePrice": 1500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 1500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.474383,
-      "expectedRevenue": 711.58,
-      "revenueAtListPrice": 711.58,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.473004,
+      "venueRating": 4.6,
+      "suggestedPrice": 1950.0,
+      "suggestedRatio": 1.3,
+      "deltaPct": 30.0,
+      "bookProbability": 0.981658,
+      "expectedRevenue": 1914.23,
+      "revenueAtListPrice": 1492.33,
+      "upliftVsListPct": 28.27,
+      "priceSensitivity": 0.026873,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        1.3
+      ],
+      "policyCapped": true,
+      "uncappedRatio": 1.5,
+      "policyCapCostPct": 14.24,
+      "curve": [
+        {
+          "ratio": 0.7,
+          "price": 1050.0,
+          "bookProbability": 0.998767,
+          "expectedRevenue": 1048.71
+        },
+        {
+          "ratio": 0.75,
+          "price": 1125.0,
+          "bookProbability": 0.998722,
+          "expectedRevenue": 1123.56
+        },
+        {
+          "ratio": 0.8,
+          "price": 1200.0,
+          "bookProbability": 0.998175,
+          "expectedRevenue": 1197.81
+        },
+        {
+          "ratio": 0.85,
+          "price": 1275.0,
+          "bookProbability": 0.996952,
+          "expectedRevenue": 1271.11
+        },
+        {
+          "ratio": 0.9,
+          "price": 1350.0,
+          "bookProbability": 0.996582,
+          "expectedRevenue": 1345.39
+        },
+        {
+          "ratio": 0.95,
+          "price": 1425.0,
+          "bookProbability": 0.995964,
+          "expectedRevenue": 1419.25
+        },
+        {
+          "ratio": 1.0,
+          "price": 1500.0,
+          "bookProbability": 0.994889,
+          "expectedRevenue": 1492.33
+        },
+        {
+          "ratio": 1.05,
+          "price": 1575.0,
+          "bookProbability": 0.993829,
+          "expectedRevenue": 1565.28
+        },
+        {
+          "ratio": 1.1,
+          "price": 1650.0,
+          "bookProbability": 0.993362,
+          "expectedRevenue": 1639.05
+        },
+        {
+          "ratio": 1.15,
+          "price": 1725.0,
+          "bookProbability": 0.989912,
+          "expectedRevenue": 1707.6
+        },
+        {
+          "ratio": 1.2,
+          "price": 1800.0,
+          "bookProbability": 0.986513,
+          "expectedRevenue": 1775.72
+        },
+        {
+          "ratio": 1.25,
+          "price": 1875.0,
+          "bookProbability": 0.98427,
+          "expectedRevenue": 1845.51
+        },
+        {
+          "ratio": 1.3,
+          "price": 1950.0,
+          "bookProbability": 0.981658,
+          "expectedRevenue": 1914.23
+        },
+        {
+          "ratio": 1.35,
+          "price": 2025.0,
+          "bookProbability": 0.981067,
+          "expectedRevenue": 1986.66
+        },
+        {
+          "ratio": 1.4,
+          "price": 2100.0,
+          "bookProbability": 0.978234,
+          "expectedRevenue": 2054.29
+        },
+        {
+          "ratio": 1.45,
+          "price": 2175.0,
+          "bookProbability": 0.973305,
+          "expectedRevenue": 2116.94
+        },
+        {
+          "ratio": 1.5,
+          "price": 2250.0,
+          "bookProbability": 0.971894,
+          "expectedRevenue": 2186.76
+        }
+      ]
+    },
+    {
+      "label": "v08 Tue 20:00 peak",
+      "sport": "cricket",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-28",
+      "hour": 20,
+      "isPeak": 1,
+      "basePrice": 1500.0,
+      "venueRating": 4.6,
+      "suggestedPrice": 1650.0,
+      "suggestedRatio": 1.1,
+      "deltaPct": 10.0,
+      "bookProbability": 0.826856,
+      "expectedRevenue": 1364.31,
+      "revenueAtListPrice": 1302.1,
+      "upliftVsListPct": 4.78,
+      "priceSensitivity": 0.394012,
+      "confidence": 1.0,
+      "plateauRatios": [
+        1.1
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 1.1,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
           "price": 1050.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 498.1
+          "bookProbability": 0.957378,
+          "expectedRevenue": 1005.25
         },
         {
           "ratio": 0.75,
           "price": 1125.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 533.68
+          "bookProbability": 0.954282,
+          "expectedRevenue": 1073.57
         },
         {
           "ratio": 0.8,
           "price": 1200.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 569.26
+          "bookProbability": 0.93708,
+          "expectedRevenue": 1124.5
         },
         {
           "ratio": 0.85,
           "price": 1275.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 604.84
+          "bookProbability": 0.906722,
+          "expectedRevenue": 1156.07
         },
         {
           "ratio": 0.9,
           "price": 1350.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 640.42
+          "bookProbability": 0.896594,
+          "expectedRevenue": 1210.4
         },
         {
           "ratio": 0.95,
           "price": 1425.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 676.0
+          "bookProbability": 0.88264,
+          "expectedRevenue": 1257.76
         },
         {
           "ratio": 1.0,
           "price": 1500.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 711.58
+          "bookProbability": 0.868063,
+          "expectedRevenue": 1302.1
         },
         {
           "ratio": 1.05,
           "price": 1575.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 2.17
+          "bookProbability": 0.843323,
+          "expectedRevenue": 1328.23
         },
         {
           "ratio": 1.1,
           "price": 1650.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 2.28
+          "bookProbability": 0.826856,
+          "expectedRevenue": 1364.31
         },
         {
           "ratio": 1.15,
           "price": 1725.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 2.38
+          "bookProbability": 0.7356,
+          "expectedRevenue": 1268.91
         },
         {
           "ratio": 1.2,
           "price": 1800.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 2.48
+          "bookProbability": 0.6717,
+          "expectedRevenue": 1209.06
         },
         {
           "ratio": 1.25,
           "price": 1875.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 2.59
+          "bookProbability": 0.661179,
+          "expectedRevenue": 1239.71
         },
         {
           "ratio": 1.3,
           "price": 1950.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 2.69
+          "bookProbability": 0.653559,
+          "expectedRevenue": 1274.44
         },
         {
           "ratio": 1.35,
           "price": 2025.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 2.79
+          "bookProbability": 0.633669,
+          "expectedRevenue": 1283.18
         },
         {
           "ratio": 1.4,
           "price": 2100.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 2.9
+          "bookProbability": 0.609351,
+          "expectedRevenue": 1279.64
         },
         {
           "ratio": 1.45,
           "price": 2175.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 3.0
+          "bookProbability": 0.576348,
+          "expectedRevenue": 1253.56
         },
         {
           "ratio": 1.5,
           "price": 2250.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 3.1
+          "bookProbability": 0.563366,
+          "expectedRevenue": 1267.57
         }
       ]
     },
     {
-      "label": "7146b7b9-6335-436a-b7cd-42397e00a470 Tue 20:00 peak",
+      "label": "v08 Tue 10:00 off-peak",
       "sport": "cricket",
       "city": "Rawalpindi",
-      "slotDate": "2026-09-01",
-      "hour": 20,
-      "isPeak": 1,
-      "basePrice": 1500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 1500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.376945,
-      "expectedRevenue": 565.42,
-      "revenueAtListPrice": 565.42,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.375765,
-      "confidence": 1.0,
-      "plateauRatios": [
-        1.0
-      ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
-      "curve": [
-        {
-          "ratio": 0.7,
-          "price": 1050.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 395.79
-        },
-        {
-          "ratio": 0.75,
-          "price": 1125.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 424.06
-        },
-        {
-          "ratio": 0.8,
-          "price": 1200.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 452.33
-        },
-        {
-          "ratio": 0.85,
-          "price": 1275.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 480.61
-        },
-        {
-          "ratio": 0.9,
-          "price": 1350.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 508.88
-        },
-        {
-          "ratio": 0.95,
-          "price": 1425.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 537.15
-        },
-        {
-          "ratio": 1.0,
-          "price": 1500.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 565.42
-        },
-        {
-          "ratio": 1.05,
-          "price": 1575.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 1.86
-        },
-        {
-          "ratio": 1.1,
-          "price": 1650.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 1.95
-        },
-        {
-          "ratio": 1.15,
-          "price": 1725.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.04
-        },
-        {
-          "ratio": 1.2,
-          "price": 1800.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.13
-        },
-        {
-          "ratio": 1.25,
-          "price": 1875.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.21
-        },
-        {
-          "ratio": 1.3,
-          "price": 1950.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.3
-        },
-        {
-          "ratio": 1.35,
-          "price": 2025.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.39
-        },
-        {
-          "ratio": 1.4,
-          "price": 2100.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.48
-        },
-        {
-          "ratio": 1.45,
-          "price": 2175.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.57
-        },
-        {
-          "ratio": 1.5,
-          "price": 2250.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.66
-        }
-      ]
-    },
-    {
-      "label": "7146b7b9-6335-436a-b7cd-42397e00a470 Tue 10:00 off-peak",
-      "sport": "cricket",
-      "city": "Rawalpindi",
-      "slotDate": "2026-09-01",
+      "slotDate": "2026-07-28",
       "hour": 10,
       "isPeak": 0,
       "basePrice": 1500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 1500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.711014,
-      "expectedRevenue": 1066.52,
-      "revenueAtListPrice": 1066.52,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.681565,
+      "venueRating": 4.6,
+      "suggestedPrice": 1050.0,
+      "suggestedRatio": 0.7,
+      "deltaPct": -30.0,
+      "bookProbability": 0.399426,
+      "expectedRevenue": 419.4,
+      "revenueAtListPrice": 12.72,
+      "upliftVsListPct": 3197.33,
+      "priceSensitivity": 0.399239,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        0.7
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 0.7,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
           "price": 1050.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 746.56
+          "bookProbability": 0.399426,
+          "expectedRevenue": 419.4
         },
         {
           "ratio": 0.75,
           "price": 1125.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 799.89
+          "bookProbability": 0.318613,
+          "expectedRevenue": 358.44
         },
         {
           "ratio": 0.8,
           "price": 1200.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 853.22
+          "bookProbability": 0.151482,
+          "expectedRevenue": 181.78
         },
         {
           "ratio": 0.85,
           "price": 1275.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 906.54
+          "bookProbability": 0.06207,
+          "expectedRevenue": 79.14
         },
         {
           "ratio": 0.9,
           "price": 1350.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 959.87
+          "bookProbability": 0.032967,
+          "expectedRevenue": 44.51
         },
         {
           "ratio": 0.95,
           "price": 1425.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 1013.19
+          "bookProbability": 0.015404,
+          "expectedRevenue": 21.95
         },
         {
           "ratio": 1.0,
           "price": 1500.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 1066.52
+          "bookProbability": 0.00848,
+          "expectedRevenue": 12.72
         },
         {
           "ratio": 1.05,
           "price": 1575.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 46.38
+          "bookProbability": 0.005676,
+          "expectedRevenue": 8.94
         },
         {
           "ratio": 1.1,
           "price": 1650.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 48.59
+          "bookProbability": 0.003254,
+          "expectedRevenue": 5.37
         },
         {
           "ratio": 1.15,
           "price": 1725.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 50.8
+          "bookProbability": 0.001729,
+          "expectedRevenue": 2.98
         },
         {
           "ratio": 1.2,
           "price": 1800.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 53.01
+          "bookProbability": 0.000998,
+          "expectedRevenue": 1.8
         },
         {
           "ratio": 1.25,
           "price": 1875.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 55.22
+          "bookProbability": 0.000836,
+          "expectedRevenue": 1.57
         },
         {
           "ratio": 1.3,
           "price": 1950.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 57.42
+          "bookProbability": 0.000586,
+          "expectedRevenue": 1.14
         },
         {
           "ratio": 1.35,
           "price": 2025.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 59.63
+          "bookProbability": 0.000436,
+          "expectedRevenue": 0.88
         },
         {
           "ratio": 1.4,
           "price": 2100.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 61.84
+          "bookProbability": 0.000335,
+          "expectedRevenue": 0.7
         },
         {
           "ratio": 1.45,
           "price": 2175.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 64.05
+          "bookProbability": 0.000201,
+          "expectedRevenue": 0.44
         },
         {
           "ratio": 1.5,
           "price": 2250.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 66.26
+          "bookProbability": 0.000186,
+          "expectedRevenue": 0.42
         }
       ]
     },
     {
-      "label": "7146b7b9-6335-436a-b7cd-42397e00a470 Sat 16:00 shoulder",
+      "label": "v08 Sat 16:00 shoulder",
       "sport": "cricket",
       "city": "Rawalpindi",
-      "slotDate": "2026-08-29",
+      "slotDate": "2026-07-25",
       "hour": 16,
       "isPeak": 0,
       "basePrice": 1500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 1500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.168369,
-      "expectedRevenue": 252.55,
-      "revenueAtListPrice": 252.55,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.167055,
+      "venueRating": 4.6,
+      "suggestedPrice": 1125.0,
+      "suggestedRatio": 0.75,
+      "deltaPct": -25.0,
+      "bookProbability": 0.844432,
+      "expectedRevenue": 949.99,
+      "revenueAtListPrice": 216.26,
+      "upliftVsListPct": 339.27,
+      "priceSensitivity": 0.861526,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        0.75
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 0.75,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
           "price": 1050.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 176.79
+          "bookProbability": 0.864008,
+          "expectedRevenue": 907.21
         },
         {
           "ratio": 0.75,
           "price": 1125.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 189.42
+          "bookProbability": 0.844432,
+          "expectedRevenue": 949.99
         },
         {
           "ratio": 0.8,
           "price": 1200.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 202.04
+          "bookProbability": 0.738806,
+          "expectedRevenue": 886.57
         },
         {
           "ratio": 0.85,
           "price": 1275.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 214.67
+          "bookProbability": 0.575334,
+          "expectedRevenue": 733.55
         },
         {
           "ratio": 0.9,
           "price": 1350.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 227.3
+          "bookProbability": 0.419478,
+          "expectedRevenue": 566.29
         },
         {
           "ratio": 0.95,
           "price": 1425.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 239.93
+          "bookProbability": 0.24079,
+          "expectedRevenue": 343.13
         },
         {
           "ratio": 1.0,
           "price": 1500.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 252.55
+          "bookProbability": 0.144176,
+          "expectedRevenue": 216.26
         },
         {
           "ratio": 1.05,
           "price": 1575.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.07
+          "bookProbability": 0.103198,
+          "expectedRevenue": 162.54
         },
         {
           "ratio": 1.1,
           "price": 1650.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.17
+          "bookProbability": 0.057845,
+          "expectedRevenue": 95.44
         },
         {
           "ratio": 1.15,
           "price": 1725.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.27
+          "bookProbability": 0.028814,
+          "expectedRevenue": 49.7
         },
         {
           "ratio": 1.2,
           "price": 1800.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.36
+          "bookProbability": 0.014571,
+          "expectedRevenue": 26.23
         },
         {
           "ratio": 1.25,
           "price": 1875.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.46
+          "bookProbability": 0.011442,
+          "expectedRevenue": 21.45
         },
         {
           "ratio": 1.3,
           "price": 1950.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.56
+          "bookProbability": 0.007644,
+          "expectedRevenue": 14.91
         },
         {
           "ratio": 1.35,
           "price": 2025.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.66
+          "bookProbability": 0.006284,
+          "expectedRevenue": 12.73
         },
         {
           "ratio": 1.4,
           "price": 2100.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.76
+          "bookProbability": 0.003754,
+          "expectedRevenue": 7.88
         },
         {
           "ratio": 1.45,
           "price": 2175.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.86
+          "bookProbability": 0.002675,
+          "expectedRevenue": 5.82
         },
         {
           "ratio": 1.5,
           "price": 2250.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.96
+          "bookProbability": 0.002482,
+          "expectedRevenue": 5.58
         }
       ]
     },
     {
-      "label": "418a8020-2195-400f-a52d-5b9d80e14650 Sat 20:00 peak",
+      "label": "v10 Sat 20:00 peak",
       "sport": "cricket",
       "city": "Islamabad",
-      "slotDate": "2026-08-29",
+      "slotDate": "2026-07-25",
       "hour": 20,
       "isPeak": 1,
-      "basePrice": 3500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 3500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.409533,
-      "expectedRevenue": 1433.36,
-      "revenueAtListPrice": 1433.36,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.407598,
+      "basePrice": 4000.0,
+      "venueRating": 4.9,
+      "suggestedPrice": 5200.0,
+      "suggestedRatio": 1.3,
+      "deltaPct": 30.0,
+      "bookProbability": 0.989704,
+      "expectedRevenue": 5146.46,
+      "revenueAtListPrice": 3986.09,
+      "upliftVsListPct": 29.11,
+      "priceSensitivity": 0.021978,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        1.3
       ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
+      "policyCapped": true,
+      "uncappedRatio": 1.5,
+      "policyCapCostPct": 13.92,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 2450.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1003.36
+          "price": 2800.0,
+          "bookProbability": 0.999149,
+          "expectedRevenue": 2797.62
         },
         {
           "ratio": 0.75,
-          "price": 2625.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1075.02
+          "price": 3000.0,
+          "bookProbability": 0.999106,
+          "expectedRevenue": 2997.32
         },
         {
           "ratio": 0.8,
-          "price": 2800.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1146.69
+          "price": 3200.0,
+          "bookProbability": 0.998716,
+          "expectedRevenue": 3195.89
         },
         {
           "ratio": 0.85,
-          "price": 2975.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1218.36
+          "price": 3400.0,
+          "bookProbability": 0.997882,
+          "expectedRevenue": 3392.8
         },
         {
           "ratio": 0.9,
-          "price": 3150.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1290.03
+          "price": 3600.0,
+          "bookProbability": 0.99762,
+          "expectedRevenue": 3591.43
         },
         {
           "ratio": 0.95,
-          "price": 3325.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1361.7
+          "price": 3800.0,
+          "bookProbability": 0.997235,
+          "expectedRevenue": 3789.49
         },
         {
           "ratio": 1.0,
-          "price": 3500.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1433.36
+          "price": 4000.0,
+          "bookProbability": 0.996524,
+          "expectedRevenue": 3986.09
         },
         {
           "ratio": 1.05,
-          "price": 3675.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.11
+          "price": 4200.0,
+          "bookProbability": 0.995697,
+          "expectedRevenue": 4181.93
         },
         {
           "ratio": 1.1,
-          "price": 3850.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.45
+          "price": 4400.0,
+          "bookProbability": 0.995549,
+          "expectedRevenue": 4380.42
         },
         {
           "ratio": 1.15,
-          "price": 4025.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.79
+          "price": 4600.0,
+          "bookProbability": 0.993955,
+          "expectedRevenue": 4572.19
         },
         {
           "ratio": 1.2,
-          "price": 4200.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 8.13
+          "price": 4800.0,
+          "bookProbability": 0.991832,
+          "expectedRevenue": 4760.79
         },
         {
           "ratio": 1.25,
-          "price": 4375.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 8.47
+          "price": 5000.0,
+          "bookProbability": 0.991194,
+          "expectedRevenue": 4955.97
         },
         {
           "ratio": 1.3,
-          "price": 4550.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 8.8
+          "price": 5200.0,
+          "bookProbability": 0.989704,
+          "expectedRevenue": 5146.46
         },
         {
           "ratio": 1.35,
-          "price": 4725.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 9.14
+          "price": 5400.0,
+          "bookProbability": 0.988309,
+          "expectedRevenue": 5336.87
         },
         {
           "ratio": 1.4,
-          "price": 4900.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 9.48
+          "price": 5600.0,
+          "bookProbability": 0.986545,
+          "expectedRevenue": 5524.65
         },
         {
           "ratio": 1.45,
-          "price": 5075.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 9.82
+          "price": 5800.0,
+          "bookProbability": 0.9795,
+          "expectedRevenue": 5681.1
         },
         {
           "ratio": 1.5,
-          "price": 5250.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 10.16
+          "price": 6000.0,
+          "bookProbability": 0.977171,
+          "expectedRevenue": 5863.02
         }
       ]
     },
     {
-      "label": "418a8020-2195-400f-a52d-5b9d80e14650 Tue 20:00 peak",
+      "label": "v10 Tue 20:00 peak",
       "sport": "cricket",
       "city": "Islamabad",
-      "slotDate": "2026-09-01",
+      "slotDate": "2026-07-28",
       "hour": 20,
       "isPeak": 1,
-      "basePrice": 3500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 3500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.323789,
-      "expectedRevenue": 1133.26,
-      "revenueAtListPrice": 1133.26,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.322135,
+      "basePrice": 4000.0,
+      "venueRating": 4.9,
+      "suggestedPrice": 5200.0,
+      "suggestedRatio": 1.3,
+      "deltaPct": 30.0,
+      "bookProbability": 0.770057,
+      "expectedRevenue": 4004.3,
+      "revenueAtListPrice": 3669.55,
+      "upliftVsListPct": 9.12,
+      "priceSensitivity": 0.358672,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        1.3
       ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
+      "policyCapped": true,
+      "uncappedRatio": 1.4,
+      "policyCapCostPct": 0.07,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 2450.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 793.28
+          "price": 2800.0,
+          "bookProbability": 0.971978,
+          "expectedRevenue": 2721.54
         },
         {
           "ratio": 0.75,
-          "price": 2625.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 849.94
+          "price": 3000.0,
+          "bookProbability": 0.969537,
+          "expectedRevenue": 2908.61
         },
         {
           "ratio": 0.8,
-          "price": 2800.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 906.61
+          "price": 3200.0,
+          "bookProbability": 0.958608,
+          "expectedRevenue": 3067.55
         },
         {
           "ratio": 0.85,
-          "price": 2975.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 963.27
+          "price": 3400.0,
+          "bookProbability": 0.938667,
+          "expectedRevenue": 3191.47
         },
         {
           "ratio": 0.9,
-          "price": 3150.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 1019.93
+          "price": 3600.0,
+          "bookProbability": 0.932793,
+          "expectedRevenue": 3358.05
         },
         {
           "ratio": 0.95,
-          "price": 3325.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 1076.6
+          "price": 3800.0,
+          "bookProbability": 0.926455,
+          "expectedRevenue": 3520.53
         },
         {
           "ratio": 1.0,
-          "price": 3500.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 1133.26
+          "price": 4000.0,
+          "bookProbability": 0.917386,
+          "expectedRevenue": 3669.55
         },
         {
           "ratio": 1.05,
-          "price": 3675.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.08
+          "price": 4200.0,
+          "bookProbability": 0.898604,
+          "expectedRevenue": 3774.14
         },
         {
           "ratio": 1.1,
-          "price": 3850.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.37
+          "price": 4400.0,
+          "bookProbability": 0.891079,
+          "expectedRevenue": 3920.75
         },
         {
           "ratio": 1.15,
-          "price": 4025.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.66
+          "price": 4600.0,
+          "bookProbability": 0.837895,
+          "expectedRevenue": 3854.32
         },
         {
           "ratio": 1.2,
-          "price": 4200.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.95
+          "price": 4800.0,
+          "bookProbability": 0.794749,
+          "expectedRevenue": 3814.8
         },
         {
           "ratio": 1.25,
-          "price": 4375.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 7.24
+          "price": 5000.0,
+          "bookProbability": 0.7897,
+          "expectedRevenue": 3948.5
         },
         {
           "ratio": 1.3,
-          "price": 4550.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 7.53
+          "price": 5200.0,
+          "bookProbability": 0.770057,
+          "expectedRevenue": 4004.3
         },
         {
           "ratio": 1.35,
-          "price": 4725.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 7.81
+          "price": 5400.0,
+          "bookProbability": 0.736103,
+          "expectedRevenue": 3974.96
         },
         {
           "ratio": 1.4,
-          "price": 4900.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 8.1
+          "price": 5600.0,
+          "bookProbability": 0.715532,
+          "expectedRevenue": 4006.98
         },
         {
           "ratio": 1.45,
-          "price": 5075.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 8.39
+          "price": 5800.0,
+          "bookProbability": 0.639049,
+          "expectedRevenue": 3706.48
         },
         {
           "ratio": 1.5,
-          "price": 5250.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 8.68
+          "price": 6000.0,
+          "bookProbability": 0.613305,
+          "expectedRevenue": 3679.83
         }
       ]
     },
     {
-      "label": "418a8020-2195-400f-a52d-5b9d80e14650 Tue 10:00 off-peak",
+      "label": "v10 Tue 10:00 off-peak",
       "sport": "cricket",
       "city": "Islamabad",
-      "slotDate": "2026-09-01",
+      "slotDate": "2026-07-28",
       "hour": 10,
       "isPeak": 0,
-      "basePrice": 3500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 3500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.055676,
-      "expectedRevenue": 194.87,
-      "revenueAtListPrice": 194.87,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.05439,
+      "basePrice": 4000.0,
+      "venueRating": 4.9,
+      "suggestedPrice": 2800.0,
+      "suggestedRatio": 0.7,
+      "deltaPct": -30.0,
+      "bookProbability": 0.414856,
+      "expectedRevenue": 1161.6,
+      "revenueAtListPrice": 41.09,
+      "upliftVsListPct": 2727.21,
+      "priceSensitivity": 0.414658,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        0.7
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 0.7,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 2450.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 136.41
+          "price": 2800.0,
+          "bookProbability": 0.414856,
+          "expectedRevenue": 1161.6
         },
         {
           "ratio": 0.75,
-          "price": 2625.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 146.15
+          "price": 3000.0,
+          "bookProbability": 0.320864,
+          "expectedRevenue": 962.59
         },
         {
           "ratio": 0.8,
-          "price": 2800.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 155.89
+          "price": 3200.0,
+          "bookProbability": 0.142713,
+          "expectedRevenue": 456.68
         },
         {
           "ratio": 0.85,
-          "price": 2975.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 165.64
+          "price": 3400.0,
+          "bookProbability": 0.064624,
+          "expectedRevenue": 219.72
         },
         {
           "ratio": 0.9,
-          "price": 3150.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 175.38
+          "price": 3600.0,
+          "bookProbability": 0.038259,
+          "expectedRevenue": 137.73
         },
         {
           "ratio": 0.95,
-          "price": 3325.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 185.12
+          "price": 3800.0,
+          "bookProbability": 0.018926,
+          "expectedRevenue": 71.92
         },
         {
           "ratio": 1.0,
-          "price": 3500.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 194.87
+          "price": 4000.0,
+          "bookProbability": 0.010272,
+          "expectedRevenue": 41.09
         },
         {
           "ratio": 1.05,
-          "price": 3675.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.72
+          "price": 4200.0,
+          "bookProbability": 0.006874,
+          "expectedRevenue": 28.87
         },
         {
           "ratio": 1.1,
-          "price": 3850.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.95
+          "price": 4400.0,
+          "bookProbability": 0.004099,
+          "expectedRevenue": 18.04
         },
         {
           "ratio": 1.15,
-          "price": 4025.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.17
+          "price": 4600.0,
+          "bookProbability": 0.002354,
+          "expectedRevenue": 10.83
         },
         {
           "ratio": 1.2,
-          "price": 4200.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.4
+          "price": 4800.0,
+          "bookProbability": 0.001382,
+          "expectedRevenue": 6.63
         },
         {
           "ratio": 1.25,
-          "price": 4375.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.62
+          "price": 5000.0,
+          "bookProbability": 0.001235,
+          "expectedRevenue": 6.18
         },
         {
           "ratio": 1.3,
-          "price": 4550.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.85
+          "price": 5200.0,
+          "bookProbability": 0.000845,
+          "expectedRevenue": 4.4
         },
         {
           "ratio": 1.35,
-          "price": 4725.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 6.07
+          "price": 5400.0,
+          "bookProbability": 0.000613,
+          "expectedRevenue": 3.31
         },
         {
           "ratio": 1.4,
-          "price": 4900.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 6.3
+          "price": 5600.0,
+          "bookProbability": 0.000471,
+          "expectedRevenue": 2.64
         },
         {
           "ratio": 1.45,
-          "price": 5075.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 6.52
+          "price": 5800.0,
+          "bookProbability": 0.000242,
+          "expectedRevenue": 1.4
         },
         {
           "ratio": 1.5,
-          "price": 5250.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 6.75
+          "price": 6000.0,
+          "bookProbability": 0.000198,
+          "expectedRevenue": 1.19
         }
       ]
     },
     {
-      "label": "418a8020-2195-400f-a52d-5b9d80e14650 Sat 16:00 shoulder",
+      "label": "v10 Sat 16:00 shoulder",
       "sport": "cricket",
       "city": "Islamabad",
-      "slotDate": "2026-08-29",
+      "slotDate": "2026-07-25",
       "hour": 16,
       "isPeak": 0,
-      "basePrice": 3500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 3500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.034269,
-      "expectedRevenue": 119.94,
-      "revenueAtListPrice": 119.94,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.033848,
+      "basePrice": 4000.0,
+      "venueRating": 4.9,
+      "suggestedPrice": 3000.0,
+      "suggestedRatio": 0.75,
+      "deltaPct": -25.0,
+      "bookProbability": 0.885948,
+      "expectedRevenue": 2657.84,
+      "revenueAtListPrice": 723.43,
+      "upliftVsListPct": 267.39,
+      "priceSensitivity": 0.898354,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        0.75
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 0.75,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 2450.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 83.96
+          "price": 2800.0,
+          "bookProbability": 0.900913,
+          "expectedRevenue": 2522.56
         },
         {
           "ratio": 0.75,
+          "price": 3000.0,
+          "bookProbability": 0.885948,
+          "expectedRevenue": 2657.84
+        },
+        {
+          "ratio": 0.8,
+          "price": 3200.0,
+          "bookProbability": 0.783752,
+          "expectedRevenue": 2508.01
+        },
+        {
+          "ratio": 0.85,
+          "price": 3400.0,
+          "bookProbability": 0.646116,
+          "expectedRevenue": 2196.79
+        },
+        {
+          "ratio": 0.9,
+          "price": 3600.0,
+          "bookProbability": 0.489292,
+          "expectedRevenue": 1761.45
+        },
+        {
+          "ratio": 0.95,
+          "price": 3800.0,
+          "bookProbability": 0.296941,
+          "expectedRevenue": 1128.38
+        },
+        {
+          "ratio": 1.0,
+          "price": 4000.0,
+          "bookProbability": 0.180858,
+          "expectedRevenue": 723.43
+        },
+        {
+          "ratio": 1.05,
+          "price": 4200.0,
+          "bookProbability": 0.123953,
+          "expectedRevenue": 520.6
+        },
+        {
+          "ratio": 1.1,
+          "price": 4400.0,
+          "bookProbability": 0.073038,
+          "expectedRevenue": 321.37
+        },
+        {
+          "ratio": 1.15,
+          "price": 4600.0,
+          "bookProbability": 0.040539,
+          "expectedRevenue": 186.48
+        },
+        {
+          "ratio": 1.2,
+          "price": 4800.0,
+          "bookProbability": 0.021503,
+          "expectedRevenue": 103.21
+        },
+        {
+          "ratio": 1.25,
+          "price": 5000.0,
+          "bookProbability": 0.017739,
+          "expectedRevenue": 88.7
+        },
+        {
+          "ratio": 1.3,
+          "price": 5200.0,
+          "bookProbability": 0.010866,
+          "expectedRevenue": 56.5
+        },
+        {
+          "ratio": 1.35,
+          "price": 5400.0,
+          "bookProbability": 0.008523,
+          "expectedRevenue": 46.02
+        },
+        {
+          "ratio": 1.4,
+          "price": 5600.0,
+          "bookProbability": 0.005274,
+          "expectedRevenue": 29.54
+        },
+        {
+          "ratio": 1.45,
+          "price": 5800.0,
+          "bookProbability": 0.003056,
+          "expectedRevenue": 17.73
+        },
+        {
+          "ratio": 1.5,
+          "price": 6000.0,
+          "bookProbability": 0.002559,
+          "expectedRevenue": 15.35
+        }
+      ]
+    },
+    {
+      "label": "v18 Sat 20:00 peak",
+      "sport": "cricket",
+      "city": "Karachi",
+      "slotDate": "2026-07-25",
+      "hour": 20,
+      "isPeak": 1,
+      "basePrice": 2500.0,
+      "venueRating": null,
+      "suggestedPrice": 3250.0,
+      "suggestedRatio": 1.3,
+      "deltaPct": 30.0,
+      "bookProbability": 0.973009,
+      "expectedRevenue": 3162.28,
+      "revenueAtListPrice": 2480.91,
+      "upliftVsListPct": 27.46,
+      "priceSensitivity": 0.054659,
+      "confidence": 1.0,
+      "plateauRatios": [
+        1.3
+      ],
+      "policyCapped": true,
+      "uncappedRatio": 1.5,
+      "policyCapCostPct": 11.87,
+      "curve": [
+        {
+          "ratio": 0.7,
+          "price": 1750.0,
+          "bookProbability": 0.998048,
+          "expectedRevenue": 1746.58
+        },
+        {
+          "ratio": 0.75,
+          "price": 1875.0,
+          "bookProbability": 0.997951,
+          "expectedRevenue": 1871.16
+        },
+        {
+          "ratio": 0.8,
+          "price": 2000.0,
+          "bookProbability": 0.997165,
+          "expectedRevenue": 1994.33
+        },
+        {
+          "ratio": 0.85,
+          "price": 2125.0,
+          "bookProbability": 0.995623,
+          "expectedRevenue": 2115.7
+        },
+        {
+          "ratio": 0.9,
+          "price": 2250.0,
+          "bookProbability": 0.995196,
+          "expectedRevenue": 2239.19
+        },
+        {
+          "ratio": 0.95,
+          "price": 2375.0,
+          "bookProbability": 0.99402,
+          "expectedRevenue": 2360.8
+        },
+        {
+          "ratio": 1.0,
+          "price": 2500.0,
+          "bookProbability": 0.992365,
+          "expectedRevenue": 2480.91
+        },
+        {
+          "ratio": 1.05,
           "price": 2625.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 89.96
-        },
-        {
-          "ratio": 0.8,
-          "price": 2800.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 95.95
-        },
-        {
-          "ratio": 0.85,
-          "price": 2975.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 101.95
-        },
-        {
-          "ratio": 0.9,
-          "price": 3150.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 107.95
-        },
-        {
-          "ratio": 0.95,
-          "price": 3325.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 113.95
-        },
-        {
-          "ratio": 1.0,
-          "price": 3500.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 119.94
-        },
-        {
-          "ratio": 1.05,
-          "price": 3675.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.55
+          "bookProbability": 0.99086,
+          "expectedRevenue": 2601.01
         },
         {
           "ratio": 1.1,
-          "price": 3850.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.62
+          "price": 2750.0,
+          "bookProbability": 0.99019,
+          "expectedRevenue": 2723.02
         },
         {
           "ratio": 1.15,
-          "price": 4025.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.7
+          "price": 2875.0,
+          "bookProbability": 0.986147,
+          "expectedRevenue": 2835.17
         },
         {
           "ratio": 1.2,
-          "price": 4200.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.77
+          "price": 3000.0,
+          "bookProbability": 0.981502,
+          "expectedRevenue": 2944.51
         },
         {
           "ratio": 1.25,
-          "price": 4375.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.84
+          "price": 3125.0,
+          "bookProbability": 0.976621,
+          "expectedRevenue": 3051.94
         },
         {
           "ratio": 1.3,
-          "price": 4550.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.92
+          "price": 3250.0,
+          "bookProbability": 0.973009,
+          "expectedRevenue": 3162.28
         },
         {
           "ratio": 1.35,
-          "price": 4725.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.99
+          "price": 3375.0,
+          "bookProbability": 0.972147,
+          "expectedRevenue": 3281.0
         },
         {
           "ratio": 1.4,
-          "price": 4900.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 2.06
+          "price": 3500.0,
+          "bookProbability": 0.968142,
+          "expectedRevenue": 3388.5
         },
         {
           "ratio": 1.45,
-          "price": 5075.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 2.14
+          "price": 3625.0,
+          "bookProbability": 0.961019,
+          "expectedRevenue": 3483.69
         },
         {
           "ratio": 1.5,
-          "price": 5250.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 2.21
+          "price": 3750.0,
+          "bookProbability": 0.943389,
+          "expectedRevenue": 3537.71
         }
       ]
     },
     {
-      "label": "255ede53-7c89-4fad-b3b2-d55e690912cb Sat 20:00 peak",
+      "label": "v18 Tue 20:00 peak",
       "sport": "cricket",
-      "city": "Islamabad",
-      "slotDate": "2026-08-29",
+      "city": "Karachi",
+      "slotDate": "2026-07-28",
       "hour": 20,
       "isPeak": 1,
-      "basePrice": 2800.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2800.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.409533,
-      "expectedRevenue": 1146.69,
-      "revenueAtListPrice": 1146.69,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.407598,
+      "basePrice": 2500.0,
+      "venueRating": null,
+      "suggestedPrice": 2750.0,
+      "suggestedRatio": 1.1,
+      "deltaPct": 10.0,
+      "bookProbability": 0.746574,
+      "expectedRevenue": 2053.08,
+      "revenueAtListPrice": 2001.81,
+      "upliftVsListPct": 2.56,
+      "priceSensitivity": 0.59485,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        1.1
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 1.1,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 1960.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 802.68
+          "price": 1750.0,
+          "bookProbability": 0.933989,
+          "expectedRevenue": 1634.48
         },
         {
           "ratio": 0.75,
-          "price": 2100.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 860.02
+          "price": 1875.0,
+          "bookProbability": 0.928483,
+          "expectedRevenue": 1740.91
         },
         {
           "ratio": 0.8,
-          "price": 2240.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 917.35
+          "price": 2000.0,
+          "bookProbability": 0.901836,
+          "expectedRevenue": 1803.67
         },
         {
           "ratio": 0.85,
-          "price": 2380.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 974.69
+          "price": 2125.0,
+          "bookProbability": 0.866359,
+          "expectedRevenue": 1841.01
         },
         {
           "ratio": 0.9,
-          "price": 2520.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1032.02
+          "price": 2250.0,
+          "bookProbability": 0.855237,
+          "expectedRevenue": 1924.28
         },
         {
           "ratio": 0.95,
-          "price": 2660.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1089.36
+          "price": 2375.0,
+          "bookProbability": 0.825041,
+          "expectedRevenue": 1959.47
         },
         {
           "ratio": 1.0,
-          "price": 2800.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1146.69
+          "price": 2500.0,
+          "bookProbability": 0.800726,
+          "expectedRevenue": 2001.81
         },
         {
           "ratio": 1.05,
-          "price": 2940.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 5.69
+          "price": 2625.0,
+          "bookProbability": 0.768179,
+          "expectedRevenue": 2016.47
         },
         {
           "ratio": 1.1,
-          "price": 3080.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 5.96
+          "price": 2750.0,
+          "bookProbability": 0.746574,
+          "expectedRevenue": 2053.08
         },
         {
           "ratio": 1.15,
-          "price": 3220.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.23
+          "price": 2875.0,
+          "bookProbability": 0.632527,
+          "expectedRevenue": 1818.52
         },
         {
           "ratio": 1.2,
-          "price": 3360.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.5
+          "price": 3000.0,
+          "bookProbability": 0.558663,
+          "expectedRevenue": 1675.99
         },
         {
           "ratio": 1.25,
-          "price": 3500.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.77
+          "price": 3125.0,
+          "bookProbability": 0.526315,
+          "expectedRevenue": 1644.73
         },
         {
           "ratio": 1.3,
-          "price": 3640.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.04
+          "price": 3250.0,
+          "bookProbability": 0.520106,
+          "expectedRevenue": 1690.34
         },
         {
           "ratio": 1.35,
-          "price": 3780.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.31
+          "price": 3375.0,
+          "bookProbability": 0.498434,
+          "expectedRevenue": 1682.21
         },
         {
           "ratio": 1.4,
-          "price": 3920.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.59
+          "price": 3500.0,
+          "bookProbability": 0.473566,
+          "expectedRevenue": 1657.48
         },
         {
           "ratio": 1.45,
-          "price": 4060.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.86
+          "price": 3625.0,
+          "bookProbability": 0.429787,
+          "expectedRevenue": 1557.98
         },
         {
           "ratio": 1.5,
-          "price": 4200.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 8.13
+          "price": 3750.0,
+          "bookProbability": 0.339139,
+          "expectedRevenue": 1271.77
         }
       ]
     },
     {
-      "label": "255ede53-7c89-4fad-b3b2-d55e690912cb Tue 20:00 peak",
+      "label": "v18 Tue 10:00 off-peak",
       "sport": "cricket",
-      "city": "Islamabad",
-      "slotDate": "2026-09-01",
-      "hour": 20,
-      "isPeak": 1,
-      "basePrice": 2800.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2800.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.323789,
-      "expectedRevenue": 906.61,
-      "revenueAtListPrice": 906.61,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.322135,
-      "confidence": 1.0,
-      "plateauRatios": [
-        1.0
-      ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
-      "curve": [
-        {
-          "ratio": 0.7,
-          "price": 1960.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 634.63
-        },
-        {
-          "ratio": 0.75,
-          "price": 2100.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 679.96
-        },
-        {
-          "ratio": 0.8,
-          "price": 2240.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 725.29
-        },
-        {
-          "ratio": 0.85,
-          "price": 2380.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 770.62
-        },
-        {
-          "ratio": 0.9,
-          "price": 2520.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 815.95
-        },
-        {
-          "ratio": 0.95,
-          "price": 2660.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 861.28
-        },
-        {
-          "ratio": 1.0,
-          "price": 2800.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 906.61
-        },
-        {
-          "ratio": 1.05,
-          "price": 2940.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 4.86
-        },
-        {
-          "ratio": 1.1,
-          "price": 3080.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.09
-        },
-        {
-          "ratio": 1.15,
-          "price": 3220.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.33
-        },
-        {
-          "ratio": 1.2,
-          "price": 3360.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.56
-        },
-        {
-          "ratio": 1.25,
-          "price": 3500.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.79
-        },
-        {
-          "ratio": 1.3,
-          "price": 3640.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.02
-        },
-        {
-          "ratio": 1.35,
-          "price": 3780.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.25
-        },
-        {
-          "ratio": 1.4,
-          "price": 3920.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.48
-        },
-        {
-          "ratio": 1.45,
-          "price": 4060.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.71
-        },
-        {
-          "ratio": 1.5,
-          "price": 4200.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.95
-        }
-      ]
-    },
-    {
-      "label": "255ede53-7c89-4fad-b3b2-d55e690912cb Tue 10:00 off-peak",
-      "sport": "cricket",
-      "city": "Islamabad",
-      "slotDate": "2026-09-01",
+      "city": "Karachi",
+      "slotDate": "2026-07-28",
       "hour": 10,
       "isPeak": 0,
-      "basePrice": 2800.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2800.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.055676,
-      "expectedRevenue": 155.89,
-      "revenueAtListPrice": 155.89,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.05439,
+      "basePrice": 2500.0,
+      "venueRating": null,
+      "suggestedPrice": 1750.0,
+      "suggestedRatio": 0.7,
+      "deltaPct": -30.0,
+      "bookProbability": 0.366681,
+      "expectedRevenue": 641.69,
+      "revenueAtListPrice": 15.3,
+      "upliftVsListPct": 4094.48,
+      "priceSensitivity": 0.36659,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        0.7
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 0.7,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 1960.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 109.12
+          "price": 1750.0,
+          "bookProbability": 0.366681,
+          "expectedRevenue": 641.69
         },
         {
           "ratio": 0.75,
-          "price": 2100.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 116.92
+          "price": 1875.0,
+          "bookProbability": 0.29143,
+          "expectedRevenue": 546.43
         },
         {
           "ratio": 0.8,
-          "price": 2240.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 124.71
+          "price": 2000.0,
+          "bookProbability": 0.134989,
+          "expectedRevenue": 269.98
         },
         {
           "ratio": 0.85,
-          "price": 2380.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 132.51
+          "price": 2125.0,
+          "bookProbability": 0.053712,
+          "expectedRevenue": 114.14
         },
         {
           "ratio": 0.9,
-          "price": 2520.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 140.3
+          "price": 2250.0,
+          "bookProbability": 0.028368,
+          "expectedRevenue": 63.83
         },
         {
           "ratio": 0.95,
-          "price": 2660.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 148.1
+          "price": 2375.0,
+          "bookProbability": 0.011305,
+          "expectedRevenue": 26.85
         },
         {
           "ratio": 1.0,
-          "price": 2800.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 155.89
+          "price": 2500.0,
+          "bookProbability": 0.006119,
+          "expectedRevenue": 15.3
         },
         {
           "ratio": 1.05,
-          "price": 2940.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 3.78
+          "price": 2625.0,
+          "bookProbability": 0.00342,
+          "expectedRevenue": 8.98
         },
         {
           "ratio": 1.1,
-          "price": 3080.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 3.96
+          "price": 2750.0,
+          "bookProbability": 0.001798,
+          "expectedRevenue": 4.94
         },
         {
           "ratio": 1.15,
-          "price": 3220.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.14
+          "price": 2875.0,
+          "bookProbability": 0.000873,
+          "expectedRevenue": 2.51
         },
         {
           "ratio": 1.2,
-          "price": 3360.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.32
+          "price": 3000.0,
+          "bookProbability": 0.000514,
+          "expectedRevenue": 1.54
         },
         {
           "ratio": 1.25,
-          "price": 3500.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.5
-        },
-        {
-          "ratio": 1.3,
-          "price": 3640.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.68
-        },
-        {
-          "ratio": 1.35,
-          "price": 3780.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.86
-        },
-        {
-          "ratio": 1.4,
-          "price": 3920.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.04
-        },
-        {
-          "ratio": 1.45,
-          "price": 4060.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.22
-        },
-        {
-          "ratio": 1.5,
-          "price": 4200.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.4
-        }
-      ]
-    },
-    {
-      "label": "255ede53-7c89-4fad-b3b2-d55e690912cb Sat 16:00 shoulder",
-      "sport": "cricket",
-      "city": "Islamabad",
-      "slotDate": "2026-08-29",
-      "hour": 16,
-      "isPeak": 0,
-      "basePrice": 2800.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2800.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.034269,
-      "expectedRevenue": 95.95,
-      "revenueAtListPrice": 95.95,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.033848,
-      "confidence": 1.0,
-      "plateauRatios": [
-        1.0
-      ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
-      "curve": [
-        {
-          "ratio": 0.7,
-          "price": 1960.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 67.17
-        },
-        {
-          "ratio": 0.75,
-          "price": 2100.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 71.97
-        },
-        {
-          "ratio": 0.8,
-          "price": 2240.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 76.76
-        },
-        {
-          "ratio": 0.85,
-          "price": 2380.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 81.56
-        },
-        {
-          "ratio": 0.9,
-          "price": 2520.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 86.36
-        },
-        {
-          "ratio": 0.95,
-          "price": 2660.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 91.16
-        },
-        {
-          "ratio": 1.0,
-          "price": 2800.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 95.95
-        },
-        {
-          "ratio": 1.05,
-          "price": 2940.0,
-          "bookProbability": 0.000421,
+          "price": 3125.0,
+          "bookProbability": 0.000397,
           "expectedRevenue": 1.24
         },
         {
-          "ratio": 1.1,
-          "price": 3080.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.3
+          "ratio": 1.3,
+          "price": 3250.0,
+          "bookProbability": 0.000286,
+          "expectedRevenue": 0.93
         },
         {
-          "ratio": 1.15,
-          "price": 3220.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.36
+          "ratio": 1.35,
+          "price": 3375.0,
+          "bookProbability": 0.000216,
+          "expectedRevenue": 0.73
         },
         {
-          "ratio": 1.2,
-          "price": 3360.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.42
-        },
-        {
-          "ratio": 1.25,
+          "ratio": 1.4,
           "price": 3500.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.47
-        },
-        {
-          "ratio": 1.3,
-          "price": 3640.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.53
-        },
-        {
-          "ratio": 1.35,
-          "price": 3780.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.59
-        },
-        {
-          "ratio": 1.4,
-          "price": 3920.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.65
+          "bookProbability": 0.000166,
+          "expectedRevenue": 0.58
         },
         {
           "ratio": 1.45,
-          "price": 4060.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.71
+          "price": 3625.0,
+          "bookProbability": 0.000115,
+          "expectedRevenue": 0.42
         },
         {
           "ratio": 1.5,
-          "price": 4200.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.77
+          "price": 3750.0,
+          "bookProbability": 9.2e-05,
+          "expectedRevenue": 0.34
         }
       ]
     },
     {
-      "label": "c043f56b-b14b-4299-99d7-65c60196cc13 Sat 20:00 peak",
-      "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-08-29",
-      "hour": 20,
-      "isPeak": 1,
-      "basePrice": 2000.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2000.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.474383,
-      "expectedRevenue": 948.77,
-      "revenueAtListPrice": 948.77,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.473004,
+      "label": "v18 Sat 16:00 shoulder",
+      "sport": "cricket",
+      "city": "Karachi",
+      "slotDate": "2026-07-25",
+      "hour": 16,
+      "isPeak": 0,
+      "basePrice": 2500.0,
+      "venueRating": null,
+      "suggestedPrice": 1875.0,
+      "suggestedRatio": 0.75,
+      "deltaPct": -25.0,
+      "bookProbability": 0.808141,
+      "expectedRevenue": 1515.26,
+      "revenueAtListPrice": 245.21,
+      "upliftVsListPct": 517.94,
+      "priceSensitivity": 0.821083,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        0.75
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 0.75,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 1400.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 664.14
+          "price": 1750.0,
+          "bookProbability": 0.822764,
+          "expectedRevenue": 1439.84
         },
         {
           "ratio": 0.75,
-          "price": 1500.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 711.58
+          "price": 1875.0,
+          "bookProbability": 0.808141,
+          "expectedRevenue": 1515.26
         },
         {
           "ratio": 0.8,
-          "price": 1600.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 759.01
+          "price": 2000.0,
+          "bookProbability": 0.656295,
+          "expectedRevenue": 1312.59
         },
         {
           "ratio": 0.85,
-          "price": 1700.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 806.45
+          "price": 2125.0,
+          "bookProbability": 0.48237,
+          "expectedRevenue": 1025.04
         },
         {
           "ratio": 0.9,
-          "price": 1800.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 853.89
+          "price": 2250.0,
+          "bookProbability": 0.332961,
+          "expectedRevenue": 749.16
         },
         {
           "ratio": 0.95,
-          "price": 1900.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 901.33
+          "price": 2375.0,
+          "bookProbability": 0.168106,
+          "expectedRevenue": 399.25
         },
         {
           "ratio": 1.0,
-          "price": 2000.0,
-          "bookProbability": 0.474383,
-          "expectedRevenue": 948.77
+          "price": 2500.0,
+          "bookProbability": 0.098085,
+          "expectedRevenue": 245.21
         },
         {
           "ratio": 1.05,
-          "price": 2100.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 2.9
+          "price": 2625.0,
+          "bookProbability": 0.058481,
+          "expectedRevenue": 153.51
         },
         {
           "ratio": 1.1,
-          "price": 2200.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 3.03
+          "price": 2750.0,
+          "bookProbability": 0.033676,
+          "expectedRevenue": 92.61
         },
         {
           "ratio": 1.15,
-          "price": 2300.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 3.17
+          "price": 2875.0,
+          "bookProbability": 0.017052,
+          "expectedRevenue": 49.02
         },
         {
           "ratio": 1.2,
-          "price": 2400.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 3.31
-        },
-        {
-          "ratio": 1.25,
-          "price": 2500.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 3.45
-        },
-        {
-          "ratio": 1.3,
-          "price": 2600.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 3.59
-        },
-        {
-          "ratio": 1.35,
-          "price": 2700.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 3.72
-        },
-        {
-          "ratio": 1.4,
-          "price": 2800.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 3.86
-        },
-        {
-          "ratio": 1.45,
-          "price": 2900.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 4.0
-        },
-        {
-          "ratio": 1.5,
           "price": 3000.0,
-          "bookProbability": 0.001379,
-          "expectedRevenue": 4.14
+          "bookProbability": 0.009114,
+          "expectedRevenue": 27.34
+        },
+        {
+          "ratio": 1.25,
+          "price": 3125.0,
+          "bookProbability": 0.007086,
+          "expectedRevenue": 22.14
+        },
+        {
+          "ratio": 1.3,
+          "price": 3250.0,
+          "bookProbability": 0.00509,
+          "expectedRevenue": 16.54
+        },
+        {
+          "ratio": 1.35,
+          "price": 3375.0,
+          "bookProbability": 0.004183,
+          "expectedRevenue": 14.12
+        },
+        {
+          "ratio": 1.4,
+          "price": 3500.0,
+          "bookProbability": 0.002496,
+          "expectedRevenue": 8.74
+        },
+        {
+          "ratio": 1.45,
+          "price": 3625.0,
+          "bookProbability": 0.002088,
+          "expectedRevenue": 7.57
+        },
+        {
+          "ratio": 1.5,
+          "price": 3750.0,
+          "bookProbability": 0.001681,
+          "expectedRevenue": 6.3
         }
       ]
     },
     {
-      "label": "c043f56b-b14b-4299-99d7-65c60196cc13 Tue 20:00 peak",
+      "label": "v11 Sat 20:00 peak",
       "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-09-01",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-25",
       "hour": 20,
       "isPeak": 1,
-      "basePrice": 2000.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2000.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.376945,
-      "expectedRevenue": 753.89,
-      "revenueAtListPrice": 753.89,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.375765,
+      "basePrice": 1600.0,
+      "venueRating": null,
+      "suggestedPrice": 2080.0,
+      "suggestedRatio": 1.3,
+      "deltaPct": 30.0,
+      "bookProbability": 0.982511,
+      "expectedRevenue": 2043.62,
+      "revenueAtListPrice": 1593.46,
+      "upliftVsListPct": 28.25,
+      "priceSensitivity": 0.04345,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        1.3
+      ],
+      "policyCapped": true,
+      "uncappedRatio": 1.5,
+      "policyCapCostPct": 12.2,
+      "curve": [
+        {
+          "ratio": 0.7,
+          "price": 1120.0,
+          "bookProbability": 0.998856,
+          "expectedRevenue": 1118.72
+        },
+        {
+          "ratio": 0.75,
+          "price": 1200.0,
+          "bookProbability": 0.998808,
+          "expectedRevenue": 1198.57
+        },
+        {
+          "ratio": 0.8,
+          "price": 1280.0,
+          "bookProbability": 0.998438,
+          "expectedRevenue": 1278.0
+        },
+        {
+          "ratio": 0.85,
+          "price": 1360.0,
+          "bookProbability": 0.99758,
+          "expectedRevenue": 1356.71
+        },
+        {
+          "ratio": 0.9,
+          "price": 1440.0,
+          "bookProbability": 0.997403,
+          "expectedRevenue": 1436.26
+        },
+        {
+          "ratio": 0.95,
+          "price": 1520.0,
+          "bookProbability": 0.997007,
+          "expectedRevenue": 1515.45
+        },
+        {
+          "ratio": 1.0,
+          "price": 1600.0,
+          "bookProbability": 0.995914,
+          "expectedRevenue": 1593.46
+        },
+        {
+          "ratio": 1.05,
+          "price": 1680.0,
+          "bookProbability": 0.995071,
+          "expectedRevenue": 1671.72
+        },
+        {
+          "ratio": 1.1,
+          "price": 1760.0,
+          "bookProbability": 0.994697,
+          "expectedRevenue": 1750.67
+        },
+        {
+          "ratio": 1.15,
+          "price": 1840.0,
+          "bookProbability": 0.992735,
+          "expectedRevenue": 1826.63
+        },
+        {
+          "ratio": 1.2,
+          "price": 1920.0,
+          "bookProbability": 0.989236,
+          "expectedRevenue": 1899.33
+        },
+        {
+          "ratio": 1.25,
+          "price": 2000.0,
+          "bookProbability": 0.985565,
+          "expectedRevenue": 1971.13
+        },
+        {
+          "ratio": 1.3,
+          "price": 2080.0,
+          "bookProbability": 0.982511,
+          "expectedRevenue": 2043.62
+        },
+        {
+          "ratio": 1.35,
+          "price": 2160.0,
+          "bookProbability": 0.979875,
+          "expectedRevenue": 2116.53
+        },
+        {
+          "ratio": 1.4,
+          "price": 2240.0,
+          "bookProbability": 0.979194,
+          "expectedRevenue": 2193.39
+        },
+        {
+          "ratio": 1.45,
+          "price": 2320.0,
+          "bookProbability": 0.97433,
+          "expectedRevenue": 2260.45
+        },
+        {
+          "ratio": 1.5,
+          "price": 2400.0,
+          "bookProbability": 0.955407,
+          "expectedRevenue": 2292.98
+        }
+      ]
+    },
+    {
+      "label": "v11 Tue 20:00 peak",
+      "sport": "football",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-28",
+      "hour": 20,
+      "isPeak": 1,
+      "basePrice": 1600.0,
+      "venueRating": null,
+      "suggestedPrice": 1760.0,
+      "suggestedRatio": 1.1,
+      "deltaPct": 10.0,
+      "bookProbability": 0.900067,
+      "expectedRevenue": 1584.12,
+      "revenueAtListPrice": 1479.34,
+      "upliftVsListPct": 7.08,
+      "priceSensitivity": 0.441761,
+      "confidence": 0.9167,
+      "plateauRatios": [
+        1.1,
+        1.15
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 1.1,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 1400.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 527.72
+          "price": 1120.0,
+          "bookProbability": 0.976102,
+          "expectedRevenue": 1093.23
         },
         {
           "ratio": 0.75,
-          "price": 1500.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 565.42
+          "price": 1200.0,
+          "bookProbability": 0.974205,
+          "expectedRevenue": 1169.05
         },
         {
           "ratio": 0.8,
-          "price": 1600.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 603.11
+          "price": 1280.0,
+          "bookProbability": 0.965769,
+          "expectedRevenue": 1236.18
         },
         {
           "ratio": 0.85,
-          "price": 1700.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 640.81
+          "price": 1360.0,
+          "bookProbability": 0.95206,
+          "expectedRevenue": 1294.8
         },
         {
           "ratio": 0.9,
-          "price": 1800.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 678.5
+          "price": 1440.0,
+          "bookProbability": 0.948743,
+          "expectedRevenue": 1366.19
         },
         {
           "ratio": 0.95,
-          "price": 1900.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 716.2
+          "price": 1520.0,
+          "bookProbability": 0.938641,
+          "expectedRevenue": 1426.73
         },
         {
           "ratio": 1.0,
-          "price": 2000.0,
-          "bookProbability": 0.376945,
-          "expectedRevenue": 753.89
+          "price": 1600.0,
+          "bookProbability": 0.924587,
+          "expectedRevenue": 1479.34
         },
         {
           "ratio": 1.05,
-          "price": 2100.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.48
+          "price": 1680.0,
+          "bookProbability": 0.910326,
+          "expectedRevenue": 1529.35
         },
         {
           "ratio": 1.1,
-          "price": 2200.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.6
+          "price": 1760.0,
+          "bookProbability": 0.900067,
+          "expectedRevenue": 1584.12
         },
         {
           "ratio": 1.15,
-          "price": 2300.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.72
+          "price": 1840.0,
+          "bookProbability": 0.855696,
+          "expectedRevenue": 1574.48
         },
         {
           "ratio": 1.2,
-          "price": 2400.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 2.83
+          "price": 1920.0,
+          "bookProbability": 0.797361,
+          "expectedRevenue": 1530.93
         },
         {
           "ratio": 1.25,
-          "price": 2500.0,
-          "bookProbability": 0.001181,
+          "price": 2000.0,
+          "bookProbability": 0.765226,
+          "expectedRevenue": 1530.45
+        },
+        {
+          "ratio": 1.3,
+          "price": 2080.0,
+          "bookProbability": 0.751935,
+          "expectedRevenue": 1564.02
+        },
+        {
+          "ratio": 1.35,
+          "price": 2160.0,
+          "bookProbability": 0.705988,
+          "expectedRevenue": 1524.93
+        },
+        {
+          "ratio": 1.4,
+          "price": 2240.0,
+          "bookProbability": 0.701155,
+          "expectedRevenue": 1570.59
+        },
+        {
+          "ratio": 1.45,
+          "price": 2320.0,
+          "bookProbability": 0.668687,
+          "expectedRevenue": 1551.35
+        },
+        {
+          "ratio": 1.5,
+          "price": 2400.0,
+          "bookProbability": 0.534342,
+          "expectedRevenue": 1282.42
+        }
+      ]
+    },
+    {
+      "label": "v11 Tue 10:00 off-peak",
+      "sport": "football",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-28",
+      "hour": 10,
+      "isPeak": 0,
+      "basePrice": 1600.0,
+      "venueRating": null,
+      "suggestedPrice": 1120.0,
+      "suggestedRatio": 0.7,
+      "deltaPct": -30.0,
+      "bookProbability": 0.001956,
+      "expectedRevenue": 2.19,
+      "revenueAtListPrice": 0.05,
+      "upliftVsListPct": 4674.65,
+      "priceSensitivity": 0.001955,
+      "confidence": 1.0,
+      "plateauRatios": [
+        0.7
+      ],
+      "policyCapped": false,
+      "uncappedRatio": 0.7,
+      "policyCapCostPct": 0.0,
+      "curve": [
+        {
+          "ratio": 0.7,
+          "price": 1120.0,
+          "bookProbability": 0.001956,
+          "expectedRevenue": 2.19
+        },
+        {
+          "ratio": 0.75,
+          "price": 1200.0,
+          "bookProbability": 0.001632,
+          "expectedRevenue": 1.96
+        },
+        {
+          "ratio": 0.8,
+          "price": 1280.0,
+          "bookProbability": 0.000555,
+          "expectedRevenue": 0.71
+        },
+        {
+          "ratio": 0.85,
+          "price": 1360.0,
+          "bookProbability": 0.000139,
+          "expectedRevenue": 0.19
+        },
+        {
+          "ratio": 0.9,
+          "price": 1440.0,
+          "bookProbability": 9.1e-05,
+          "expectedRevenue": 0.13
+        },
+        {
+          "ratio": 0.95,
+          "price": 1520.0,
+          "bookProbability": 5.4e-05,
+          "expectedRevenue": 0.08
+        },
+        {
+          "ratio": 1.0,
+          "price": 1600.0,
+          "bookProbability": 2.9e-05,
+          "expectedRevenue": 0.05
+        },
+        {
+          "ratio": 1.05,
+          "price": 1680.0,
+          "bookProbability": 2e-05,
+          "expectedRevenue": 0.03
+        },
+        {
+          "ratio": 1.1,
+          "price": 1760.0,
+          "bookProbability": 1.2e-05,
+          "expectedRevenue": 0.02
+        },
+        {
+          "ratio": 1.15,
+          "price": 1840.0,
+          "bookProbability": 6e-06,
+          "expectedRevenue": 0.01
+        },
+        {
+          "ratio": 1.2,
+          "price": 1920.0,
+          "bookProbability": 4e-06,
+          "expectedRevenue": 0.01
+        },
+        {
+          "ratio": 1.25,
+          "price": 2000.0,
+          "bookProbability": 3e-06,
+          "expectedRevenue": 0.01
+        },
+        {
+          "ratio": 1.3,
+          "price": 2080.0,
+          "bookProbability": 3e-06,
+          "expectedRevenue": 0.01
+        },
+        {
+          "ratio": 1.35,
+          "price": 2160.0,
+          "bookProbability": 2e-06,
+          "expectedRevenue": 0.0
+        },
+        {
+          "ratio": 1.4,
+          "price": 2240.0,
+          "bookProbability": 2e-06,
+          "expectedRevenue": 0.0
+        },
+        {
+          "ratio": 1.45,
+          "price": 2320.0,
+          "bookProbability": 2e-06,
+          "expectedRevenue": 0.0
+        },
+        {
+          "ratio": 1.5,
+          "price": 2400.0,
+          "bookProbability": 2e-06,
+          "expectedRevenue": 0.0
+        }
+      ]
+    },
+    {
+      "label": "v11 Sat 16:00 shoulder",
+      "sport": "football",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-25",
+      "hour": 16,
+      "isPeak": 0,
+      "basePrice": 1600.0,
+      "venueRating": null,
+      "suggestedPrice": 1120.0,
+      "suggestedRatio": 0.7,
+      "deltaPct": -30.0,
+      "bookProbability": 0.39421,
+      "expectedRevenue": 441.52,
+      "revenueAtListPrice": 14.46,
+      "upliftVsListPct": 2954.16,
+      "priceSensitivity": 0.393844,
+      "confidence": 0.9167,
+      "plateauRatios": [
+        0.7,
+        0.75
+      ],
+      "policyCapped": false,
+      "uncappedRatio": 0.7,
+      "policyCapCostPct": 0.0,
+      "curve": [
+        {
+          "ratio": 0.7,
+          "price": 1120.0,
+          "bookProbability": 0.39421,
+          "expectedRevenue": 441.52
+        },
+        {
+          "ratio": 0.75,
+          "price": 1200.0,
+          "bookProbability": 0.366016,
+          "expectedRevenue": 439.22
+        },
+        {
+          "ratio": 0.8,
+          "price": 1280.0,
+          "bookProbability": 0.159214,
+          "expectedRevenue": 203.79
+        },
+        {
+          "ratio": 0.85,
+          "price": 1360.0,
+          "bookProbability": 0.071996,
+          "expectedRevenue": 97.91
+        },
+        {
+          "ratio": 0.9,
+          "price": 1440.0,
+          "bookProbability": 0.040876,
+          "expectedRevenue": 58.86
+        },
+        {
+          "ratio": 0.95,
+          "price": 1520.0,
+          "bookProbability": 0.019729,
+          "expectedRevenue": 29.99
+        },
+        {
+          "ratio": 1.0,
+          "price": 1600.0,
+          "bookProbability": 0.009035,
+          "expectedRevenue": 14.46
+        },
+        {
+          "ratio": 1.05,
+          "price": 1680.0,
+          "bookProbability": 0.006937,
+          "expectedRevenue": 11.65
+        },
+        {
+          "ratio": 1.1,
+          "price": 1760.0,
+          "bookProbability": 0.004825,
+          "expectedRevenue": 8.49
+        },
+        {
+          "ratio": 1.15,
+          "price": 1840.0,
+          "bookProbability": 0.002052,
+          "expectedRevenue": 3.78
+        },
+        {
+          "ratio": 1.2,
+          "price": 1920.0,
+          "bookProbability": 0.001119,
+          "expectedRevenue": 2.15
+        },
+        {
+          "ratio": 1.25,
+          "price": 2000.0,
+          "bookProbability": 0.000961,
+          "expectedRevenue": 1.92
+        },
+        {
+          "ratio": 1.3,
+          "price": 2080.0,
+          "bookProbability": 0.000847,
+          "expectedRevenue": 1.76
+        },
+        {
+          "ratio": 1.35,
+          "price": 2160.0,
+          "bookProbability": 0.000695,
+          "expectedRevenue": 1.5
+        },
+        {
+          "ratio": 1.4,
+          "price": 2240.0,
+          "bookProbability": 0.00049,
+          "expectedRevenue": 1.1
+        },
+        {
+          "ratio": 1.45,
+          "price": 2320.0,
+          "bookProbability": 0.000438,
+          "expectedRevenue": 1.02
+        },
+        {
+          "ratio": 1.5,
+          "price": 2400.0,
+          "bookProbability": 0.000366,
+          "expectedRevenue": 0.88
+        }
+      ]
+    },
+    {
+      "label": "v16 Sat 20:00 peak",
+      "sport": "cricket",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-25",
+      "hour": 20,
+      "isPeak": 1,
+      "basePrice": 1800.0,
+      "venueRating": 3.9,
+      "suggestedPrice": 2160.0,
+      "suggestedRatio": 1.2,
+      "deltaPct": 20.0,
+      "bookProbability": 0.827788,
+      "expectedRevenue": 1788.02,
+      "revenueAtListPrice": 1650.86,
+      "upliftVsListPct": 8.31,
+      "priceSensitivity": 0.377515,
+      "confidence": 0.8333,
+      "plateauRatios": [
+        1.2,
+        1.25,
+        1.3
+      ],
+      "policyCapped": true,
+      "uncappedRatio": 1.35,
+      "policyCapCostPct": 2.09,
+      "curve": [
+        {
+          "ratio": 0.7,
+          "price": 1260.0,
+          "bookProbability": 0.974161,
+          "expectedRevenue": 1227.44
+        },
+        {
+          "ratio": 0.75,
+          "price": 1350.0,
+          "bookProbability": 0.973887,
+          "expectedRevenue": 1314.75
+        },
+        {
+          "ratio": 0.8,
+          "price": 1440.0,
+          "bookProbability": 0.966886,
+          "expectedRevenue": 1392.32
+        },
+        {
+          "ratio": 0.85,
+          "price": 1530.0,
+          "bookProbability": 0.946236,
+          "expectedRevenue": 1447.74
+        },
+        {
+          "ratio": 0.9,
+          "price": 1620.0,
+          "bookProbability": 0.94216,
+          "expectedRevenue": 1526.3
+        },
+        {
+          "ratio": 0.95,
+          "price": 1710.0,
+          "bookProbability": 0.933898,
+          "expectedRevenue": 1596.97
+        },
+        {
+          "ratio": 1.0,
+          "price": 1800.0,
+          "bookProbability": 0.917145,
+          "expectedRevenue": 1650.86
+        },
+        {
+          "ratio": 1.05,
+          "price": 1890.0,
+          "bookProbability": 0.903864,
+          "expectedRevenue": 1708.3
+        },
+        {
+          "ratio": 1.1,
+          "price": 1980.0,
+          "bookProbability": 0.89395,
+          "expectedRevenue": 1770.02
+        },
+        {
+          "ratio": 1.15,
+          "price": 2070.0,
+          "bookProbability": 0.854304,
+          "expectedRevenue": 1768.41
+        },
+        {
+          "ratio": 1.2,
+          "price": 2160.0,
+          "bookProbability": 0.827788,
+          "expectedRevenue": 1788.02
+        },
+        {
+          "ratio": 1.25,
+          "price": 2250.0,
+          "bookProbability": 0.787184,
+          "expectedRevenue": 1771.16
+        },
+        {
+          "ratio": 1.3,
+          "price": 2340.0,
+          "bookProbability": 0.759022,
+          "expectedRevenue": 1776.11
+        },
+        {
+          "ratio": 1.35,
+          "price": 2430.0,
+          "bookProbability": 0.751156,
+          "expectedRevenue": 1825.31
+        },
+        {
+          "ratio": 1.4,
+          "price": 2520.0,
+          "bookProbability": 0.723014,
+          "expectedRevenue": 1822.0
+        },
+        {
+          "ratio": 1.45,
+          "price": 2610.0,
+          "bookProbability": 0.686882,
+          "expectedRevenue": 1792.76
+        },
+        {
+          "ratio": 1.5,
+          "price": 2700.0,
+          "bookProbability": 0.596646,
+          "expectedRevenue": 1610.94
+        }
+      ]
+    },
+    {
+      "label": "v16 Tue 20:00 peak",
+      "sport": "cricket",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-28",
+      "hour": 20,
+      "isPeak": 1,
+      "basePrice": 1800.0,
+      "venueRating": 3.9,
+      "suggestedPrice": 1350.0,
+      "suggestedRatio": 0.75,
+      "deltaPct": -25.0,
+      "bookProbability": 0.455164,
+      "expectedRevenue": 614.47,
+      "revenueAtListPrice": 398.54,
+      "upliftVsListPct": 54.18,
+      "priceSensitivity": 0.423549,
+      "confidence": 1.0,
+      "plateauRatios": [
+        0.75
+      ],
+      "policyCapped": false,
+      "uncappedRatio": 0.75,
+      "policyCapCostPct": 0.0,
+      "curve": [
+        {
+          "ratio": 0.7,
+          "price": 1260.0,
+          "bookProbability": 0.467128,
+          "expectedRevenue": 588.58
+        },
+        {
+          "ratio": 0.75,
+          "price": 1350.0,
+          "bookProbability": 0.455164,
+          "expectedRevenue": 614.47
+        },
+        {
+          "ratio": 0.8,
+          "price": 1440.0,
+          "bookProbability": 0.385927,
+          "expectedRevenue": 555.74
+        },
+        {
+          "ratio": 0.85,
+          "price": 1530.0,
+          "bookProbability": 0.293597,
+          "expectedRevenue": 449.2
+        },
+        {
+          "ratio": 0.9,
+          "price": 1620.0,
+          "bookProbability": 0.277957,
+          "expectedRevenue": 450.29
+        },
+        {
+          "ratio": 0.95,
+          "price": 1710.0,
+          "bookProbability": 0.247526,
+          "expectedRevenue": 423.27
+        },
+        {
+          "ratio": 1.0,
+          "price": 1800.0,
+          "bookProbability": 0.221414,
+          "expectedRevenue": 398.54
+        },
+        {
+          "ratio": 1.05,
+          "price": 1890.0,
+          "bookProbability": 0.198597,
+          "expectedRevenue": 375.35
+        },
+        {
+          "ratio": 1.1,
+          "price": 1980.0,
+          "bookProbability": 0.181792,
+          "expectedRevenue": 359.95
+        },
+        {
+          "ratio": 1.15,
+          "price": 2070.0,
+          "bookProbability": 0.120235,
+          "expectedRevenue": 248.89
+        },
+        {
+          "ratio": 1.2,
+          "price": 2160.0,
+          "bookProbability": 0.102341,
+          "expectedRevenue": 221.06
+        },
+        {
+          "ratio": 1.25,
+          "price": 2250.0,
+          "bookProbability": 0.089098,
+          "expectedRevenue": 200.47
+        },
+        {
+          "ratio": 1.3,
+          "price": 2340.0,
+          "bookProbability": 0.086042,
+          "expectedRevenue": 201.34
+        },
+        {
+          "ratio": 1.35,
+          "price": 2430.0,
+          "bookProbability": 0.078719,
+          "expectedRevenue": 191.29
+        },
+        {
+          "ratio": 1.4,
+          "price": 2520.0,
+          "bookProbability": 0.070627,
+          "expectedRevenue": 177.98
+        },
+        {
+          "ratio": 1.45,
+          "price": 2610.0,
+          "bookProbability": 0.06287,
+          "expectedRevenue": 164.09
+        },
+        {
+          "ratio": 1.5,
+          "price": 2700.0,
+          "bookProbability": 0.04358,
+          "expectedRevenue": 117.66
+        }
+      ]
+    },
+    {
+      "label": "v16 Tue 10:00 off-peak",
+      "sport": "cricket",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-28",
+      "hour": 10,
+      "isPeak": 0,
+      "basePrice": 1800.0,
+      "venueRating": 3.9,
+      "suggestedPrice": 1260.0,
+      "suggestedRatio": 0.7,
+      "deltaPct": -30.0,
+      "bookProbability": 0.051254,
+      "expectedRevenue": 64.58,
+      "revenueAtListPrice": 1.84,
+      "upliftVsListPct": 3418.19,
+      "priceSensitivity": 0.051225,
+      "confidence": 1.0,
+      "plateauRatios": [
+        0.7
+      ],
+      "policyCapped": false,
+      "uncappedRatio": 0.7,
+      "policyCapCostPct": 0.0,
+      "curve": [
+        {
+          "ratio": 0.7,
+          "price": 1260.0,
+          "bookProbability": 0.051254,
+          "expectedRevenue": 64.58
+        },
+        {
+          "ratio": 0.75,
+          "price": 1350.0,
+          "bookProbability": 0.044179,
+          "expectedRevenue": 59.64
+        },
+        {
+          "ratio": 0.8,
+          "price": 1440.0,
+          "bookProbability": 0.024242,
+          "expectedRevenue": 34.91
+        },
+        {
+          "ratio": 0.85,
+          "price": 1530.0,
+          "bookProbability": 0.008701,
+          "expectedRevenue": 13.31
+        },
+        {
+          "ratio": 0.9,
+          "price": 1620.0,
+          "bookProbability": 0.004404,
+          "expectedRevenue": 7.13
+        },
+        {
+          "ratio": 0.95,
+          "price": 1710.0,
+          "bookProbability": 0.001832,
+          "expectedRevenue": 3.13
+        },
+        {
+          "ratio": 1.0,
+          "price": 1800.0,
+          "bookProbability": 0.00102,
+          "expectedRevenue": 1.84
+        },
+        {
+          "ratio": 1.05,
+          "price": 1890.0,
+          "bookProbability": 0.000594,
+          "expectedRevenue": 1.12
+        },
+        {
+          "ratio": 1.1,
+          "price": 1980.0,
+          "bookProbability": 0.000302,
+          "expectedRevenue": 0.6
+        },
+        {
+          "ratio": 1.15,
+          "price": 2070.0,
+          "bookProbability": 0.000168,
+          "expectedRevenue": 0.35
+        },
+        {
+          "ratio": 1.2,
+          "price": 2160.0,
+          "bookProbability": 0.000119,
+          "expectedRevenue": 0.26
+        },
+        {
+          "ratio": 1.25,
+          "price": 2250.0,
+          "bookProbability": 9.2e-05,
+          "expectedRevenue": 0.21
+        },
+        {
+          "ratio": 1.3,
+          "price": 2340.0,
+          "bookProbability": 7e-05,
+          "expectedRevenue": 0.16
+        },
+        {
+          "ratio": 1.35,
+          "price": 2430.0,
+          "bookProbability": 5.3e-05,
+          "expectedRevenue": 0.13
+        },
+        {
+          "ratio": 1.4,
+          "price": 2520.0,
+          "bookProbability": 4.4e-05,
+          "expectedRevenue": 0.11
+        },
+        {
+          "ratio": 1.45,
+          "price": 2610.0,
+          "bookProbability": 3.4e-05,
+          "expectedRevenue": 0.09
+        },
+        {
+          "ratio": 1.5,
+          "price": 2700.0,
+          "bookProbability": 2.8e-05,
+          "expectedRevenue": 0.08
+        }
+      ]
+    },
+    {
+      "label": "v16 Sat 16:00 shoulder",
+      "sport": "cricket",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-25",
+      "hour": 16,
+      "isPeak": 0,
+      "basePrice": 1800.0,
+      "venueRating": 3.9,
+      "suggestedPrice": 1350.0,
+      "suggestedRatio": 0.75,
+      "deltaPct": -25.0,
+      "bookProbability": 0.285576,
+      "expectedRevenue": 385.53,
+      "revenueAtListPrice": 15.54,
+      "upliftVsListPct": 2381.47,
+      "priceSensitivity": 0.297465,
+      "confidence": 1.0,
+      "plateauRatios": [
+        0.75
+      ],
+      "policyCapped": false,
+      "uncappedRatio": 0.75,
+      "policyCapCostPct": 0.0,
+      "curve": [
+        {
+          "ratio": 0.7,
+          "price": 1260.0,
+          "bookProbability": 0.297729,
+          "expectedRevenue": 375.14
+        },
+        {
+          "ratio": 0.75,
+          "price": 1350.0,
+          "bookProbability": 0.285576,
+          "expectedRevenue": 385.53
+        },
+        {
+          "ratio": 0.8,
+          "price": 1440.0,
+          "bookProbability": 0.157992,
+          "expectedRevenue": 227.51
+        },
+        {
+          "ratio": 0.85,
+          "price": 1530.0,
+          "bookProbability": 0.071941,
+          "expectedRevenue": 110.07
+        },
+        {
+          "ratio": 0.9,
+          "price": 1620.0,
+          "bookProbability": 0.038499,
+          "expectedRevenue": 62.37
+        },
+        {
+          "ratio": 0.95,
+          "price": 1710.0,
+          "bookProbability": 0.017043,
+          "expectedRevenue": 29.14
+        },
+        {
+          "ratio": 1.0,
+          "price": 1800.0,
+          "bookProbability": 0.008631,
+          "expectedRevenue": 15.54
+        },
+        {
+          "ratio": 1.05,
+          "price": 1890.0,
+          "bookProbability": 0.005043,
+          "expectedRevenue": 9.53
+        },
+        {
+          "ratio": 1.1,
+          "price": 1980.0,
+          "bookProbability": 0.002841,
+          "expectedRevenue": 5.62
+        },
+        {
+          "ratio": 1.15,
+          "price": 2070.0,
+          "bookProbability": 0.001424,
           "expectedRevenue": 2.95
         },
         {
-          "ratio": 1.3,
-          "price": 2600.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 3.07
-        },
-        {
-          "ratio": 1.35,
-          "price": 2700.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 3.19
-        },
-        {
-          "ratio": 1.4,
-          "price": 2800.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 3.31
-        },
-        {
-          "ratio": 1.45,
-          "price": 2900.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 3.42
-        },
-        {
-          "ratio": 1.5,
-          "price": 3000.0,
-          "bookProbability": 0.001181,
-          "expectedRevenue": 3.54
-        }
-      ]
-    },
-    {
-      "label": "c043f56b-b14b-4299-99d7-65c60196cc13 Tue 10:00 off-peak",
-      "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-09-01",
-      "hour": 10,
-      "isPeak": 0,
-      "basePrice": 2000.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2000.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.711014,
-      "expectedRevenue": 1422.03,
-      "revenueAtListPrice": 1422.03,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.681565,
-      "confidence": 1.0,
-      "plateauRatios": [
-        1.0
-      ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
-      "curve": [
-        {
-          "ratio": 0.7,
-          "price": 1400.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 995.42
-        },
-        {
-          "ratio": 0.75,
-          "price": 1500.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 1066.52
-        },
-        {
-          "ratio": 0.8,
-          "price": 1600.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 1137.62
-        },
-        {
-          "ratio": 0.85,
-          "price": 1700.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 1208.72
-        },
-        {
-          "ratio": 0.9,
-          "price": 1800.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 1279.82
-        },
-        {
-          "ratio": 0.95,
-          "price": 1900.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 1350.93
-        },
-        {
-          "ratio": 1.0,
-          "price": 2000.0,
-          "bookProbability": 0.711014,
-          "expectedRevenue": 1422.03
-        },
-        {
-          "ratio": 1.05,
-          "price": 2100.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 61.84
-        },
-        {
-          "ratio": 1.1,
-          "price": 2200.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 64.79
-        },
-        {
-          "ratio": 1.15,
-          "price": 2300.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 67.73
-        },
-        {
           "ratio": 1.2,
-          "price": 2400.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 70.68
+          "price": 2160.0,
+          "bookProbability": 0.001059,
+          "expectedRevenue": 2.29
         },
         {
           "ratio": 1.25,
-          "price": 2500.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 73.62
-        },
-        {
-          "ratio": 1.3,
-          "price": 2600.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 76.57
-        },
-        {
-          "ratio": 1.35,
-          "price": 2700.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 79.51
-        },
-        {
-          "ratio": 1.4,
-          "price": 2800.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 82.45
-        },
-        {
-          "ratio": 1.45,
-          "price": 2900.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 85.4
-        },
-        {
-          "ratio": 1.5,
-          "price": 3000.0,
-          "bookProbability": 0.029448,
-          "expectedRevenue": 88.34
-        }
-      ]
-    },
-    {
-      "label": "c043f56b-b14b-4299-99d7-65c60196cc13 Sat 16:00 shoulder",
-      "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-08-29",
-      "hour": 16,
-      "isPeak": 0,
-      "basePrice": 2000.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2000.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.168369,
-      "expectedRevenue": 336.74,
-      "revenueAtListPrice": 336.74,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.167055,
-      "confidence": 1.0,
-      "plateauRatios": [
-        1.0
-      ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
-      "curve": [
-        {
-          "ratio": 0.7,
-          "price": 1400.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 235.72
-        },
-        {
-          "ratio": 0.75,
-          "price": 1500.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 252.55
-        },
-        {
-          "ratio": 0.8,
-          "price": 1600.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 269.39
-        },
-        {
-          "ratio": 0.85,
-          "price": 1700.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 286.23
-        },
-        {
-          "ratio": 0.9,
-          "price": 1800.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 303.06
-        },
-        {
-          "ratio": 0.95,
-          "price": 1900.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 319.9
-        },
-        {
-          "ratio": 1.0,
-          "price": 2000.0,
-          "bookProbability": 0.168369,
-          "expectedRevenue": 336.74
-        },
-        {
-          "ratio": 1.05,
-          "price": 2100.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.76
-        },
-        {
-          "ratio": 1.1,
-          "price": 2200.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 2.89
-        },
-        {
-          "ratio": 1.15,
-          "price": 2300.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 3.02
-        },
-        {
-          "ratio": 1.2,
-          "price": 2400.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 3.15
-        },
-        {
-          "ratio": 1.25,
-          "price": 2500.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 3.28
-        },
-        {
-          "ratio": 1.3,
-          "price": 2600.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 3.42
-        },
-        {
-          "ratio": 1.35,
-          "price": 2700.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 3.55
-        },
-        {
-          "ratio": 1.4,
-          "price": 2800.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 3.68
-        },
-        {
-          "ratio": 1.45,
-          "price": 2900.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 3.81
-        },
-        {
-          "ratio": 1.5,
-          "price": 3000.0,
-          "bookProbability": 0.001314,
-          "expectedRevenue": 3.94
-        }
-      ]
-    },
-    {
-      "label": "b769a220-0c6d-4945-84db-f90a2824d9df Sat 20:00 peak",
-      "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-08-29",
-      "hour": 20,
-      "isPeak": 1,
-      "basePrice": 2500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.409533,
-      "expectedRevenue": 1023.83,
-      "revenueAtListPrice": 1023.83,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.407598,
-      "confidence": 1.0,
-      "plateauRatios": [
-        1.0
-      ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
-      "curve": [
-        {
-          "ratio": 0.7,
-          "price": 1750.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 716.68
-        },
-        {
-          "ratio": 0.75,
-          "price": 1875.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 767.87
-        },
-        {
-          "ratio": 0.8,
-          "price": 2000.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 819.07
-        },
-        {
-          "ratio": 0.85,
-          "price": 2125.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 870.26
-        },
-        {
-          "ratio": 0.9,
           "price": 2250.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 921.45
-        },
-        {
-          "ratio": 0.95,
-          "price": 2375.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 972.64
-        },
-        {
-          "ratio": 1.0,
-          "price": 2500.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1023.83
-        },
-        {
-          "ratio": 1.05,
-          "price": 2625.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 5.08
-        },
-        {
-          "ratio": 1.1,
-          "price": 2750.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 5.32
-        },
-        {
-          "ratio": 1.15,
-          "price": 2875.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 5.56
-        },
-        {
-          "ratio": 1.2,
-          "price": 3000.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 5.81
-        },
-        {
-          "ratio": 1.25,
-          "price": 3125.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.05
+          "bookProbability": 0.000822,
+          "expectedRevenue": 1.85
         },
         {
           "ratio": 1.3,
-          "price": 3250.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.29
-        },
-        {
-          "ratio": 1.35,
-          "price": 3375.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.53
-        },
-        {
-          "ratio": 1.4,
-          "price": 3500.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.77
-        },
-        {
-          "ratio": 1.45,
-          "price": 3625.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.01
-        },
-        {
-          "ratio": 1.5,
-          "price": 3750.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.26
-        }
-      ]
-    },
-    {
-      "label": "b769a220-0c6d-4945-84db-f90a2824d9df Tue 20:00 peak",
-      "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-09-01",
-      "hour": 20,
-      "isPeak": 1,
-      "basePrice": 2500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.323789,
-      "expectedRevenue": 809.47,
-      "revenueAtListPrice": 809.47,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.322135,
-      "confidence": 1.0,
-      "plateauRatios": [
-        1.0
-      ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
-      "curve": [
-        {
-          "ratio": 0.7,
-          "price": 1750.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 566.63
-        },
-        {
-          "ratio": 0.75,
-          "price": 1875.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 607.1
-        },
-        {
-          "ratio": 0.8,
-          "price": 2000.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 647.58
-        },
-        {
-          "ratio": 0.85,
-          "price": 2125.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 688.05
-        },
-        {
-          "ratio": 0.9,
-          "price": 2250.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 728.52
-        },
-        {
-          "ratio": 0.95,
-          "price": 2375.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 769.0
-        },
-        {
-          "ratio": 1.0,
-          "price": 2500.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 809.47
-        },
-        {
-          "ratio": 1.05,
-          "price": 2625.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 4.34
-        },
-        {
-          "ratio": 1.1,
-          "price": 2750.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 4.55
-        },
-        {
-          "ratio": 1.15,
-          "price": 2875.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 4.75
-        },
-        {
-          "ratio": 1.2,
-          "price": 3000.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 4.96
-        },
-        {
-          "ratio": 1.25,
-          "price": 3125.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.17
-        },
-        {
-          "ratio": 1.3,
-          "price": 3250.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.38
-        },
-        {
-          "ratio": 1.35,
-          "price": 3375.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.58
-        },
-        {
-          "ratio": 1.4,
-          "price": 3500.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.79
-        },
-        {
-          "ratio": 1.45,
-          "price": 3625.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.0
-        },
-        {
-          "ratio": 1.5,
-          "price": 3750.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.2
-        }
-      ]
-    },
-    {
-      "label": "b769a220-0c6d-4945-84db-f90a2824d9df Tue 10:00 off-peak",
-      "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-09-01",
-      "hour": 10,
-      "isPeak": 0,
-      "basePrice": 2500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.055676,
-      "expectedRevenue": 139.19,
-      "revenueAtListPrice": 139.19,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.05439,
-      "confidence": 1.0,
-      "plateauRatios": [
-        1.0
-      ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
-      "curve": [
-        {
-          "ratio": 0.7,
-          "price": 1750.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 97.43
-        },
-        {
-          "ratio": 0.75,
-          "price": 1875.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 104.39
-        },
-        {
-          "ratio": 0.8,
-          "price": 2000.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 111.35
-        },
-        {
-          "ratio": 0.85,
-          "price": 2125.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 118.31
-        },
-        {
-          "ratio": 0.9,
-          "price": 2250.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 125.27
-        },
-        {
-          "ratio": 0.95,
-          "price": 2375.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 132.23
-        },
-        {
-          "ratio": 1.0,
-          "price": 2500.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 139.19
-        },
-        {
-          "ratio": 1.05,
-          "price": 2625.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 3.37
-        },
-        {
-          "ratio": 1.1,
-          "price": 2750.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 3.54
-        },
-        {
-          "ratio": 1.15,
-          "price": 2875.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 3.7
-        },
-        {
-          "ratio": 1.2,
-          "price": 3000.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 3.86
-        },
-        {
-          "ratio": 1.25,
-          "price": 3125.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.02
-        },
-        {
-          "ratio": 1.3,
-          "price": 3250.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.18
-        },
-        {
-          "ratio": 1.35,
-          "price": 3375.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.34
-        },
-        {
-          "ratio": 1.4,
-          "price": 3500.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.5
-        },
-        {
-          "ratio": 1.45,
-          "price": 3625.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.66
-        },
-        {
-          "ratio": 1.5,
-          "price": 3750.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.82
-        }
-      ]
-    },
-    {
-      "label": "b769a220-0c6d-4945-84db-f90a2824d9df Sat 16:00 shoulder",
-      "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-08-29",
-      "hour": 16,
-      "isPeak": 0,
-      "basePrice": 2500.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 2500.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.034269,
-      "expectedRevenue": 85.67,
-      "revenueAtListPrice": 85.67,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.033848,
-      "confidence": 1.0,
-      "plateauRatios": [
-        1.0
-      ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
-      "curve": [
-        {
-          "ratio": 0.7,
-          "price": 1750.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 59.97
-        },
-        {
-          "ratio": 0.75,
-          "price": 1875.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 64.26
-        },
-        {
-          "ratio": 0.8,
-          "price": 2000.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 68.54
-        },
-        {
-          "ratio": 0.85,
-          "price": 2125.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 72.82
-        },
-        {
-          "ratio": 0.9,
-          "price": 2250.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 77.11
-        },
-        {
-          "ratio": 0.95,
-          "price": 2375.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 81.39
-        },
-        {
-          "ratio": 1.0,
-          "price": 2500.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 85.67
-        },
-        {
-          "ratio": 1.05,
-          "price": 2625.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.11
-        },
-        {
-          "ratio": 1.1,
-          "price": 2750.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.16
-        },
-        {
-          "ratio": 1.15,
-          "price": 2875.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.21
-        },
-        {
-          "ratio": 1.2,
-          "price": 3000.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.26
-        },
-        {
-          "ratio": 1.25,
-          "price": 3125.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.32
-        },
-        {
-          "ratio": 1.3,
-          "price": 3250.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.37
-        },
-        {
-          "ratio": 1.35,
-          "price": 3375.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.42
-        },
-        {
-          "ratio": 1.4,
-          "price": 3500.0,
-          "bookProbability": 0.000421,
+          "price": 2340.0,
+          "bookProbability": 0.000627,
           "expectedRevenue": 1.47
         },
         {
+          "ratio": 1.35,
+          "price": 2430.0,
+          "bookProbability": 0.000537,
+          "expectedRevenue": 1.3
+        },
+        {
+          "ratio": 1.4,
+          "price": 2520.0,
+          "bookProbability": 0.000366,
+          "expectedRevenue": 0.92
+        },
+        {
           "ratio": 1.45,
-          "price": 3625.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.53
+          "price": 2610.0,
+          "bookProbability": 0.000315,
+          "expectedRevenue": 0.82
         },
         {
           "ratio": 1.5,
-          "price": 3750.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.58
+          "price": 2700.0,
+          "bookProbability": 0.000264,
+          "expectedRevenue": 0.71
         }
       ]
     },
     {
-      "label": "30721293-95d0-463b-993a-bca1b07a0d05 Sat 20:00 peak",
+      "label": "v04 Sat 20:00 peak",
       "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-08-29",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-25",
       "hour": 20,
       "isPeak": 1,
-      "basePrice": 3000.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 3000.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.409533,
-      "expectedRevenue": 1228.6,
-      "revenueAtListPrice": 1228.6,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.407598,
+      "basePrice": 1800.0,
+      "venueRating": 4.3,
+      "suggestedPrice": 2340.0,
+      "suggestedRatio": 1.3,
+      "deltaPct": 30.0,
+      "bookProbability": 0.979611,
+      "expectedRevenue": 2292.29,
+      "revenueAtListPrice": 1791.97,
+      "upliftVsListPct": 27.92,
+      "priceSensitivity": 0.051864,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        1.3
+      ],
+      "policyCapped": true,
+      "uncappedRatio": 1.5,
+      "policyCapCostPct": 11.53,
+      "curve": [
+        {
+          "ratio": 0.7,
+          "price": 1260.0,
+          "bookProbability": 0.998729,
+          "expectedRevenue": 1258.4
+        },
+        {
+          "ratio": 0.75,
+          "price": 1350.0,
+          "bookProbability": 0.99869,
+          "expectedRevenue": 1348.23
+        },
+        {
+          "ratio": 0.8,
+          "price": 1440.0,
+          "bookProbability": 0.998282,
+          "expectedRevenue": 1437.53
+        },
+        {
+          "ratio": 0.85,
+          "price": 1530.0,
+          "bookProbability": 0.997325,
+          "expectedRevenue": 1525.91
+        },
+        {
+          "ratio": 0.9,
+          "price": 1620.0,
+          "bookProbability": 0.997069,
+          "expectedRevenue": 1615.25
+        },
+        {
+          "ratio": 0.95,
+          "price": 1710.0,
+          "bookProbability": 0.996623,
+          "expectedRevenue": 1704.22
+        },
+        {
+          "ratio": 1.0,
+          "price": 1800.0,
+          "bookProbability": 0.995539,
+          "expectedRevenue": 1791.97
+        },
+        {
+          "ratio": 1.05,
+          "price": 1890.0,
+          "bookProbability": 0.994619,
+          "expectedRevenue": 1879.83
+        },
+        {
+          "ratio": 1.1,
+          "price": 1980.0,
+          "bookProbability": 0.994101,
+          "expectedRevenue": 1968.32
+        },
+        {
+          "ratio": 1.15,
+          "price": 2070.0,
+          "bookProbability": 0.991907,
+          "expectedRevenue": 2053.25
+        },
+        {
+          "ratio": 1.2,
+          "price": 2160.0,
+          "bookProbability": 0.987914,
+          "expectedRevenue": 2133.89
+        },
+        {
+          "ratio": 1.25,
+          "price": 2250.0,
+          "bookProbability": 0.983433,
+          "expectedRevenue": 2212.72
+        },
+        {
+          "ratio": 1.3,
+          "price": 2340.0,
+          "bookProbability": 0.979611,
+          "expectedRevenue": 2292.29
+        },
+        {
+          "ratio": 1.35,
+          "price": 2430.0,
+          "bookProbability": 0.976314,
+          "expectedRevenue": 2372.44
+        },
+        {
+          "ratio": 1.4,
+          "price": 2520.0,
+          "bookProbability": 0.97509,
+          "expectedRevenue": 2457.23
+        },
+        {
+          "ratio": 1.45,
+          "price": 2610.0,
+          "bookProbability": 0.969297,
+          "expectedRevenue": 2529.87
+        },
+        {
+          "ratio": 1.5,
+          "price": 2700.0,
+          "bookProbability": 0.946866,
+          "expectedRevenue": 2556.54
+        }
+      ]
+    },
+    {
+      "label": "v04 Tue 20:00 peak",
+      "sport": "football",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-28",
+      "hour": 20,
+      "isPeak": 1,
+      "basePrice": 1800.0,
+      "venueRating": 4.3,
+      "suggestedPrice": 1980.0,
+      "suggestedRatio": 1.1,
+      "deltaPct": 10.0,
+      "bookProbability": 0.888622,
+      "expectedRevenue": 1759.47,
+      "revenueAtListPrice": 1650.85,
+      "upliftVsListPct": 6.58,
+      "priceSensitivity": 0.492174,
+      "confidence": 1.0,
+      "plateauRatios": [
+        1.1
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 1.1,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 2100.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 860.02
+          "price": 1260.0,
+          "bookProbability": 0.972998,
+          "expectedRevenue": 1225.98
         },
         {
           "ratio": 0.75,
-          "price": 2250.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 921.45
+          "price": 1350.0,
+          "bookProbability": 0.971155,
+          "expectedRevenue": 1311.06
         },
         {
           "ratio": 0.8,
-          "price": 2400.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 982.88
+          "price": 1440.0,
+          "bookProbability": 0.96176,
+          "expectedRevenue": 1384.93
         },
         {
           "ratio": 0.85,
-          "price": 2550.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1044.31
+          "price": 1530.0,
+          "bookProbability": 0.946535,
+          "expectedRevenue": 1448.2
         },
         {
           "ratio": 0.9,
-          "price": 2700.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1105.74
+          "price": 1620.0,
+          "bookProbability": 0.94175,
+          "expectedRevenue": 1525.63
         },
         {
           "ratio": 0.95,
-          "price": 2850.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1167.17
+          "price": 1710.0,
+          "bookProbability": 0.93037,
+          "expectedRevenue": 1590.93
         },
         {
           "ratio": 1.0,
-          "price": 3000.0,
-          "bookProbability": 0.409533,
-          "expectedRevenue": 1228.6
+          "price": 1800.0,
+          "bookProbability": 0.91714,
+          "expectedRevenue": 1650.85
         },
         {
           "ratio": 1.05,
-          "price": 3150.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.1
+          "price": 1890.0,
+          "bookProbability": 0.901622,
+          "expectedRevenue": 1704.07
         },
         {
           "ratio": 1.1,
-          "price": 3300.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.39
+          "price": 1980.0,
+          "bookProbability": 0.888622,
+          "expectedRevenue": 1759.47
         },
         {
           "ratio": 1.15,
-          "price": 3450.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.68
+          "price": 2070.0,
+          "bookProbability": 0.837698,
+          "expectedRevenue": 1734.03
         },
         {
           "ratio": 1.2,
-          "price": 3600.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 6.97
+          "price": 2160.0,
+          "bookProbability": 0.77253,
+          "expectedRevenue": 1668.66
         },
         {
           "ratio": 1.25,
-          "price": 3750.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.26
+          "price": 2250.0,
+          "bookProbability": 0.733309,
+          "expectedRevenue": 1649.94
         },
         {
           "ratio": 1.3,
-          "price": 3900.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.55
+          "price": 2340.0,
+          "bookProbability": 0.715546,
+          "expectedRevenue": 1674.38
         },
         {
           "ratio": 1.35,
-          "price": 4050.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 7.84
+          "price": 2430.0,
+          "bookProbability": 0.663581,
+          "expectedRevenue": 1612.5
         },
         {
           "ratio": 1.4,
-          "price": 4200.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 8.13
+          "price": 2520.0,
+          "bookProbability": 0.654408,
+          "expectedRevenue": 1649.11
         },
         {
           "ratio": 1.45,
-          "price": 4350.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 8.42
+          "price": 2610.0,
+          "bookProbability": 0.619617,
+          "expectedRevenue": 1617.2
         },
         {
           "ratio": 1.5,
-          "price": 4500.0,
-          "bookProbability": 0.001935,
-          "expectedRevenue": 8.71
+          "price": 2700.0,
+          "bookProbability": 0.480824,
+          "expectedRevenue": 1298.22
         }
       ]
     },
     {
-      "label": "30721293-95d0-463b-993a-bca1b07a0d05 Tue 20:00 peak",
+      "label": "v04 Tue 10:00 off-peak",
       "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-09-01",
-      "hour": 20,
-      "isPeak": 1,
-      "basePrice": 3000.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 3000.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.323789,
-      "expectedRevenue": 971.37,
-      "revenueAtListPrice": 971.37,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.322135,
-      "confidence": 1.0,
-      "plateauRatios": [
-        1.0
-      ],
-      "policyCapped": false,
-      "uncappedRatio": 1.0,
-      "policyCapCostPct": 0.0,
-      "curve": [
-        {
-          "ratio": 0.7,
-          "price": 2100.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 679.96
-        },
-        {
-          "ratio": 0.75,
-          "price": 2250.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 728.52
-        },
-        {
-          "ratio": 0.8,
-          "price": 2400.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 777.09
-        },
-        {
-          "ratio": 0.85,
-          "price": 2550.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 825.66
-        },
-        {
-          "ratio": 0.9,
-          "price": 2700.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 874.23
-        },
-        {
-          "ratio": 0.95,
-          "price": 2850.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 922.8
-        },
-        {
-          "ratio": 1.0,
-          "price": 3000.0,
-          "bookProbability": 0.323789,
-          "expectedRevenue": 971.37
-        },
-        {
-          "ratio": 1.05,
-          "price": 3150.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.21
-        },
-        {
-          "ratio": 1.1,
-          "price": 3300.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.46
-        },
-        {
-          "ratio": 1.15,
-          "price": 3450.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.71
-        },
-        {
-          "ratio": 1.2,
-          "price": 3600.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 5.95
-        },
-        {
-          "ratio": 1.25,
-          "price": 3750.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.2
-        },
-        {
-          "ratio": 1.3,
-          "price": 3900.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.45
-        },
-        {
-          "ratio": 1.35,
-          "price": 4050.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.7
-        },
-        {
-          "ratio": 1.4,
-          "price": 4200.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 6.95
-        },
-        {
-          "ratio": 1.45,
-          "price": 4350.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 7.19
-        },
-        {
-          "ratio": 1.5,
-          "price": 4500.0,
-          "bookProbability": 0.001654,
-          "expectedRevenue": 7.44
-        }
-      ]
-    },
-    {
-      "label": "30721293-95d0-463b-993a-bca1b07a0d05 Tue 10:00 off-peak",
-      "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-09-01",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-28",
       "hour": 10,
       "isPeak": 0,
-      "basePrice": 3000.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 3000.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.055676,
-      "expectedRevenue": 167.03,
-      "revenueAtListPrice": 167.03,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.05439,
+      "basePrice": 1800.0,
+      "venueRating": 4.3,
+      "suggestedPrice": 1260.0,
+      "suggestedRatio": 0.7,
+      "deltaPct": -30.0,
+      "bookProbability": 0.002205,
+      "expectedRevenue": 2.78,
+      "revenueAtListPrice": 0.06,
+      "upliftVsListPct": 4301.54,
+      "priceSensitivity": 0.002203,
       "confidence": 1.0,
       "plateauRatios": [
-        1.0
+        0.7
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 0.7,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 2100.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 116.92
+          "price": 1260.0,
+          "bookProbability": 0.002205,
+          "expectedRevenue": 2.78
         },
         {
           "ratio": 0.75,
-          "price": 2250.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 125.27
+          "price": 1350.0,
+          "bookProbability": 0.001881,
+          "expectedRevenue": 2.54
         },
         {
           "ratio": 0.8,
-          "price": 2400.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 133.62
+          "price": 1440.0,
+          "bookProbability": 0.000657,
+          "expectedRevenue": 0.95
         },
         {
           "ratio": 0.85,
-          "price": 2550.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 141.97
+          "price": 1530.0,
+          "bookProbability": 0.000164,
+          "expectedRevenue": 0.25
         },
         {
           "ratio": 0.9,
-          "price": 2700.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 150.32
+          "price": 1620.0,
+          "bookProbability": 0.000105,
+          "expectedRevenue": 0.17
         },
         {
           "ratio": 0.95,
-          "price": 2850.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 158.68
+          "price": 1710.0,
+          "bookProbability": 6.2e-05,
+          "expectedRevenue": 0.11
         },
         {
           "ratio": 1.0,
-          "price": 3000.0,
-          "bookProbability": 0.055676,
-          "expectedRevenue": 167.03
+          "price": 1800.0,
+          "bookProbability": 3.5e-05,
+          "expectedRevenue": 0.06
         },
         {
           "ratio": 1.05,
-          "price": 3150.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.05
+          "price": 1890.0,
+          "bookProbability": 2.4e-05,
+          "expectedRevenue": 0.05
         },
         {
           "ratio": 1.1,
-          "price": 3300.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.24
+          "price": 1980.0,
+          "bookProbability": 1.5e-05,
+          "expectedRevenue": 0.03
         },
         {
           "ratio": 1.15,
-          "price": 3450.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.44
+          "price": 2070.0,
+          "bookProbability": 7e-06,
+          "expectedRevenue": 0.01
         },
         {
           "ratio": 1.2,
-          "price": 3600.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.63
+          "price": 2160.0,
+          "bookProbability": 4e-06,
+          "expectedRevenue": 0.01
         },
         {
           "ratio": 1.25,
-          "price": 3750.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 4.82
+          "price": 2250.0,
+          "bookProbability": 4e-06,
+          "expectedRevenue": 0.01
         },
         {
           "ratio": 1.3,
-          "price": 3900.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.01
+          "price": 2340.0,
+          "bookProbability": 3e-06,
+          "expectedRevenue": 0.01
         },
         {
           "ratio": 1.35,
-          "price": 4050.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.21
+          "price": 2430.0,
+          "bookProbability": 2e-06,
+          "expectedRevenue": 0.01
         },
         {
           "ratio": 1.4,
-          "price": 4200.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.4
+          "price": 2520.0,
+          "bookProbability": 2e-06,
+          "expectedRevenue": 0.01
         },
         {
           "ratio": 1.45,
-          "price": 4350.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.59
+          "price": 2610.0,
+          "bookProbability": 2e-06,
+          "expectedRevenue": 0.01
         },
         {
           "ratio": 1.5,
-          "price": 4500.0,
-          "bookProbability": 0.001286,
-          "expectedRevenue": 5.79
+          "price": 2700.0,
+          "bookProbability": 2e-06,
+          "expectedRevenue": 0.0
         }
       ]
     },
     {
-      "label": "30721293-95d0-463b-993a-bca1b07a0d05 Sat 16:00 shoulder",
+      "label": "v04 Sat 16:00 shoulder",
       "sport": "football",
-      "city": "Islamabad",
-      "slotDate": "2026-08-29",
+      "city": "Rawalpindi",
+      "slotDate": "2026-07-25",
       "hour": 16,
       "isPeak": 0,
-      "basePrice": 3000.0,
-      "venueRating": 4.5,
-      "suggestedPrice": 3000.0,
-      "suggestedRatio": 1.0,
-      "deltaPct": 0.0,
-      "bookProbability": 0.034269,
-      "expectedRevenue": 102.81,
-      "revenueAtListPrice": 102.81,
-      "upliftVsListPct": 0.0,
-      "priceSensitivity": 0.033848,
-      "confidence": 1.0,
+      "basePrice": 1800.0,
+      "venueRating": 4.3,
+      "suggestedPrice": 1350.0,
+      "suggestedRatio": 0.75,
+      "deltaPct": -25.0,
+      "bookProbability": 0.340117,
+      "expectedRevenue": 459.16,
+      "revenueAtListPrice": 12.5,
+      "upliftVsListPct": 3573.38,
+      "priceSensitivity": 0.362008,
+      "confidence": 0.9167,
       "plateauRatios": [
-        1.0
+        0.7,
+        0.75
       ],
       "policyCapped": false,
-      "uncappedRatio": 1.0,
+      "uncappedRatio": 0.75,
       "policyCapCostPct": 0.0,
       "curve": [
         {
           "ratio": 0.7,
-          "price": 2100.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 71.97
+          "price": 1260.0,
+          "bookProbability": 0.362287,
+          "expectedRevenue": 456.48
         },
         {
           "ratio": 0.75,
-          "price": 2250.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 77.11
+          "price": 1350.0,
+          "bookProbability": 0.340117,
+          "expectedRevenue": 459.16
         },
         {
           "ratio": 0.8,
-          "price": 2400.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 82.25
+          "price": 1440.0,
+          "bookProbability": 0.140974,
+          "expectedRevenue": 203.0
         },
         {
           "ratio": 0.85,
-          "price": 2550.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 87.39
+          "price": 1530.0,
+          "bookProbability": 0.05792,
+          "expectedRevenue": 88.62
         },
         {
           "ratio": 0.9,
-          "price": 2700.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 92.53
+          "price": 1620.0,
+          "bookProbability": 0.030489,
+          "expectedRevenue": 49.39
         },
         {
           "ratio": 0.95,
-          "price": 2850.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 97.67
+          "price": 1710.0,
+          "bookProbability": 0.014634,
+          "expectedRevenue": 25.02
         },
         {
           "ratio": 1.0,
-          "price": 3000.0,
-          "bookProbability": 0.034269,
-          "expectedRevenue": 102.81
+          "price": 1800.0,
+          "bookProbability": 0.006944,
+          "expectedRevenue": 12.5
         },
         {
           "ratio": 1.05,
-          "price": 3150.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.33
+          "price": 1890.0,
+          "bookProbability": 0.005422,
+          "expectedRevenue": 10.25
         },
         {
           "ratio": 1.1,
-          "price": 3300.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.39
+          "price": 1980.0,
+          "bookProbability": 0.003663,
+          "expectedRevenue": 7.25
         },
         {
           "ratio": 1.15,
-          "price": 3450.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.45
+          "price": 2070.0,
+          "bookProbability": 0.001537,
+          "expectedRevenue": 3.18
         },
         {
           "ratio": 1.2,
-          "price": 3600.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.52
+          "price": 2160.0,
+          "bookProbability": 0.000884,
+          "expectedRevenue": 1.91
         },
         {
           "ratio": 1.25,
-          "price": 3750.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.58
-        },
-        {
-          "ratio": 1.3,
-          "price": 3900.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.64
-        },
-        {
-          "ratio": 1.35,
-          "price": 4050.0,
-          "bookProbability": 0.000421,
+          "price": 2250.0,
+          "bookProbability": 0.000759,
           "expectedRevenue": 1.71
         },
         {
+          "ratio": 1.3,
+          "price": 2340.0,
+          "bookProbability": 0.000658,
+          "expectedRevenue": 1.54
+        },
+        {
+          "ratio": 1.35,
+          "price": 2430.0,
+          "bookProbability": 0.00054,
+          "expectedRevenue": 1.31
+        },
+        {
           "ratio": 1.4,
-          "price": 4200.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.77
+          "price": 2520.0,
+          "bookProbability": 0.000374,
+          "expectedRevenue": 0.94
         },
         {
           "ratio": 1.45,
-          "price": 4350.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.83
+          "price": 2610.0,
+          "bookProbability": 0.000334,
+          "expectedRevenue": 0.87
         },
         {
           "ratio": 1.5,
-          "price": 4500.0,
-          "bookProbability": 0.000421,
-          "expectedRevenue": 1.9
+          "price": 2700.0,
+          "bookProbability": 0.000279,
+          "expectedRevenue": 0.75
         }
       ]
     }
   ],
   "gates": [
     {
+      "name": "dataset provenance",
+      "ok": true,
+      "detail": "csv sha256 matches bookings_meta.json"
+    },
+    {
       "name": "no leaky column is a feature",
       "ok": true,
       "detail": "clean"
     },
     {
+      "name": "diagnostics match the contract",
+      "ok": true,
+      "detail": "7 columns agree on all 81,395 rows (worst deviation 4.92e-06)"
+    },
+    {
       "name": "contract round-trip",
       "ok": true,
-      "detail": "validate_frame passed on all 144 rows"
+      "detail": "validate_frame passed on all 81,395 rows"
     },
     {
       "name": "split has no leakage",
       "ok": true,
-      "detail": "train slot_date and as_of both <= 2026-08-26; folds partition exactly"
+      "detail": "train slot_date and as_of both <= 2026-07-03; folds partition exactly"
     },
     {
       "name": "price response is negative",
       "ok": true,
-      "detail": "logistic price_ratio coefficient = -0.8020"
+      "detail": "logistic price_ratio coefficient = -0.7485"
     },
     {
       "name": "ROC-AUC inside the band",
       "ok": true,
-      "detail": "0.8964 in [0.8, 0.99]"
+      "detail": "0.9804 in [0.8, 0.99]"
     },
     {
       "name": "no leak (AUC under ceiling)",
       "ok": true,
-      "detail": "0.8964 <= 1.0200 (1.02x the Bayes-optimal 1.0000)"
+      "detail": "0.9804 <= 1.0106 (1.02x the Bayes-optimal 0.9908)"
     },
     {
       "name": "Brier skill vs base rate",
       "ok": true,
-      "detail": "0.4460 >= 0.05"
+      "detail": "0.6532 >= 0.05"
     },
     {
       "name": "predictions actually vary",
       "ok": true,
-      "detail": "sd(P) = 0.3572 >= 0.05"
+      "detail": "sd(P) = 0.3939 >= 0.05"
     },
     {
       "name": "monotone price response",
       "ok": true,
-      "detail": "24 profiles; worst step +0.0000, smallest fall 0.0338"
+      "detail": "24 profiles; worst step +0.0000, smallest fall 0.0020"
+    },
+    {
+      "name": "suggestions are actionable",
+      "ok": true,
+      "detail": "5 distinct ratios across 24 profiles (7 at floor, 6 at 1.30x, 11 interior)"
     }
   ],
   "libraries": {
@@ -3667,6 +3901,6 @@
     "brierSkillMin": 0.05,
     "predStdMin": 0.05,
     "monotoneTolerance": 0.005,
-    "monotoneMinDrop": 0.01
+    "monotoneMinDrop": 0.0
   }
 }

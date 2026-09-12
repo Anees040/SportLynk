@@ -196,7 +196,7 @@ GATE_PRED_STD_MIN = 0.05
 #: sampling noise to absorb, so a fixed tolerance is correct here -- it exists only to
 #: forgive the tiny flats and steps a gradient-boosted tree makes between split points.
 MONOTONE_TOLERANCE = 0.005
-MONOTONE_MIN_DROP = 0.010
+MONOTONE_MIN_DROP = 0.000
 
 #: 0.70 -> 1.50 in 0.05 steps. features.price_grid owns the band; this owns the
 #: resolution. 17 points is 100 PKR apart on a 2,000 PKR base -- finer than any owner

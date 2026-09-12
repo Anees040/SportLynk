@@ -1,6 +1,6 @@
 {
   "generated_by": "training/gen_intents.py",
-  "generated_at": "2026-09-09T07:05:34+00:00",
+  "generated_at": "2026-09-11T20:08:16+00:00",
   "wave": "S.6 Wave A",
   "model": "#4 SportLynk assistant -- intent classifier corpus",
   "seed": 20260824,
@@ -18,7 +18,7 @@
     "authored": {
       "file": "authored_intents.csv",
       "rows": 653,
-      "sha256": "157d7bf8d0003e38bc9376ef3f5a5927eae362a9ba76e85d13a5bdcac7cde04f"
+      "sha256": "f79e54a4a55c16dc24b8b8c72098409340e13109a42029b9bb5c8cec0367a2ca"
     },
     "exam": {
       "file": "assistant_test.csv",

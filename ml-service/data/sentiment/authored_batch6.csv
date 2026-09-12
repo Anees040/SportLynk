@@ -1,0 +1,106 @@
+text,label,lang,aspect
+"ground itna ganda tha ke match cancel karna pada again",negative,ru,ground
+"futsal turf ki halat kharab hai, no grip at all",negative,mixed,ground
+"pitch ka bounce uneven tha and we couldn't play properly",negative,mixed,ground
+"ground maintain nahi karte, kachra para rehta hai",negative,ru,ground
+"outfield me khadday the, injury ka risk tha",negative,ru,ground
+"parking area mein andhera aur security zero hai",negative,mixed,facilities
+"washroom se badbu aati hai and saaf nahi hota",negative,mixed,facilities
+"water cooler me pani nahi tha in this summer heat",negative,mixed,facilities
+"seating space was pathetic, baithne ki jagah nahi thi",negative,mixed,facilities
+"changing rooms were locked and staff gayab tha",negative,mixed,facilities
+"booking cancel kardi aur pehle se bataya bhi nahi",negative,mixed,booking
+"time pe slot booked tha but wahan kisi aur ko de diya",negative,mixed,booking
+"refund me ek hafta laga, process was very slow",negative,mixed,booking
+"owner ne kaha slot booked hai but app pe khali tha",negative,mixed,booking
+"advance lene ke baad they messed up the timing",negative,mixed,booking
+"price is way too high for this kind of ground",negative,en,price
+"3000 ka slot is not justified here",negative,en,price
+"rate theek tha but quality is horrible",negative,en,price
+"they charge extra on weekends for no reason",negative,en,price
+"overpriced venue and terrible service",negative,en,price
+"staff was so rude and disrespectful",negative,en,staff
+"owner had zero manners to talk to players",negative,en,staff
+"manager argued with us instead of helping",negative,en,staff
+"caretaker refused to give us the ball",negative,en,staff
+"uncooperative staff ruined the whole experience",negative,en,staff
+"lights kharab thin aadhi pitch dark thi",negative,mixed,lights
+"floodlights were dim aur shadows ban rahi thin",negative,mixed,lights
+"power outage hui and they didn't have generator",negative,mixed,lights
+"lights went off before our time ended",negative,mixed,lights
+"visibility was terrible due to bad lighting",negative,en,lights
+"zindagi ka sab se bura experience here",negative,mixed,overall
+"time and money both wasted on this ground",negative,mixed,overall
+"never coming back to this pathetic place",negative,en,overall
+"bohot hi kharab jagah hai totally avoid",negative,mixed,overall
+"worst decision to play our match here",negative,en,overall
+"ground average tha, could be better",neutral,en,ground
+"the pitch was okay, just playable",neutral,en,ground
+"turf is functional for a practice game",neutral,en,ground
+"maintenance was acceptable but needs work",neutral,en,ground
+"football ground size was fine",neutral,en,ground
+"washrooms were usable at least",neutral,en,facilities
+"parking was fine, no big issues",neutral,en,facilities
+"water was available, basic need met",neutral,en,facilities
+"seating was basic, nothing special",neutral,en,facilities
+"changing room was there but cramped",neutral,en,facilities
+"booking process went as expected",neutral,en,booking
+"slot was handed over on time",neutral,en,booking
+"app booking worked without issues",neutral,en,booking
+"refund was processed normally",neutral,en,booking
+"cancellation policy is standard",neutral,en,booking
+"price is fair for this location",neutral,en,price
+"standard pricing, neither cheap nor expensive",neutral,en,price
+"value for money is just average",neutral,en,price
+"rates are acceptable for the quality",neutral,en,price
+"you get what you pay for",neutral,en,price
+"staff was polite and standard",neutral,en,staff
+"owner was professional enough",neutral,en,staff
+"no issues with the venue management",neutral,en,staff
+"manager did his job",neutral,en,staff
+"staff presence was minimal",neutral,en,staff
+"lights were decent for night play",neutral,en,lights
+"floodlights worked fine",neutral,en,lights
+"visibility was okay, no complaints",neutral,en,lights
+"lighting could be brighter but its fine",neutral,en,lights
+"night match was playable",neutral,en,lights
+"overall an average experience",neutral,en,overall
+"standard venue, serves its purpose well",neutral,en,overall
+"nothing remarkable, just a ground",neutral,en,overall
+"it's an okay place for casual football",neutral,en,overall
+"might return if no other options are there",neutral,en,overall
+"zabardast turf, amazing playing experience",positive,mixed,ground
+"pitch ka bounce was perfect for cricket",positive,mixed,ground
+"futsal surface premium hai, loved it",positive,mixed,ground
+"ground maintenance is top notch seriously",positive,mixed,ground
+"outfield bohot fast tha, great fielding",positive,mixed,ground
+"washrooms bohot neat and clean the",positive,mixed,facilities
+"parking secure thi aur ample space thi",positive,mixed,facilities
+"chilled water dispenser was a lifesaver",positive,mixed,facilities
+"premium changing rooms with all facilities",positive,mixed,facilities
+"seating arrangement was bohot comfortable",positive,mixed,facilities
+"booking system bohot smooth aur fast hai",positive,mixed,booking
+"slot on time mila, they respect your time",positive,mixed,booking
+"support team was bohot helpful for modifying",positive,mixed,booking
+"cancellation process was totally hassle-free",positive,mixed,booking
+"app experience was superb and easy",positive,mixed,booking
+"rate bilkul munasib hai for this quality",positive,mixed,price
+"paise wasool jagah hai definitely",positive,mixed,price
+"discount mila humein, which was awesome",positive,mixed,price
+"is se acha ground is price me impossible hai",positive,mixed,price
+"very affordable and premium at the same time",positive,mixed,price
+"owner bohot friendly aur welcoming tha",positive,mixed,staff
+"staff ne humein respectfully treat kiya",positive,mixed,staff
+"manager went out of his way to help us",positive,mixed,staff
+"caretaker was very cooperative",positive,mixed,staff
+"customer service is simply the best",positive,mixed,staff
+"lights itni bright thin, perfect night match",positive,mixed,lights
+"floodlights quality is the best in town",positive,mixed,lights
+"no dark spots, proper roshni everywhere",positive,mixed,lights
+"night games ke liye perfect lighting setup hai",positive,mixed,lights
+"visibility was amazing even at 10pm",positive,mixed,lights
+"zindagi ka behtareen match yahan khela",positive,mixed,overall
+"highly recommend karunga sab ko ye venue",positive,mixed,overall
+"is venue se acha koi nahi yahan aas paas",positive,mixed,overall
+"outstanding experience, we will be regulars",positive,mixed,overall
+"10/10 rating for this amazing sports ground",positive,mixed,overall

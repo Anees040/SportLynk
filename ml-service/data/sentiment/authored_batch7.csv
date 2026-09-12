@@ -1,0 +1,51 @@
+text,label,lang,aspect
+"bohot mehnga hai is quality ke liye, sasta options behtar hain",negative,mixed,price
+"bohot mehnga hai, sasta options behtar",negative,mixed,price
+"quality ke hisaab se bohot mehnga hai",negative,mixed,price
+"washroom saaf tha lekin canteen band thi",neutral,mixed,facilities
+"saaf washroom par canteen band",neutral,mixed,facilities
+"owner ne waqt pe slot diya, ground thora purana hai",neutral,mixed,ground
+"waqt pe slot mila par ground purana",neutral,mixed,ground
+"na maza aya na bura laga, bas khel liya",neutral,ru,overall
+"mast ground hai yaar, dosron ko bhi bataya",positive,ru,ground
+"mast ground hai yaar",positive,ru,ground
+"dosron ko bhi bataya acha ground hai",positive,ru,ground
+"owner ne slot late tak barha diya, bohat mehrbani",positive,ru,owner
+"slot late tak barha diya owner ne",positive,ru,owner
+"refund bina poochhe hi kar diya jab slot cancel karna para",positive,ru,refund
+"bina pooche refund kar diya cancel karne pe",positive,ru,refund
+"no parking, no washroom, kuch bhi theek nahi",negative,mixed,facilities
+"parking nahi, washroom nahi, theek nahi",negative,mixed,facilities
+"kuch bhi theek nahi, no parking no washroom",negative,mixed,facilities
+"asked for a morning slot, unhon ne evening ka de diya without telling",negative,mixed,booking
+"morning slot manga tha, evening ka de diya without telling",negative,mixed,booking
+"good location but everything else bakwas",negative,mixed,overall
+"location good but sab bakwas",negative,mixed,overall
+"overpriced for the quality, 4000 mein bohat behtar milta hai",negative,mixed,price
+"quality ke liye overpriced hai, 4000 mein behtar milta",negative,mixed,price
+"nice photos on the app lekin haqeeqat mein ganda hai",negative,mixed,ground
+"app pe photos nice lekin haqeeqat ganda",negative,mixed,ground
+"lights are good but ghaas thori kam thi",neutral,mixed,lights
+"ghaas kam thi but lights good",neutral,mixed,lights
+"clean washroom but canteen band thi",neutral,mixed,facilities
+"canteen band but clean washroom",neutral,mixed,facilities
+"good size ground lekin ghaas patli thi jagah jagah",neutral,mixed,ground
+"ground size good lekin ghaas patli",neutral,mixed,ground
+"Overpriced for what you get. Better options nearby for less.",negative,en,price
+"Overpriced. Better options nearby.",negative,en,price
+"No parking, no changing room, nothing as advertised.",negative,en,facilities
+"Nothing as advertised, no parking no changing room.",negative,en,facilities
+"The pictures on the app look nothing like the actual ground.",negative,en,ground
+"Pictures on the app are totally different from actual ground.",negative,en,ground
+"Absolutely not recommended for a serious match.",negative,en,overall
+"Not recommended for a serious match.",negative,en,overall
+"Played two hours, no issues, no highlights.",neutral,en,overall
+"Played two hours, no issues.",neutral,en,overall
+"Reasonable price, slightly inconvenient location.",neutral,en,location
+"Slightly inconvenient location, reasonable price.",neutral,en,location
+"Clean washrooms, but the canteen was closed.",neutral,en,facilities
+"Canteen was closed but clean washrooms.",neutral,en,facilities
+"Not bad for the rate, though I would not call it good.",neutral,en,price
+"Not bad, but not good for the rate.",neutral,en,price
+"Refunded immediately when we had to cancel. Very fair.",positive,en,refund
+"Very fair, refunded immediately on cancel.",positive,en,refund

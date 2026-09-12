@@ -3,7 +3,7 @@
   "wave": "S.3 Wave B",
   "synthetic": true,
   "why_synthetic": "Production holds 22 bookings, 0 slots with status='booked', and exactly one distinct price per venue -- so the real data contains no price variation and therefore no elasticity signal at all. See this file's module docstring.",
-  "accepted": true,
+  "accepted": false,
   "seed": 42,
   "window": {
     "start": "2025-08-01",
@@ -510,7 +510,7 @@
     },
     {
       "name": "latent_bounds",
-      "passed": true,
+      "passed": false,
       "detail": "latent_p in [5.97e-31, 1.0000]; 42.62% of rows below 1e-4 (need max<0.97 so no label is deterministic, and <10% effectively dead)"
     },
     {
