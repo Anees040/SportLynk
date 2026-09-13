@@ -152,8 +152,12 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                             const Icon(Icons.account_balance_wallet,
                               color: AppColors.accent, size: 16),
                             const SizedBox(width: 6),
-                            Text('AVAILABLE FUNDS', style: GoogleFonts.poppins(
-                              color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
+                            Flexible(
+                              child: Text('AVAILABLE FUNDS', textAlign: TextAlign.center,
+                                maxLines: 2, overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
+                            ),
                           ]),
                           const SizedBox(height: 4),
                           Text('PKR ${asNum(_wallet?['balance']).toStringAsFixed(0)}',
@@ -172,8 +176,12 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                             const Icon(Icons.lock_outline,
                               color: Colors.white60, size: 14),
                             const SizedBox(width: 6),
-                            Text('FROZEN', style: GoogleFonts.poppins(
-                              color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
+                            Flexible(
+                              child: Text('FROZEN', textAlign: TextAlign.center,
+                                maxLines: 2, overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white60, fontSize: 9, letterSpacing: 0.5)),
+                            ),
                           ]),
                           const SizedBox(height: 4),
                           Text('PKR ${asNum(_wallet?['frozen_balance']).toStringAsFixed(0)}',
@@ -204,10 +212,18 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
                 const SizedBox(height: 24),
 
                 // Recent transactions
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Text('Recent Transactions', style: GoogleFonts.poppins(
-                    fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                Row(children: [
+                  Expanded(
+                    child: Text('Recent Transactions', maxLines: 1,
+                      overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(
+                        fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  ),
                   TextButton(
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 48),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     onPressed: () => Navigator.push(context, MaterialPageRoute(
                       builder: (_) => const WalletHistoryScreen())),
                     child: Text('View All', style: GoogleFonts.poppins(
@@ -275,5 +291,4 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
     );
   }
 }
-
 
