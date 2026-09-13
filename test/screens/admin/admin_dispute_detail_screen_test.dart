@@ -39,7 +39,7 @@ import '../screen_harness.dart';
 /// load GET and the rule PATCH land here.
 const String kCase = '/admin/disputes/d-1';
 
-const FakeAuth _admin =
+final FakeAuth _admin =
     FakeAuth(role: 'admin', id: 'admin-1', name: 'Ops', token: 'admin-token');
 
 /// One team side, in the shape `DisputeTeam.fromJson` reads (models/admin.dart).
@@ -63,10 +63,10 @@ Map<String, dynamic> submission({
 }) =>
     {
       'teamId': teamId,
-      if (captainName != null) 'captainName': captainName,
-      if (scoreline != null) 'scoreline': scoreline,
-      if (scoreChallenger != null) 'scoreChallenger': scoreChallenger,
-      if (scoreOpponent != null) 'scoreOpponent': scoreOpponent,
+      'captainName': ?captainName,
+      'scoreline': ?scoreline,
+      'scoreChallenger': ?scoreChallenger,
+      'scoreOpponent': ?scoreOpponent,
     };
 
 /// The dispute row, in the shape `DisputeRow.fromJson` reads (models/admin.dart):
@@ -94,7 +94,7 @@ Map<String, dynamic> disputeRow({
       'match': {
         'status': 'disputed',
         'resultsIn': resultsIn,
-        if (scoreline != null) 'scoreline': scoreline,
+        'scoreline': ?scoreline,
         'eloApplied': eloApplied,
         'isFixture': isFixture,
       },
@@ -125,11 +125,11 @@ Map<String, dynamic> caseJson({
         'canRule': canRule,
         'needsCorrection': needsCorrection,
         'correctionAvailable': correctionAvailable,
-        if (correctionBlockedBy != null) 'correctionBlockedBy': correctionBlockedBy,
+        'correctionBlockedBy': ?correctionBlockedBy,
       },
       'submissions': {
         'challenger': challengerSubmission ?? submission(),
-        if (opponentSubmission != null) 'opponent': opponentSubmission,
+        'opponent': ?opponentSubmission,
         'agree': agree,
         'count': count,
       },
@@ -167,6 +167,13 @@ Future<RouteLog> pumpCaseHosted(WidgetTester tester, FakeApi api) async {
 /// fields when the action needs a scoreline), matched inside the open dialog.
 Finder dialogFields() =>
     find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
+
+/// `ElevatedButton.icon` is a private subtype in the Material 3 implementation,
+/// so an exact `find.byType(ElevatedButton)` lookup does not see its label.
+Finder elevatedButtonWithText(String label) => find.ancestor(
+      of: find.text(label),
+      matching: find.byWidgetPredicate((widget) => widget is ElevatedButton),
+    );
 
 /// The rule PATCHes recorded against the case path, method-filtered off the load GET.
 Iterable<RecordedRequest> rulings(FakeApi api) =>
@@ -243,7 +250,7 @@ void main() {
 
       expect(find.textContaining('Only Dismiss is available.'), findsOneWidget);
       final rule = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'Rule this dispute'));
+          elevatedButtonWithText('Rule this dispute'));
       expect(rule.onPressed, isNull,
           reason: 'a blocked correction disables the ruling action');
       final dismiss = tester.widget<OutlinedButton>(
@@ -321,10 +328,21 @@ void main() {
         (tester) async {
       await pumpCaseHosted(tester, api);
 
+      for (final e in find.byWidgetPredicate((w) => w is ButtonStyleButton).evaluate()) {
+        debugPrint('DIAG BTN ${e.widget.runtimeType}');
+      }
+      for (final t in find.byType(Text).evaluate()) {
+        debugPrint('DIAG TXT "${(t.widget as Text).data}"');
+      }
+      debugPrint('DIAG ELEV=${find.byType(ElevatedButton).evaluate().length} '
+          'OUT=${find.byType(OutlinedButton).evaluate().length} '
+          'RULE=${find.widgetWithText(ElevatedButton, 'Rule this dispute').evaluate().length} '
+          'RULEoff=${find.widgetWithText(ElevatedButton, 'Rule this dispute', skipOffstage: false).evaluate().length}');
+
       // The ruling sheet offers the four result-changing actions; "your own" is always
       // available and asks for a scoreline.
       await tapVisible(
-          tester, find.widgetWithText(ElevatedButton, 'Rule this dispute'));
+          tester, elevatedButtonWithText('Rule this dispute'));
       await tester.pumpAndSettle();
       expect(find.text('Which result stands?'), findsOneWidget);
 
@@ -367,7 +385,7 @@ void main() {
       await settleData(tester);
 
       await tapVisible(
-          tester, find.widgetWithText(ElevatedButton, 'Rule this dispute'));
+          tester, elevatedButtonWithText('Rule this dispute'));
       await tester.pumpAndSettle();
 
       // The challenger filed a scoreline and the opponent did not, so the "never
