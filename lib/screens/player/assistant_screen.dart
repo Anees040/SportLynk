@@ -91,7 +91,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
     super.initState();
     final token = Provider.of<AuthProvider>(context, listen: false).token;
     if (token != null && token.isNotEmpty) {
-      final c = AssistantController(token: token, initialThreadId: widget.threadId);
+      final c = AssistantController(
+        token: token,
+        initialThreadId: widget.threadId,
+      );
       c.addListener(_onControllerChanged);
       _c = c;
       c.start();
@@ -131,7 +134,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
     _tailId = tail;
     _wasBusy = busy;
     // The first paint should already be at the newest message, not animate to it.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom(animate: !first));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _toBottom(animate: !first),
+    );
   }
 
   /// Load older history when the user reaches the top of the transcript.
@@ -219,7 +224,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
   void _leave({String? screen}) {
     final nav = Navigator.of(context);
     if (!nav.canPop()) return;
-    nav.pop(ScoutExit(bookingsChanged: _c?.bookingsChanged ?? false, screen: screen));
+    nav.pop(
+      ScoutExit(bookingsChanged: _c?.bookingsChanged ?? false, screen: screen),
+    );
   }
 
   void _toast(String message) {
@@ -275,30 +282,38 @@ class _AssistantScreenState extends State<AssistantScreen> {
   /// Only reachable if the route is opened without a session — the guard normally
   /// catches this first, so it stays deliberately plain.
   Widget _signedOut() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ScoutAvatar(size: 54),
-              const SizedBox(height: 16),
-              const Text(
-                'Sign in to talk to Scout',
-                style: TextStyle(color: ScoutTheme.ink, fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Scout answers from your own bookings, teams and wallet, so it needs '
-                'to know who you are.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: ScoutTheme.inkSoft, fontSize: 12.5, height: 1.45),
-              ),
-              const SizedBox(height: 18),
-              TextButton(onPressed: () => _leave(), child: const Text('Go back')),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ScoutAvatar(size: 54),
+          const SizedBox(height: 16),
+          const Text(
+            'Sign in to talk to Scout',
+            style: TextStyle(
+              color: ScoutTheme.ink,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
-      );
+          const SizedBox(height: 6),
+          const Text(
+            'Scout answers from your own bookings, teams and wallet, so it needs '
+            'to know who you are.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: ScoutTheme.inkSoft,
+              fontSize: 12.5,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 18),
+          TextButton(onPressed: () => _leave(), child: const Text('Go back')),
+        ],
+      ),
+    ),
+  );
 
   // App bar
 
@@ -351,13 +366,20 @@ class _AssistantScreenState extends State<AssistantScreen> {
                       ),
                     ),
                     const SizedBox(width: 5),
-                    Text(
-                      c.booting
-                          ? 'Opening…'
-                          : c.busy
-                              ? 'Working on it'
-                              : 'Your bookings, teams & wallet',
-                      style: const TextStyle(color: ScoutTheme.inkFaint, fontSize: 10.5),
+                    Expanded(
+                      child: Text(
+                        c.booting
+                            ? 'Opening…'
+                            : c.busy
+                            ? 'Working on it'
+                            : 'Your bookings, teams & wallet',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: ScoutTheme.inkFaint,
+                          fontSize: 10.5,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -421,12 +443,20 @@ class _AssistantScreenState extends State<AssistantScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, size: 15, color: ScoutTheme.danger),
+          const Icon(
+            Icons.error_outline_rounded,
+            size: 15,
+            color: ScoutTheme.danger,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               c.notice!,
-              style: const TextStyle(color: ScoutTheme.ink, fontSize: 11.5, height: 1.35),
+              style: const TextStyle(
+                color: ScoutTheme.ink,
+                fontSize: 11.5,
+                height: 1.35,
+              ),
             ),
           ),
           IconButton(
@@ -451,7 +481,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
         child: SizedBox(
           width: 22,
           height: 22,
-          child: CircularProgressIndicator(strokeWidth: 2, color: ScoutTheme.accent),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: ScoutTheme.accent,
+          ),
         ),
       );
     }
@@ -478,7 +511,8 @@ class _AssistantScreenState extends State<AssistantScreen> {
         final msg = msgs[i - 1];
         final prev = i - 2 >= 0 ? msgs[i - 2] : null;
         final newDay =
-            prev == null || !ScoutDateSeparator.sameDay(prev.createdAt, msg.createdAt);
+            prev == null ||
+            !ScoutDateSeparator.sameDay(prev.createdAt, msg.createdAt);
         final group = ScoutMessageGroup(
           key: ValueKey(msg.id),
           msg: msg,
@@ -490,7 +524,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
         if (!newDay) return group;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [ScoutDateSeparator(day: msg.createdAt), group],
+          children: [
+            ScoutDateSeparator(day: msg.createdAt),
+            group,
+          ],
         );
       },
     );
@@ -506,7 +543,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
           child: SizedBox(
             width: 16,
             height: 16,
-            child: CircularProgressIndicator(strokeWidth: 1.8, color: ScoutTheme.inkFaint),
+            child: CircularProgressIndicator(
+              strokeWidth: 1.8,
+              color: ScoutTheme.inkFaint,
+            ),
           ),
         ),
       );
@@ -568,7 +608,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
           'Book a ground, check what you owe, find a team to play — in English, '
           'Urdu or both.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: ScoutTheme.inkSoft, fontSize: 12.5, height: 1.5),
+          style: TextStyle(
+            color: ScoutTheme.inkSoft,
+            fontSize: 12.5,
+            height: 1.5,
+          ),
         ),
         const SizedBox(height: 22),
         _example('“football ground chahiye kal shaam 2000 se kam”'),
@@ -588,25 +632,29 @@ class _AssistantScreenState extends State<AssistantScreen> {
   }
 
   Widget _example(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          children: [
-            const Icon(Icons.chat_bubble_outline_rounded, size: 12, color: ScoutTheme.inkFaint),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  color: ScoutTheme.inkFaint,
-                  fontSize: 11.5,
-                  height: 1.4,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      children: [
+        const Icon(
+          Icons.chat_bubble_outline_rounded,
+          size: 12,
+          color: ScoutTheme.inkFaint,
         ),
-      );
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: ScoutTheme.inkFaint,
+              fontSize: 11.5,
+              height: 1.4,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   // Jump bar
 
@@ -633,7 +681,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
             padding: const EdgeInsets.fromLTRB(11, 8, 4, 8),
             child: Row(
               children: [
-                const Icon(Icons.open_in_new_rounded, size: 14, color: ScoutTheme.accent),
+                const Icon(
+                  Icons.open_in_new_rounded,
+                  size: 14,
+                  color: ScoutTheme.accent,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -650,7 +702,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   icon: const Icon(Icons.close_rounded, size: 14),
                   color: ScoutTheme.inkFaint,
                   visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                  constraints: const BoxConstraints(
+                    minWidth: 30,
+                    minHeight: 30,
+                  ),
                   padding: EdgeInsets.zero,
                   tooltip: 'Not now',
                 ),
@@ -709,7 +764,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _send(),
-                style: const TextStyle(color: ScoutTheme.ink, fontSize: 13.5, height: 1.35),
+                style: const TextStyle(
+                  color: ScoutTheme.ink,
+                  fontSize: 13.5,
+                  height: 1.35,
+                ),
                 cursorColor: ScoutTheme.accent,
                 decoration: InputDecoration(
                   isDense: true,
@@ -718,7 +777,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   // counter only appears when the user is near it.
                   counterText: '',
                   hintText: _hint(c),
-                  hintStyle: const TextStyle(color: ScoutTheme.inkFaint, fontSize: 13),
+                  hintStyle: const TextStyle(
+                    color: ScoutTheme.inkFaint,
+                    fontSize: 13,
+                  ),
                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
@@ -784,7 +846,11 @@ class _SendButton extends StatelessWidget {
               child: const SizedBox(
                 width: 44,
                 height: 44,
-                child: Icon(Icons.arrow_upward_rounded, size: 20, color: Colors.white),
+                child: Icon(
+                  Icons.arrow_upward_rounded,
+                  size: 20,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
