@@ -66,7 +66,9 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
   String? _venueId;
 
   ReportPreview? _preview;
-  bool _loading = false;
+  // The first frame is already waiting for the post-frame preview request. Keeping
+  // this true avoids a blank report card between route mount and the first response.
+  bool _loading = true;
   bool _downloading = false;
   String _error = '';
   CsvFile? _file;
@@ -254,9 +256,27 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
               const SizedBox.shrink()
             else if (p.isEmpty)
               _card(
-                child: const MatchEmptyState(
-                  text: 'No bookings or tournament payouts in this range.',
-                  icon: Icons.receipt_long,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.receipt_long,
+                        size: 60,
+                        color: AppColors.disabled,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No bookings or tournament payouts in this range.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               )
             else ...[
