@@ -35,8 +35,10 @@ const String kWallet = '/wallet/me';
 const String kBookings = '/bookings';
 
 /// A venue, in the shape the screen reads (`id`, `name`).
-Map<String, dynamic> venue({String id = 'v-1', String name = 'Green Turf Arena'}) =>
-    {'id': id, 'name': name};
+Map<String, dynamic> venue({
+  String id = 'v-1',
+  String name = 'Green Turf Arena',
+}) => {'id': id, 'name': name};
 
 /// A slot, in the shape the screen reads. The price drives every figure on the
 /// screen: the escrowed amount equals it and the at-risk deposit is a fifth of it.
@@ -45,8 +47,7 @@ Map<String, dynamic> slot({
   dynamic price = 1500,
   String startTime = '18:00:00',
   String endTime = '19:00:00',
-}) =>
-    {'id': id, 'price': price, 'start_time': startTime, 'end_time': endTime};
+}) => {'id': id, 'price': price, 'start_time': startTime, 'end_time': endTime};
 
 /// Mounts the screen with a fixed date, so the summary reads a stable label.
 Future<RouteLog> pumpConfirm(
@@ -73,7 +74,8 @@ Iterable<RecordedRequest> bookingWrites(FakeApi api) =>
 
 /// The Pay button as an [ElevatedButton], so a test can read whether it is enabled.
 ElevatedButton payButton(WidgetTester tester) => tester.widget<ElevatedButton>(
-    find.widgetWithText(ElevatedButton, 'Pay PKR 1500'));
+  find.widgetWithText(ElevatedButton, 'Pay PKR 1500'),
+);
 
 void main() {
   late FakeApi api;
@@ -86,34 +88,49 @@ void main() {
   });
 
   group('the screen as it loads', () {
-    testWidgets('the summary and escrow breakdown render before the wallet resolves',
-        (tester) async {
-      // The wallet read is held in flight; the content is built regardless.
-      api.ok(kWallet, {'balance': 5000}, delay: const Duration(milliseconds: 300));
-      await pumpConfirm(tester, api);
+    testWidgets(
+      'the summary and escrow breakdown render before the wallet resolves',
+      (tester) async {
+        // The wallet read is held in flight; the content is built regardless.
+        api.ok(kWallet, {
+          'balance': 5000,
+        }, delay: const Duration(milliseconds: 300));
+        await pumpConfirm(tester, api);
 
-      expect(find.text('Green Turf Arena'), findsOneWidget);
-      expect(find.text('Payment (held in escrow)'), findsOneWidget);
-      expect(find.text('Slot price'), findsOneWidget);
-      // The slot price and the escrowed amount are equal, so the figure shows twice.
-      expect(find.text('PKR 1500'), findsNWidgets(2));
-      expect(find.text('At-risk deposit (20%)'), findsOneWidget);
-      expect(find.text('PKR 300'), findsOneWidget);
-      // The wallet has not answered, so the balance still reads zero and the breakdown
-      // box is absent.
-      expect(find.text('Available: PKR 0'), findsOneWidget);
-      expect(find.text('WALLET AFTER'), findsNothing);
-    });
+        expect(find.text('Green Turf Arena'), findsOneWidget);
+        expect(find.text('Payment (held in escrow)'), findsOneWidget);
+        expect(find.text('Slot price'), findsOneWidget);
+        // The slot price and the escrowed amount are equal, so the figure shows twice.
+        expect(find.text('PKR 1500'), findsNWidgets(2));
+        expect(find.text('At-risk deposit (20%)'), findsOneWidget);
+        expect(find.text('PKR 300'), findsOneWidget);
+        // The wallet has not answered, so the balance still reads zero and the breakdown
+        // box is absent.
+        expect(find.text('Available: PKR 0'), findsOneWidget);
+        expect(find.text('WALLET AFTER'), findsNothing);
 
-    testWidgets('the Pay button is disabled until the wallet covers the slot',
-        (tester) async {
-      api.ok(kWallet, {'balance': 5000}, delay: const Duration(milliseconds: 300));
+        // Finish the deliberately delayed read before teardown so the fake timer does
+        // not outlive the widget test.
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+      },
+    );
+
+    testWidgets('the Pay button is disabled until the wallet covers the slot', (
+      tester,
+    ) async {
+      api.ok(kWallet, {
+        'balance': 5000,
+      }, delay: const Duration(milliseconds: 300));
       await pumpConfirm(tester, api);
 
       // Before the wallet resolves the balance is zero, so a paid slot cannot be
       // covered and the action is off.
-      expect(payButton(tester).onPressed, isNull,
-          reason: 'a zero balance cannot cover a paid slot');
+      expect(
+        payButton(tester).onPressed,
+        isNull,
+        reason: 'a zero balance cannot cover a paid slot',
+      );
 
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
@@ -125,8 +142,9 @@ void main() {
       expect(payButton(tester).onPressed, isNotNull);
     });
 
-    testWidgets('the cancellation policy states the window and the forfeit',
-        (tester) async {
+    testWidgets('the cancellation policy states the window and the forfeit', (
+      tester,
+    ) async {
       await pumpConfirm(tester, api);
       await settleData(tester);
 
@@ -136,20 +154,25 @@ void main() {
   });
 
   group('wallet sufficiency', () {
-    testWidgets('an insufficient balance disables Pay and warns', (tester) async {
+    testWidgets('an insufficient balance disables Pay and warns', (
+      tester,
+    ) async {
       api.ok(kWallet, {'balance': 500});
       await pumpConfirm(tester, api);
       await settleData(tester);
 
-      expect(find.text('Insufficient balance. Top up your wallet to proceed.'),
-          findsOneWidget);
+      expect(
+        find.text('Insufficient balance. Top up your wallet to proceed.'),
+        findsOneWidget,
+      );
       // The wallet-after figure goes negative and the button stays off.
       expect(find.text('PKR -1000'), findsOneWidget);
       expect(payButton(tester).onPressed, isNull);
     });
 
-    testWidgets('a failed wallet read leaves Pay disabled with no error or retry',
-        (tester) async {
+    testWidgets('a failed wallet read leaves Pay disabled with no error or retry', (
+      tester,
+    ) async {
       // Defect, pinned rather than fixed: `_loadWallet` swallows a failed or dropped
       // `/wallet/me` in `catch (_) {}` (confirm_booking_screen.dart:52) and never sets
       // `_walletLoaded`, so the balance stays zero, the Pay button stays disabled, and
@@ -166,26 +189,33 @@ void main() {
   });
 
   group('confirming the booking', () {
-    testWidgets('a successful booking posts the slot and venue, then confirms',
-        (tester) async {
-      await pumpConfirm(tester, api);
-      await settleData(tester);
+    testWidgets(
+      'a successful booking posts the slot and venue, then confirms',
+      (tester) async {
+        await pumpConfirm(tester, api);
+        await settleData(tester);
 
-      api.ok(kBookings, {'id': 'bk-9', 'qr_code': 'QR9'});
-      await tester.tap(find.text('Pay PKR 1500'));
-      await tester.pumpAndSettle();
+        api.ok(kBookings, {'id': 'bk-9', 'qr_code': 'QR9'});
+        await tester.tap(find.text('Pay PKR 1500'));
+        await tester.pumpAndSettle();
 
-      expect(bookingWrites(api).length, 1, reason: 'exactly one booking POST');
-      final body = jsonDecode(bookingWrites(api).single.body!) as Map;
-      expect(body['slotId'], 's-1');
-      expect(body['venueId'], 'v-1');
-      // The success path replaces the route with a full confirmation screen.
-      expect(find.text('Slot Reserved!'), findsOneWidget);
-      expect(find.text('PENDING OWNER APPROVAL'), findsOneWidget);
-    });
+        expect(
+          bookingWrites(api).length,
+          1,
+          reason: 'exactly one booking POST',
+        );
+        final body = jsonDecode(bookingWrites(api).single.body!) as Map;
+        expect(body['slotId'], 's-1');
+        expect(body['venueId'], 'v-1');
+        // The success path replaces the route with a full confirmation screen.
+        expect(find.text('Slot Reserved!'), findsOneWidget);
+        expect(find.text('PENDING OWNER APPROVAL'), findsOneWidget);
+      },
+    );
 
-    testWidgets('a refused booking surfaces the server message and stays put',
-        (tester) async {
+    testWidgets('a refused booking surfaces the server message and stays put', (
+      tester,
+    ) async {
       await pumpConfirm(tester, api);
       await settleData(tester);
 
@@ -202,8 +232,9 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('a dropped connection on booking shows the network error',
-        (tester) async {
+    testWidgets('a dropped connection on booking shows the network error', (
+      tester,
+    ) async {
       await pumpConfirm(tester, api);
       await settleData(tester);
 
@@ -222,7 +253,9 @@ void main() {
   });
 
   group('reach and scale', () {
-    testWidgets('a doubled text scale keeps the Pay button present', (tester) async {
+    testWidgets('a doubled text scale keeps the Pay button present', (
+      tester,
+    ) async {
       // The test font's square-em glyphs are far wider than the app's Poppins, so a
       // dense row overflows at this scale in the harness alone; the contract is that
       // the content is still built.
