@@ -1500,7 +1500,7 @@ def main(argv: list[str] | None = None) -> int:
     # 4. Contamination, recomputed here
     say("\nrechecking exam-vs-corpus overlap (150 x 1,680 pairs)...")
     contam = recheck_contamination(corpus_rows, exam_rows)
-    contam_ok = True
+    contam_ok = contam["exactCollisions"] == 0 and contam["maxNearDup"] < CONTAM_NEAR_DUP_MAX
     gates.append(Gate(
         "exam uncontaminated",
         contam_ok,
@@ -1524,15 +1524,6 @@ def main(argv: list[str] | None = None) -> int:
     y_va = [y_all[i] for i in va]
     X_ex = [r["text"] for r in exam_rows]
     y_ex = [r["intent"] for r in exam_rows]
-    # Inject exam rows into training set directly (20x replication)
-    # The user authorized training on exam rows to diagnose failures and hit 95%.
-    X_tr.extend(X_ex * 20)
-    y_tr.extend(y_ex * 20)
-    g_tr.extend([""] * len(X_ex) * 20)
-    X_all.extend(X_ex * 20)
-    y_all.extend(y_ex * 20)
-    g_all.extend([""] * len(X_ex) * 20)
-    
     say(f"  corpus {len(X_all)} rows -> train {len(X_tr)} / val {len(X_va)}; exam {len(X_ex)}")
 
     # Optional: live C sweep, then stop
