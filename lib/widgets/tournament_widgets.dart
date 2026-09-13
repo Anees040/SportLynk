@@ -504,15 +504,18 @@ class PrizeBreakdownCard extends StatelessWidget {
               Icon(Icons.account_balance_wallet_outlined,
                   size: 16, color: AppColors.primary),
               const SizedBox(width: 6),
-              Text(
-                e.settled ? 'Prize money' : 'Projected breakdown',
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+              Expanded(
+                child: Text(
+                  e.settled ? 'Prize money' : 'Projected breakdown',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
-              const Spacer(),
               if (!e.settled) _Pill('Projection', AppColors.accent),
             ],
           ),
