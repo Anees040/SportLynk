@@ -35,13 +35,18 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   static const int _cancellationWindowHours = 24;
 
   @override
-  void initState() { super.initState(); _loadWallet(); }
+  void initState() {
+    super.initState();
+    _loadWallet();
+  }
 
   Future<void> _loadWallet() async {
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final resp = await http.get(Uri.parse('${ApiConstants.baseUrl}/wallet/me'),
-        headers: {'Authorization': 'Bearer $token'});
+      final resp = await http.get(
+        Uri.parse('${ApiConstants.baseUrl}/wallet/me'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
       final data = jsonDecode(resp.body);
       if (mounted && data['success'] == true) {
         setState(() {
@@ -63,18 +68,26 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     final amountToPay = asNum(widget.slot['price']);
 
     if (_walletBalance < amountToPay) {
-      SnackbarUtil.showError(context, 'Insufficient wallet balance. Please top up your wallet.');
+      SnackbarUtil.showError(
+        context,
+        'Insufficient wallet balance. Please top up your wallet.',
+      );
       return;
     }
     setState(() => _loading = true);
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final resp = await http.post(Uri.parse('${ApiConstants.baseUrl}/bookings'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      final resp = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/bookings'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({
           'slotId': widget.slot['id'],
           'venueId': widget.venue['id'],
-        }));
+        }),
+      );
       final data = jsonDecode(resp.body);
       if (mounted) {
         setState(() => _loading = false);
@@ -94,7 +107,8 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
 
   /// Navigate to a full success screen instead of a dialog to avoid render issues
   void _showSuccessScreen(Map<String, dynamic> booking) {
-    final bookingId = (booking['id'] ?? booking['qr_code'] ?? 'UNKNOWN').toString();
+    final bookingId = (booking['id'] ?? booking['qr_code'] ?? 'UNKNOWN')
+        .toString();
     final manualCode = bookingId.length >= 6
         ? bookingId.substring(0, 6).toUpperCase()
         : bookingId.toUpperCase();
@@ -106,7 +120,8 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           manualCode: manualCode,
           venueName: widget.venue['name'] ?? '',
           date: _fmtDate(widget.selectedDate),
-          time: '${_safeTime(widget.slot['start_time'])} – ${_safeTime(widget.slot['end_time'])}',
+          time:
+              '${_safeTime(widget.slot['start_time'])} – ${_safeTime(widget.slot['end_time'])}',
         ),
       ),
     );
@@ -117,218 +132,459 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     final price = asNum(widget.slot['price']);
     // Full slot price is escrowed at booking; 20% of it is the at-risk deposit.
     final amountToPay = double.parse(price.toStringAsFixed(2));
-    final depositAtRisk =
-        double.parse((price * (_depositPercent / 100)).toStringAsFixed(2));
+    final depositAtRisk = double.parse(
+      (price * (_depositPercent / 100)).toStringAsFixed(2),
+    );
     final remainingWallet = _walletBalance - amountToPay;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text('Confirm Booking', style: GoogleFonts.poppins(
-          color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(
+          'Confirm Booking',
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: AppColors.primary,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
       ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        decoration: const BoxDecoration(color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2))]),
-        child: SafeArea(top: false,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 8,
+              offset: Offset(0, -2),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
           child: ElevatedButton(
-            onPressed: (_loading || remainingWallet < 0) ? null : _confirmBooking,
+            onPressed: (_loading || remainingWallet < 0)
+                ? null
+                : _confirmBooking,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accent,
               disabledBackgroundColor: AppColors.disabled,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-              padding: const EdgeInsets.symmetric(vertical: 16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
             child: _loading
-              ? const SizedBox(width: 20, height: 20,
-                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : Text('Pay PKR ${amountToPay.toStringAsFixed(0)}',
-                  style: GoogleFonts.poppins(color: Colors.white,
-                    fontWeight: FontWeight.bold, fontSize: 15)),
-          )),
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : Text(
+                    'Pay PKR ${amountToPay.toStringAsFixed(0)}',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+          ),
+        ),
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // BOOKING summary
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border)),
-            child: Row(children: [
-              Container(width: 72, height: 72,
-                decoration: BoxDecoration(color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.stadium_outlined, color: Colors.white38, size: 36)),
-              const SizedBox(width: 14),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(widget.venue['name'] ?? '', style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold, fontSize: 15),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Row(children: [
-                  const Icon(Icons.calendar_today_outlined, size: 13,
-                    color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
-                  Text(_fmtDate(widget.selectedDate), style: GoogleFonts.poppins(
-                    fontSize: 12, color: AppColors.textSecondary)),
-                ]),
-                const SizedBox(height: 2),
-                Row(children: [
-                  const Icon(Icons.access_time_outlined, size: 13,
-                    color: AppColors.textSecondary),
-                  const SizedBox(width: 4),
-                  Text('${_safeTime(widget.slot['start_time'])} – '
-                    '${_safeTime(widget.slot['end_time'])}',
-                    style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-                ]),
-              ])),
-            ]),
-          ),
-          const SizedBox(height: 16),
-
-          // Escrow breakdown
-          _section('Payment (held in escrow)', [
-            _moneyRow('Slot price', 'PKR ${price.toStringAsFixed(0)}'),
-            const SizedBox(height: 8),
-            _moneyRow('Paid now, held in escrow', 'PKR ${amountToPay.toStringAsFixed(0)}',
-              highlight: true),
-            const SizedBox(height: 8),
-            _moneyRow('At-risk deposit ($_depositPercent%)',
-              'PKR ${depositAtRisk.toStringAsFixed(0)}'),
-            const SizedBox(height: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // BOOKING summary
             Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: AppColors.accentLight,
-                borderRadius: BorderRadius.circular(10)),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Icon(Icons.lock_outline, color: AppColors.accent, size: 16),
-                const SizedBox(width: 8),
-                Expanded(child: Text(
-                  'The full amount stays frozen in your wallet and is released to '
-                  'the venue only when you check in with your QR code.',
-                  style: GoogleFonts.poppins(fontSize: 11, color: AppColors.primary))),
-              ]),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.stadium_outlined,
+                      color: Colors.white38,
+                      size: 36,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.venue['name'] ?? '',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_today_outlined,
+                              size: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _fmtDate(widget.selectedDate),
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.access_time_outlined,
+                              size: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${_safeTime(widget.slot['start_time'])} – '
+                              '${_safeTime(widget.slot['end_time'])}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ]),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // Payment method
-          _section('Wallet Balance', [
-            Row(children: [
-              Container(width: 42, height: 42,
-                decoration: BoxDecoration(color: AppColors.accentLight,
-                  borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.account_balance_wallet,
-                  color: AppColors.accent, size: 22)),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('SportLynk Wallet', style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600, fontSize: 13)),
-                Text('Available: PKR ${_walletBalance.toStringAsFixed(0)}',
-                  style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
-              ])),
-            ]),
-            if (_walletLoaded) ...[
+            // Escrow breakdown
+            _section('Payment (held in escrow)', [
+              _moneyRow('Slot price', 'PKR ${price.toStringAsFixed(0)}'),
+              const SizedBox(height: 8),
+              _moneyRow(
+                'Paid now, held in escrow',
+                'PKR ${amountToPay.toStringAsFixed(0)}',
+                highlight: true,
+              ),
+              const SizedBox(height: 8),
+              _moneyRow(
+                'At-risk deposit ($_depositPercent%)',
+                'PKR ${depositAtRisk.toStringAsFixed(0)}',
+              ),
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: AppColors.inputFill,
-                  borderRadius: BorderRadius.circular(10)),
-                child: Column(children: [
-                  Row(children: [
-                    Expanded(child: Column(children: [
-                      Text('PAYMENT', style: GoogleFonts.poppins(fontSize: 9,
-                        color: AppColors.textSecondary, letterSpacing: 0.5)),
-                      const SizedBox(height: 2),
-                      Text('- PKR ${amountToPay.toStringAsFixed(0)}',
-                        style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
-                          color: AppColors.error)),
-                    ])),
-                    Container(width: 1, height: 32, color: AppColors.border),
-                    Expanded(child: Column(children: [
-                      Text('WALLET AFTER', style: GoogleFonts.poppins(fontSize: 9,
-                        color: AppColors.textSecondary, letterSpacing: 0.5)),
-                      const SizedBox(height: 2),
-                      Text('PKR ${remainingWallet.toStringAsFixed(0)}',
-                        style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold,
-                          color: remainingWallet >= 0 ? AppColors.success : AppColors.error)),
-                    ])),
-                  ]),
-                ]),
-              ),
-              if (remainingWallet < 0) ...[
-                const SizedBox(height: 8),
-                Container(padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: const Color(0xFFFEE2E2),
-                    borderRadius: BorderRadius.circular(8)),
-                  child: Row(children: [
-                    const Icon(Icons.warning_amber_outlined, color: AppColors.error, size: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.accentLight,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.lock_outline,
+                      color: AppColors.accent,
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
-                    Expanded(child: Text('Insufficient balance. Top up your wallet to proceed.',
-                      style: GoogleFonts.poppins(fontSize: 11, color: AppColors.error))),
-                  ])),
-              ],
-            ],
-          ]),
-          const SizedBox(height: 20),
-
-          // Cancellation POLICY
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: const Color(0xFFFEF3C7),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.warning.withValues(alpha: 0.4))),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Icon(Icons.info_outline, color: AppColors.warning, size: 16),
-              const SizedBox(width: 8),
-              Expanded(child: Text(
-                'Cancel at least $_cancellationWindowHours hours before your slot for a full '
-                'refund. Cancelling later (or not showing up) forfeits the '
-                '$_depositPercent% deposit and lowers your trust score.',
-                style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF92400E)))),
+                    Expanded(
+                      child: Text(
+                        'The full amount stays frozen in your wallet and is released to '
+                        'the venue only when you check in with your QR code.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ]),
-          ),
-          const SizedBox(height: 100),
-        ]),
+            const SizedBox(height: 16),
+
+            // Payment method
+            _section('Wallet Balance', [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppColors.accentLight,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_wallet,
+                      color: AppColors.accent,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'SportLynk Wallet',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          'Available: PKR ${_walletBalance.toStringAsFixed(0)}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (_walletLoaded) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.inputFill,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(
+                                  'PAYMENT',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 9,
+                                    color: AppColors.textSecondary,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '- PKR ${amountToPay.toStringAsFixed(0)}',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.error,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 32,
+                            color: AppColors.border,
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(
+                                  'WALLET AFTER',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 9,
+                                    color: AppColors.textSecondary,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'PKR ${remainingWallet.toStringAsFixed(0)}',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: remainingWallet >= 0
+                                        ? AppColors.success
+                                        : AppColors.error,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (remainingWallet < 0) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_outlined,
+                          color: AppColors.error,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Insufficient balance. Top up your wallet to proceed.',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: AppColors.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ]),
+            const SizedBox(height: 20),
+
+            // Cancellation POLICY
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.warning.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    color: AppColors.warning,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cancel at least $_cancellationWindowHours hours before your slot for a full '
+                      'refund. Cancelling later (or not showing up) forfeits the '
+                      '$_depositPercent% deposit and lowers your trust score.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: const Color(0xFF92400E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 100),
+          ],
+        ),
       ),
     );
   }
 
   Widget _section(String title, List<Widget> children) => Container(
     padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: AppColors.border)),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(title, style: GoogleFonts.poppins(
-        fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-      const SizedBox(height: 10),
-      ...children,
-    ]),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ...children,
+      ],
+    ),
   );
 
   Widget _moneyRow(String label, String value, {bool highlight = false}) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(label, style: GoogleFonts.poppins(
-        fontSize: 12,
-        color: highlight ? AppColors.textPrimary : AppColors.textSecondary,
-        fontWeight: highlight ? FontWeight.w600 : FontWeight.normal)),
-      Text(value, style: GoogleFonts.poppins(
-        fontSize: highlight ? 15 : 12,
-        fontWeight: highlight ? FontWeight.bold : FontWeight.w600,
-        color: highlight ? AppColors.accent : AppColors.textPrimary)),
+      Expanded(
+        child: Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            color: highlight ? AppColors.textPrimary : AppColors.textSecondary,
+            fontWeight: highlight ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Flexible(
+        child: Text(
+          value,
+          textAlign: TextAlign.right,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.poppins(
+            fontSize: highlight ? 15 : 12,
+            fontWeight: highlight ? FontWeight.bold : FontWeight.w600,
+            color: highlight ? AppColors.accent : AppColors.textPrimary,
+          ),
+        ),
+      ),
     ],
   );
 
   String _fmtDate(DateTime d) {
-    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return '${d.day} ${m[d.month-1]}, ${d.year}';
+    const m = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${d.day} ${m[d.month - 1]}, ${d.year}';
   }
 }
 
@@ -360,112 +616,212 @@ class _BookingSuccessScreen extends StatelessWidget {
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(32),
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                // Hourglass icon (pending, not check)
-                Container(
-                  width: 90, height: 90,
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withValues(alpha: 0.12),
-                    shape: BoxShape.circle),
-                  child: const Icon(Icons.lock_clock_rounded,
-                    color: AppColors.warning, size: 52),
-                ),
-                const SizedBox(height: 24),
-                Text('Slot Reserved!', style: GoogleFonts.poppins(
-                  fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                const SizedBox(height: 8),
-                Text('Awaiting owner approval',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(fontSize: 14, color: AppColors.warning, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Text('Your slot is reserved and your payment is held safely in escrow.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
-                const SizedBox(height: 32),
-
-                // Booking summary card
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.border),
-                    boxShadow: [BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 16, offset: const Offset(0, 4))]),
-                  child: Column(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
-                        borderRadius: BorderRadius.circular(10)),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.hourglass_top, color: AppColors.warning, size: 16),
-                        const SizedBox(width: 6),
-                        Text('PENDING OWNER APPROVAL', style: GoogleFonts.poppins(
-                          fontSize: 11, color: AppColors.warning, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                      ]),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Hourglass icon (pending, not check)
+                  Container(
+                    width: 90,
+                    height: 90,
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(height: 20),
-                    _infoRow(Icons.stadium_outlined, venueName),
-                    const SizedBox(height: 8),
-                    _infoRow(Icons.calendar_today_outlined, date),
-                    const SizedBox(height: 8),
-                    _infoRow(Icons.access_time_outlined, time),
-                    const SizedBox(height: 16),
-                    const Divider(color: AppColors.border),
-                    const SizedBox(height: 12),
-                    // Note about QR code
-                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Icon(Icons.qr_code_2, color: AppColors.textSecondary, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(
-                        'Your QR check-in code will appear in Booking History once the owner approves your booking.',
-                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary))),
-                    ]),
-                  ]),
-                ),
-                const SizedBox(height: 16),
-                // Escrow info
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentLight,
-                    borderRadius: BorderRadius.circular(12)),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Icon(Icons.lock_outline, color: AppColors.accent, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(
-                      'Your payment is frozen safely. If the owner rejects the request — '
-                      'or never approves it before the slot gets close — you get a full '
-                      'automatic refund.',
-                      style: GoogleFonts.poppins(fontSize: 11, color: AppColors.primary))),
-                  ]),
-                ),
-                const SizedBox(height: 32),
-                // View Bookings button
-                SizedBox(width: double.infinity,
-                  child: ElevatedButton(
+                    child: const Icon(
+                      Icons.lock_clock_rounded,
+                      color: AppColors.warning,
+                      size: 52,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Slot Reserved!',
+                    style: GoogleFonts.poppins(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Awaiting owner approval',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: AppColors.warning,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Your slot is reserved and your payment is held safely in escrow.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Booking summary card
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.border),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.hourglass_top,
+                                color: AppColors.warning,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'PENDING OWNER APPROVAL',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: AppColors.warning,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _infoRow(Icons.stadium_outlined, venueName),
+                        const SizedBox(height: 8),
+                        _infoRow(Icons.calendar_today_outlined, date),
+                        const SizedBox(height: 8),
+                        _infoRow(Icons.access_time_outlined, time),
+                        const SizedBox(height: 16),
+                        const Divider(color: AppColors.border),
+                        const SizedBox(height: 12),
+                        // Note about QR code
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.qr_code_2,
+                              color: AppColors.textSecondary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Your QR check-in code will appear in Booking History once the owner approves your booking.',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Escrow info
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentLight,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.lock_outline,
+                          color: AppColors.accent,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Your payment is frozen safely. If the owner rejects the request — '
+                            'or never approves it before the slot gets close — you get a full '
+                            'automatic refund.',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  // View Bookings button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pushNamedAndRemoveUntil(
+                          '/player-home',
+                          (route) => false,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: Text(
+                        'Back to Home',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
                     onPressed: () {
-                      Navigator.of(context).pushNamedAndRemoveUntil('/player-home', (route) => false);
+                      Navigator.of(context).pushNamedAndRemoveUntil(
+                        '/player-home',
+                        (route) => false,
+                      );
+                      // Navigate to bookings tab — home screen will handle this via route
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      padding: const EdgeInsets.symmetric(vertical: 16)),
-                    child: Text('Back to Home', style: GoogleFonts.poppins(
-                      color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                  )),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pushNamedAndRemoveUntil('/player-home', (route) => false);
-                    // Navigate to bookings tab — home screen will handle this via route
-                  },
-                  child: Text('View in Booking History →', style: GoogleFonts.poppins(
-                    color: AppColors.accent, fontWeight: FontWeight.w600, fontSize: 13)),
-                ),
-              ]),
+                    child: Text(
+                      'View in Booking History →',
+                      style: GoogleFonts.poppins(
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -473,12 +829,20 @@ class _BookingSuccessScreen extends StatelessWidget {
     );
   }
 
-  Widget _infoRow(IconData icon, String text) => Row(children: [
-    Icon(icon, size: 16, color: AppColors.textSecondary),
-    const SizedBox(width: 8),
-    Expanded(child: Text(text, style: GoogleFonts.poppins(
-      fontSize: 13, color: AppColors.textPrimary, fontWeight: FontWeight.w500))),
-  ]);
+  Widget _infoRow(IconData icon, String text) => Row(
+    children: [
+      Icon(icon, size: 16, color: AppColors.textSecondary),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          text,
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    ],
+  );
 }
-
-
