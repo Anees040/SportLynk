@@ -56,13 +56,14 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   /// tap on Approve cannot fire a second refund while the first is still travelling.
   final _busy = <String>{};
 
-  late final TabController _tabs = TabController(length: 5, vsync: this);
+  late final TabController _tabs;
 
   String get _token => context.read<AuthProvider>().token ?? '';
 
   @override
   void initState() {
     super.initState();
+    _tabs = TabController(length: 5, vsync: this);
     _load().then((_) {
       if (widget.autoRegister && mounted) _register();
     });
@@ -81,7 +82,9 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     final ok = raw['success'] == true && raw['data'] is Map;
     setState(() {
       _loading = false;
-      _error = ok ? null : '${raw['message'] ?? 'Could not load this tournament'}';
+      _error = ok
+          ? null
+          : '${raw['message'] ?? 'Could not load this tournament'}';
       if (ok) {
         _detail = TournamentDetail.fromJson(
           Map<String, dynamic>.from(raw['data'] as Map),
@@ -109,7 +112,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (!mounted) return;
     setState(() => _busy.remove(key));
     final ok = r['success'] == true;
-    final message = '${r['message'] ?? (ok ? fallbackSuccess ?? 'Done' : 'That did not work')}';
+    final message =
+        '${r['message'] ?? (ok ? fallbackSuccess ?? 'Done' : 'That did not work')}';
     if (ok) {
       SnackbarUtil.showSuccess(context, message);
     } else {
@@ -127,7 +131,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         context,
         viewer.isCaptain
             ? 'None of your teams can enter this one - check the sport and whether '
-                'they are already registered.'
+                  'they are already registered.'
             : 'Only a team captain can enter a tournament. Create a team first.',
       );
       return;
@@ -156,7 +160,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (t == null || entry == null) return;
     final ok = await _confirm(
       title: 'Withdraw ${entry.teamName}?',
-      message: 'Your ${formatPkr(entry.paidAmount)} entry fee goes straight back to '
+      message:
+          'Your ${formatPkr(entry.paidAmount)} entry fee goes straight back to '
           'your wallet. Once the bracket is drawn the fee has already paid for venue '
           'hours and there is nothing left to refund.',
       confirmLabel: 'Withdraw',
@@ -233,7 +238,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     final e = _detail.economics;
     final ok = await _confirm(
       title: 'Draw the bracket?',
-      message: 'Fixtures are seeded by ELO and placed on real slots at your venue, '
+      message:
+          'Fixtures are seeded by ELO and placed on real slots at your venue, '
           'which are then blocked. The ${formatPkr(e.pool)} of held entry fees settles '
           'now: ${formatPkr(e.venueCost)} for the venue hours, ${formatPkr(e.prize)} '
           'frozen as prize money, ${formatPkr(e.margin)} to you as margin. '
@@ -247,7 +253,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (!mounted) return;
     setState(() => _busy.remove('generate'));
     if (r['success'] != true) {
-      SnackbarUtil.showError(context, '${r['message'] ?? 'The draw was refused'}');
+      SnackbarUtil.showError(
+        context,
+        '${r['message'] ?? 'The draw was refused'}',
+      );
       await _load(silent: true);
       return;
     }
@@ -274,7 +283,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (t == null) return;
     final reason = await _askText(
       title: 'Cancel ${t.name}?',
-      message: 'Every held entry fee is refunded in full. Tell the captains why.',
+      message:
+          'Every held entry fee is refunded in full. Tell the captains why.',
       hint: 'Reason (optional)',
       confirmLabel: 'Cancel tournament',
       danger: true,
@@ -282,7 +292,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (reason == null || !mounted) return;
     await _run(
       'cancel',
-      () => _service.cancel(_token, t.id, reason: reason.isEmpty ? null : reason),
+      () =>
+          _service.cancel(_token, t.id, reason: reason.isEmpty ? null : reason),
       fallbackSuccess: 'Cancelled and refunded.',
     );
   }
@@ -296,8 +307,11 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (t == null) return;
     if (decision != 'approve') {
       final ok = await _confirm(
-        title: decision == 'reject' ? 'Reject ${r.teamName}?' : 'Remove ${r.teamName}?',
-        message: 'Their ${formatPkr(r.paidAmount)} entry fee is refunded immediately.',
+        title: decision == 'reject'
+            ? 'Reject ${r.teamName}?'
+            : 'Remove ${r.teamName}?',
+        message:
+            'Their ${formatPkr(r.paidAmount)} entry fee is refunded immediately.',
         confirmLabel: decision == 'reject' ? 'Reject' : 'Remove',
         danger: true,
       );
@@ -325,7 +339,13 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     if (score == null || !mounted) return;
     await _run(
       'result:${f.id}',
-      () => _service.enterResult(_token, t.id, f.id, scoreA: score[0], scoreB: score[1]),
+      () => _service.enterResult(
+        _token,
+        t.id,
+        f.id,
+        scoreA: score[0],
+        scoreB: score[1],
+      ),
       fallbackSuccess: 'Result recorded.',
     );
   }
@@ -509,22 +529,23 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
       body: _loading
           ? const CustomLoader()
           : t == null
-              ? TournamentEmpty(
-                  icon: Icons.search_off,
-                  title: 'Tournament not found',
-                  message: _error ??
-                      'It may have been cancelled, or the link is out of date.',
-                )
-              : TabBarView(
-                  controller: _tabs,
-                  children: [
-                    _tab(_overview(t)),
-                    _tab(_fixtures(t)),
-                    _tab(_table(t)),
-                    _tab(_teams(t)),
-                    _tab(_money(t)),
-                  ],
-                ),
+          ? TournamentEmpty(
+              icon: Icons.search_off,
+              title: 'Tournament not found',
+              message:
+                  _error ??
+                  'It may have been cancelled, or the link is out of date.',
+            )
+          : TabBarView(
+              controller: _tabs,
+              children: [
+                _tab(_overview(t)),
+                _tab(_fixtures(t)),
+                _tab(_table(t)),
+                _tab(_teams(t)),
+                _tab(_money(t)),
+              ],
+            ),
       bottomNavigationBar: t == null || _loading ? null : _actionBar(t),
     );
   }
@@ -533,14 +554,14 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   /// tournament is being played, and a captain watching from the touchline should be
   /// able to pull the newest state from whichever tab they are on.
   Widget _tab(List<Widget> children) => RefreshIndicator(
-        color: AppColors.accent,
-        onRefresh: () => _load(silent: true),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-          children: children,
-        ),
-      );
+    color: AppColors.accent,
+    onRefresh: () => _load(silent: true),
+    child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+      children: children,
+    ),
+  );
 
   // Tabs
 
@@ -563,10 +584,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         const SizedBox(height: 12),
       ],
       if (v.myRegistration != null) ...[
-        _MyEntryCard(
-          registration: v.myRegistration!,
-          nextFixture: next,
-        ),
+        _MyEntryCard(registration: v.myRegistration!, nextFixture: next),
         const SizedBox(height: 12),
       ],
       if (org != null) ...[
@@ -633,7 +651,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
           title: 'The draw is not out yet',
           message: t.isOpen
               ? 'Fixtures are seeded by team ELO and drawn when registration closes'
-                  '${t.countdown.startsWith('Closes') ? ' - ${t.countdown.toLowerCase()}' : ''}.'
+                    '${t.countdown.startsWith('Closes') ? ' - ${t.countdown.toLowerCase()}' : ''}.'
               : 'Fixtures have not been generated for this tournament.',
         ),
       ];
@@ -659,12 +677,12 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   }
 
   List<Widget> _table(Tournament t) => [
-        StandingsTable(
-          _detail.standings,
-          highlightTeamId: _detail.viewer.myTeamId,
-          knockout: t.format == TournamentFormat.knockout,
-        ),
-      ];
+    StandingsTable(
+      _detail.standings,
+      highlightTeamId: _detail.viewer.myTeamId,
+      knockout: t.format == TournamentFormat.knockout,
+    ),
+  ];
 
   List<Widget> _teams(Tournament t) {
     final org = _detail.organiser;
@@ -760,16 +778,26 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _bullet('Your entry fee leaves your spendable balance the moment you enter '
-                'and sits frozen. Nobody has earned it yet.'),
-            _bullet('Withdraw before the draw, or get rejected, and it comes straight '
-                'back in full.'),
-            _bullet('At the draw the fees settle: the venue hours are paid for first, '
-                'then the prize pool is frozen, then the organiser takes what is left.'),
-            _bullet('The champion and the runner-up are paid when the final is '
-                'settled.'),
-            _bullet('You never book or pay for a tournament slot. The entry fee is the '
-                'only thing you pay.'),
+            _bullet(
+              'Your entry fee leaves your spendable balance the moment you enter '
+              'and sits frozen. Nobody has earned it yet.',
+            ),
+            _bullet(
+              'Withdraw before the draw, or get rejected, and it comes straight '
+              'back in full.',
+            ),
+            _bullet(
+              'At the draw the fees settle: the venue hours are paid for first, '
+              'then the prize pool is frozen, then the organiser takes what is left.',
+            ),
+            _bullet(
+              'The champion and the runner-up are paid when the final is '
+              'settled.',
+            ),
+            _bullet(
+              'You never book or pay for a tournament slot. The entry fee is the '
+              'only thing you pay.',
+            ),
           ],
         ),
       ),
@@ -777,34 +805,34 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   }
 
   Widget _bullet(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 7),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 5, right: 8),
-              child: Container(
-                width: 5,
-                height: 5,
-                decoration: const BoxDecoration(
-                  color: AppColors.accent,
-                  shape: BoxShape.circle,
-                ),
-              ),
+    padding: const EdgeInsets.only(bottom: 7),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 5, right: 8),
+          child: Container(
+            width: 5,
+            height: 5,
+            decoration: const BoxDecoration(
+              color: AppColors.accent,
+              shape: BoxShape.circle,
             ),
-            Expanded(
-              child: Text(
-                text,
-                style: GoogleFonts.poppins(
-                  fontSize: 11.5,
-                  height: 1.5,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      );
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.poppins(
+              fontSize: 11.5,
+              height: 1.5,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   // The one action
 
@@ -818,7 +846,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
 
     if (v.canWithdraw) {
       return _Bar(
-        label: 'Withdraw and get ${formatPkr(v.myRegistration!.paidAmount)} back',
+        label:
+            'Withdraw and get ${formatPkr(v.myRegistration!.paidAmount)} back',
         icon: Icons.undo,
         color: AppColors.error,
         busy: _busy.contains('withdraw'),
@@ -849,7 +878,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
         onPressed: _generate,
         note: org.pendingApprovals > 0
             ? '${org.pendingApprovals} ${org.pendingApprovals == 1 ? 'entry' : 'entries'} '
-                'still awaiting your approval - drawing now rejects and refunds them'
+                  'still awaiting your approval - drawing now rejects and refunds them'
             : null,
       );
     }
@@ -870,35 +899,35 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.cardBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.divider),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: AppColors.cardBg,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: AppColors.divider),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
+            Expanded(
+              child: Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
                 ),
-                ?trailing,
-              ],
+              ),
             ),
-            const SizedBox(height: 10),
-            child,
+            ?trailing,
           ],
         ),
-      );
+        const SizedBox(height: 10),
+        child,
+      ],
+    ),
+  );
 }
 
 /// The bottom bar's one button, with an optional line of context above it.
@@ -939,7 +968,11 @@ class _Bar extends StatelessWidget {
           if (note != null) ...[
             Row(
               children: [
-                Icon(Icons.info_outline, size: 13, color: AppColors.textSecondary),
+                Icon(
+                  Icons.info_outline,
+                  size: 13,
+                  color: AppColors.textSecondary,
+                ),
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
@@ -1110,22 +1143,22 @@ class _HeaderCard extends StatelessWidget {
   }
 
   Widget _fact(IconData icon, String text) => Padding(
-        padding: const EdgeInsets.only(right: 14),
-        child: Row(
-          children: [
-            Icon(icon, size: 13, color: AppColors.accent),
-            const SizedBox(width: 4),
-            Text(
-              text,
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppColors.white.withValues(alpha: 0.9),
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.only(right: 14),
+    child: Row(
+      children: [
+        Icon(icon, size: 13, color: AppColors.accent),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: GoogleFonts.poppins(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: AppColors.white.withValues(alpha: 0.9),
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 /// A compact icon+label action for the trailing edge of a fixture tile.
@@ -1209,35 +1242,35 @@ class _RulesCard extends StatelessWidget {
             Icons.account_tree_outlined,
             knockout
                 ? 'Single-elimination knockout, up to ${t.maxTeams} teams. Seeded by '
-                    'team ELO: the top seed meets the lowest.'
+                      'team ELO: the top seed meets the lowest.'
                 : 'Round-robin, up to ${t.maxTeams} teams. Everybody plays everybody '
-                    'once.',
+                      'once.',
           ),
           if (knockout)
             _row(
               Icons.balance,
               'A drawn tie is decided in favour of the higher seed. If the number of '
-                  'entries is not a power of two, the top seeds get a bye into the next '
-                  'round.',
+              'entries is not a power of two, the top seeds get a bye into the next '
+              'round.',
             )
           else
             _row(Icons.balance, 'Win 3 points, draw 1, loss 0.'),
           _row(
             Icons.trending_up,
             'Tournament matches move ELO harder than friendlies, and the later the '
-                'round the harder: K=40 early, 48 in a semi-final, 56 in the final. A '
-                'bye or a walkover moves nothing, because no game was played.',
+            'round the harder: K=40 early, 48 in a semi-final, 56 in the final. A '
+            'bye or a walkover moves nothing, because no game was played.',
           ),
           _row(
             Icons.groups_outlined,
             'At least ${t.minTeams} teams have to enter. Below that the tournament is '
-                'cancelled at the deadline and every fee is refunded in full.',
+            'cancelled at the deadline and every fee is refunded in full.',
           ),
           _row(
             t.requiresApproval ? Icons.verified_outlined : Icons.bolt,
             t.requiresApproval
                 ? 'The organiser approves each entry. Your fee is held until they do, '
-                    'and refunded in full if they say no.'
+                      'and refunded in full if they say no.'
                 : 'Entry is automatic while there are spots left.',
           ),
         ],
@@ -1246,25 +1279,25 @@ class _RulesCard extends StatelessWidget {
   }
 
   Widget _row(IconData icon, String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 9),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 14, color: AppColors.accent),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                text,
-                style: GoogleFonts.poppins(
-                  fontSize: 11.5,
-                  height: 1.5,
-                  color: AppColors.textSecondary,
-                ),
-              ),
+    padding: const EdgeInsets.only(bottom: 9),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: AppColors.accent),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.poppins(
+              fontSize: 11.5,
+              height: 1.5,
+              color: AppColors.textSecondary,
             ),
-          ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 /// My team's own entry: what it cost, whether it is confirmed, and who is next.
@@ -1463,8 +1496,11 @@ class _OrganiserPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.admin_panel_settings_outlined,
-                  size: 15, color: AppColors.primary),
+              const Icon(
+                Icons.admin_panel_settings_outlined,
+                size: 15,
+                color: AppColors.primary,
+              ),
               const SizedBox(width: 7),
               Text(
                 'You are running this',
@@ -1483,13 +1519,19 @@ class _OrganiserPanel extends StatelessWidget {
             children: [
               _stat('${t.teamsAccepted}', 'accepted'),
               if (o.pendingApprovals > 0)
-                _stat('${o.pendingApprovals}', 'awaiting you',
-                    color: AppColors.warning),
+                _stat(
+                  '${o.pendingApprovals}',
+                  'awaiting you',
+                  color: AppColors.warning,
+                ),
               if (t.hasBracket)
-                _stat('${o.unsettledFixtures}', 'results to enter',
-                    color: o.unsettledFixtures > 0
-                        ? AppColors.warning
-                        : AppColors.success),
+                _stat(
+                  '${o.unsettledFixtures}',
+                  'results to enter',
+                  color: o.unsettledFixtures > 0
+                      ? AppColors.warning
+                      : AppColors.success,
+                ),
               _stat('${t.minTeams}', 'minimum'),
             ],
           ),
@@ -1511,8 +1553,11 @@ class _OrganiserPanel extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const Icon(Icons.chevron_right,
-                      size: 16, color: AppColors.accent),
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: AppColors.accent,
+                  ),
                 ],
               ),
             ),
@@ -1522,10 +1567,10 @@ class _OrganiserPanel extends StatelessWidget {
             TournamentWarning(
               t.teamsAccepted < t.minTeams
                   ? 'The deadline has passed with only ${t.teamsAccepted} of the '
-                      '${t.minTeams} teams needed. This will be cancelled and every fee '
-                      'refunded.'
+                        '${t.minTeams} teams needed. This will be cancelled and every fee '
+                        'refunded.'
                   : 'The deadline has passed. Draw the bracket to start play — the '
-                      'nightly job will do it for you if you do not.',
+                        'nightly job will do it for you if you do not.',
               color: t.teamsAccepted < t.minTeams
                   ? AppColors.error
                   : AppColors.warning,
@@ -1746,10 +1791,10 @@ class _RegisterSheetState extends State<_RegisterSheet> {
               Text(
                 t.requiresApproval
                     ? 'The fee is held now and only becomes the organiser’s once '
-                        'they accept you. Refunded in full if they say no, or if you '
-                        'withdraw before the deadline.'
+                          'they accept you. Refunded in full if they say no, or if you '
+                          'withdraw before the deadline.'
                     : 'The fee is held now, not spent. Refunded in full if you withdraw '
-                        'before the deadline or the tournament is cancelled.',
+                          'before the deadline or the tournament is cancelled.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 10,
@@ -1808,7 +1853,9 @@ class _RegisterSheetState extends State<_RegisterSheet> {
               ),
             ),
             Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
               size: 18,
               color: selected ? AppColors.accent : AppColors.border,
             ),
@@ -1910,8 +1957,8 @@ class _RegisterSheetState extends State<_RegisterSheet> {
                   win > 0 ? formatPkr(win) : 'Set at the draw',
                   win > 0
                       ? (e.isProjection
-                          ? 'projected at ${e.projectedFor ?? e.teams} teams'
-                          : 'runner-up ${formatPkr(e.runnerupShare)}')
+                            ? 'projected at ${e.projectedFor ?? e.teams} teams'
+                            : 'runner-up ${formatPkr(e.runnerupShare)}')
                       : 'once the field is known',
                   AppColors.accent,
                 ),
@@ -1925,7 +1972,9 @@ class _RegisterSheetState extends State<_RegisterSheet> {
             Row(
               children: [
                 Icon(
-                  short ? Icons.error_outline : Icons.account_balance_wallet_outlined,
+                  short
+                      ? Icons.error_outline
+                      : Icons.account_balance_wallet_outlined,
                   size: 14,
                   color: short ? AppColors.error : AppColors.textSecondary,
                 ),
@@ -1934,9 +1983,9 @@ class _RegisterSheetState extends State<_RegisterSheet> {
                   child: Text(
                     short
                         ? 'Wallet ${formatPkr(balance)} — you are '
-                            '${formatPkr(t.entryFee - balance)} short'
+                              '${formatPkr(t.entryFee - balance)} short'
                         : 'Wallet ${formatPkr(balance)}, leaving '
-                            '${formatPkr(balance - t.entryFee)} after this',
+                              '${formatPkr(balance - t.entryFee)} after this',
                     style: GoogleFonts.poppins(
                       fontSize: 10.5,
                       fontWeight: short ? FontWeight.w600 : FontWeight.w400,
@@ -2137,8 +2186,10 @@ class _ScoreDialogState extends State<_ScoreDialog> {
               isDense: true,
               filled: true,
               fillColor: AppColors.inputFill,
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 10,
+                horizontal: 8,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(9),
                 borderSide: BorderSide.none,
@@ -2217,8 +2268,11 @@ class _DrawResultSheet extends StatelessWidget {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  const Icon(Icons.account_tree,
-                      size: 18, color: AppColors.accent),
+                  const Icon(
+                    Icons.account_tree,
+                    size: 18,
+                    color: AppColors.accent,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -2248,13 +2302,17 @@ class _DrawResultSheet extends StatelessWidget {
                 children: [
                   _chip('$teams teams', Icons.groups_outlined),
                   if (bracket['rounds'] != null)
-                    _chip('${bracket['rounds']} rounds',
-                        Icons.format_list_numbered),
+                    _chip(
+                      '${bracket['rounds']} rounds',
+                      Icons.format_list_numbered,
+                    ),
                   if (bracket['fixtures'] != null)
                     _chip('${bracket['fixtures']} fixtures', Icons.sports),
                   if (byes > 0)
-                    _chip('$byes ${byes == 1 ? 'bye' : 'byes'}',
-                        Icons.fast_forward),
+                    _chip(
+                      '$byes ${byes == 1 ? 'bye' : 'byes'}',
+                      Icons.fast_forward,
+                    ),
                   if (prize > 0)
                     _chip('${formatPkr(prize)} prize', Icons.emoji_events),
                 ],
@@ -2319,25 +2377,25 @@ class _DrawResultSheet extends StatelessWidget {
   }
 
   Widget _chip(String text, IconData icon) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.cardBg,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: AppColors.border),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: AppColors.cardBg,
+      borderRadius: BorderRadius.circular(9),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, size: 12, color: AppColors.accent),
+        const SizedBox(width: 5),
+        Text(
+          text,
+          style: GoogleFonts.poppins(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
         ),
-        child: Row(
-          children: [
-            Icon(icon, size: 12, color: AppColors.accent),
-            const SizedBox(width: 5),
-            Text(
-              text,
-              style: GoogleFonts.poppins(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 }
