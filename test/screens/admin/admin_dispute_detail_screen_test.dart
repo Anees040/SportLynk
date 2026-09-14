@@ -328,17 +328,6 @@ void main() {
         (tester) async {
       await pumpCaseHosted(tester, api);
 
-      for (final e in find.byWidgetPredicate((w) => w is ButtonStyleButton).evaluate()) {
-        debugPrint('DIAG BTN ${e.widget.runtimeType}');
-      }
-      for (final t in find.byType(Text).evaluate()) {
-        debugPrint('DIAG TXT "${(t.widget as Text).data}"');
-      }
-      debugPrint('DIAG ELEV=${find.byType(ElevatedButton).evaluate().length} '
-          'OUT=${find.byType(OutlinedButton).evaluate().length} '
-          'RULE=${find.widgetWithText(ElevatedButton, 'Rule this dispute').evaluate().length} '
-          'RULEoff=${find.widgetWithText(ElevatedButton, 'Rule this dispute', skipOffstage: false).evaluate().length}');
-
       // The ruling sheet offers the four result-changing actions; "your own" is always
       // available and asks for a scoreline.
       await tapVisible(
