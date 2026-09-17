@@ -1,6 +1,6 @@
 {
   "generated_by": "validate_intent_test.py",
-  "generated_at": "2026-08-28T13:06:46+00:00",
+  "generated_at": "2026-09-17T00:32:38+00:00",
   "wave": "S.6 Wave A",
   "model": "#4 assistant intent classifier",
   "role": "held-out exam -- never trained on, never generated, never repaired",
@@ -196,7 +196,7 @@
   },
   "authored_overlap": {
     "file": "authored_intents.csv",
-    "rows_compared": 382,
+    "rows_compared": 653,
     "threshold": 0.8,
     "overlaps": []
   },
@@ -314,7 +314,7 @@
     {
       "name": "disjoint_from_authored",
       "ok": true,
-      "detail": "382 authored training rows, none within 0.8 of an exam row"
+      "detail": "653 authored training rows, none within 0.8 of an exam row"
     },
     {
       "name": "every_row_documented",
