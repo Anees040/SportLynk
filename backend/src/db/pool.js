@@ -71,6 +71,13 @@ const pool = new Pool({
   ssl: useSsl ? { rejectUnauthorized: false } : false,
 });
 
+// Idle clients in the pool emit an error when the remote server (Supabase pooler)
+// closes an idle socket. Handling this prevents an unhandled 'error' event crash.
+pool.on('error', (err) => {
+  console.warn('⚠️ Idle database client connection reset (handled):', err.message);
+});
+
+
 // Fail loudly and usefully. "Database connection failed: <driver error>" on its
 // own has cost hours before; the hints below name the three things that are
 // ever wrong.
