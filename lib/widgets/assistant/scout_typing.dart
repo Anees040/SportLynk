@@ -55,6 +55,7 @@ class _ScoutTypingState extends State<ScoutTyping>
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final caption = _caption;
     return Semantics(
       liveRegion: true,
@@ -73,23 +74,23 @@ class _ScoutTypingState extends State<ScoutTyping>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                     decoration: BoxDecoration(
-                      color: ScoutTheme.bubble,
+                      color: t.bubble,
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(5),
                         topRight: Radius.circular(ScoutTheme.bubbleRadius),
                         bottomLeft: Radius.circular(ScoutTheme.bubbleRadius),
                         bottomRight: Radius.circular(ScoutTheme.bubbleRadius),
                       ),
-                      border: Border.all(color: ScoutTheme.line),
+                      border: Border.all(color: t.line),
                     ),
                     child: AnimatedBuilder(
                       animation: _c,
                       builder: (_, _) => Row(
                         mainAxisSize: MainAxisSize.min,
                         children: List.generate(3, (i) {
-                          final t = (_c.value + i * 0.2) % 1.0;
-                          final dy = -3.0 * (t < 0.5 ? t * 2 : (1 - t) * 2);
-                          final glow = t < 0.5 ? t * 2 : (1 - t) * 2;
+                          final phase = (_c.value + i * 0.2) % 1.0;
+                          final dy = -3.0 * (phase < 0.5 ? phase * 2 : (1 - phase) * 2);
+                          final glow = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 2.5),
                             child: Transform.translate(
@@ -99,11 +100,7 @@ class _ScoutTypingState extends State<ScoutTyping>
                                 height: 6.5,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: Color.lerp(
-                                    ScoutTheme.inkFaint,
-                                    ScoutTheme.accent,
-                                    glow,
-                                  ),
+                                  color: Color.lerp(t.inkFaint, t.accent, glow),
                                 ),
                               ),
                             ),
@@ -117,8 +114,8 @@ class _ScoutTypingState extends State<ScoutTyping>
                       padding: const EdgeInsets.only(left: 6, top: 5),
                       child: Text(
                         caption,
-                        style: const TextStyle(
-                          color: ScoutTheme.inkFaint,
+                        style: TextStyle(
+                          color: t.inkFaint,
                           fontSize: 10.5,
                           height: 1.3,
                         ),
