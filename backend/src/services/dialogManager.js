@@ -301,6 +301,13 @@ function labelFor(intent) {
 const NOT_A_GUESS = new Set(['affirm', 'deny', 'out_of_scope', 'greeting']);
 
 /**
+ * How close the model's top two guesses must be, in confidence, to count as a genuine
+ * two-way tie rather than a leader with a runner-up. A 0.20 gap is the model
+ * preferring the first; inside it, the two are a coin flip worth asking about.
+ */
+const FOCUSED_GAP = 0.2;
+
+/**
  * "Did you mean" — the runner-up intents, as buttons.
  *
  * `alternatives` is the classifier's own ranking below the winner, so on a
@@ -319,6 +326,58 @@ function guessChips(alternatives = []) {
     if (out.length === 3) break;
   }
   return out;
+}
+
+/**
+ * The routable, nameable runner-ups, kept with the group and confidence a plain guess
+ * chip discards. The raw filter [guessChips] applies, plus the two fields
+ * [focusedClarify] needs to decide whether the top two are a real tie.
+ */
+function rankedGuesses(alternatives = []) {
+  const out = [];
+  for (const alt of alternatives) {
+    if (!alt || NOT_A_GUESS.has(alt.intent) || !actions.isAction(alt.intent)) continue;
+    const label = labelFor(alt.intent);
+    if (!label) continue;
+    out.push({
+      intent: alt.intent,
+      label,
+      group: alt.group || null,
+      confidence: Number(alt.confidence) || 0,
+    });
+  }
+  return out;
+}
+
+/**
+ * "Did you mean A or B?" — the binary question, when the model's top two guesses are a
+ * genuine two-way tie rather than scattered uncertainty.
+ *
+ * The intent model scores 0.7913 at intent-GROUP resolution against 0.6957 at intent
+ * resolution: when it is unsure it is usually unsure between two neighbours in one
+ * group, and naming just those two recovers most of that gap for a single tap. So this
+ * fires only when the top two routable guesses share a non-null group and sit within
+ * [FOCUSED_GAP] of each other. When they cross groups, or one clearly leads, the model
+ * is genuinely lost and the wide capability menu is the honest answer.
+ *
+ * It builds a plain [reply], never [menu], so the capability card is not assembled
+ * here — a "Something else" chip posts `capability_menu`, keeping menu() the single
+ * place that card is built. Returns null to mean "use the full menu".
+ */
+function focusedClarify(alternatives = []) {
+  const ranked = rankedGuesses(alternatives);
+  if (ranked.length < 2) return null;
+  const [a, b] = ranked;
+  if (!a.group || a.group !== b.group) return null;
+  if (Math.abs(a.confidence - b.confidence) > FOCUSED_GAP) return null;
+  return reply(`Did you mean ${a.label} or ${b.label}?`, {
+    source: SOURCES.MENU,
+    chips: [
+      chip(a.label, a.intent),
+      chip(b.label, b.intent),
+      chip('Something else', 'capability_menu'),
+    ],
+  });
 }
 
 /**
@@ -406,6 +465,11 @@ function abstainReply({ reason, alternatives = [], name = 'Scout', slotChip = nu
     ));
   }
   if (reason === ml.NLU_ABSTAIN_LOW_CONFIDENCE) {
+    // A genuine two-way tie gets the binary question alone; the slot chip, if the
+    // parser extracted something concrete, still leads it. Anything else falls back to
+    // the full menu with the runner-ups promoted to chips.
+    const focused = focusedClarify(alternatives);
+    if (focused) return withChips(focused);
     return withChips(
       menu('I am not sure I got that. Did you mean one of these?', { name }),
       guessChips(alternatives),
@@ -855,6 +919,7 @@ module.exports = {
   slotsFromEntities,
   fsmStateOf,
   guessChips,
+  focusedClarify,
   slotSearchChip,
   abstainReply,
   labelFor,
