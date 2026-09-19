@@ -46,7 +46,7 @@ class _ScoutFabState extends State<ScoutFab> with SingleTickerProviderStateMixin
             borderRadius: BorderRadius.circular(widget.extended ? 18 : 999),
             boxShadow: [
               BoxShadow(
-                color: ScoutTheme.accent.withValues(alpha: 0.16 + 0.16 * t),
+                color: ScoutTheme.accentFill.withValues(alpha: 0.16 + 0.16 * t),
                 blurRadius: 14 + 10 * t,
                 spreadRadius: 1 + 2 * t,
               ),
@@ -68,24 +68,23 @@ class _ScoutFabState extends State<ScoutFab> with SingleTickerProviderStateMixin
                   ? const EdgeInsets.symmetric(horizontal: 16, vertical: 13)
                   : const EdgeInsets.all(15),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [ScoutTheme.canvasGlow, ScoutTheme.accentDim],
-                ),
+                gradient: ScoutTheme.accentGradient,
                 borderRadius: BorderRadius.circular(widget.extended ? 18 : 999),
-                border: Border.all(color: ScoutTheme.accent.withValues(alpha: 0.45)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.auto_awesome_rounded, color: Color(0xFFEAF6EE), size: 22),
+                  const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: ScoutTheme.onAccentFill,
+                    size: 22,
+                  ),
                   if (widget.extended) ...[
                     const SizedBox(width: 8),
                     const Text(
                       'Ask Scout',
                       style: TextStyle(
-                        color: Color(0xFFEAF6EE),
+                        color: ScoutTheme.onAccentFill,
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,
                       ),
@@ -103,9 +102,12 @@ class _ScoutFabState extends State<ScoutFab> with SingleTickerProviderStateMixin
 
 /// The same entry point as a banner, for the Home tab's quick actions.
 ///
-/// It is dark on a white screen on purpose: it previews the surface it opens, and it
-/// is the one element on Home that is not another white card, which is what stops a
-/// brand-new capability from being invisible among four tiles that were already there.
+/// It carries the only green on an otherwise white screen, which is what stops a
+/// new capability from disappearing among four tiles that were already there. It
+/// no longer previews the assistant's surface by being dark: Scout follows the
+/// system brightness now, so there is no one surface to preview, and a dark card
+/// on a light Home would be a promise about the next screen that the phone's own
+/// setting decides.
 class ScoutAskBanner extends StatelessWidget {
   final VoidCallback onTap;
 
@@ -113,6 +115,7 @@ class ScoutAskBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     return Semantics(
       button: true,
       child: GestureDetector(
@@ -120,16 +123,12 @@ class ScoutAskBanner extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [ScoutTheme.canvasGlow, ScoutTheme.canvas],
-            ),
+            color: ScoutTheme.accentFill.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: ScoutTheme.accent.withValues(alpha: 0.30)),
+            border: Border.all(color: t.accent.withValues(alpha: 0.30)),
             boxShadow: [
               BoxShadow(
-                color: ScoutTheme.canvas.withValues(alpha: 0.22),
+                color: ScoutTheme.accentFill.withValues(alpha: 0.10),
                 blurRadius: 14,
                 offset: const Offset(0, 5),
               ),
@@ -141,34 +140,34 @@ class ScoutAskBanner extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: ScoutTheme.accent.withValues(alpha: 0.15),
+                  color: t.accent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(13),
-                  border: Border.all(color: ScoutTheme.accent.withValues(alpha: 0.35)),
+                  border: Border.all(color: t.accent.withValues(alpha: 0.35)),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.auto_awesome_rounded,
-                  color: ScoutTheme.accent,
+                  color: t.accent,
                   size: 21,
                 ),
               ),
               const SizedBox(width: 13),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Ask Scout',
                       style: TextStyle(
-                        color: ScoutTheme.ink,
+                        color: t.ink,
                         fontSize: 14.5,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
                       'Book a ground, find players, check your wallet — just say it.',
                       style: TextStyle(
-                        color: ScoutTheme.inkSoft,
+                        color: t.inkSoft,
                         fontSize: 11,
                         height: 1.3,
                       ),
@@ -177,7 +176,7 @@ class ScoutAskBanner extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              const Icon(Icons.arrow_forward_rounded, color: ScoutTheme.accent, size: 18),
+              Icon(Icons.arrow_forward_rounded, color: t.accent, size: 18),
             ],
           ),
         ),
