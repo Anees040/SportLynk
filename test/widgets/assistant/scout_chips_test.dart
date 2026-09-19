@@ -55,7 +55,7 @@ void main() {
       await pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Center(
               child: ScoutChipButton(
                 label: 'Book it',
@@ -93,7 +93,7 @@ void main() {
         await pumpApp(
             tester,
             ColoredBox(
-              color: ScoutTheme.canvas,
+              color: ScoutTheme.light.canvas,
               child: Center(
                 child: ScoutChipButton(label: 'Confirm', tone: tone, onTap: () {}),
               ),
@@ -104,19 +104,21 @@ void main() {
       }
 
       final primary = await decoration(ScoutChipTone.primary);
-      expect(primary.gradient, ScoutTheme.userBubbleGradient);
+      // A primary chip is the one filled green control in a reply, so it takes the
+      // fixed fill gradient that holds its white label, not the palette accent.
+      expect(primary.gradient, ScoutTheme.accentGradient);
       expect(primary.color, isNull);
 
       final normal = await decoration(ScoutChipTone.normal);
       expect(normal.gradient, isNull);
-      expect(normal.color, ScoutTheme.accent.withValues(alpha: 0.10));
+      expect(normal.color, ScoutTheme.light.accent.withValues(alpha: 0.10));
     });
 
     testWidgets('a destructive chip is drawn in the danger colour', (tester) async {
       await pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Center(
               child: ScoutChipButton(
                 label: 'Cancel booking',
@@ -127,9 +129,9 @@ void main() {
             ),
           ));
       expect(tester.widget<Text>(find.text('Cancel booking')).style!.color,
-          ScoutTheme.danger);
+          ScoutTheme.light.danger);
       expect(tester.widget<Icon>(find.byIcon(Icons.event_busy_rounded)).color,
-          ScoutTheme.danger);
+          ScoutTheme.light.danger);
     });
 
     // Disabled means unreachable, not merely ignored — the same rule the composer's
@@ -139,7 +141,7 @@ void main() {
       await pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Center(
               child: ScoutChipButton(
                 label: 'Book it',
@@ -150,7 +152,7 @@ void main() {
           ));
       expect(tester.widget<InkWell>(find.byType(InkWell)).onTap, isNull);
       expect(tester.widget<Text>(find.text('Book it')).style!.color,
-          ScoutTheme.inkFaint);
+          ScoutTheme.light.inkFaint);
       await tester.tap(find.text('Book it'));
       expect(taps, 0);
     });
@@ -160,7 +162,7 @@ void main() {
         await pumpApp(
             tester,
             ColoredBox(
-              color: ScoutTheme.canvas,
+              color: ScoutTheme.light.canvas,
               child: Center(
                 child: ScoutChipButton(
                     label: 'Other times',
@@ -189,7 +191,7 @@ void main() {
         pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Align(
               alignment: Alignment.topLeft,
               child: SizedBox(
@@ -236,9 +238,12 @@ void main() {
     // even when the caller passes no tones at all.
     testWidgets('cancelling is destructive by default', (tester) async {
       await pumpWrap(tester, onTap: (_) {});
-      expect(tester.widget<Text>(find.text('Cancel')).style!.color, ScoutTheme.danger);
+      expect(tester.widget<Text>(find.text('Cancel')).style!.color,
+          ScoutTheme.light.danger);
+      // A normal chip's label is the accent itself, not a bespoke pale green: the
+      // old hardcoded fill was removed when the palette gained a light mode.
       expect(tester.widget<Text>(find.text('Other times')).style!.color,
-          const Color(0xFFB7F7CD));
+          ScoutTheme.light.accent);
     });
 
     testWidgets('the caller nominates which action a card is for', (tester) async {
