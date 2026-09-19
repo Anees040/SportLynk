@@ -57,7 +57,7 @@ void main() {
       tester,
       Builder(
         builder: (context) => Scaffold(
-          backgroundColor: ScoutTheme.canvas,
+          backgroundColor: ScoutTheme.light.canvas,
           body: Center(
             child: ElevatedButton(
               onPressed: () => showScoutThreadsSheet(context, controller),
@@ -397,7 +397,7 @@ void main() {
         tester,
         Builder(
           builder: (context) => Scaffold(
-            backgroundColor: ScoutTheme.canvas,
+            backgroundColor: ScoutTheme.light.canvas,
             body: Center(
               child: GestureDetector(
                 onTap: () => showScoutHelpSheet(
