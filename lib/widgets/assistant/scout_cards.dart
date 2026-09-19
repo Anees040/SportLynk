@@ -75,7 +75,7 @@ class ScoutCardFrame extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         width: double.infinity,
         padding: padding,
-        decoration: ScoutTheme.cardDecoration(tint: tint),
+        decoration: ScoutTheme.of(context).cardDecoration(tint: tint),
         child: child,
       );
 }
@@ -145,6 +145,7 @@ class _VenueCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final rating = v.rating;
     return ScoutCardFrame(
       child: Column(
@@ -173,7 +174,7 @@ class _VenueCard extends StatelessWidget {
                           ScoutFact(
                             Icons.payments_rounded,
                             '${formatPkr(v.pricePerHour)}/hr',
-                            color: ScoutTheme.money,
+                            color: t.money,
                           ),
                         ScoutFact(
                           Icons.star_rounded,
@@ -181,7 +182,7 @@ class _VenueCard extends StatelessWidget {
                               ? 'New'
                               : '${rating.toStringAsFixed(1)}'
                                   '${v.totalReviews > 0 ? ' (${v.totalReviews})' : ''}',
-                          color: rating == null ? ScoutTheme.inkFaint : ScoutTheme.money,
+                          color: rating == null ? t.inkFaint : t.money,
                         ),
                         if (v.sport.isNotEmpty)
                           ScoutFact(Icons.sports_soccer_rounded, v.sport),
@@ -222,21 +223,22 @@ class _SlotPickerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     return ScoutCardFrame(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.schedule_rounded, size: 15, color: ScoutTheme.accent),
+              Icon(Icons.schedule_rounded, size: 15, color: t.accent),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   [p.venueName, p.dateLabel].where((s) => s.isNotEmpty).join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: ScoutTheme.ink,
+                  style: TextStyle(
+                    color: t.ink,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                   ),
@@ -246,9 +248,9 @@ class _SlotPickerCard extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           if (p.slots.isEmpty)
-            const Text(
+            Text(
               'No free slots on that day.',
-              style: TextStyle(color: ScoutTheme.inkSoft, fontSize: 12),
+              style: TextStyle(color: t.inkSoft, fontSize: 12),
             )
           else
             Wrap(
@@ -285,7 +287,8 @@ class _SlotTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = enabled ? ScoutTheme.ink : ScoutTheme.inkFaint;
+    final t = ScoutTheme.of(context);
+    final fg = enabled ? t.ink : t.inkFaint;
     return Semantics(
       button: true,
       enabled: enabled,
@@ -300,12 +303,12 @@ class _SlotTile extends StatelessWidget {
             width: 92,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             decoration: BoxDecoration(
-              color: ScoutTheme.accent.withValues(alpha: enabled ? 0.08 : 0.03),
+              color: t.accent.withValues(alpha: enabled ? 0.08 : 0.03),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: enabled
-                    ? ScoutTheme.accent.withValues(alpha: 0.30)
-                    : ScoutTheme.lineSoft,
+                    ? t.accent.withValues(alpha: 0.30)
+                    : t.lineSoft,
               ),
             ),
             child: Column(
@@ -314,7 +317,7 @@ class _SlotTile extends StatelessWidget {
                 Text(
                   '${slot.n}',
                   style: TextStyle(
-                    color: ScoutTheme.accent.withValues(alpha: enabled ? 0.75 : 0.35),
+                    color: t.accent.withValues(alpha: enabled ? 0.75 : 0.35),
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
                   ),
@@ -331,7 +334,7 @@ class _SlotTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: enabled ? ScoutTheme.money : ScoutTheme.inkFaint,
+                      color: enabled ? t.money : t.inkFaint,
                       fontSize: 9.5,
                       fontWeight: FontWeight.w600,
                     ),
@@ -364,6 +367,7 @@ class _ConfirmCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final refunding = c.what.contains('cancel');
     final totalLabel = refunding ? 'Refund to wallet' : 'Total';
     final depositLabel = refunding
@@ -379,7 +383,7 @@ class _ConfirmCard extends StatelessWidget {
         .toList();
 
     return ScoutCardFrame(
-      tint: ScoutTheme.money,
+      tint: t.money,
       padding: const EdgeInsets.all(13),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -389,14 +393,14 @@ class _ConfirmCard extends StatelessWidget {
               Icon(
                 refunding ? Icons.undo_rounded : Icons.lock_outline_rounded,
                 size: 15,
-                color: ScoutTheme.money,
+                color: t.money,
               ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   c.title,
-                  style: const TextStyle(
-                    color: ScoutTheme.ink,
+                  style: TextStyle(
+                    color: t.ink,
                     fontSize: 14.5,
                     fontWeight: FontWeight.w700,
                     height: 1.2,
@@ -410,7 +414,7 @@ class _ConfirmCard extends StatelessWidget {
             ...detail.map((l) => _DetailRow(label: l.label, value: l.value)),
           ],
           const SizedBox(height: 9),
-          Container(height: 1, color: ScoutTheme.money.withValues(alpha: 0.18)),
+          Container(height: 1, color: t.money.withValues(alpha: 0.18)),
           const SizedBox(height: 9),
           if (c.total != null)
             _DetailRow(label: totalLabel, value: c.totalLabel, emphasis: true),
@@ -419,20 +423,20 @@ class _ConfirmCard extends StatelessWidget {
               label: depositLabel,
               value: c.depositLabel,
               emphasis: true,
-              tone: ScoutTheme.money,
+              tone: t.money,
             ),
           if (c.note != null) ...[
             const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.info_outline_rounded, size: 12, color: ScoutTheme.inkFaint),
+                Icon(Icons.info_outline_rounded, size: 12, color: t.inkFaint),
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
                     c.note!,
-                    style: const TextStyle(
-                      color: ScoutTheme.inkSoft,
+                    style: TextStyle(
+                      color: t.inkSoft,
                       fontSize: 10.5,
                       height: 1.35,
                     ),
@@ -469,13 +473,14 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     if (label.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 4),
         child: Text(
           value,
           style: TextStyle(
-            color: tone ?? ScoutTheme.ink,
+            color: tone ?? t.ink,
             fontSize: emphasis ? 13.5 : 12,
             fontWeight: emphasis ? FontWeight.w700 : FontWeight.w500,
           ),
@@ -492,7 +497,7 @@ class _DetailRow extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                color: emphasis ? ScoutTheme.inkSoft : ScoutTheme.inkFaint,
+                color: emphasis ? t.inkSoft : t.inkFaint,
                 fontSize: emphasis ? 12 : 11.5,
                 fontWeight: emphasis ? FontWeight.w600 : FontWeight.w400,
               ),
@@ -505,7 +510,7 @@ class _DetailRow extends StatelessWidget {
               value,
               textAlign: TextAlign.right,
               style: TextStyle(
-                color: tone ?? ScoutTheme.ink,
+                color: tone ?? t.ink,
                 fontSize: emphasis ? 13.5 : 12,
                 fontWeight: emphasis ? FontWeight.w700 : FontWeight.w500,
               ),
@@ -536,20 +541,28 @@ class _BookingCard extends StatelessWidget {
 
   const _BookingCard(this.b, this.actions);
 
-  static ({Color color, IconData icon, String label}) _tone(String status) {
+  /// The status word, mapped to a colour, an icon and a display label.
+  ///
+  /// Takes the palette rather than reading it from a context, because the mapping
+  /// is a pure function of the status and the caller has already resolved the
+  /// brightness once for the whole card.
+  static ({Color color, IconData icon, String label}) _tone(
+    ScoutTheme t,
+    String status,
+  ) {
     switch (status) {
       case 'confirmed':
-        return (color: ScoutTheme.good, icon: Icons.verified_rounded, label: 'Confirmed');
+        return (color: t.good, icon: Icons.verified_rounded, label: 'Confirmed');
       case 'completed':
-        return (color: ScoutTheme.inkSoft, icon: Icons.done_all_rounded, label: 'Completed');
+        return (color: t.inkSoft, icon: Icons.done_all_rounded, label: 'Completed');
       case 'cancelled':
       case 'canceled':
-        return (color: ScoutTheme.danger, icon: Icons.cancel_outlined, label: 'Cancelled');
+        return (color: t.danger, icon: Icons.cancel_outlined, label: 'Cancelled');
       case 'pending':
-        return (color: ScoutTheme.money, icon: Icons.schedule_rounded, label: 'Pending');
+        return (color: t.money, icon: Icons.schedule_rounded, label: 'Pending');
       default:
         return (
-          color: ScoutTheme.inkSoft,
+          color: t.inkSoft,
           icon: Icons.receipt_long_rounded,
           label: status.isEmpty ? 'Booking' : status,
         );
@@ -558,11 +571,12 @@ class _BookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = _tone(b.status);
+    final t = ScoutTheme.of(context);
+    final tone = _tone(t, b.status);
     final ref = b.id.length > 7 ? b.id.substring(0, 7) : b.id;
 
     return ScoutCardFrame(
-      tint: t.color,
+      tint: tone.color,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -579,18 +593,18 @@ class _BookingCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: t.color.withValues(alpha: 0.14),
+                  color: tone.color.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: t.color.withValues(alpha: 0.34)),
+                  border: Border.all(color: tone.color.withValues(alpha: 0.34)),
                 ),
                 child: Row(
                   children: [
-                    Icon(t.icon, size: 11, color: t.color),
+                    Icon(tone.icon, size: 11, color: tone.color),
                     const SizedBox(width: 4),
                     Text(
-                      t.label,
+                      tone.label,
                       style: TextStyle(
-                        color: t.color,
+                        color: tone.color,
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,
                       ),
@@ -611,7 +625,7 @@ class _BookingCard extends StatelessWidget {
                 ScoutFact(
                   Icons.payments_outlined,
                   b.totalLabel,
-                  color: ScoutTheme.money,
+                  color: t.money,
                 ),
             ],
           ),
@@ -619,8 +633,8 @@ class _BookingCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Ref $ref',
-              style: const TextStyle(
-                color: ScoutTheme.inkFaint,
+              style: TextStyle(
+                color: t.inkFaint,
                 fontSize: 10,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 0.4,
