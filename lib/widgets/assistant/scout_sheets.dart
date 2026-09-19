@@ -23,7 +23,7 @@ Future<void> showScoutThreadsSheet(
 ) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: ScoutTheme.card,
+    backgroundColor: ScoutTheme.of(context).card,
     showDragHandle: true,
     isScrollControlled: true,
     builder: (_) => _ThreadsSheet(controller: controller),
@@ -84,16 +84,19 @@ class _ThreadsSheetState extends State<_ThreadsSheet> {
   }
 
   Future<void> _delete(ScoutThread t) async {
+    // Named `theme` rather than the usual `t`, which this class spends on the
+    // thread being acted upon.
+    final theme = ScoutTheme.of(context);
     final yes = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: ScoutTheme.card,
-        title: const Text('Delete this chat?',
-            style: TextStyle(color: ScoutTheme.ink, fontSize: 16)),
-        content: const Text(
+        backgroundColor: theme.card,
+        title: Text('Delete this chat?',
+            style: TextStyle(color: theme.ink, fontSize: 16)),
+        content: Text(
           'The messages go with it. Any bookings you made in this chat are unaffected — '
           'they live in your bookings, not in the conversation.',
-          style: TextStyle(color: ScoutTheme.inkSoft, fontSize: 12.5, height: 1.4),
+          style: TextStyle(color: theme.inkSoft, fontSize: 12.5, height: 1.4),
         ),
         actions: [
           TextButton(
@@ -102,7 +105,7 @@ class _ThreadsSheetState extends State<_ThreadsSheet> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete', style: TextStyle(color: ScoutTheme.danger)),
+            child: Text('Delete', style: TextStyle(color: theme.danger)),
           ),
         ],
       ),
@@ -117,6 +120,7 @@ class _ThreadsSheetState extends State<_ThreadsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ScoutTheme.of(context);
     final list = _threads;
     final current = widget.controller.threadId;
 
@@ -129,11 +133,11 @@ class _ThreadsSheetState extends State<_ThreadsSheet> {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Your chats',
                     style: TextStyle(
-                      color: ScoutTheme.ink,
+                      color: theme.ink,
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
@@ -157,7 +161,7 @@ class _ThreadsSheetState extends State<_ThreadsSheet> {
                 padding: const EdgeInsets.symmetric(vertical: 22),
                 child: Text(
                   _error!,
-                  style: const TextStyle(color: ScoutTheme.danger, fontSize: 12.5),
+                  style: TextStyle(color: theme.danger, fontSize: 12.5),
                 ),
               )
             else if (list == null)
@@ -172,11 +176,11 @@ class _ThreadsSheetState extends State<_ThreadsSheet> {
                 ),
               )
             else if (list.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 26),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 26),
                 child: Text(
                   'No chats yet. Whatever you ask first becomes one.',
-                  style: TextStyle(color: ScoutTheme.inkFaint, fontSize: 12.5),
+                  style: TextStyle(color: theme.inkFaint, fontSize: 12.5),
                 ),
               )
             else
@@ -184,9 +188,9 @@ class _ThreadsSheetState extends State<_ThreadsSheet> {
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: list.length,
-                  separatorBuilder: (_, _) => const Divider(
+                  separatorBuilder: (_, _) => Divider(
                     height: 1,
-                    color: ScoutTheme.lineSoft,
+                    color: theme.lineSoft,
                   ),
                   itemBuilder: (_, i) {
                     final t = list[i];
@@ -196,14 +200,14 @@ class _ThreadsSheetState extends State<_ThreadsSheet> {
                       leading: Icon(
                         active ? Icons.chat_bubble_rounded : Icons.chat_bubble_outline_rounded,
                         size: 18,
-                        color: active ? ScoutTheme.accent : ScoutTheme.inkFaint,
+                        color: active ? theme.accent : theme.inkFaint,
                       ),
                       title: Text(
                         t.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: ScoutTheme.ink,
+                          color: theme.ink,
                           fontSize: 13.5,
                           fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                         ),
@@ -215,14 +219,14 @@ class _ThreadsSheetState extends State<_ThreadsSheet> {
                         ].join('  ·  '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: ScoutTheme.inkFaint, fontSize: 11),
+                        style: TextStyle(color: theme.inkFaint, fontSize: 11),
                       ),
                       trailing: PopupMenuButton<String>(
-                        color: ScoutTheme.card,
-                        icon: const Icon(
+                        color: theme.card,
+                        icon: Icon(
                           Icons.more_horiz_rounded,
                           size: 18,
-                          color: ScoutTheme.inkFaint,
+                          color: theme.inkFaint,
                         ),
                         onSelected: (v) async {
                           if (v == 'rename') await _rename(t);
@@ -275,10 +279,11 @@ Future<void> showScoutHelpSheet(
 }) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: ScoutTheme.card,
+    backgroundColor: ScoutTheme.of(context).card,
     showDragHandle: true,
     isScrollControlled: true,
     builder: (sheetContext) {
+      final t = ScoutTheme.of(sheetContext);
       final groups = ScoutCapability.grouped(capabilities);
       return SafeArea(
         child: ConstrainedBox(
@@ -291,25 +296,25 @@ Future<void> showScoutHelpSheet(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'What I can do',
                   style: TextStyle(
-                    color: ScoutTheme.ink,
+                    color: t.ink,
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 3),
-                const Text(
+                Text(
                   'Tap one, or just type it in your own words — English, Roman Urdu, either.',
-                  style: TextStyle(color: ScoutTheme.inkFaint, fontSize: 11.5, height: 1.35),
+                  style: TextStyle(color: t.inkFaint, fontSize: 11.5, height: 1.35),
                 ),
                 const SizedBox(height: 14),
                 if (capabilities.isEmpty)
-                  const Text(
+                  Text(
                     'I could not load the list just now. Ask me anything anyway — grounds, '
                     'bookings, teams, your wallet.',
-                    style: TextStyle(color: ScoutTheme.inkSoft, fontSize: 12.5, height: 1.4),
+                    style: TextStyle(color: t.inkSoft, fontSize: 12.5, height: 1.4),
                   )
                 else
                   Flexible(
@@ -321,8 +326,8 @@ Future<void> showScoutHelpSheet(
                             padding: EdgeInsets.only(top: g == groups.first ? 0 : 16, bottom: 6),
                             child: Text(
                               g.group.toUpperCase(),
-                              style: const TextStyle(
-                                color: ScoutTheme.inkFaint,
+                              style: TextStyle(
+                                color: t.inkFaint,
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 1.1,
@@ -357,47 +362,50 @@ class _CapabilityRow extends StatelessWidget {
   const _CapabilityRow({required this.capability, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(ScoutChipIcons.of(capability.action), size: 16, color: ScoutTheme.accent),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+  Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(ScoutChipIcons.of(capability.action), size: 16, color: t.accent),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    capability.label,
+                    style: TextStyle(
+                      color: t.ink,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (capability.gloss.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
-                      capability.label,
-                      style: const TextStyle(
-                        color: ScoutTheme.ink,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                      capability.gloss,
+                      style: TextStyle(
+                        color: t.inkFaint,
+                        fontSize: 11,
+                        height: 1.3,
                       ),
                     ),
-                    if (capability.gloss.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        capability.gloss,
-                        style: const TextStyle(
-                          color: ScoutTheme.inkFaint,
-                          fontSize: 11,
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
-              const Icon(Icons.chevron_right_rounded, size: 17, color: ScoutTheme.inkFaint),
-            ],
-          ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 17, color: t.inkFaint),
+          ],
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _RenameDialog extends StatefulWidget {
@@ -426,15 +434,16 @@ class _RenameDialogState extends State<_RenameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     return AlertDialog(
-      backgroundColor: ScoutTheme.card,
-      title: const Text('Rename chat',
-          style: TextStyle(color: ScoutTheme.ink, fontSize: 16)),
+      backgroundColor: t.card,
+      title: Text('Rename chat',
+          style: TextStyle(color: t.ink, fontSize: 16)),
       content: TextField(
         controller: _ctrl,
         autofocus: true,
         maxLength: 60,
-        style: const TextStyle(color: ScoutTheme.ink),
+        style: TextStyle(color: t.ink),
         decoration: const InputDecoration(hintText: 'Chat name'),
         onSubmitted: (v) => Navigator.pop(context, v.trim()),
       ),
