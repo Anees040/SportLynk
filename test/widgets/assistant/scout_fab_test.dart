@@ -40,7 +40,7 @@ void main() {
       await pumpApp(
         tester,
         ColoredBox(
-          color: ScoutTheme.canvas,
+          color: ScoutTheme.light.canvas,
           child: Center(
             child: ScoutFab(extended: extended, onTap: () => taps++),
           ),
@@ -58,15 +58,9 @@ void main() {
 
       final face = decorations(tester, find.byType(ScoutFab))[1];
       expect(face.borderRadius, BorderRadius.circular(999));
-      expect(
-          face.gradient,
-          const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [ScoutTheme.canvasGlow, ScoutTheme.accentDim],
-          ));
-      expect(face.border,
-          Border.all(color: ScoutTheme.accent.withValues(alpha: 0.45)));
+      // The face is the fixed fill gradient in both brightnesses: it is the one
+      // control carrying a white glyph, and only the fill accents hold white.
+      expect(face.gradient, ScoutTheme.accentGradient);
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
@@ -105,7 +99,7 @@ void main() {
         await pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Center(
               child: ScoutFab(extended: extended, onTap: () => taps++),
             ),
@@ -123,7 +117,7 @@ void main() {
     Future<void> pumpFab(WidgetTester tester) => pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Center(child: ScoutFab(onTap: () {})),
           ),
         );
@@ -150,9 +144,10 @@ void main() {
       expect(decorations(tester, find.byType(ScoutFab))[1].gradient, face.gradient);
       expect(decorations(tester, find.byType(ScoutFab))[1].borderRadius,
           face.borderRadius);
-      // 15 of padding either side of a 22px glyph, plus the 1px border: comfortably
-      // over the project's 48px floor without a `SizedBox` to hold it there.
-      expect(tester.getSize(find.byType(ScoutFab)), const Size(54, 54));
+      // 15 of padding either side of a 22px glyph: comfortably over the project's
+      // 48px floor without a `SizedBox` to hold it there. The old 1px accent border
+      // is gone — a filled gradient control carries its own edge.
+      expect(tester.getSize(find.byType(ScoutFab)), const Size(52, 52));
       expectTapTarget(tester, find.byType(ScoutFab));
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -180,8 +175,9 @@ void main() {
     });
   });
 
-  // The banner is the same tap on the Home tab, drawn dark on a white screen so a new
+  // The banner is the same tap on the Home tab, a light accent-washed card so a new
   // capability is not invisible among the four white tiles that were already there.
+  // It no longer previews a dark surface: Scout follows the system brightness now.
   group('the Home banner', () {
     Future<int> pumpBanner(WidgetTester tester, {double textScale = 1.0}) async {
       var taps = 0;
@@ -202,19 +198,15 @@ void main() {
       return taps;
     }
 
-    testWidgets('it previews the surface it opens', (tester) async {
+    testWidgets('it is a light accent-washed card, not a dark preview',
+        (tester) async {
       await pumpBanner(tester);
       final card = decorations(tester, find.byType(ScoutAskBanner)).first;
-      expect(
-          card.gradient,
-          const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [ScoutTheme.canvasGlow, ScoutTheme.canvas],
-          ));
+      expect(card.gradient, isNull);
+      expect(card.color, ScoutTheme.accentFill.withValues(alpha: 0.06));
       expect(card.borderRadius, BorderRadius.circular(18));
       expect(card.border,
-          Border.all(color: ScoutTheme.accent.withValues(alpha: 0.30)));
+          Border.all(color: ScoutTheme.light.accent.withValues(alpha: 0.30)));
     });
 
     testWidgets('it says what Scout is for rather than only naming it',
@@ -229,7 +221,7 @@ void main() {
           reason: 'the arrow is what marks it as a way out of Home');
       expect(
           tester.widget<Icon>(find.byIcon(Icons.auto_awesome_rounded)).color,
-          ScoutTheme.accent);
+          ScoutTheme.light.accent);
       expect(
           tester.getSize(find.ancestor(
               of: find.byIcon(Icons.auto_awesome_rounded),
