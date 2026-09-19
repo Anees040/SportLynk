@@ -34,16 +34,16 @@ String announced(WidgetTester tester) =>
 void main() {
   Future<void> pumpTyping(WidgetTester tester, {double textScale = 1.0}) => pumpApp(
         tester,
-        const ColoredBox(
-          color: ScoutTheme.canvas,
-          child: Align(alignment: Alignment.topLeft, child: ScoutTyping()),
+        ColoredBox(
+          color: ScoutTheme.light.canvas,
+          child: const Align(alignment: Alignment.topLeft, child: ScoutTyping()),
         ),
         textScale: textScale,
       );
 
   /// Unmounts the widget so its two timers are cancelled inside the test body.
   Future<void> close(WidgetTester tester) =>
-      pumpApp(tester, const ColoredBox(color: ScoutTheme.canvas));
+      pumpApp(tester, ColoredBox(color: ScoutTheme.light.canvas));
 
   group('what is drawn while waiting', () {
     testWidgets('three dots beside a thinking avatar, and no caption yet',
