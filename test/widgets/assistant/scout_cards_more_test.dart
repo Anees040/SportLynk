@@ -90,7 +90,7 @@ void main() {
     await pumpApp(
       tester,
       Scaffold(
-        backgroundColor: ScoutTheme.canvas,
+        backgroundColor: ScoutTheme.light.canvas,
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(12),
           child: SizedBox(
@@ -225,15 +225,16 @@ void main() {
       await pumpCard(tester, card(ScoutCardType.player, player(matchPct: 0)));
 
       expect(find.text('0% match'), findsOneWidget);
-      expect(textColorOf(tester, find.text('0% match')), ScoutTheme.danger);
+      expect(textColorOf(tester, find.text('0% match')),
+          ScoutTheme.light.danger);
     });
 
     testWidgets('the badge takes its colour from the shared bands', (tester) async {
       for (final entry in <int, Color>{
-        88: ScoutTheme.good,
-        62: ScoutTheme.accent,
-        40: ScoutTheme.money,
-        12: ScoutTheme.danger,
+        88: ScoutTheme.light.good,
+        62: ScoutTheme.light.accent,
+        40: ScoutTheme.light.money,
+        12: ScoutTheme.light.danger,
       }.entries) {
         await pumpCard(
           tester,
@@ -241,7 +242,7 @@ void main() {
         );
         expect(textColorOf(tester, find.text('${entry.key}% match')), entry.value,
             reason: '${entry.key}% must match ScoutTheme.pctTone');
-        expect(ScoutTheme.pctTone(entry.key).color, entry.value);
+        expect(ScoutTheme.light.pctTone(entry.key).color, entry.value);
       }
     });
 
@@ -253,10 +254,11 @@ void main() {
     testWidgets('a strong trust score is coloured and a weak one is not',
         (tester) async {
       await pumpCard(tester, card(ScoutCardType.player, player(trust: 70)));
-      expect(textColorOf(tester, find.text('Trust 70')), ScoutTheme.good);
+      expect(textColorOf(tester, find.text('Trust 70')), ScoutTheme.light.good);
 
       await pumpCard(tester, card(ScoutCardType.player, player(trust: 69)));
-      expect(textColorOf(tester, find.text('Trust 69')), ScoutTheme.inkSoft);
+      expect(textColorOf(tester, find.text('Trust 69')),
+          ScoutTheme.light.inkSoft);
     });
 
     testWidgets('a player with no record shows only what is known',
@@ -381,7 +383,8 @@ void main() {
       expect(find.text('Unranked'), findsOneWidget);
       expect(find.textContaining('1200'), findsNothing);
       expect(find.textContaining('ELO'), findsNothing);
-      expect(textColorOf(tester, find.text('Unranked')), ScoutTheme.inkFaint);
+      expect(textColorOf(tester, find.text('Unranked')),
+          ScoutTheme.light.inkFaint);
     });
 
     testWidgets('a payload that omits the flag falls back to the rating',
@@ -521,7 +524,8 @@ void main() {
       );
 
       expect(find.text('Free entry'), findsOneWidget);
-      expect(textColorOf(tester, find.text('Free entry')), ScoutTheme.good);
+      expect(textColorOf(tester, find.text('Free entry')),
+          ScoutTheme.light.good);
       expect(find.byIcon(Icons.card_giftcard_rounded), findsOneWidget);
     });
 
@@ -542,7 +546,7 @@ void main() {
       await pumpCard(tester, card(ScoutCardType.tournament, tourney(full: true)));
 
       expect(find.text('Full'), findsOneWidget);
-      expect(textColorOf(tester, find.text('Full')), ScoutTheme.danger);
+      expect(textColorOf(tester, find.text('Full')), ScoutTheme.light.danger);
     });
 
     testWidgets('the last few places are called out', (tester) async {
@@ -578,7 +582,7 @@ void main() {
         find.byType(LinearProgressIndicator),
       );
       expect(bar.value, closeTo(0.5, 0.0001));
-      expect(bar.valueColor?.value, ScoutTheme.accent);
+      expect(bar.valueColor?.value, ScoutTheme.light.accent);
     });
 
     testWidgets('a nearly full field turns amber and a full one red',
@@ -589,7 +593,7 @@ void main() {
             .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
             .valueColor
             ?.value,
-        ScoutTheme.money,
+        ScoutTheme.light.money,
       );
 
       await pumpCard(tester, card(ScoutCardType.tournament, tourney(teamsIn: 16)));
@@ -598,7 +602,7 @@ void main() {
             .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
             .valueColor
             ?.value,
-        ScoutTheme.danger,
+        ScoutTheme.light.danger,
       );
     });
 
