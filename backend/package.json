@@ -12,6 +12,7 @@
     "check:scout": "node src/scripts/check_assistant.js",
     "check:scout:http": "node src/scripts/check_assistant_http.js",
     "check:scout:kb": "node src/scripts/check_scout_coverage.js",
+    "check:schema": "node src/scripts/check_schema_sync.js",
     "evidence": "node src/scripts/check_assistant.js --evidence && node src/scripts/check_assistant_http.js --evidence"
   },
   "engines": {
