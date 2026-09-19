@@ -160,7 +160,7 @@ void main() {
     await pumpApp(
       tester,
       Scaffold(
-        backgroundColor: ScoutTheme.canvas,
+        backgroundColor: ScoutTheme.light.canvas,
         body: Center(
           child: SizedBox(
             width: width,
@@ -653,7 +653,7 @@ void main() {
         (tester) async {
       await pumpCard(tester, card('confirm', confirm()));
       final frame = tester.widget<ScoutCardFrame>(find.byType(ScoutCardFrame));
-      expect(frame.tint, ScoutTheme.money);
+      expect(frame.tint, ScoutTheme.light.money);
     });
   });
 
@@ -694,7 +694,7 @@ void main() {
       expect(find.text('Confirmed'), findsOneWidget);
       expect(
         tester.widget<ScoutCardFrame>(find.byType(ScoutCardFrame)).tint,
-        ScoutTheme.good,
+        ScoutTheme.light.good,
       );
     });
 
@@ -707,7 +707,7 @@ void main() {
       expect(find.text('Confirmed'), findsNothing);
       expect(
         tester.widget<ScoutCardFrame>(find.byType(ScoutCardFrame)).tint,
-        ScoutTheme.money,
+        ScoutTheme.light.money,
       );
       expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
     });
@@ -717,7 +717,7 @@ void main() {
       expect(find.text('Cancelled'), findsOneWidget);
       expect(
         tester.widget<ScoutCardFrame>(find.byType(ScoutCardFrame)).tint,
-        ScoutTheme.danger,
+        ScoutTheme.light.danger,
       );
     });
 
