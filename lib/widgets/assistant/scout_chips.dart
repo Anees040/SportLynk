@@ -68,14 +68,18 @@ class ScoutChipButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final primary = tone == ScoutChipTone.primary;
     final danger = tone == ScoutChipTone.danger;
-    final accent = danger ? ScoutTheme.danger : ScoutTheme.accent;
+    final accent = danger ? t.danger : t.accent;
+    // A primary chip is a filled green control, so its label sits on
+    // [ScoutTheme.accentFill] rather than on the page and takes white. Every other
+    // chip is a tinted outline, so the label is the accent itself.
     final fg = !enabled
-        ? ScoutTheme.inkFaint
+        ? t.inkFaint
         : primary
-            ? Colors.white
-            : (danger ? ScoutTheme.danger : const Color(0xFFB7F7CD));
+            ? ScoutTheme.onAccentFill
+            : accent;
 
     return Semantics(
       button: true,
@@ -94,7 +98,7 @@ class ScoutChipButton extends StatelessWidget {
               vertical: dense ? 7 : 9,
             ),
             decoration: BoxDecoration(
-              gradient: primary && enabled ? ScoutTheme.userBubbleGradient : null,
+              gradient: primary && enabled ? ScoutTheme.accentGradient : null,
               color: primary && enabled
                   ? null
                   : (enabled ? accent.withValues(alpha: 0.10) : Colors.transparent),
@@ -102,7 +106,7 @@ class ScoutChipButton extends StatelessWidget {
               border: Border.all(
                 color: enabled
                     ? accent.withValues(alpha: primary ? 0.55 : 0.34)
-                    : ScoutTheme.lineSoft,
+                    : t.lineSoft,
               ),
             ),
             child: Row(
