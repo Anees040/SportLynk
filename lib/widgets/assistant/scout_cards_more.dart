@@ -74,6 +74,7 @@ class _PlayerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final trust = d.moneyOrNull('trustScore');
     final played = d.intOrNull('matchesPlayed');
 
@@ -118,7 +119,7 @@ class _PlayerCard extends StatelessWidget {
                           ScoutFact(
                             Icons.verified_user_outlined,
                             'Trust ${trust.round()}',
-                            color: trust >= 70 ? ScoutTheme.good : ScoutTheme.inkSoft,
+                            color: trust >= 70 ? t.good : t.inkSoft,
                           ),
                         if (played != null)
                           ScoutFact(
@@ -155,6 +156,7 @@ class _TeamCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final ranked = d.raw['isRanked'] == null ? null : d.flag('isRanked');
     final shown = d.intOrNull('displayElo') ?? d.intOrNull('elo');
     final wins = d.intOrNull('wins');
@@ -198,16 +200,16 @@ class _TeamCard extends StatelessWidget {
                     ScoutFacts(
                       facts: [
                         if (ranked == false)
-                          const ScoutFact(
+                          ScoutFact(
                             Icons.hourglass_empty_rounded,
                             'Unranked',
-                            color: ScoutTheme.inkFaint,
+                            color: t.inkFaint,
                           )
                         else if (shown != null)
                           ScoutFact(
                             Icons.emoji_events_outlined,
                             '$shown ELO',
-                            color: ScoutTheme.money,
+                            color: t.money,
                           ),
                         if (wins != null && losses != null)
                           ScoutFact(Icons.timeline_rounded, '${wins}W–${losses}L'),
@@ -243,6 +245,7 @@ class _TournamentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final full = d.flag('isFull');
     final maxTeams = d.intOrNull('maxTeams');
     final teamsIn = d.intOrNull('teamsIn') ?? 0;
@@ -250,7 +253,7 @@ class _TournamentCard extends StatelessWidget {
     final free = d.moneyOrNull('entryFee') == 0;
 
     return ScoutCardFrame(
-      tint: full ? ScoutTheme.danger : null,
+      tint: full ? t.danger : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -267,9 +270,9 @@ class _TournamentCard extends StatelessWidget {
                 ),
               ),
               if (full)
-                const _MiniPill(text: 'Full', color: ScoutTheme.danger)
+                _MiniPill(text: 'Full', color: t.danger)
               else if (left != null && left <= 3)
-                _MiniPill(text: '$left left', color: ScoutTheme.money),
+                _MiniPill(text: '$left left', color: t.money),
             ],
           ),
           const SizedBox(height: 7),
@@ -279,7 +282,7 @@ class _TournamentCard extends StatelessWidget {
               ScoutFact(
                 free ? Icons.card_giftcard_rounded : Icons.confirmation_number_outlined,
                 d.str('entryFeeLabel', or: free ? 'Free entry' : '—'),
-                color: free ? ScoutTheme.good : ScoutTheme.money,
+                color: free ? t.good : t.money,
               ),
               if (d.has('venueName'))
                 ScoutFact(Icons.stadium_outlined, d.str('venueName')),
@@ -295,13 +298,13 @@ class _TournamentCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.timer_outlined, size: 12, color: ScoutTheme.danger),
+                Icon(Icons.timer_outlined, size: 12, color: t.danger),
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
                     'Registration closes ${d.str('deadlineLabel')}',
-                    style: const TextStyle(
-                      color: ScoutTheme.inkSoft,
+                    style: TextStyle(
+                      color: t.inkSoft,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                     ),
@@ -326,8 +329,9 @@ class _FillBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final ratio = of <= 0 ? 0.0 : (value / of).clamp(0.0, 1.0);
-    final tone = ratio >= 1 ? ScoutTheme.danger : (ratio >= 0.8 ? ScoutTheme.money : ScoutTheme.accent);
+    final tone = ratio >= 1 ? t.danger : (ratio >= 0.8 ? t.money : t.accent);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -336,14 +340,14 @@ class _FillBar extends StatelessWidget {
           child: LinearProgressIndicator(
             value: ratio,
             minHeight: 5,
-            backgroundColor: ScoutTheme.lineSoft,
+            backgroundColor: t.lineSoft,
             valueColor: AlwaysStoppedAnimation<Color>(tone),
           ),
         ),
         const SizedBox(height: 4),
         Text(
           '$value of $of teams in',
-          style: const TextStyle(color: ScoutTheme.inkFaint, fontSize: 10.5),
+          style: TextStyle(color: t.inkFaint, fontSize: 10.5),
         ),
       ],
     );
@@ -392,6 +396,7 @@ class _MapCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final hasPin = d.flag('hasPin');
     final where = [
       if (d.has('address')) d.str('address'),
@@ -399,7 +404,7 @@ class _MapCard extends StatelessWidget {
     ].join(', ');
 
     return ScoutCardFrame(
-      tint: ScoutTheme.accent,
+      tint: t.accent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -409,11 +414,11 @@ class _MapCard extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: ScoutTheme.accent.withValues(alpha: 0.13),
+                  color: t.accent.withValues(alpha: 0.13),
                   borderRadius: BorderRadius.circular(11),
-                  border: Border.all(color: ScoutTheme.accent.withValues(alpha: 0.3)),
+                  border: Border.all(color: t.accent.withValues(alpha: 0.3)),
                 ),
-                child: const Icon(Icons.directions_rounded, size: 20, color: ScoutTheme.accent),
+                child: Icon(Icons.directions_rounded, size: 20, color: t.accent),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -429,7 +434,7 @@ class _MapCard extends StatelessWidget {
             Text(
               'No exact pin saved for this ground — Maps will search for the name instead.',
               style: TextStyle(
-                color: ScoutTheme.inkFaint,
+                color: t.inkFaint,
                 fontSize: 10.5,
                 height: 1.35,
                 fontStyle: FontStyle.italic,
@@ -482,19 +487,20 @@ class _WalletCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final frozen = d.moneyOrNull('frozen') ?? 0;
     final minOut = d.moneyOrNull('withdrawalMin');
 
     return ScoutCardFrame(
-      tint: ScoutTheme.money,
+      tint: t.money,
       padding: const EdgeInsets.all(13),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Available to spend',
             style: TextStyle(
-              color: ScoutTheme.inkFaint,
+              color: t.inkFaint,
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.3,
@@ -506,8 +512,8 @@ class _WalletCard extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               d.label('balanceLabel', 'balance'),
-              style: const TextStyle(
-                color: ScoutTheme.money,
+              style: TextStyle(
+                color: t.money,
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
                 height: 1.1,
@@ -518,22 +524,27 @@ class _WalletCard extends StatelessWidget {
             const SizedBox(height: 9),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+              // The escrow row is an inset panel on the card, drawn as the page
+              // colour behind a full-strength hairline. The fill alone cannot carry
+              // the separation in both brightnesses — white on an off-white card is
+              // no edge at all — so the border is [ScoutTheme.line] rather than the
+              // softer token the card's own frame uses.
               decoration: BoxDecoration(
-                color: ScoutTheme.canvas.withValues(alpha: 0.5),
+                color: t.canvas,
                 borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: ScoutTheme.lineSoft),
+                border: Border.all(color: t.line),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.lock_outline_rounded, size: 13, color: ScoutTheme.inkSoft),
+                  Icon(Icons.lock_outline_rounded, size: 13, color: t.inkSoft),
                   const SizedBox(width: 6),
                   Flexible(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
-                      child: const Text(
+                      child: Text(
                         'Held in escrow',
-                        style: TextStyle(color: ScoutTheme.inkSoft, fontSize: 11.5),
+                        style: TextStyle(color: t.inkSoft, fontSize: 11.5),
                       ),
                     ),
                   ),
@@ -543,8 +554,8 @@ class _WalletCard extends StatelessWidget {
                       fit: BoxFit.scaleDown,
                       child: Text(
                         d.label('frozenLabel', 'frozen'),
-                        style: const TextStyle(
-                          color: ScoutTheme.ink,
+                        style: TextStyle(
+                          color: t.ink,
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                         ),
@@ -559,7 +570,7 @@ class _WalletCard extends StatelessWidget {
             const SizedBox(height: 7),
             Text(
               'Withdrawals start at ${formatPkr(minOut)}.',
-              style: const TextStyle(color: ScoutTheme.inkFaint, fontSize: 10.5),
+              style: TextStyle(color: t.inkFaint, fontSize: 10.5),
             ),
           ],
           ScoutCardButtons(
@@ -627,6 +638,7 @@ class _PolicyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final figures = _figures();
     final extra = d.strOrNull('extra') ?? d.strOrNull('body');
 
@@ -644,13 +656,13 @@ class _PolicyCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.gavel_rounded, size: 14, color: ScoutTheme.inkSoft),
+              Icon(Icons.gavel_rounded, size: 14, color: t.inkSoft),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   d.str('title', or: 'Policy'),
-                  style: const TextStyle(
-                    color: ScoutTheme.ink,
+                  style: TextStyle(
+                    color: t.ink,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.2,
@@ -671,7 +683,7 @@ class _PolicyCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               extra,
-              style: const TextStyle(color: ScoutTheme.inkSoft, fontSize: 11.5, height: 1.45),
+              style: TextStyle(color: t.inkSoft, fontSize: 11.5, height: 1.45),
             ),
           ],
         ],
@@ -688,38 +700,44 @@ class _FigureTile extends StatelessWidget {
   const _FigureTile({required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        decoration: BoxDecoration(
-          color: ScoutTheme.canvas.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: ScoutTheme.lineSoft),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                color: ScoutTheme.ink,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                height: 1.1,
-              ),
+  Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      // The same inset treatment as the wallet's escrow row, and for the same
+      // reason: the page colour cannot separate itself from the card it sits on
+      // in both brightnesses, so the hairline carries the edge.
+      decoration: BoxDecoration(
+        color: t.canvas,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: t.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: t.ink,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              height: 1.1,
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(
-                color: ScoutTheme.inkFaint,
-                fontSize: 6.8,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.1,
-              ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              color: t.inkFaint,
+              fontSize: 6.8,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.1,
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The capability list — what Scout can do, as buttons.
@@ -742,6 +760,7 @@ class _CapabilitiesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final items = ScoutCapability.listFrom(d.raw['items']);
     if (items.isEmpty) return const SizedBox.shrink();
     final groups = ScoutCapability.grouped(items);
@@ -754,8 +773,8 @@ class _CapabilitiesCard extends StatelessWidget {
             if (g != groups.first) const SizedBox(height: 11),
             Text(
               g.group.toUpperCase(),
-              style: const TextStyle(
-                color: ScoutTheme.inkFaint,
+              style: TextStyle(
+                color: t.inkFaint,
                 fontSize: 9.5,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.1,
@@ -812,6 +831,7 @@ class _StatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final rows = <({String label, String value})>[];
     d.raw.forEach((k, v) {
       if (k == 'buttons' || v == null) return;
@@ -837,14 +857,14 @@ class _StatsCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       r.label,
-                      style: const TextStyle(color: ScoutTheme.inkFaint, fontSize: 11.5),
+                      style: TextStyle(color: t.inkFaint, fontSize: 11.5),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Text(
                     r.value,
-                    style: const TextStyle(
-                      color: ScoutTheme.ink,
+                    style: TextStyle(
+                      color: t.ink,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -870,19 +890,22 @@ class _UnknownCard extends StatelessWidget {
   const _UnknownCard(this.type);
 
   @override
-  Widget build(BuildContext context) => ScoutCardFrame(
-        child: Row(
-          children: [
-            const Icon(Icons.system_update_alt_rounded, size: 14, color: ScoutTheme.inkFaint),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'This answer has a “$type” card that needs a newer version of the app. '
-                'The message above still has the full answer.',
-                style: const TextStyle(color: ScoutTheme.inkFaint, fontSize: 10.5, height: 1.35),
-              ),
+  Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
+    return ScoutCardFrame(
+      child: Row(
+        children: [
+          Icon(Icons.system_update_alt_rounded, size: 14, color: t.inkFaint),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'This answer has a “$type” card that needs a newer version of the app. '
+              'The message above still has the full answer.',
+              style: TextStyle(color: t.inkFaint, fontSize: 10.5, height: 1.35),
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
 }
