@@ -27,6 +27,7 @@
 // worse than saying so.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sportlynk/models/assistant.dart';
 import 'package:sportlynk/widgets/assistant/scout_bits.dart';
@@ -118,7 +119,7 @@ void main() {
       pumpApp(
         tester,
         Scaffold(
-          backgroundColor: ScoutTheme.canvas,
+          backgroundColor: ScoutTheme.light.canvas,
           body: ScoutMessageGroup(
             msg: msg,
             actions: actions,
@@ -137,12 +138,16 @@ void main() {
       .firstWhere((c) => c.decoration is BoxDecoration);
 
   group('the player\'s own words', () {
-    testWidgets('a sent message is a gradient bubble on the right',
+    // The pill is a flat neutral now, not the old brand-green gradient: green
+    // carried white text at only 2.3:1, and a neutral with [ink] on it removes the
+    // contrast problem rather than working around it.
+    testWidgets('a sent message is a neutral pill on the right',
         (tester) async {
       await pumpGroup(tester, user());
       expect(find.text('any ground free at 7?'), findsOneWidget);
       final box = bubbleBox(tester).decoration! as BoxDecoration;
-      expect(box.gradient, ScoutTheme.userBubbleGradient);
+      expect(box.color, ScoutTheme.light.userBubble);
+      expect(box.gradient, isNull);
       expect(tester.widget<Row>(find.byType(Row).first).mainAxisAlignment,
           MainAxisAlignment.end);
       expect(find.byIcon(Icons.refresh_rounded), findsNothing);
@@ -178,7 +183,7 @@ void main() {
       expect(find.text('any ground free at 7?'), findsOneWidget);
       expect(find.text('Not sent'), findsOneWidget);
       final button = tester.widget<IconButton>(find.byType(IconButton));
-      expect(button.color, ScoutTheme.danger);
+      expect(button.color, ScoutTheme.light.danger);
       expect(button.tooltip, 'Send again',
           reason: 'an icon-only button carries its own name');
 
@@ -328,13 +333,15 @@ void main() {
       expect(find.byIcon(Icons.thumb_down_outlined), findsOneWidget);
       expect(thumb(tester, Icons.thumb_up_outlined).tooltip, 'Helpful');
       expect(thumb(tester, Icons.thumb_down_outlined).tooltip, 'Not helpful');
-      expect(thumb(tester, Icons.thumb_up_outlined).color, ScoutTheme.inkFaint);
+      expect(thumb(tester, Icons.thumb_up_outlined).color,
+          ScoutTheme.light.inkFaint);
     });
 
     testWidgets('an up-vote fills its own thumb and goes inert', (tester) async {
       await pumpGroup(tester, scout(vote: 1));
       expect(find.byIcon(Icons.thumb_up_rounded), findsOneWidget);
-      expect(thumb(tester, Icons.thumb_up_rounded).color, ScoutTheme.good);
+      expect(thumb(tester, Icons.thumb_up_rounded).color,
+          ScoutTheme.light.good);
       expect(thumb(tester, Icons.thumb_up_rounded).tooltip,
           'You marked this helpful');
       expect(thumb(tester, Icons.thumb_up_rounded).onPressed, isNull,
@@ -346,7 +353,8 @@ void main() {
     testWidgets('a down-vote is the same in the other direction',
         (tester) async {
       await pumpGroup(tester, scout(vote: -1));
-      expect(thumb(tester, Icons.thumb_down_rounded).color, ScoutTheme.danger);
+      expect(thumb(tester, Icons.thumb_down_rounded).color,
+          ScoutTheme.light.danger);
       expect(thumb(tester, Icons.thumb_down_rounded).onPressed, isNull);
     });
 
@@ -380,13 +388,63 @@ void main() {
     });
   });
 
+  // The one-tap whole-message copy, inline under Scout's own turns. Selection and the
+  // platform toolbar cover a long press; this covers "give me the whole thing".
+  group('copying the answer', () {
+    testWidgets('a scout turn with words offers a copy button', (tester) async {
+      await pumpGroup(tester, scout());
+      expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
+    });
+
+    testWidgets('the player\'s own turn has nothing to copy', (tester) async {
+      await pumpGroup(tester, user());
+      expect(find.byIcon(Icons.copy_rounded), findsNothing);
+    });
+
+    // A pure-card reply has no sentence, so there is no text to lift.
+    testWidgets('a wordless reply offers no copy', (tester) async {
+      await pumpGroup(tester,
+          scout(text: '', r: reply(text: '', cards: [textCard('Refunds')])));
+      expect(find.byIcon(Icons.copy_rounded), findsNothing);
+    });
+
+    testWidgets('a tap lifts the whole sentence and acknowledges with a tick',
+        (tester) async {
+      final copied = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        },
+      );
+      await pumpGroup(tester, scout());
+      await tester.tap(find.byIcon(Icons.copy_rounded));
+      await tester.pump();
+      expect(copied.single, 'Arena One is free at 7.',
+          reason: 'the whole answer is copied, not a selection');
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget,
+          reason: 'the glyph turns to a tick so the tap is acknowledged');
+
+      // Let the revert timer fire so it does not outlive the test, then release the
+      // channel handler.
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(find.byIcon(Icons.copy_rounded), findsOneWidget,
+          reason: 'the tick reverts to the copy glyph');
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+  });
+
   // History a session old turns into one undated wall without these, and Scout's
   // transcript is explicitly meant to be read back.
   group('the day boundary', () {
     Future<void> pumpSeparator(WidgetTester tester, DateTime day) => pumpApp(
           tester,
           Scaffold(
-            backgroundColor: ScoutTheme.canvas,
+            backgroundColor: ScoutTheme.light.canvas,
             body: ScoutDateSeparator(day: day),
           ),
         );
@@ -444,7 +502,7 @@ void main() {
         tester,
         Builder(
           builder: (context) => Scaffold(
-            backgroundColor: ScoutTheme.canvas,
+            backgroundColor: ScoutTheme.light.canvas,
             body: Center(
               child: ElevatedButton(
                 onPressed: () => showScoutExplainSheet(context, msg),
