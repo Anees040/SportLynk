@@ -154,4 +154,18 @@ class AssistantService {
     final data = Map<String, dynamic>.from(r['data'] as Map);
     return ScoutCapability.listFrom(data['capabilities']);
   }
+
+  /// Whether the intent classifier is loaded and answering.
+  ///
+  /// True when the question could not be asked. A failed probe means the API
+  /// itself is unreachable, and the next turn will say so far more plainly than a
+  /// banner about a Python service on another port — so the absence of an answer
+  /// is never read as an outage of the model.
+  Future<bool> nluReady(String token) async {
+    final r = await _api.get(ApiConstants.assistantHealth, token: token);
+    if (r['success'] != true || r['data'] is! Map) return true;
+    final data = Map<String, dynamic>.from(r['data'] as Map);
+    final nlu = data['nlu'];
+    return nlu is! Map || nlu['ready'] != false;
+  }
 }
