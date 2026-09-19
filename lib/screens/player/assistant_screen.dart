@@ -28,12 +28,14 @@ class ScoutExit {
 
 /// Scout: the whole assistant, one screen.
 ///
-/// The SURFACE is dark on purpose. Every other player screen is white cards on grey,
-/// and that is right for browsing — but a conversation is a different kind of place,
-/// and twelve card types stacked in one scroll view need a background that recedes
-/// instead of competing. The dark green keeps the brand and gives the cards, the money
-/// figures and the accents somewhere to sit. Contrast ratios were checked, not
-/// eyeballed; see `scout_theme.dart`.
+/// The surface follows the phone. The screen wraps its subtree in
+/// `ScoutTheme.data(brightness)` taken from the platform, so the transcript, the
+/// cards, the sheets and the dialogs are light or dark together. That replaces the
+/// single dark-green canvas the first build used: it made "I am talking to the
+/// assistant" legible before a word was read, and cost more than it bought, because
+/// twelve card types were pushed into one narrow band of dark surfaces and the
+/// screen read as heavy beside the rest of a light utility app. Contrast ratios were
+/// checked, not eyeballed; see `scout_theme.dart`.
 ///
 /// There is no mic button. Voice was a stretch goal, and a microphone icon that does
 /// nothing is worse than no microphone at all — it is the single most tapped affordance
@@ -85,6 +87,18 @@ class _AssistantScreenState extends State<AssistantScreen> {
   /// "should the viewport follow this".
   String? _tailId;
   bool _wasBusy = false;
+
+  /// Scout's palette for this build.
+  ///
+  /// Derived from the platform brightness rather than read through
+  /// [ScoutTheme.of], because this State's own context sits above the [Theme] that
+  /// [build] installs: `of` here would resolve the app's light-only theme and leave
+  /// the screen's chrome light while everything inside the wrapper went dark. The
+  /// widgets below the wrapper are in the right place and use [ScoutTheme.of].
+  ScoutTheme get _palette =>
+      MediaQuery.platformBrightnessOf(context) == Brightness.dark
+      ? ScoutTheme.dark
+      : ScoutTheme.light;
 
   @override
   void initState() {
@@ -229,11 +243,20 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
+  /// A one-off message that is not part of the conversation.
+  ///
+  /// Both colours are stated rather than inherited. The snackbar is built by the
+  /// `ScaffoldMessenger` above this route, outside the [Theme] that [build]
+  /// installs, so it would otherwise take the app's light defaults and put pale
+  /// text on a pale surface.
   void _toast(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: ScoutTheme.card,
+        content: Text(
+          message,
+          style: const TextStyle(color: ScoutTheme.onToastSurface),
+        ),
+        backgroundColor: ScoutTheme.toastSurface,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 3),
       ),
@@ -246,7 +269,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
   Widget build(BuildContext context) {
     final c = _c;
     return Theme(
-      data: ScoutTheme.data(),
+      data: ScoutTheme.data(MediaQuery.platformBrightnessOf(context)),
       child: PopScope(
         // The gesture back has to carry the same result as the button, or a user who
         // swipes out after booking would return to a stale bookings list.
@@ -255,24 +278,22 @@ class _AssistantScreenState extends State<AssistantScreen> {
           if (!didPop) _leave();
         },
         child: Scaffold(
-          backgroundColor: ScoutTheme.canvas,
+          backgroundColor: _palette.canvas,
           resizeToAvoidBottomInset: true,
-          body: DecoratedBox(
-            decoration: ScoutTheme.pageDecoration,
-            child: SafeArea(
-              child: c == null
-                  ? _signedOut()
-                  : Column(
-                      children: [
-                        _appBar(c),
-                        if (c.notice != null) _noticeBar(c),
-                        Expanded(child: _body(c)),
-                        if (c.busy) const ScoutTyping(),
-                        _jumpBar(c),
-                        _composer(c),
-                      ],
-                    ),
-            ),
+          body: SafeArea(
+            child: c == null
+                ? _signedOut()
+                : Column(
+                    children: [
+                      _appBar(c),
+                      if (c.notice != null) _noticeBar(c),
+                      Expanded(child: _body(c)),
+                      if (c.busy) const ScoutTyping(),
+                      if (c.nluOffline) _nluOfflineBar(c),
+                      _jumpBar(c),
+                      _composer(c),
+                    ],
+                  ),
           ),
         ),
       ),
@@ -281,39 +302,38 @@ class _AssistantScreenState extends State<AssistantScreen> {
 
   /// Only reachable if the route is opened without a session — the guard normally
   /// catches this first, so it stays deliberately plain.
-  Widget _signedOut() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const ScoutAvatar(size: 54),
-          const SizedBox(height: 16),
-          const Text(
-            'Sign in to talk to Scout',
-            style: TextStyle(
-              color: ScoutTheme.ink,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+  Widget _signedOut() {
+    final t = _palette;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ScoutAvatar(size: 54),
+            const SizedBox(height: 16),
+            Text(
+              'Sign in to talk to Scout',
+              style: TextStyle(
+                color: t.ink,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Scout answers from your own bookings, teams and wallet, so it needs '
-            'to know who you are.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: ScoutTheme.inkSoft,
-              fontSize: 12.5,
-              height: 1.45,
+            const SizedBox(height: 6),
+            Text(
+              'Scout answers from your own bookings, teams and wallet, so it needs '
+              'to know who you are.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: t.inkSoft, fontSize: 12.5, height: 1.45),
             ),
-          ),
-          const SizedBox(height: 18),
-          TextButton(onPressed: () => _leave(), child: const Text('Go back')),
-        ],
+            const SizedBox(height: 18),
+            TextButton(onPressed: () => _leave(), child: const Text('Go back')),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   // App bar
 
@@ -322,18 +342,19 @@ class _AssistantScreenState extends State<AssistantScreen> {
   /// only in the transcript, and an AppBar title cannot hold two lines of different
   /// weight without fighting its own centring.
   Widget _appBar(AssistantController c) {
+    final t = _palette;
     final title = c.title;
     return Container(
       padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: ScoutTheme.lineSoft)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: t.lineSoft)),
       ),
       child: Row(
         children: [
           IconButton(
             onPressed: () => _leave(),
             icon: const Icon(Icons.arrow_back_rounded, size: 21),
-            color: ScoutTheme.inkSoft,
+            color: t.inkSoft,
             tooltip: 'Back',
           ),
           const ScoutAvatar(size: 32),
@@ -347,8 +368,8 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   title == null || title.isEmpty ? 'Scout' : title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: ScoutTheme.ink,
+                  style: TextStyle(
+                    color: t.ink,
                     fontSize: 14.5,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.1,
@@ -362,7 +383,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                       height: 5,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: c.busy ? ScoutTheme.money : ScoutTheme.good,
+                        color: c.busy ? t.money : t.good,
                       ),
                     ),
                     const SizedBox(width: 5),
@@ -375,10 +396,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                             : 'Your bookings, teams & wallet',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: ScoutTheme.inkFaint,
-                          fontSize: 10.5,
-                        ),
+                        style: TextStyle(color: t.inkFaint, fontSize: 10.5),
                       ),
                     ),
                   ],
@@ -416,10 +434,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
     required String tooltip,
     VoidCallback? onTap,
   }) {
+    final t = _palette;
     return IconButton(
       onPressed: onTap,
       icon: Icon(icon, size: 19),
-      color: onTap == null ? ScoutTheme.inkFaint : ScoutTheme.inkSoft,
+      color: onTap == null ? t.inkFaint : t.inkSoft,
       tooltip: tooltip,
       visualDensity: VisualDensity.compact,
       constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
@@ -433,36 +452,29 @@ class _AssistantScreenState extends State<AssistantScreen> {
   /// rename, a thread that would not delete. Conversation problems arrive as bubbles;
   /// these do not deserve a fake turn in the transcript.
   Widget _noticeBar(AssistantController c) {
+    final t = _palette;
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 8, 10, 0),
       padding: const EdgeInsets.fromLTRB(11, 9, 5, 9),
       decoration: BoxDecoration(
-        color: ScoutTheme.danger.withValues(alpha: 0.10),
+        color: t.danger.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: ScoutTheme.danger.withValues(alpha: 0.35)),
+        border: Border.all(color: t.danger.withValues(alpha: 0.35)),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.error_outline_rounded,
-            size: 15,
-            color: ScoutTheme.danger,
-          ),
+          Icon(Icons.error_outline_rounded, size: 15, color: t.danger),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               c.notice!,
-              style: const TextStyle(
-                color: ScoutTheme.ink,
-                fontSize: 11.5,
-                height: 1.35,
-              ),
+              style: TextStyle(color: t.ink, fontSize: 11.5, height: 1.35),
             ),
           ),
           IconButton(
             onPressed: c.dismissNotice,
             icon: const Icon(Icons.close_rounded, size: 15),
-            color: ScoutTheme.inkSoft,
+            color: t.inkSoft,
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             padding: EdgeInsets.zero,
@@ -473,17 +485,61 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
+  /// The classifier is not answering, and the user is entitled to know before
+  /// they type a third sentence and get a third capability menu.
+  ///
+  /// Sits above the composer rather than under the app bar because that is where
+  /// the consequence lands: what it is really saying is "typing will not be
+  /// understood right now, but every button on this screen still works". The
+  /// claim is literally true — a chip posts an action and never reaches model #4.
+  Widget _nluOfflineBar(AssistantController c) {
+    final t = _palette;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 2),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(11, 8, 4, 8),
+        decoration: BoxDecoration(
+          color: t.money.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: t.money.withValues(alpha: 0.32)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.cloud_off_rounded, size: 15, color: t.money),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Scout cannot read typed messages right now — its language model '
+                'is offline. Every button still works.',
+                style: TextStyle(color: t.ink, fontSize: 11.5, height: 1.35),
+              ),
+            ),
+            IconButton(
+              onPressed: c.dismissNluNotice,
+              icon: const Icon(Icons.close_rounded, size: 15),
+              color: t.inkSoft,
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              padding: EdgeInsets.zero,
+              tooltip: 'Dismiss',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // Transcript
 
   Widget _body(AssistantController c) {
     if (c.booting) {
-      return const Center(
+      return Center(
         child: SizedBox(
           width: 22,
           height: 22,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            color: ScoutTheme.accent,
+            color: _palette.accent,
           ),
         ),
       );
@@ -537,15 +593,15 @@ class _AssistantScreenState extends State<AssistantScreen> {
   /// exists, or nothing at all once the beginning has been reached.
   Widget _topSlot(AssistantController c) {
     if (c.loadingOlder) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 14),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
         child: Center(
           child: SizedBox(
             width: 16,
             height: 16,
             child: CircularProgressIndicator(
               strokeWidth: 1.8,
-              color: ScoutTheme.inkFaint,
+              color: _palette.inkFaint,
             ),
           ),
         ),
@@ -558,7 +614,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         child: TextButton(
           onPressed: c.loadOlder,
           style: TextButton.styleFrom(
-            foregroundColor: ScoutTheme.inkSoft,
+            foregroundColor: _palette.inkSoft,
             textStyle: const TextStyle(fontSize: 11.5),
           ),
           child: const Text('Load earlier messages'),
@@ -587,32 +643,29 @@ class _AssistantScreenState extends State<AssistantScreen> {
   /// four chips right there. No illustration, no "Hi! I'm Scout 👋"; the greeting is
   /// Scout's to send once there is something to greet.
   Widget _empty(AssistantController c) {
+    final t = _palette;
     return ListView(
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(20, 26, 20, 20),
       children: [
         const Center(child: ScoutAvatar(size: 60)),
         const SizedBox(height: 18),
-        const Text(
+        Text(
           'Ask Scout',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: ScoutTheme.ink,
+            color: t.ink,
             fontSize: 21,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.2,
           ),
         ),
         const SizedBox(height: 7),
-        const Text(
+        Text(
           'Book a ground, check what you owe, find a team to play — in English, '
           'Urdu or both.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: ScoutTheme.inkSoft,
-            fontSize: 12.5,
-            height: 1.5,
-          ),
+          style: TextStyle(color: t.inkSoft, fontSize: 12.5, height: 1.5),
         ),
         const SizedBox(height: 22),
         _example('“football ground chahiye kal shaam 2000 se kam”'),
@@ -631,30 +684,33 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
-  Widget _example(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Row(
-      children: [
-        const Icon(
-          Icons.chat_bubble_outline_rounded,
-          size: 12,
-          color: ScoutTheme.inkFaint,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              color: ScoutTheme.inkFaint,
-              fontSize: 11.5,
-              height: 1.4,
-              fontStyle: FontStyle.italic,
+  Widget _example(String text) {
+    final t = _palette;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(
+            Icons.chat_bubble_outline_rounded,
+            size: 12,
+            color: t.inkFaint,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: t.inkFaint,
+                fontSize: 11.5,
+                height: 1.4,
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 
   // Jump bar
 
@@ -669,11 +725,20 @@ class _AssistantScreenState extends State<AssistantScreen> {
     final label = _screenLabels[screen];
     if (label == null) return const SizedBox.shrink();
 
+    final t = _palette;
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 2),
       child: Material(
-        color: ScoutTheme.canvasGlow,
-        borderRadius: BorderRadius.circular(11),
+        color: t.card,
+        // A card fill alone does not separate this from the canvas in light mode —
+        // near-white on white is no edge — so the hairline carries the boundary,
+        // and the shape replaces the plain radius because a Material takes one or
+        // the other.
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(11),
+          side: BorderSide(color: t.line),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => _goScreen(screen),
           borderRadius: BorderRadius.circular(11),
@@ -681,17 +746,13 @@ class _AssistantScreenState extends State<AssistantScreen> {
             padding: const EdgeInsets.fromLTRB(11, 8, 4, 8),
             child: Row(
               children: [
-                const Icon(
-                  Icons.open_in_new_rounded,
-                  size: 14,
-                  color: ScoutTheme.accent,
-                ),
+                Icon(Icons.open_in_new_rounded, size: 14, color: t.accent),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Open $label',
-                    style: const TextStyle(
-                      color: ScoutTheme.ink,
+                    style: TextStyle(
+                      color: t.ink,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -700,7 +761,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 IconButton(
                   onPressed: () => setState(() => _dismissedJump = screen),
                   icon: const Icon(Icons.close_rounded, size: 14),
-                  color: ScoutTheme.inkFaint,
+                  color: t.inkFaint,
                   visualDensity: VisualDensity.compact,
                   constraints: const BoxConstraints(
                     minWidth: 30,
@@ -737,11 +798,12 @@ class _AssistantScreenState extends State<AssistantScreen> {
   }
 
   Widget _composer(AssistantController c) {
+    final t = _palette;
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-      decoration: const BoxDecoration(
-        color: ScoutTheme.canvas,
-        border: Border(top: BorderSide(color: ScoutTheme.lineSoft)),
+      decoration: BoxDecoration(
+        color: t.canvas,
+        border: Border(top: BorderSide(color: t.lineSoft)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -750,9 +812,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
             child: Container(
               constraints: const BoxConstraints(minHeight: 44),
               decoration: BoxDecoration(
-                color: ScoutTheme.bubble,
+                color: t.bubble,
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: ScoutTheme.line),
+                border: Border.all(color: t.line),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
@@ -764,12 +826,12 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _send(),
-                style: const TextStyle(
-                  color: ScoutTheme.ink,
-                  fontSize: 13.5,
+                style: TextStyle(
+                  color: t.ink,
+                  fontSize: 15.5,
                   height: 1.35,
                 ),
-                cursorColor: ScoutTheme.accent,
+                cursorColor: t.accent,
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
@@ -777,10 +839,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   // counter only appears when the user is near it.
                   counterText: '',
                   hintText: _hint(c),
-                  hintStyle: const TextStyle(
-                    color: ScoutTheme.inkFaint,
-                    fontSize: 13,
-                  ),
+                  hintStyle: TextStyle(color: t.inkFaint, fontSize: 15),
                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
@@ -804,6 +863,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
 ///
 /// Disabled means dimmed and inert, not hidden: a control that vanishes when the box
 /// is empty makes the row jump every time the last character is deleted.
+///
+/// The fill is the same green in both brightnesses. It is the one control on the
+/// screen that carries a white glyph, so it uses [ScoutTheme.accentGradient] — built
+/// from the two accents that hold white at 5:1 — rather than the palette's `accent`,
+/// which is a glyph colour and fails under white text.
 class _SendButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
@@ -826,15 +890,11 @@ class _SendButton extends StatelessWidget {
           child: Ink(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                colors: [ScoutTheme.accent, ScoutTheme.accentDim],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              gradient: ScoutTheme.accentGradient,
               boxShadow: enabled
                   ? [
                       BoxShadow(
-                        color: ScoutTheme.accent.withValues(alpha: 0.28),
+                        color: ScoutTheme.accentFill.withValues(alpha: 0.28),
                         blurRadius: 12,
                         offset: const Offset(0, 3),
                       ),
@@ -849,7 +909,7 @@ class _SendButton extends StatelessWidget {
                 child: Icon(
                   Icons.arrow_upward_rounded,
                   size: 20,
-                  color: Colors.white,
+                  color: ScoutTheme.onAccentFill,
                 ),
               ),
             ),
