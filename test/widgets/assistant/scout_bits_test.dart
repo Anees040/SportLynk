@@ -40,7 +40,7 @@ void main() {
         pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Center(child: ScoutAvatar(thinking: thinking, size: size)),
           ),
         );
@@ -48,13 +48,9 @@ void main() {
     testWidgets('it is a gradient circle carrying one glyph', (tester) async {
       await pumpAvatar(tester);
       expect(avatarBox(tester).shape, BoxShape.circle);
-      expect(
-          avatarBox(tester).gradient,
-          const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [ScoutTheme.accent, ScoutTheme.accentDim],
-          ));
+      // The face uses the fixed fill gradient, not the palette's glyph accent:
+      // its glyph is white, and only [accentFill]/[accentFillDim] hold white text.
+      expect(avatarBox(tester).gradient, ScoutTheme.accentGradient);
       expect(tester.getSize(find.byType(ScoutAvatar)), const Size(34, 34));
       expect(tester.widget<Icon>(find.byIcon(Icons.auto_awesome)).size,
           closeTo(17.68, 0.01),
@@ -134,7 +130,7 @@ void main() {
       await pumpApp(
         tester,
         Material(
-          color: ScoutTheme.canvas,
+          color: ScoutTheme.light.canvas,
           child: Center(
             child: ScoutSourcePill(
                 source: source, onTap: tappable ? () => taps++ : null),
@@ -211,7 +207,7 @@ void main() {
       await pumpApp(
         tester,
         Material(
-          color: ScoutTheme.canvas,
+          color: ScoutTheme.light.canvas,
           child: Center(
             child: ScoutSourcePill(
                 source: ScoutSource.live, onTap: () => taps++),
@@ -231,7 +227,7 @@ void main() {
         pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Center(
                 child: ScoutMatchBadge(pct: pct, showLabel: showLabel)),
           ),
@@ -248,7 +244,7 @@ void main() {
       await pumpBadge(tester, pct: 72);
       expect(find.text('72% match'), findsOneWidget);
       expect(tester.widget<Text>(find.text('72% match')).style!.color,
-          ScoutTheme.accent);
+          ScoutTheme.light.accent);
     });
 
     // The band name is for the cards that have room for it; the figure alone is for
@@ -263,7 +259,7 @@ void main() {
       await pumpBadge(tester, pct: 12, showLabel: true);
       expect(find.text('12% · Weak fit'), findsOneWidget);
       expect(tester.widget<Text>(find.text('12% · Weak fit')).style!.color,
-          ScoutTheme.danger);
+          ScoutTheme.light.danger);
     });
   });
 
@@ -275,7 +271,7 @@ void main() {
         pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Center(child: ScoutThumb(url: url, fallback: fallback)),
           ),
         );
@@ -324,7 +320,7 @@ void main() {
         pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Align(
               alignment: Alignment.topLeft,
               child: SizedBox(
@@ -346,7 +342,7 @@ void main() {
       expect(find.text('In budget'), findsOneWidget);
       expect(find.byIcon(Icons.check_rounded), findsNWidgets(2));
       expect(tester.widget<Icon>(find.byIcon(Icons.check_rounded).first).color,
-          ScoutTheme.accent);
+          ScoutTheme.light.accent);
     });
 
     // The ranker returns as many as it computed; the card shows the three that fit.
@@ -378,7 +374,7 @@ void main() {
         pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Align(
               alignment: Alignment.topLeft,
               child: SizedBox(
@@ -398,7 +394,7 @@ void main() {
       expect(tester.widget<Icon>(find.byIcon(Icons.place_rounded)).size, 12.5,
           reason: 'the glyph is set from the row\'s own font size');
       expect(tester.widget<Text>(find.text('2.4 km away')).style!.color,
-          ScoutTheme.inkSoft);
+          ScoutTheme.light.inkSoft);
     });
 
     // A join that came back without a value must not leave an icon standing beside
@@ -423,14 +419,14 @@ void main() {
     // A price that is over the asking figure is the one fact that has to shout, so a
     // fact's own colour overrides the muted default on both halves.
     testWidgets('a fact can carry its own colour', (tester) async {
-      await pumpFacts(tester, facts: const [
+      await pumpFacts(tester, facts: [
         ScoutFact(Icons.trending_up_rounded, 'Peak pricing',
-            color: ScoutTheme.money),
+            color: ScoutTheme.light.money),
       ]);
       expect(tester.widget<Text>(find.text('Peak pricing')).style!.color,
-          ScoutTheme.money);
+          ScoutTheme.light.money);
       expect(tester.widget<Icon>(find.byIcon(Icons.trending_up_rounded)).color,
-          ScoutTheme.money);
+          ScoutTheme.light.money);
     });
   });
 
@@ -445,7 +441,7 @@ void main() {
         pumpApp(
           tester,
           ColoredBox(
-            color: ScoutTheme.canvas,
+            color: ScoutTheme.light.canvas,
             child: Align(
               alignment: Alignment.topLeft,
               child: SizedBox(
@@ -471,7 +467,7 @@ void main() {
       expect(find.text('Football · 5-a-side'), findsOneWidget);
       final subtitle = tester.widget<Text>(find.text('Football · 5-a-side'));
       expect(subtitle.maxLines, 1);
-      expect(subtitle.style!.color, ScoutTheme.inkFaint);
+      expect(subtitle.style!.color, ScoutTheme.light.inkFaint);
       expect(tester.getTopLeft(find.text('Football · 5-a-side')).dy,
           greaterThan(tester.getTopLeft(find.text('Arena One')).dy));
     });
