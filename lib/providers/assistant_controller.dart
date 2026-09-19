@@ -51,6 +51,17 @@ class AssistantController extends ChangeNotifier {
   String? _notice;
   bool _disposed = false;
 
+  /// Whether the intent classifier is answering.
+  ///
+  /// This exists because the graceful degradation is too graceful to see. With
+  /// ml-service down, `parseNlu` abstains with `nlu_unavailable` and the dialog
+  /// manager answers every typed sentence with the capability menu — which is the
+  /// correct behaviour and is indistinguishable, from the user's seat, from an
+  /// assistant that simply cannot answer anything. Naming the outage is the whole
+  /// difference between a degraded feature and a broken one.
+  bool _nluOffline = false;
+  bool _nluNoticeDismissed = false;
+
   /// Set the first time this conversation changes the user's bookings, and never
   /// unset. A cancellation counts: it moves the same row the Bookings tab renders.
   ///
@@ -73,6 +84,10 @@ class AssistantController extends ChangeNotifier {
   String? get notice => _notice;
   bool get bookingsChanged => _bookingsChanged;
   bool get isEmpty => _messages.isEmpty;
+
+  /// True while the classifier is known to be down and the user has not dismissed
+  /// the banner saying so.
+  bool get nluOffline => _nluOffline && !_nluNoticeDismissed;
 
   /// The screen the last reply pointed at, if it pointed at one. `app_help` answers
   /// carry `meta.screen`, and offering the jump is the client's half of that action.
@@ -120,6 +135,7 @@ class AssistantController extends ChangeNotifier {
     _booting = false;
     _emit();
     unawaited(_fetchCapabilities());
+    unawaited(_probeNlu());
   }
 
   Future<void> _load(String id) async {
@@ -145,6 +161,33 @@ class AssistantController extends ChangeNotifier {
       // The menu card and the abstain reply both carry the same list, so a failure
       // here costs the help sheet and nothing else. Not worth a banner.
     }
+  }
+
+  /// Ask once, at open, whether the classifier is loaded.
+  ///
+  /// Asking up front rather than inferring it from the first reply means the user
+  /// is told before they spend a message finding out.
+  Future<void> _probeNlu() async {
+    try {
+      _setNluOffline(!await _svc.nluReady(token));
+      _emit();
+    } catch (_) {
+      // A probe that cannot run says nothing about the model. Leave the flag.
+    }
+  }
+
+  /// Both callers pass evidence, never a guess. Re-arms the banner on a new
+  /// outage: a dismissal answers the outage the user saw, not every later one.
+  void _setNluOffline(bool offline) {
+    if (offline == _nluOffline) return;
+    _nluOffline = offline;
+    _nluNoticeDismissed = false;
+  }
+
+  void dismissNluNotice() {
+    if (!_nluOffline || _nluNoticeDismissed) return;
+    _nluNoticeDismissed = true;
+    _emit();
   }
 
   /// One page older, appended at the front.
@@ -258,6 +301,15 @@ class AssistantController extends ChangeNotifier {
     if (turn.ok) _inFlight.remove(clientId);
     if (turn.threadId.isNotEmpty) _threadId = turn.threadId;
     _fsm = turn.fsm;
+
+    // Only a turn the classifier actually saw is evidence about the classifier. A
+    // chip press and a bare "yes" both answer with `via` of 'chip' or 'lexicon'
+    // and carry no abstain reason, so letting them clear this would hide a live
+    // outage behind one tapped button.
+    final nlu = turn.nlu;
+    if (nlu != null && nlu.via == 'model') {
+      _setNluOffline(nlu.reason == 'nlu_unavailable');
+    }
 
     // A 500 still carries a reply, and the server deliberately did not persist it —
     // so it is shown, and it disappears on reload, which is the honest behaviour for
