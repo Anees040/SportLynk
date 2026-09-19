@@ -52,29 +52,25 @@ class _ScoutAvatarState extends State<ScoutAvatar>
     return AnimatedBuilder(
       animation: _c,
       builder: (_, _) {
-        final t = _c.value;
+        final pulse = _c.value;
         return Container(
           width: widget.size,
           height: widget.size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [ScoutTheme.accent, ScoutTheme.accentDim],
-            ),
+            gradient: ScoutTheme.accentGradient,
             boxShadow: [
               BoxShadow(
-                color: ScoutTheme.accent.withValues(alpha: 0.18 + 0.34 * t),
-                blurRadius: 6 + 10 * t,
-                spreadRadius: 0.5 + 1.5 * t,
+                color: ScoutTheme.accentFill.withValues(alpha: 0.18 + 0.34 * pulse),
+                blurRadius: 6 + 10 * pulse,
+                spreadRadius: 0.5 + 1.5 * pulse,
               ),
             ],
           ),
           child: Icon(
             Icons.auto_awesome,
             size: widget.size * 0.52,
-            color: Colors.white,
+            color: ScoutTheme.onAccentFill,
           ),
         );
       },
@@ -95,7 +91,7 @@ class ScoutSourcePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tone = ScoutTheme.sourceTone(source);
+    final tone = ScoutTheme.of(context).sourceTone(source);
     return Semantics(
       label: 'Answer source: ${source.label}. ${source.gloss}',
       button: onTap != null,
@@ -150,7 +146,7 @@ class ScoutMatchBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = pct;
     if (p == null) return const SizedBox.shrink();
-    final tone = ScoutTheme.pctTone(p);
+    final tone = ScoutTheme.of(context).pctTone(p);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
@@ -187,15 +183,16 @@ class ScoutThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final placeholder = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: ScoutTheme.accent.withValues(alpha: 0.10),
+        color: t.accent.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: ScoutTheme.lineSoft),
+        border: Border.all(color: t.lineSoft),
       ),
-      child: Icon(fallback, color: ScoutTheme.accent.withValues(alpha: 0.7), size: size * 0.42),
+      child: Icon(fallback, color: t.accent.withValues(alpha: 0.7), size: size * 0.42),
     );
 
     final src = url;
@@ -229,6 +226,7 @@ class ScoutReasons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (reasons.isEmpty) return const SizedBox.shrink();
+    final t = ScoutTheme.of(context);
     final shown = reasons.take(max).toList();
     return Padding(
       padding: const EdgeInsets.only(top: 6),
@@ -240,7 +238,7 @@ class ScoutReasons extends StatelessWidget {
               (r) => Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.check_rounded, size: 11, color: ScoutTheme.accent),
+                  Icon(Icons.check_rounded, size: 11, color: t.accent),
                   const SizedBox(width: 3),
                   Flexible(
                     child: FittedBox(
@@ -248,8 +246,8 @@ class ScoutReasons extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         r,
-                        style: const TextStyle(
-                          color: ScoutTheme.inkSoft,
+                        style: TextStyle(
+                          color: t.inkSoft,
                           fontSize: 10.5,
                           height: 1.25,
                         ),
@@ -288,6 +286,7 @@ class ScoutFacts extends StatelessWidget {
   Widget build(BuildContext context) {
     final shown = facts.where((f) => f.text.trim().isNotEmpty).toList();
     if (shown.isEmpty) return const SizedBox.shrink();
+    final t = ScoutTheme.of(context);
     return Wrap(
       spacing: 10,
       runSpacing: 4,
@@ -296,7 +295,7 @@ class ScoutFacts extends StatelessWidget {
             (f) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(f.icon, size: fontSize + 1.5, color: f.color ?? ScoutTheme.inkFaint),
+                Icon(f.icon, size: fontSize + 1.5, color: f.color ?? t.inkFaint),
                 const SizedBox(width: 3.5),
                 Flexible(
                   child: FittedBox(
@@ -305,7 +304,7 @@ class ScoutFacts extends StatelessWidget {
                     child: Text(
                       f.text,
                       style: TextStyle(
-                        color: f.color ?? ScoutTheme.inkSoft,
+                        color: f.color ?? t.inkSoft,
                         fontSize: fontSize,
                         fontWeight: FontWeight.w500,
                       ),
@@ -330,6 +329,7 @@ class ScoutCardTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -341,8 +341,8 @@ class ScoutCardTitle extends StatelessWidget {
                 title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: ScoutTheme.ink,
+                style: TextStyle(
+                  color: t.ink,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   height: 1.2,
@@ -355,7 +355,7 @@ class ScoutCardTitle extends StatelessWidget {
                     subtitle!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: ScoutTheme.inkFaint, fontSize: 11),
+                    style: TextStyle(color: t.inkFaint, fontSize: 11),
                   ),
                 ),
             ],
