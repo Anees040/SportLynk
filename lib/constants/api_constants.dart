@@ -164,6 +164,11 @@ class ApiConstants {
   static const String assistantMessage = '/assistant/message';
   static const String assistantThreads = '/assistant/threads';
   static const String assistantCapabilities = '/assistant/capabilities';
+
+  /// Whether the intent classifier is answering. Asked once when the chat opens,
+  /// so an ml-service that is not running can be named rather than left to look
+  /// like an assistant with nothing to say.
+  static const String assistantHealth = '/assistant/health';
   static String assistantThread(String threadId) => '/assistant/threads/$threadId';
   static String assistantThreadMessages(String threadId) =>
       '/assistant/threads/$threadId/messages';
