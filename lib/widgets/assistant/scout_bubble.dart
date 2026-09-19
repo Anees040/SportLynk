@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/assistant.dart';
 import 'scout_bits.dart';
@@ -51,12 +54,18 @@ class ScoutMessageGroup extends StatelessWidget {
         child: msg.isScout ? _scout(context) : _user(context),
       );
 
-  /// The user's own words: right-aligned, gradient, and dimmed while in flight.
+  /// The user's own words: right-aligned in a neutral pill, dimmed while in flight.
+  ///
+  /// The pill is a grey, not the brand green it used to be. Green had to carry white
+  /// text at 2.3:1 to work, and a neutral removes that constraint instead of
+  /// designing around it — which also leaves the green free to mean one thing on
+  /// this screen rather than three.
   ///
   /// A failed send is not swallowed. It keeps the bubble, drops the opacity, and puts a
   /// retry beside it — because the text a user typed is the only copy of what they
   /// wanted, and losing it to a timeout is worse than any error message.
   Widget _user(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final failed = msg.delivery == ScoutDelivery.failed;
     final sending = msg.delivery == ScoutDelivery.sending;
 
@@ -70,7 +79,7 @@ class ScoutMessageGroup extends StatelessWidget {
             child: IconButton(
               onPressed: onRetry == null ? null : () => onRetry!(msg),
               icon: const Icon(Icons.refresh_rounded, size: 17),
-              color: ScoutTheme.danger,
+              color: t.danger,
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
               padding: EdgeInsets.zero,
@@ -84,9 +93,9 @@ class ScoutMessageGroup extends StatelessWidget {
               opacity: sending ? 0.62 : 1,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: const BoxDecoration(
-                  gradient: ScoutTheme.userBubbleGradient,
-                  borderRadius: BorderRadius.only(
+                decoration: BoxDecoration(
+                  color: t.userBubble,
+                  borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(ScoutTheme.bubbleRadius),
                     topRight: Radius.circular(ScoutTheme.bubbleRadius),
                     bottomLeft: Radius.circular(ScoutTheme.bubbleRadius),
@@ -98,20 +107,19 @@ class ScoutMessageGroup extends StatelessWidget {
                   children: [
                     Text(
                       msg.text,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13.5,
+                      style: TextStyle(
+                        color: t.ink,
+                        fontSize: 16,
                         height: 1.4,
-                        fontWeight: FontWeight.w500,
                       ),
                     ),
                     if (failed)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 3),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
                         child: Text(
                           'Not sent',
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: t.danger,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.2,
@@ -128,17 +136,26 @@ class ScoutMessageGroup extends StatelessWidget {
     );
   }
 
-  /// Scout's side: avatar, provenance, sentence, cards, chips, vote.
+  /// Scout's side: avatar, provenance, sentence, cards, chips, actions.
   ///
-  /// The bubble is only drawn when there is text. A few replies are pure card — the
-  /// slot picker after a ground is chosen, for instance — and an empty rounded
-  /// rectangle above a card looks like a rendering bug rather than a design.
+  /// The sentence is bare text on the canvas at full width — no fill and no border,
+  /// unlike the user's pill. Only one side of the conversation is bubbled, which is
+  /// the pattern a reader recognises from every modern assistant: the user's turn is
+  /// an object they placed, and the assistant's is the page answering. The old
+  /// bordered bubble boxed the answer and its cards into one narrow column and fought
+  /// the twelve card types below it; removing it lets each card own its own width.
+  ///
+  /// The sentence is only drawn when there is text. A few replies are pure card — the
+  /// slot picker after a ground is chosen, for instance — where a stray empty line
+  /// above the card would read as a rendering fault rather than a design.
   Widget _scout(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final r = msg.reply;
     final cards = r?.cards ?? const <ScoutCard>[];
     final chips = r?.chips ?? const <ScoutChip>[];
     final source = r?.source ?? ScoutSource.unknown;
-    final maxBubble = MediaQuery.sizeOf(context).width * 0.80;
+    final hasText = msg.text.isNotEmpty;
+    final canVote = msg.canVote && onVote != null;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,30 +177,10 @@ class ScoutMessageGroup extends StatelessWidget {
                     onTap: onExplain == null ? null : () => onExplain!(msg),
                   ),
                 ),
-              if (msg.text.isNotEmpty)
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxBubble),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: ScoutTheme.bubble,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(6),
-                        topRight: Radius.circular(ScoutTheme.bubbleRadius),
-                        bottomLeft: Radius.circular(ScoutTheme.bubbleRadius),
-                        bottomRight: Radius.circular(ScoutTheme.bubbleRadius),
-                      ),
-                      border: Border.all(color: ScoutTheme.line),
-                    ),
-                    child: SelectableText(
-                      msg.text,
-                      style: const TextStyle(
-                        color: ScoutTheme.ink,
-                        fontSize: 13.5,
-                        height: 1.45,
-                      ),
-                    ),
-                  ),
+              if (hasText)
+                SelectableText(
+                  msg.text,
+                  style: TextStyle(color: t.ink, fontSize: 16, height: 1.5),
                 ),
               for (final c in cards)
                 Padding(
@@ -200,15 +197,73 @@ class ScoutMessageGroup extends StatelessWidget {
                     enabled: actions.enabled,
                   ),
                 ),
-              if (msg.canVote && onVote != null)
+              if (hasText || canVote)
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: _VoteRow(vote: msg.vote, onVote: (v) => onVote!(msg, v)),
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    children: [
+                      if (hasText) _CopyButton(text: msg.text),
+                      if (canVote)
+                        _VoteRow(vote: msg.vote, onVote: (v) => onVote!(msg, v)),
+                    ],
+                  ),
                 ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Copy Scout's answer to the clipboard.
+///
+/// The affordance a reader reaches for most in any assistant, and it sits inline
+/// under the message rather than only behind a long press. A [SelectableText] already
+/// gives word-selection and the platform copy toolbar on a long press; this is the
+/// one-tap whole-message copy that a long press does not. The glyph turns to a tick
+/// for a beat so the tap is acknowledged without a snackbar covering the transcript.
+class _CopyButton extends StatefulWidget {
+  final String text;
+
+  const _CopyButton({required this.text});
+
+  @override
+  State<_CopyButton> createState() => _CopyButtonState();
+}
+
+class _CopyButtonState extends State<_CopyButton> {
+  static const Duration _held = Duration(milliseconds: 1400);
+  bool _copied = false;
+  Timer? _timer;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.text));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    _timer?.cancel();
+    _timer = Timer(_held, () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
+    return IconButton(
+      onPressed: _copy,
+      icon: Icon(_copied ? Icons.check_rounded : Icons.copy_rounded, size: 14),
+      color: _copied ? t.good : t.inkFaint,
+      tooltip: _copied ? 'Copied' : 'Copy',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 30),
     );
   }
 }
@@ -230,22 +285,25 @@ class _VoteRow extends StatelessWidget {
   const _VoteRow({required this.vote, required this.onVote});
 
   @override
-  Widget build(BuildContext context) => Row(
-        children: [
-          _VoteButton(
-            icon: vote == 1 ? Icons.thumb_up_rounded : Icons.thumb_up_outlined,
-            tone: vote == 1 ? ScoutTheme.good : ScoutTheme.inkFaint,
-            tip: vote == 1 ? 'You marked this helpful' : 'Helpful',
-            onTap: vote == 1 ? null : () => onVote(1),
-          ),
-          _VoteButton(
-            icon: vote == -1 ? Icons.thumb_down_rounded : Icons.thumb_down_outlined,
-            tone: vote == -1 ? ScoutTheme.danger : ScoutTheme.inkFaint,
-            tip: vote == -1 ? 'You marked this unhelpful' : 'Not helpful',
-            onTap: vote == -1 ? null : () => onVote(-1),
-          ),
-        ],
-      );
+  Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
+    return Row(
+      children: [
+        _VoteButton(
+          icon: vote == 1 ? Icons.thumb_up_rounded : Icons.thumb_up_outlined,
+          tone: vote == 1 ? t.good : t.inkFaint,
+          tip: vote == 1 ? 'You marked this helpful' : 'Helpful',
+          onTap: vote == 1 ? null : () => onVote(1),
+        ),
+        _VoteButton(
+          icon: vote == -1 ? Icons.thumb_down_rounded : Icons.thumb_down_outlined,
+          tone: vote == -1 ? t.danger : t.inkFaint,
+          tip: vote == -1 ? 'You marked this unhelpful' : 'Not helpful',
+          onTap: vote == -1 ? null : () => onVote(-1),
+        ),
+      ],
+    );
+  }
 }
 
 class _VoteButton extends StatelessWidget {
@@ -301,28 +359,31 @@ class ScoutDateSeparator extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
-            decoration: BoxDecoration(
-              color: ScoutTheme.card,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: ScoutTheme.lineSoft),
-            ),
-            child: Text(
-              _label(),
-              style: const TextStyle(
-                color: ScoutTheme.inkFaint,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-              ),
+  Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
+          decoration: BoxDecoration(
+            color: t.card,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: t.lineSoft),
+          ),
+          child: Text(
+            _label(),
+            style: TextStyle(
+              color: t.inkFaint,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 /// "How I answered this" — the per-message audit, one tap from the provenance pill.
@@ -339,7 +400,7 @@ class ScoutDateSeparator extends StatelessWidget {
 Future<void> showScoutExplainSheet(BuildContext context, ScoutMessage msg) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: ScoutTheme.card,
+    backgroundColor: ScoutTheme.of(context).card,
     showDragHandle: true,
     isScrollControlled: true,
     builder: (_) => _ExplainSheet(msg: msg),
@@ -353,9 +414,10 @@ class _ExplainSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
     final r = msg.reply;
     final source = r?.source ?? ScoutSource.unknown;
-    final tone = ScoutTheme.sourceTone(source);
+    final tone = t.sourceTone(source);
     final nlu = msg.nlu;
     final pct = nlu?.confidencePct;
 
@@ -366,10 +428,10 @@ class _ExplainSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'How I answered this',
               style: TextStyle(
-                color: ScoutTheme.ink,
+                color: t.ink,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
               ),
@@ -402,8 +464,8 @@ class _ExplainSheet extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           source.gloss,
-                          style: const TextStyle(
-                            color: ScoutTheme.inkSoft,
+                          style: TextStyle(
+                            color: t.inkSoft,
                             fontSize: 11.5,
                             height: 1.35,
                           ),
@@ -423,11 +485,11 @@ class _ExplainSheet extends StatelessWidget {
               if (nlu.modelVersion != null) _ExplainRow('Model', nlu.modelVersion!),
               if (nlu.ms != null) _ExplainRow('Parse time', '${nlu.ms} ms'),
             ] else
-              const Text(
+              Text(
                 'This turn has no classifier record. Either you tapped a button — those '
                 'run the action directly and never go near the model — or the message was '
                 'reloaded from history, where only the source is kept.',
-                style: TextStyle(color: ScoutTheme.inkFaint, fontSize: 11.5, height: 1.45),
+                style: TextStyle(color: t.inkFaint, fontSize: 11.5, height: 1.45),
               ),
             if (r?.action != null) ...[
               const SizedBox(height: 4),
@@ -450,29 +512,32 @@ class _ExplainRow extends StatelessWidget {
   const _ExplainRow(this.label, this.value);
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 9),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 108,
-              child: Text(
-                label,
-                style: const TextStyle(color: ScoutTheme.inkFaint, fontSize: 11.5),
+  Widget build(BuildContext context) {
+    final t = ScoutTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 108,
+            child: Text(
+              label,
+              style: TextStyle(color: t.inkFaint, fontSize: 11.5),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: t.ink,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            Expanded(
-              child: Text(
-                value,
-                style: const TextStyle(
-                  color: ScoutTheme.ink,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
 }
