@@ -11,6 +11,7 @@
     "test": "node --test \"test/**/*.test.js\"",
     "check:scout": "node src/scripts/check_assistant.js",
     "check:scout:http": "node src/scripts/check_assistant_http.js",
+    "check:scout:kb": "node src/scripts/check_scout_coverage.js",
     "evidence": "node src/scripts/check_assistant.js --evidence && node src/scripts/check_assistant_http.js --evidence"
   },
   "engines": {
