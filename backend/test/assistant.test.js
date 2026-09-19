@@ -829,6 +829,51 @@ test('abstainReply: no parse, no chip — the reply is exactly what it was befor
   assert.ok(bare.cards.some((c) => c.type === 'capabilities'));
 });
 
+// Wave 4b: when the model's top two guesses are a genuine two-way tie -- close in
+// confidence and in the same intent group -- Scout asks the binary question alone
+// rather than burying it under the seventeen-row capability card. The card is one tap
+// away on a "Something else" chip. The model card's 0.7913 group-accuracy against
+// 0.6957 intent-accuracy is the headroom this recovers.
+test('abstainReply: a same-group two-way tie asks a focused question, not the menu', () => {
+  const out = dialog.abstainReply({
+    reason: ABSTAIN.low,
+    alternatives: [
+      { intent: 'my_bookings', confidence: 0.34, group: 'booking' },
+      { intent: 'cancel_booking', confidence: 0.30, group: 'booking' },
+    ],
+  });
+  assert.equal(out.cards.some((c) => c.type === 'capabilities'), false,
+    'a focused question does not drag the whole capability card with it');
+  assert.deepEqual(out.chips.map((c) => c.action),
+    ['my_bookings', 'cancel_booking', 'capability_menu'],
+    'the two guesses, then the way to the full menu');
+});
+
+test('abstainReply: guesses that cross groups keep the full menu', () => {
+  const out = dialog.abstainReply({
+    reason: ABSTAIN.low,
+    alternatives: [
+      { intent: 'my_bookings', confidence: 0.34, group: 'booking' },
+      { intent: 'wallet_balance', confidence: 0.31, group: 'money' },
+    ],
+  });
+  assert.ok(out.cards.some((c) => c.type === 'capabilities'),
+    'genuinely scattered uncertainty is what the wide menu is for');
+});
+
+test('abstainReply: a same-group tie that is not close keeps the full menu', () => {
+  // One clear leader is not a two-way tie: a 0.30 gap is the model preferring the
+  // first guess, and the focused binary question would misrepresent that as a coin flip.
+  const out = dialog.abstainReply({
+    reason: ABSTAIN.low,
+    alternatives: [
+      { intent: 'my_bookings', confidence: 0.55, group: 'booking' },
+      { intent: 'cancel_booking', confidence: 0.22, group: 'booking' },
+    ],
+  });
+  assert.ok(out.cards.some((c) => c.type === 'capabilities'));
+});
+
 // The pool opens on require (services/dialogManager -> db/pool). Without this the
 // suite sits on an idle client until node's own timeout, which turns a 300ms test
 // file into a 13-second one.
