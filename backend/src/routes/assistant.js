@@ -38,6 +38,7 @@ const dialog = require('../services/dialogManager');
 const threads = require('../services/assistantThreads');
 const kb = require('../services/assistantKb');
 const actions = require('../services/assistantActions');
+const ml = require('../services/mlClient');
 const { menu, CAPABILITIES } = require('../utils/assistantReply');
 
 const router = express.Router();
@@ -267,6 +268,40 @@ router.get('/capabilities', (req, res) => ok(res, {
   actions: actions.intentLabels(),
   menu: menu(null, {}),
 }));
+
+/**
+ * GET /health — is the intent classifier answering?
+ *
+ * The one question the chat screen cannot answer for itself. When ml-service is
+ * not running, every typed message still gets a reply: dialogManager.abstainReply
+ * serves the capability menu, correctly and by design. But the user sees the same
+ * menu for every sentence they type, which reads as "Scout has nothing to say"
+ * rather than as an outage — and a silent degradation is exactly the failure this
+ * whole subsystem was built to avoid. The client asks once at boot and can then
+ * name the state instead of implying it.
+ *
+ * Never 503s, whatever the answer. `nluSpec()` tolerates both an unreachable
+ * service and a reachable one with no artifact loaded, and a probe that fails
+ * when the thing it reports on fails is a probe that reports nothing.
+ */
+router.get('/health', async (req, res, next) => {
+  try {
+    const spec = await ml.nluSpec();
+    const model = (spec.data && spec.data.model) || {};
+    return ok(res, {
+      nlu: {
+        reachable: spec.reachable === true,
+        ready: spec.reachable === true && model.status === 'ready',
+        status: model.status || null,
+        // The service's own sentence when it is not ready — "intent_latest.joblib
+        // not found", "labels mismatch" — which is the line worth reading.
+        reason: spec.reachable ? (model.reason || null) : (spec.error || null),
+        modelVersion: model.modelVersion || null,
+        threshold: Number.isFinite(Number(model.threshold)) ? Number(model.threshold) : null,
+      },
+    });
+  } catch (e) { return next(e); }
+});
 
 // The owner side — "what is Scout telling players about my ground?"
 //
