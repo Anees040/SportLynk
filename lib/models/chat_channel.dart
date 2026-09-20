@@ -56,6 +56,8 @@ class ChatChannelContext {
 
   final String? opponentName; // captain
   final bool isTournament; // captain
+  final String? myTeamId; // captain — the viewer's own team, for the match-centre jump
+  final String? myTeamName; // captain
 
   final String? sport; // team
   final int? memberCount; // team
@@ -71,6 +73,8 @@ class ChatChannelContext {
     this.slotLabel,
     this.opponentName,
     this.isTournament = false,
+    this.myTeamId,
+    this.myTeamName,
     this.sport,
     this.memberCount,
   });
@@ -86,6 +90,8 @@ class ChatChannelContext {
         slotLabel: j['slotLabel'] as String?,
         opponentName: j['opponentName'] as String?,
         isTournament: j['isTournament'] == true,
+        myTeamId: j['myTeamId'] as String?,
+        myTeamName: j['myTeamName'] as String?,
         sport: j['sport'] as String?,
         memberCount: j['memberCount'] == null ? null : asNum(j['memberCount']).toInt(),
       );
