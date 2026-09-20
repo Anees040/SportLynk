@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  static const Color primary = Color(0xFF0A1F13);
+  // A friendly forest green (Tailwind green-800). White text on it clears WCAG AA
+  // (~5.5:1). The previous 0xFF0A1F13 was so dark it read as black on headers and
+  // primary buttons; this keeps the brand green legible as a large surface colour.
+  static const Color primary = Color(0xFF166534);
   static const Color accent = Color(0xFF22C55E);
   static const Color accentLight = Color(0xFFDCFCE7);
   static const Color background = Color(0xFFF8FAFC);
