@@ -382,6 +382,16 @@ const TYPES = {
     icon: 'chat_bubble', entity: 'channel', deepLink: chatLink,
     group: chatGroup,
   },
+  // Being named in a message. HIGH, and deliberately NOT grouped: the whole point
+  // of an @mention is that this one is addressed to you, so it must not collapse
+  // into a "3 new messages" count the way an ordinary chat_message does, and it
+  // reaches you even in a room you have muted (chatCore.notifyNewMessage) — muting
+  // silences the room, not your own name. Same deep link as chat_message, so
+  // tapping it opens the thread it was posted in.
+  chat_mention: {
+    category: CATEGORY.CHAT, priority: PRIORITY.HIGH,
+    icon: 'alternate_email', entity: 'channel', deepLink: chatLink,
+  },
   // An admin ruled on a disputed result. High without question: it changes both
   // teams' ELO and closes an argument the captains have been having.
   dispute_resolved: {
