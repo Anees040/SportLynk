@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../constants/colors.dart';
 import '../../models/chat_message.dart';
 import 'tick_icon.dart';
+import 'voice_note_player.dart';
 
 /// One chat bubble. Handles mine-vs-theirs alignment and colour, text & image
 /// payloads, the deleted tombstone, per-message reactions, and (on my messages)
@@ -19,6 +23,8 @@ class MessageBubble extends StatelessWidget {
   final void Function(String emoji)? onReactionTap;
   final VoidCallback? onImageTap;
   final VoidCallback? onRetry;
+  final VoidCallback? onCancel; // cancel a still-uploading image
+  final VoidCallback? onQuoteTap; // jump to the message this one replies to
 
   const MessageBubble({
     required this.message,
@@ -29,6 +35,8 @@ class MessageBubble extends StatelessWidget {
     this.onReactionTap,
     this.onImageTap,
     this.onRetry,
+    this.onCancel,
+    this.onQuoteTap,
     super.key,
   });
 
@@ -102,7 +110,33 @@ class MessageBubble extends StatelessWidget {
   Widget _content(BuildContext context) {
     if (message.isDeleted) return _deleted();
     if (message.isImage) return _image(context);
+    if (message.isAudio) return _audio();
     return _text();
+  }
+
+  Widget _audio() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 10, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showSender && !isMine) _senderName(),
+          if (message.isReply) _quote(),
+          VoiceNotePlayer(
+            url: message.mediaUrl,
+            durationMs: message.durationMs.toInt(),
+            pending: message.pending,
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: _footer(),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _deleted() => Padding(
@@ -128,21 +162,133 @@ class MessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (showSender && !isMine) _senderName(),
+          if (message.isReply) _quote(),
           // Body and the time/ticks share the last line where they fit, wrapping
           // otherwise — the compact WhatsApp footer.
           Wrap(
             alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.end,
             children: [
-              Text(
-                message.body ?? '',
-                style: const TextStyle(fontSize: 14.5, height: 1.32, color: AppColors.textPrimary),
-              ),
+              _bodyText(message.body ?? ''),
               const SizedBox(width: 8),
               _footer(),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// The body, with @mentions tinted. Only `@word` tokens are highlighted, and
+  /// only when the message actually mentions somebody — so a stray "@" in
+  /// ordinary text is never styled, and a message with no mentions is a plain
+  /// [Text] with no per-character span cost.
+  Widget _bodyText(String text, {double fontSize = 14.5, double height = 1.32}) {
+    final base = TextStyle(fontSize: fontSize, height: height, color: AppColors.textPrimary);
+    if (message.mentions.isEmpty || !text.contains('@')) {
+      return Text(text, style: base);
+    }
+    final spans = <TextSpan>[];
+    final re = RegExp(r'(@\w+)');
+    var last = 0;
+    for (final match in re.allMatches(text)) {
+      if (match.start > last) {
+        spans.add(TextSpan(text: text.substring(last, match.start), style: base));
+      }
+      spans.add(TextSpan(
+        text: match.group(0),
+        style: base.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600),
+      ));
+      last = match.end;
+    }
+    if (last < text.length) spans.add(TextSpan(text: text.substring(last), style: base));
+    return Text.rich(TextSpan(children: spans));
+  }
+
+  /// The quoted parent shown above a reply's own body: a coloured left bar, the
+  /// original sender's name, and a one-line snippet. Tapping it asks the screen to
+  /// scroll to the original.
+  Widget _quote() {
+    final rp = message.replyPreview!;
+    final who = rp.senderName ?? 'Someone';
+    final icon = rp.deleted
+        ? null
+        : rp.kind == MessageKind.image
+            ? Icons.photo
+            : rp.kind == MessageKind.audio
+                ? Icons.mic
+                : null;
+    return GestureDetector(
+      onTap: onQuoteTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(6),
+          border: const Border(left: BorderSide(color: AppColors.accent, width: 3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              who,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
+            ),
+            const SizedBox(height: 1),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 13, color: AppColors.textSecondary),
+                  const SizedBox(width: 3),
+                ],
+                Flexible(
+                  child: Text(
+                    rp.snippet,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontStyle: rp.deleted ? FontStyle.italic : FontStyle.normal,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The picked file while uploading (so the bubble is never empty), then the
+  /// hosted image once the send completes.
+  Widget _imageContent() {
+    if (message.mediaUrl == null && message.localPath != null) {
+      final path = message.localPath!;
+      return kIsWeb
+          ? Image.network(path, fit: BoxFit.cover)
+          : Image.file(File(path), fit: BoxFit.cover);
+    }
+    return CachedNetworkImage(
+      imageUrl: message.mediaUrl ?? '',
+      fit: BoxFit.cover,
+      placeholder: (_, _) => Container(
+        color: AppColors.inputFill,
+        child: const Center(
+            child: SizedBox(
+                width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
+      ),
+      errorWidget: (_, _, _) => Container(
+        color: AppColors.inputFill,
+        child: const Center(
+            child: Icon(Icons.broken_image_outlined, color: AppColors.textSecondary)),
       ),
     );
   }
@@ -156,6 +302,8 @@ class MessageBubble extends StatelessWidget {
         children: [
           if (showSender && !isMine)
             Padding(padding: const EdgeInsets.fromLTRB(6, 4, 6, 2), child: _senderName()),
+          if (message.isReply)
+            Padding(padding: const EdgeInsets.fromLTRB(3, 2, 3, 2), child: _quote()),
           ClipRRect(
             borderRadius: radius,
             child: GestureDetector(
@@ -164,31 +312,34 @@ class MessageBubble extends StatelessWidget {
                 children: [
                   AspectRatio(
                     aspectRatio: message.aspectRatio,
-                    child: CachedNetworkImage(
-                      imageUrl: message.mediaUrl ?? '',
-                      fit: BoxFit.cover,
-                      placeholder: (_, _) => Container(
-                        color: AppColors.inputFill,
-                        child: const Center(
-                            child: SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2))),
-                      ),
-                      errorWidget: (_, _, _) => Container(
-                        color: AppColors.inputFill,
-                        child: const Center(
-                            child: Icon(Icons.broken_image_outlined,
-                                color: AppColors.textSecondary)),
-                      ),
-                    ),
+                    child: _imageContent(),
                   ),
                   if (message.pending)
                     Positioned.fill(
                       child: Container(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        child: const Center(
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)),
+                        color: Colors.black.withValues(alpha: 0.28),
+                        child: Center(
+                          child: onCancel == null
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2.5)
+                              : Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    const SizedBox(
+                                      width: 46,
+                                      height: 46,
+                                      child: CircularProgressIndicator(
+                                          color: Colors.white, strokeWidth: 2.5),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close,
+                                          color: Colors.white, size: 20),
+                                      tooltip: 'Cancel',
+                                      onPressed: onCancel,
+                                    ),
+                                  ],
+                                ),
+                        ),
                       ),
                     ),
                   // Time/ticks float on a scrim when there is no caption to host them.
@@ -216,8 +367,7 @@ class MessageBubble extends StatelessWidget {
                 alignment: WrapAlignment.end,
                 crossAxisAlignment: WrapCrossAlignment.end,
                 children: [
-                  Text(message.body!,
-                      style: const TextStyle(fontSize: 14.5, height: 1.3, color: AppColors.textPrimary)),
+                  _bodyText(message.body!, height: 1.3),
                   const SizedBox(width: 8),
                   _footer(),
                 ],
