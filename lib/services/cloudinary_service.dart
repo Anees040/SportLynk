@@ -35,6 +35,29 @@ class CloudinaryService {
     }
   }
 
+  /// Upload a voice note. Cloudinary handles audio under its Video resource type,
+  /// so the returned URL lives on the same res.cloudinary.com host the backend
+  /// already trusts for chat media.
+  Future<String?> uploadAudio(String filePath, {String folder = 'chat_audio'}) async {
+    try {
+      if (AppConfig.cloudinaryCloudName.isEmpty || AppConfig.cloudinaryUploadPreset.isEmpty) {
+        debugPrint('Cloudinary not configured. Skipping audio upload.');
+        return null;
+      }
+      final response = await cloudinary.uploadFile(
+        CloudinaryFile.fromFile(
+          filePath,
+          resourceType: CloudinaryResourceType.Video,
+          folder: folder,
+        ),
+      );
+      return response.secureUrl;
+    } catch (e) {
+      debugPrint('Cloudinary audio upload error: $e');
+      return null;
+    }
+  }
+
   Future<List<String>> uploadMultipleImages(List<String> filePaths, {String folder = 'venues'}) async {
     final futures = filePaths.map((path) => uploadImage(path, folder: folder));
     final results = await Future.wait(futures);
