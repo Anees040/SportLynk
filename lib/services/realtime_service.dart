@@ -35,6 +35,7 @@ class RealtimeService {
   final _teamRequests = StreamController<Map<String, dynamic>>.broadcast();
   final _matchUpdates = StreamController<Map<String, dynamic>>.broadcast();
   final _notifications = StreamController<Map<String, dynamic>>.broadcast();
+  final _pinned = StreamController<Map<String, dynamic>>.broadcast();
   final _connection = StreamController<bool>.broadcast();
 
   /// A newly persisted (or re-emitted) message — the client upserts by id, so
@@ -81,6 +82,11 @@ class RealtimeService {
   /// re-reads the feed.
   Stream<Map<String, dynamic>> get notifications => _notifications.stream;
 
+  /// A channel's pinned set changed: `{channelId}`. A nudge, not a payload — the
+  /// listener refetches GET /pinned rather than merging a message in place, so
+  /// every device's banner stays correct without per-client reconciliation.
+  Stream<Map<String, dynamic>> get pinned => _pinned.stream;
+
   Stream<bool> get connection => _connection.stream;
 
   bool get isConnected => _socket?.connected ?? false;
@@ -90,7 +96,10 @@ class RealtimeService {
   /// reused, a stale-token socket is replaced.
   void ensureConnected(String token) {
     if (token.isEmpty) return;
-    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    // Platform.environment (dart:io) is unavailable on web and throws there;
+    // the FLUTTER_TEST guard is only meaningful under `flutter test`, which runs
+    // on the VM, so it is gated behind kIsWeb to keep this path web-safe.
+    if (!kIsWeb && Platform.environment.containsKey('FLUTTER_TEST')) return;
     if (_socket != null && _token == token) {
       if (!_socket!.connected) _socket!.connect();
       return;
@@ -133,6 +142,7 @@ class RealtimeService {
     s.on('team:request', (d) => _push(_teamRequests, d));
     s.on('match:update', (d) => _push(_matchUpdates, d));
     s.on('notification:new', (d) => _push(_notifications, d));
+    s.on('chat:pinned', (d) => _push(_pinned, d));
   }
 
   void _push(StreamController<Map<String, dynamic>> c, dynamic data) {
