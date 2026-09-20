@@ -3,6 +3,30 @@ const bus = require('../realtime/bus');
 const { buildSystemMessage } = require('./chatSystemMessages');
 const { notify } = require('./notify');
 
+// A quoted parent message, denormalised onto every reply that carries a
+// reply_to_id. Denormalised on purpose: the client renders a reply's quote line
+// without holding the parent, which it usually does not — the parent may be
+// hundreds of messages up the scroll, or never loaded at all. NULL when the
+// message is not a reply. A parent that was deleted-for-everyone still quotes, as
+// `{deleted:true}` with an empty body, so the reply keeps its shape and the quote
+// reads "This message was deleted" rather than the reply silently losing its head.
+//
+// Correlated on m.reply_to_id, which is functionally dependent on the grouped
+// m.id, so it is valid alongside the reactions GROUP BY without joining a second
+// copy of chat_messages into the aggregate.
+const REPLY_PREVIEW_SQL = `(
+  SELECT jsonb_build_object(
+           'id', p.id,
+           'senderName', pu.name,
+           'kind', p.kind,
+           'deleted', (p.deleted_at IS NOT NULL),
+           'body', left(p.body, 120)
+         )
+    FROM chat_messages p
+    LEFT JOIN users pu ON pu.id = p.sender_id
+   WHERE p.id = m.reply_to_id
+)`;
+
 async function ensureTeamChannel(client, team) {
   const { rows } = await client.query(
     `INSERT INTO chat_channels (type, ref_id, title, image_url, created_by)
@@ -101,6 +125,7 @@ async function postSystemMessage(client, channelId, payload) {
 async function hydrateMessage(clientOrPool, messageId) {
   const { rows } = await (clientOrPool || pool).query(
     `SELECT m.*, u.name AS sender_name, u.avatar_url AS sender_avatar,
+       ${REPLY_PREVIEW_SQL} AS reply_preview,
        COALESCE(jsonb_agg(jsonb_build_object('emoji', r.emoji, 'userId', r.user_id))
          FILTER (WHERE r.id IS NOT NULL), '[]'::jsonb) AS reactions
        FROM chat_messages m
@@ -121,6 +146,112 @@ async function emitPersistedMessage(client, channelId, messageId, event = 'chat:
   const members = await channelMemberIds(client, channelId);
   if (message) bus.emitMessage(channelId, members, event, message);
   return message;
+}
+
+// Mentions
+//
+// A message's @mentions are the user ids it addresses by name. The client
+// resolves them from a member picker and sends the id list, because a display
+// name can repeat or contain spaces and parsing the body server-side would guess
+// wrong; the route then keeps only ids that are live members of THIS channel, so
+// a mention can never point outside the room or at somebody who left it.
+//
+// Written as a separate UPDATE rather than through insertMessage's column list on
+// purpose: it touches only the rows that actually mention somebody, so an ordinary
+// message never references the column, and a database that has not yet had
+// migration 026 applied still sends plain messages. Returns the filtered ids for
+// the notifier to ping.
+
+/**
+ * Keep only the ids that are live members of the channel, then store them on the
+ * message. Returns the validated id list (possibly empty). A caller passing no
+ * ids gets an empty list and no write.
+ */
+async function setMentions(client, { channelId, messageId, userIds }) {
+  const wanted = [...new Set((Array.isArray(userIds) ? userIds : [])
+    .filter((id) => typeof id === 'string' && id))];
+  if (!wanted.length) return [];
+
+  const { rows } = await client.query(
+    `SELECT user_id FROM chat_channel_members
+      WHERE channel_id = $1 AND left_at IS NULL AND user_id = ANY($2::uuid[])`,
+    [channelId, wanted],
+  );
+  const valid = rows.map((r) => r.user_id);
+  if (!valid.length) return [];
+
+  await client.query(
+    'UPDATE chat_messages SET mentions = $2::jsonb WHERE id = $1',
+    [messageId, JSON.stringify(valid)],
+  );
+  return valid;
+}
+
+// Pins
+//
+// A pinned message survives the scroll as a banner at the top of the thread — a
+// captain pins "Sunday 6pm, F-11, PKR 500 each" so nobody has to hunt for it.
+// Only a channel admin may pin, the same authority that deletes anyone's message;
+// the route proves that before calling here. pinned_at doubles as the flag and
+// the sort key, so unpinning is simply clearing it.
+
+/** Pin (or unpin) a message. `by` is the admin doing it; ignored on unpin. */
+async function setPinned(client, { messageId, pinned, by = null }) {
+  const { rows } = await client.query(
+    `UPDATE chat_messages
+        SET pinned_at = CASE WHEN $2 THEN now() ELSE NULL END,
+            pinned_by = CASE WHEN $2 THEN $3 ELSE NULL END
+      WHERE id = $1
+      RETURNING id, pinned_at`,
+    [messageId, pinned, by],
+  );
+  return rows[0] || null;
+}
+
+/**
+ * The channel's pinned messages, newest pin first, each hydrated exactly as
+ * history rows are (sender, reply preview, reactions) so the banner and a tap
+ * into it render with no special case. Served by idx_chat_messages_pinned.
+ */
+async function listPinned(clientOrPool, channelId, limit = 20) {
+  const { rows } = await (clientOrPool || pool).query(
+    `SELECT m.*, u.name AS sender_name, u.avatar_url AS sender_avatar,
+       ${REPLY_PREVIEW_SQL} AS reply_preview,
+       COALESCE(jsonb_agg(jsonb_build_object('emoji', r.emoji, 'userId', r.user_id))
+         FILTER (WHERE r.id IS NOT NULL), '[]'::jsonb) AS reactions
+       FROM chat_messages m
+       LEFT JOIN users u ON u.id = m.sender_id
+       LEFT JOIN chat_reactions r ON r.message_id = m.id
+      WHERE m.channel_id = $1 AND m.pinned_at IS NOT NULL AND m.deleted_at IS NULL
+      GROUP BY m.id, u.name, u.avatar_url
+      ORDER BY m.pinned_at DESC
+      LIMIT $2`,
+    [channelId, limit],
+  );
+  return rows;
+}
+
+/**
+ * The channel's shared photos, newest first, paginated on the pin-independent
+ * created_at cursor `before`. Images only — the "all photos in this chat" view —
+ * and served by idx_chat_messages_media from migration 015. No reactions or reply
+ * preview: a gallery tile is a thumbnail that opens the full image, nothing more.
+ */
+async function listMedia(clientOrPool, { channelId, before = null, limit = 60 }) {
+  const { rows } = await (clientOrPool || pool).query(
+    `SELECT m.id, m.channel_id, m.sender_id, u.name AS sender_name,
+            m.kind, m.media_url, m.media_mime, m.media_w, m.media_h,
+            m.body, m.created_at
+       FROM chat_messages m
+       LEFT JOIN users u ON u.id = m.sender_id
+      WHERE m.channel_id = $1 AND m.kind = 'image'
+        AND m.deleted_at IS NULL AND m.media_url IS NOT NULL
+        AND m.created_at < $2
+      ORDER BY m.created_at DESC
+      LIMIT $3`,
+    [channelId, before || '9999-12-31', limit],
+  );
+  return rows;
 }
 
 
@@ -320,6 +451,22 @@ async function emitPills(clientOrPool, pills) {
   }
 }
 
+/**
+ * Tell every open client of a channel that its pinned set changed, so each
+ * refetches GET /pinned. A nudge, not a payload: the banner is a small dedicated
+ * read, and one channel-wide signal keeps every device's banner correct without
+ * the server reconciling per-client banner state. Call after the write commits;
+ * swallows its own failure, since a dropped frame costs one reopen, not the pin.
+ */
+async function emitPinnedChanged(clientOrPool, channelId) {
+  try {
+    const members = await channelMemberIds(clientOrPool, channelId);
+    bus.emitMessage(channelId, members, 'chat:pinned', { channelId });
+  } catch (e) {
+    console.warn('[chat] pinned signal skipped:', e.message);
+  }
+}
+
 // CHAT → notification
 //
 // A message is the one notification whose correctness is decided by presence, not
@@ -365,11 +512,17 @@ function messagePreview(message) {
 /**
  * Write one `chat_message` notification per member who is not looking at the thread.
  *
- * Returns `{ notified, viewing, muted }` so the check script can assert the split
- * rather than merely counting rows.
+ * A member named in `mentionedIds` is treated differently: they are pinged with
+ * the HIGH, ungrouped `chat_mention` type, and that ping pierces a mute — being
+ * addressed by name is exactly the case a muted room should still surface. It does
+ * NOT pierce presence: somebody with the thread open already saw their name arrive.
+ *
+ * Returns `{ notified, viewing, muted, mentioned }` so the check script can assert
+ * the split rather than merely counting rows.
  */
-async function notifyNewMessage(client, { channelId, message }) {
-  const out = { notified: 0, viewing: 0, muted: 0 };
+async function notifyNewMessage(client, { channelId, message, mentionedIds = [] }) {
+  const out = { notified: 0, viewing: 0, muted: 0, mentioned: 0 };
+  const mentioned = new Set(mentionedIds || []);
   // System pills and Scout's own replies are never a ping: nobody wants a banner
   // saying "booking confirmed" one second after tapping Approve, and the assistant
   // thread is by definition already on screen.
@@ -414,7 +567,28 @@ async function notifyNewMessage(client, { channelId, message }) {
     for (const r of rows) {
       if (r.user_id === message.sender_id) continue;
       if (bus.isUserViewingChannel(r.user_id, channelId)) { out.viewing += 1; continue; }
-      if (r.is_muted) { out.muted += 1; continue; }
+
+      const isMentioned = mentioned.has(r.user_id);
+      // A mention pierces the mute; an ordinary message does not.
+      if (r.is_muted && !isMentioned) { out.muted += 1; continue; }
+
+      if (isMentioned) {
+        // "Ali mentioned you" — the name leads, because the point of the alert is
+        // who addressed you, and the preview follows so the tray line is useful
+        // without opening the thread.
+        await notify(client, {
+          userId: r.user_id,
+          type: 'chat_mention',
+          title: isGroup ? `${senderName} in ${channelTitle || 'a chat'}` : senderName,
+          body: `mentioned you: ${preview}`,
+          payload,
+          actorId: message.sender_id,
+          imageUrl: r.sender_avatar || null,
+        });
+        out.mentioned += 1;
+        continue;
+      }
+
       await notify(client, {
         userId: r.user_id,
         type: 'chat_message',
@@ -443,4 +617,6 @@ module.exports = {
   captainChannelId, bookingChannelId,
   openBookingRoom, announceInRoom, emitPills,
   messagePreview, notifyNewMessage,
+  setMentions, setPinned, listPinned, listMedia, emitPinnedChanged,
+  REPLY_PREVIEW_SQL,
 };
