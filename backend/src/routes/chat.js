@@ -169,6 +169,7 @@ router.get('/:channelId/messages', async (req, res, next) => {
     const before = req.query.before || '9999-12-31';
     const { rows } = await client.query(
       `SELECT m.*, u.name AS sender_name, u.avatar_url AS sender_avatar,
+              ${chat.REPLY_PREVIEW_SQL} AS reply_preview,
               COALESCE(jsonb_agg(jsonb_build_object('emoji', r.emoji, 'userId', r.user_id))
                 FILTER (WHERE r.id IS NOT NULL), '[]'::jsonb) AS reactions
          FROM chat_messages m
@@ -187,11 +188,10 @@ router.get('/:channelId/messages', async (req, res, next) => {
 // Send
 
 /**
- * Post a message. `kind` is 'text' (default) or 'image'; voice ('audio') is a
- * planned follow-up and rejected explicitly so the client gets a clear sentence
- * rather than a constraint-violation 500. `clientId` makes the send idempotent —
- * a retry after a dropped response returns the original row with a 200, never a
- * duplicate (chatCore + ux_chat_messages_client enforce it).
+ * Post a message. `kind` is 'text' (default), 'image', or 'audio' (a voice note:
+ * a Cloudinary clip URL plus its mime and duration). `clientId` makes the send
+ * idempotent — a retry after a dropped response returns the original row with a
+ * 200, never a duplicate (chatCore + ux_chat_messages_client enforce it).
  */
 router.post('/:channelId/messages', async (req, res, next) => {
   const client = await pool.connect();
@@ -200,7 +200,6 @@ router.post('/:channelId/messages', async (req, res, next) => {
     if (!m) return fail(res, 403, 'You are not a chat member.');
 
     const kind = req.body.kind === 'image' ? 'image' : req.body.kind === 'audio' ? 'audio' : 'text';
-    if (kind === 'audio') return fail(res, 400, 'Voice messages are coming soon.');
 
     const clientId = typeof req.body.clientId === 'string' ? req.body.clientId.slice(0, 64) : null;
     const insert = { channelId: req.params.channelId, senderId: req.user.id, clientId, kind };
@@ -214,12 +213,44 @@ router.post('/:channelId/messages', async (req, res, next) => {
       insert.mediaH = Number.isFinite(+req.body.mediaH) ? Math.trunc(+req.body.mediaH) : null;
       const caption = access.squashMultiline(req.body.body || '');
       insert.body = caption || null; // an image may carry a caption, or none
+    } else if (kind === 'audio') {
+      // A voice note: the uploaded clip's URL, its mime, and how long it runs.
+      // validateMediaUrl pins it to the app's own media host exactly as images are.
+      const media = access.validateMediaUrl(req.body.mediaUrl, { label: 'Voice note', required: true });
+      if (!media.ok) return fail(res, 400, media.message);
+      insert.mediaUrl = media.value;
+      insert.mediaMime = typeof req.body.mediaMime === 'string' ? req.body.mediaMime.slice(0, 60) : null;
+      const dur = Number.isFinite(+req.body.durationMs) ? Math.trunc(+req.body.durationMs) : 0;
+      // Capped at ten minutes so a runaway recording cannot store an arbitrary blob.
+      insert.durationMs = Math.max(0, Math.min(dur, 10 * 60 * 1000));
     } else {
       const body = access.squashMultiline(req.body.body || '');
       if (!body) return fail(res, 400, 'Message cannot be empty.');
       if (body.length > 4000) return fail(res, 400, 'Message is too long.');
       insert.body = body;
     }
+
+    // Reply/quote: a message may quote an earlier one in the SAME channel. The
+    // parent is validated here rather than trusted — a reply_to_id pointing at
+    // another channel would let the quote leak a line from a room the sender
+    // cannot see. A deleted parent is still a valid target (its row is a
+    // tombstone), and the quote then renders as "This message was deleted".
+    if (req.body.replyToId != null) {
+      if (!access.isUuid(req.body.replyToId)) return fail(res, 400, 'That message cannot be replied to.');
+      const parent = (await client.query(
+        'SELECT id FROM chat_messages WHERE id = $1 AND channel_id = $2',
+        [req.body.replyToId, req.params.channelId],
+      )).rows[0];
+      if (!parent) return fail(res, 400, 'The message being replied to is not in this chat.');
+      insert.replyToId = req.body.replyToId;
+    }
+
+    // @mentions: the client sends the resolved user ids (built from a member
+    // picker). They are filtered to live members of this channel by
+    // chat.setMentions after the insert, so nothing is trusted from the body here.
+    const mentionIds = Array.isArray(req.body.mentions)
+      ? req.body.mentions.filter((id) => typeof id === 'string').slice(0, 50)
+      : [];
 
     await client.query('BEGIN');
     const out = await chat.insertMessage(client, insert);
@@ -229,8 +260,11 @@ router.post('/:channelId/messages', async (req, res, next) => {
     // open or the channel muted, and is SAVEPOINT-wrapped so a notifications failure
     // cannot roll the message back.
     if (!out.duplicate) {
+      const mentioned = await chat.setMentions(client, {
+        channelId: req.params.channelId, messageId: out.message.id, userIds: mentionIds,
+      });
       await chat.notifyNewMessage(client, {
-        channelId: req.params.channelId, message: out.message,
+        channelId: req.params.channelId, message: out.message, mentionedIds: mentioned,
       });
     }
     await client.query('COMMIT');
@@ -382,6 +416,110 @@ router.delete('/:channelId/messages/:messageId', async (req, res, next) => {
     await client.query('ROLLBACK').catch(() => {});
     next(e);
   } finally { client.release(); }
+});
+
+// PIN  (a channel admin pins a message to the top of the thread)
+//
+// Pinning is an admin power — the same authority that deletes anyone's message: in
+// a booking room the owner, in a team or captain room the captains. It is not a
+// power over one's own message the way delete is: a plain member cannot pin even
+// their own line, because a pin is an announcement to the whole room. Pinning
+// posts a visible "X pinned a message" pill so everyone knows an announcement was
+// made; unpinning is silent. The live signal is 'chat:pinned', a channel-wide
+// nudge telling every open client to refetch GET /pinned rather than a payload
+// each would have to merge into its own banner state.
+
+/** GET the channel's pinned messages, newest pin first — the banner's source. */
+router.get('/:channelId/pinned', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const m = await member(client, req.params.channelId, req.user.id);
+    if (!m) return fail(res, 403, 'You are not a chat member.');
+    return ok(res, await chat.listPinned(client, req.params.channelId));
+  } catch (e) { next(e); } finally { client.release(); }
+});
+
+router.post('/:channelId/messages/:messageId/pin', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const m = await member(client, req.params.channelId, req.user.id);
+    if (!m) return fail(res, 403, 'You are not a chat member.');
+    if (m.role !== 'admin') return fail(res, 403, 'Only an admin can pin a message.');
+    if (!access.isUuid(req.params.messageId)) return fail(res, 404, 'Message not found.');
+
+    const msg = (await client.query(
+      'SELECT id, kind, deleted_at, pinned_at FROM chat_messages WHERE id = $1 AND channel_id = $2',
+      [req.params.messageId, req.params.channelId],
+    )).rows[0];
+    if (!msg) return fail(res, 404, 'Message not found.');
+    if (msg.deleted_at) return fail(res, 400, 'A deleted message cannot be pinned.');
+    if (msg.kind === 'system') return fail(res, 400, 'That message cannot be pinned.');
+    if (msg.pinned_at) {
+      // Already pinned: return it unchanged, without a second pill.
+      return ok(res, await chat.hydrateMessage(client, req.params.messageId));
+    }
+
+    const actorName = (await client.query('SELECT name FROM users WHERE id = $1', [req.user.id]))
+      .rows[0]?.name || 'Someone';
+
+    await client.query('BEGIN');
+    await chat.setPinned(client, { messageId: req.params.messageId, pinned: true, by: req.user.id });
+    const pill = await chat.announceInRoom(client, req.params.channelId, 'message_pinned', {
+      actorId: req.user.id, actorName,
+    });
+    await client.query('COMMIT');
+
+    // The updated bubble (pinned_at now set), the pill, and a channel-wide signal
+    // so every open client refreshes its pinned banner.
+    const hydrated = await chat.emitPersistedMessage(client, req.params.channelId, req.params.messageId);
+    if (pill) await chat.emitPills(client, pill);
+    await chat.emitPinnedChanged(client, req.params.channelId);
+    return ok(res, hydrated);
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(e);
+  } finally { client.release(); }
+});
+
+router.delete('/:channelId/messages/:messageId/pin', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const m = await member(client, req.params.channelId, req.user.id);
+    if (!m) return fail(res, 403, 'You are not a chat member.');
+    if (m.role !== 'admin') return fail(res, 403, 'Only an admin can unpin a message.');
+    if (!access.isUuid(req.params.messageId)) return fail(res, 404, 'Message not found.');
+
+    const msg = (await client.query(
+      'SELECT id, pinned_at FROM chat_messages WHERE id = $1 AND channel_id = $2',
+      [req.params.messageId, req.params.channelId],
+    )).rows[0];
+    if (!msg) return fail(res, 404, 'Message not found.');
+    if (!msg.pinned_at) return ok(res, { unpinned: true }); // idempotent
+
+    await chat.setPinned(client, { messageId: req.params.messageId, pinned: false });
+    // Silent — no pill. Refresh the bubble and nudge the banner.
+    const hydrated = await chat.emitPersistedMessage(client, req.params.channelId, req.params.messageId);
+    await chat.emitPinnedChanged(client, req.params.channelId);
+    return ok(res, hydrated || { unpinned: true });
+  } catch (e) { next(e); } finally { client.release(); }
+});
+
+// Shared media  (the "all photos in this chat" gallery)
+
+/**
+ * GET the channel's shared photos, newest first, paginated on `before` (a
+ * created_at cursor, like history). Served by idx_chat_messages_media (015).
+ */
+router.get('/:channelId/media', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const m = await member(client, req.params.channelId, req.user.id);
+    if (!m) return fail(res, 403, 'You are not a chat member.');
+    const limit = Math.min(Math.max(Number(req.query.limit) || 60, 1), 100);
+    return ok(res, await chat.listMedia(client, {
+      channelId: req.params.channelId, before: req.query.before || null, limit,
+    }));
+  } catch (e) { next(e); } finally { client.release(); }
 });
 
 // Mute
