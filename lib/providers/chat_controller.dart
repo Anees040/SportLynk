@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/chat_message.dart';
 import '../services/chat_service.dart';
+import '../services/cloudinary_service.dart';
 import '../services/realtime_service.dart';
 
 /// Owns the live state of one open chat. Instantiated locally by ChatThreadScreen
@@ -37,6 +38,13 @@ class ChatController extends ChangeNotifier {
 
   final Map<String, ChatMessage> _byId = {};
   List<ChatMessage> _ordered = [];
+  List<ChatMessage> _pinned = [];
+
+  /// Where my read watermark sat when the room opened, captured once so the
+  /// "unread messages" divider marks the boundary I arrived at — not one that
+  /// advances as I read. Null until the first member load; stays put after.
+  DateTime? _unreadBoundary;
+  bool _boundaryCaptured = false;
 
   final Map<String, ChatMember> _members = {};
   final Map<String, DateTime> _read = {};
@@ -49,6 +57,10 @@ class ChatController extends ChangeNotifier {
 
   final List<StreamSubscription> _subs = [];
 
+  /// clientIds of image sends the user cancelled while they were still
+  /// uploading; their upload result is dropped when it eventually returns.
+  final Set<String> _canceled = {};
+
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
@@ -59,11 +71,21 @@ class ChatController extends ChangeNotifier {
   // Public view
   List<ChatMessage> get messages => _ordered;
   List<ChatMember> get members => _members.values.toList();
+  List<ChatMessage> get pinned => _pinned;
+  DateTime? get unreadBoundary => _unreadBoundary;
   bool get loading => _loading;
   bool get hasMore => _hasMore;
   bool get connected => _connected;
   String? get error => _error;
   int get memberCount => _members.length;
+
+  /// The member the picker offers for @mentions: everyone but me, and never a
+  /// system/absent sender. Sorted by name so the list is stable.
+  List<ChatMember> get mentionCandidates {
+    final out = _members.values.where((m) => m.userId != myUserId).toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return out;
+  }
 
   /// "Ali is typing…", "Ali & Sara are typing…", or null when nobody is.
   String? get typingText {
@@ -90,15 +112,22 @@ class ChatController extends ChangeNotifier {
   // Init & teardown
   Future<void> _init() async {
     _rt.ensureConnected(token);
+    // Seed from the socket's current state. The connection stream is a broadcast
+    // with no replay, so a chat opened after the socket already connected (the
+    // common case — it connects at login) would otherwise never receive an
+    // onConnect event and would sit on "Connecting…" forever despite being live.
+    _connected = _rt.isConnected;
     _subs.add(_rt.messages.listen(_onMessage));
     _subs.add(_rt.receipts.listen(_onReceipt));
     _subs.add(_rt.typing.listen(_onTyping));
     _subs.add(_rt.presence.listen(_onPresence));
+    _subs.add(_rt.pinned.listen(_onPinnedChanged));
     _subs.add(_rt.connection.listen(_onConnection));
 
     _rt.joinChannel(channelId);
     await _loadMembers();
     await _loadInitial();
+    await _loadPinned();
   }
 
   Future<void> _loadMembers() async {
@@ -108,6 +137,13 @@ class ChatController extends ChangeNotifier {
       _read[m.userId] = m.lastReadAt;
       _delivered[m.userId] = m.lastDeliveredAt;
       if (m.lastSeenAt != null) _lastSeen[m.userId] = m.lastSeenAt;
+    }
+    // The unread boundary is where my own watermark sat when I arrived. Captured
+    // exactly once, before the first _markRead moves it, so reopening a room I
+    // have already read does not plant a fresh divider.
+    if (!_boundaryCaptured) {
+      _unreadBoundary = _members[myUserId]?.lastReadAt;
+      _boundaryCaptured = true;
     }
     notifyListeners();
   }
@@ -121,6 +157,11 @@ class ChatController extends ChangeNotifier {
     _loading = false;
     _rebuild();
     _markRead();
+  }
+
+  Future<void> _loadPinned() async {
+    _pinned = await _chat.pinned(token, channelId);
+    notifyListeners();
   }
 
   Future<void> loadMore() async {
@@ -152,7 +193,12 @@ class ChatController extends ChangeNotifier {
   String _newClientId() =>
       '${DateTime.now().microsecondsSinceEpoch}-${myUserId.hashCode}-${_sendCounter++}';
 
-  Future<void> sendText(String raw) async {
+  Future<void> sendText(
+    String raw, {
+    String? replyToId,
+    ReplyPreview? replyPreview,
+    List<String> mentions = const [],
+  }) async {
     final body = raw.trim();
     if (body.isEmpty) return;
     final clientId = _newClientId();
@@ -163,11 +209,21 @@ class ChatController extends ChangeNotifier {
       senderId: myUserId,
       kind: MessageKind.text,
       body: body,
+      replyToId: replyToId,
+      replyPreview: replyPreview,
+      mentions: mentions,
       createdAt: DateTime.now(),
       pending: true,
     ));
 
-    final r = await _chat.sendText(token, channelId, body: body, clientId: clientId);
+    final r = await _chat.sendText(
+      token,
+      channelId,
+      body: body,
+      clientId: clientId,
+      replyToId: replyToId,
+      mentions: mentions.isEmpty ? null : mentions,
+    );
     _reconcile(clientId, r);
   }
 
@@ -178,6 +234,8 @@ class ChatController extends ChangeNotifier {
     int? mediaW,
     int? mediaH,
     String? caption,
+    String? replyToId,
+    ReplyPreview? replyPreview,
   }) async {
     final clientId = _newClientId();
     _addOptimistic(ChatMessage(
@@ -191,6 +249,8 @@ class ChatController extends ChangeNotifier {
       mediaMime: mediaMime,
       mediaW: mediaW ?? 0,
       mediaH: mediaH ?? 0,
+      replyToId: replyToId,
+      replyPreview: replyPreview,
       createdAt: DateTime.now(),
       pending: true,
     ));
@@ -204,8 +264,131 @@ class ChatController extends ChangeNotifier {
       mediaH: mediaH,
       caption: caption,
       clientId: clientId,
+      replyToId: replyToId,
     );
     _reconcile(clientId, r);
+  }
+
+  /// Send a just-picked image. The bubble appears immediately from the local
+  /// file with a spinner; the upload and the server send happen behind it, so
+  /// there is never a gap where nothing is on screen. The upload cannot report
+  /// byte progress (Cloudinary's unsigned uploader does not), so the spinner is
+  /// indeterminate. A failed upload leaves the bubble in the failed state for a
+  /// tap-to-retry; a [cancelPending] call drops it and ignores the result.
+  Future<void> sendImageLocal({
+    required String localPath,
+    String? mediaMime,
+    int? mediaW,
+    int? mediaH,
+    String? caption,
+    String? replyToId,
+    ReplyPreview? replyPreview,
+  }) async {
+    final clientId = _newClientId();
+    _addOptimistic(ChatMessage(
+      id: 'local:$clientId',
+      clientId: clientId,
+      channelId: channelId,
+      senderId: myUserId,
+      kind: MessageKind.image,
+      body: (caption ?? '').trim().isEmpty ? null : caption!.trim(),
+      localPath: localPath,
+      mediaMime: mediaMime,
+      mediaW: mediaW ?? 0,
+      mediaH: mediaH ?? 0,
+      replyToId: replyToId,
+      replyPreview: replyPreview,
+      createdAt: DateTime.now(),
+      pending: true,
+    ));
+
+    final url = await CloudinaryService().uploadImage(localPath, folder: 'chat');
+    if (_canceled.remove(clientId)) return; // cancelled during upload
+
+    if (url == null) {
+      final temp = _byId['local:$clientId'];
+      if (temp != null) {
+        _byId['local:$clientId'] = temp.copyWith(pending: false, failed: true);
+        _rebuild();
+      }
+      return;
+    }
+
+    final r = await _chat.sendImage(
+      token,
+      channelId,
+      mediaUrl: url,
+      mediaMime: mediaMime,
+      mediaW: mediaW,
+      mediaH: mediaH,
+      caption: caption,
+      clientId: clientId,
+      replyToId: replyToId,
+    );
+    if (_canceled.remove(clientId)) return; // cancelled during the server send
+    _reconcile(clientId, r);
+  }
+
+  /// Send a just-recorded voice note. The bubble appears immediately with its
+  /// known [durationMs] and a spinner; the upload and the server send happen
+  /// behind it, mirroring [sendImageLocal]. A failed upload leaves the bubble in
+  /// the failed state for a tap-to-retry; a [cancelPending] call drops it.
+  Future<void> sendAudioLocal({
+    required String localPath,
+    String? mediaMime,
+    int durationMs = 0,
+    String? replyToId,
+    ReplyPreview? replyPreview,
+  }) async {
+    final clientId = _newClientId();
+    _addOptimistic(ChatMessage(
+      id: 'local:$clientId',
+      clientId: clientId,
+      channelId: channelId,
+      senderId: myUserId,
+      kind: MessageKind.audio,
+      localPath: localPath,
+      mediaMime: mediaMime,
+      durationMs: durationMs,
+      replyToId: replyToId,
+      replyPreview: replyPreview,
+      createdAt: DateTime.now(),
+      pending: true,
+    ));
+
+    final url = await CloudinaryService().uploadAudio(localPath, folder: 'chat_audio');
+    if (_canceled.remove(clientId)) return; // cancelled during upload
+
+    if (url == null) {
+      final temp = _byId['local:$clientId'];
+      if (temp != null) {
+        _byId['local:$clientId'] = temp.copyWith(pending: false, failed: true);
+        _rebuild();
+      }
+      return;
+    }
+
+    final r = await _chat.sendAudio(
+      token,
+      channelId,
+      mediaUrl: url,
+      mediaMime: mediaMime,
+      durationMs: durationMs,
+      clientId: clientId,
+      replyToId: replyToId,
+    );
+    if (_canceled.remove(clientId)) return; // cancelled during the server send
+    _reconcile(clientId, r);
+  }
+
+  /// Cancel a still-uploading image or voice note: drop the optimistic bubble now
+  /// and ignore the upload's result when it returns.
+  void cancelPending(ChatMessage m) {
+    final cid = m.clientId;
+    if (cid == null || !m.pending) return;
+    _canceled.add(cid);
+    _byId.remove(m.id);
+    _rebuild();
   }
 
   void _addOptimistic(ChatMessage m) {
@@ -232,16 +415,49 @@ class ChatController extends ChangeNotifier {
     if (!failed.failed) return;
     _byId.remove(failed.id);
     _rebuild();
-    if (failed.kind == MessageKind.image && failed.mediaUrl != null) {
-      await sendImage(
-        mediaUrl: failed.mediaUrl!,
+    if (failed.kind == MessageKind.image) {
+      // A failed image usually failed at the upload, so it still has only its
+      // local file — re-upload from there. If it uploaded but the server send
+      // failed, the hosted url is enough. Either way the reply target is carried
+      // through, so retrying a reply stays a reply.
+      if (failed.localPath != null) {
+        await sendImageLocal(
+          localPath: failed.localPath!,
+          mediaMime: failed.mediaMime,
+          mediaW: failed.mediaW.toInt(),
+          mediaH: failed.mediaH.toInt(),
+          caption: failed.body,
+          replyToId: failed.replyToId,
+          replyPreview: failed.replyPreview,
+        );
+      } else if (failed.mediaUrl != null) {
+        await sendImage(
+          mediaUrl: failed.mediaUrl!,
+          mediaMime: failed.mediaMime,
+          mediaW: failed.mediaW.toInt(),
+          mediaH: failed.mediaH.toInt(),
+          caption: failed.body,
+          replyToId: failed.replyToId,
+          replyPreview: failed.replyPreview,
+        );
+      }
+    } else if (failed.kind == MessageKind.audio && failed.localPath != null) {
+      // A voice note only ever holds its local clip until the send lands, so a
+      // retry always re-uploads from the recorded file.
+      await sendAudioLocal(
+        localPath: failed.localPath!,
         mediaMime: failed.mediaMime,
-        mediaW: failed.mediaW.toInt(),
-        mediaH: failed.mediaH.toInt(),
-        caption: failed.body,
+        durationMs: failed.durationMs.toInt(),
+        replyToId: failed.replyToId,
+        replyPreview: failed.replyPreview,
       );
     } else {
-      await sendText(failed.body ?? '');
+      await sendText(
+        failed.body ?? '',
+        replyToId: failed.replyToId,
+        replyPreview: failed.replyPreview,
+        mentions: failed.mentions,
+      );
     }
   }
 
@@ -287,6 +503,35 @@ class ChatController extends ChangeNotifier {
     if (m.isSystem || m.isDeleted || m.pending) return false;
     if (m.senderId == myUserId) return true;
     return _members[myUserId]?.isAdmin ?? false;
+  }
+
+  /// Only a channel admin may pin, and only a real, non-system, non-deleted
+  /// message. Unlike delete there is no "your own message" exception: a pin is an
+  /// announcement to the whole room, not a thing a member does to their own line.
+  bool canPin(ChatMessage m) {
+    if (m.isSystem || m.isDeleted || m.pending || m.failed) return false;
+    return _members[myUserId]?.isAdmin ?? false;
+  }
+
+  bool isPinned(String messageId) => _pinned.any((p) => p.id == messageId);
+
+  /// Whether I am a channel admin — the one thing the pinned banner needs up
+  /// front to decide whether to offer its unpin control, without a message in hand.
+  bool get amAdmin => _members[myUserId]?.isAdmin ?? false;
+
+  /// Pin or unpin. Not optimistic: pinning is rare and admin-only, and the server
+  /// echoes the updated message and nudges every client to refetch the banner, so
+  /// a refetch on success is both correct and simplest.
+  Future<Map<String, dynamic>> togglePin(ChatMessage m, {required bool pinned}) async {
+    final r = await _chat.setPinned(token, channelId, m.id, pinned: pinned);
+    if (r['success'] == true) {
+      if (r['data'] is Map && (r['data'] as Map).containsKey('id')) {
+        _byId[m.id] = ChatMessage.fromJson(Map<String, dynamic>.from(r['data'] as Map));
+        _rebuild();
+      }
+      await _loadPinned();
+    }
+    return r;
   }
 
   // Live event handlers
@@ -341,6 +586,13 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Somebody pinned or unpinned in this room. The event is a bare nudge, so the
+  /// banner is refetched rather than reconstructed from a payload.
+  void _onPinnedChanged(Map<String, dynamic> data) {
+    if ('${data['channelId']}' != channelId) return;
+    _loadPinned();
+  }
+
   void _onConnection(bool up) {
     _connected = up;
     if (up) {
@@ -361,6 +613,7 @@ class ChatController extends ChangeNotifier {
     }
     _rebuild();
     _markRead();
+    await _loadPinned();
   }
 
   // Tick computation
