@@ -13,6 +13,7 @@ import '../../widgets/phone_field.dart';
 import '../../widgets/password_strength_bar.dart';
 import '../../widgets/custom_button.dart';
 import '../../utils/snackbar_util.dart';
+import '../../utils/maps_link.dart';
 
 class OwnerRegisterScreen extends StatefulWidget {
   const OwnerRegisterScreen({super.key});
@@ -52,16 +53,31 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
   String? _city;
   final _cities = ['Islamabad','Rawalpindi','Lahore','Karachi','Peshawar','Quetta','Multan','Faisalabad'];
   final _sportOpts = ['Football','Cricket'];
+  // Coordinates parsed from the location field below. Discovery and the "near me"
+  // ranking need a real point, so a venue cannot be submitted without one.
+  LatLng? _groundCoords;
 
   // Step 2
   XFile? _cnicFront, _cnicBack, _selfie, _utilityBill, _ownershipProof;
   final List<XFile> _groundPhotos = [];
+  bool _agreedToTerms = false;
 
   @override
   void initState() {
     super.initState();
     _passCtrl.addListener(() => setState(() => _pwText = _passCtrl.text));
     _confirmCtrl.addListener(() => setState(() {}));
+    _mapsCtrl.addListener(_onLocationChanged);
+  }
+
+  // Re-parse coordinates whenever the location field changes. Parsing is a pure
+  // string operation, so it is cheap enough to run on every keystroke.
+  void _onLocationChanged() {
+    final parsed = parseLatLng(_mapsCtrl.text);
+    if (parsed?.lat == _groundCoords?.lat && parsed?.lng == _groundCoords?.lng) {
+      return;
+    }
+    setState(() => _groundCoords = parsed);
   }
 
   @override
@@ -173,6 +189,33 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
     ]));
   }
 
+  // Feedback under the location field: nothing entered, unreadable, out of
+  // country, or a confirmed in-country point.
+  Widget _locationStatus() {
+    if (_mapsCtrl.text.trim().isEmpty) {
+      return _statusRow(Icons.location_searching, 'No location set yet', AppColors.textSecondary);
+    }
+    final c = _groundCoords;
+    if (c == null) {
+      return _statusRow(Icons.error_outline,
+        "Couldn't read a location. Paste a full Google Maps link, or long-press your ground and copy the coordinates.",
+        AppColors.error);
+    }
+    if (!isWithinPakistan(c)) {
+      return _statusRow(Icons.warning_amber,
+        'That location looks outside Pakistan — please check it.', AppColors.warning);
+    }
+    return _statusRow(Icons.check_circle, 'Location set: $c', AppColors.accent);
+  }
+
+  Widget _statusRow(IconData icon, String text, Color color) {
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Icon(icon, size: 16, color: color),
+      const SizedBox(width: 6),
+      Expanded(child: Text(text, style: GoogleFonts.poppins(fontSize: 12, color: color))),
+    ]);
+  }
+
   // Step 1
   Widget _buildStep1() {
     return Form(key: _formKey1, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -219,14 +262,15 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
       SportTextField(label: 'Full Address *', hint: 'Street, area, landmark', prefixIcon: Icons.location_on_outlined, controller: _addrCtrl, maxLines: 2,
         validator: (v) => v != null && v.trim().length >= 10 ? null : 'Min 10 characters'),
       const SizedBox(height: 16),
-      SportTextField(label: 'Google Maps Link (optional)', hint: 'Paste Google Maps URL', prefixIcon: Icons.map_outlined, controller: _mapsCtrl, helperText: 'Open Google Maps → Share → Copy link',
-        validator: (v) {
-          if (v == null || v.trim().isEmpty) return null;
-          final url = v.trim().toLowerCase();
-          final isValid = url.startsWith('https://maps.google') || url.startsWith('https://goo.gl') || url.startsWith('https://maps.app.goo.gl') || url.startsWith('http://maps.google') || url.startsWith('https://www.google.com/maps');
-          if (!isValid) return 'Must be a Google Maps link (maps.google.com or maps.app.goo.gl)';
-          return null;
-        }),
+      SportTextField(
+        label: 'Ground Location *',
+        hint: 'Paste a Maps link or "24.8607, 67.0011"',
+        prefixIcon: Icons.map_outlined,
+        controller: _mapsCtrl,
+        helperText: 'In Google Maps, long-press your ground, then copy the coordinates or use Share → Copy link.',
+      ),
+      const SizedBox(height: 8),
+      _locationStatus(),
       const SizedBox(height: 16),
       Row(children: [
         Expanded(child: SportTextField(label: 'Opens at *', hint: '06:00', prefixIcon: Icons.access_time, controller: _openCtrl, readOnly: true,
@@ -252,6 +296,8 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
           if (!_formKey1.currentState!.validate()) return;
           if (_groundType == null) { _snack('Select ground type'); return; }
           if (_sports.isEmpty) { _snack('Select at least one sport'); return; }
+          if (_groundCoords == null) { _snack('Add your ground location (paste a Maps link or coordinates)'); return; }
+          if (!isWithinPakistan(_groundCoords!)) { _snack('Ground location looks outside Pakistan — please check it'); return; }
           setState(() => _step = 2);
         })),
       ]),
@@ -306,7 +352,28 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
       const SizedBox(height: 20),
       Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(8)),
         child: Row(children: [const Icon(Icons.warning_amber, color: AppColors.warning, size: 18), const SizedBox(width: 8), Expanded(child: Text('Account reviewed within 24-48 hours. You cannot list venues until approved.', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textPrimary)))])),
-      const SizedBox(height: 32),
+      const SizedBox(height: 16),
+      InkWell(
+        onTap: () => setState(() => _agreedToTerms = !_agreedToTerms),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(children: [
+            SizedBox(width: 24, height: 24, child: Checkbox(
+              value: _agreedToTerms,
+              activeColor: AppColors.accent,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: Text(
+              'I confirm the information provided is accurate, and I agree to the Terms of Service and consent to verification of my submitted documents.',
+              style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+            )),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 24),
       Consumer<AuthProvider>(builder: (context, auth, _) => Row(children: [
         Expanded(child: OutlinedButton(onPressed: () => setState(() => _step = 1), style: OutlinedButton.styleFrom(foregroundColor: AppColors.accent, side: const BorderSide(color: AppColors.accent), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28))),
           child: Text('← Back', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)))),
@@ -342,6 +409,14 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
     }
     if (_groundPhotos.length < 3) {
       _snack('Add at least 3 ground photos');
+      return;
+    }
+    if (_groundCoords == null || !isWithinPakistan(_groundCoords!)) {
+      _snack('A valid ground location is required. Go back to the Ground step and set it.');
+      return;
+    }
+    if (!_agreedToTerms) {
+      _snack('Please accept the terms to submit your application');
       return;
     }
 
@@ -381,6 +456,8 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
         'city': _city,
         'fullAddress': _addrCtrl.text.trim(),
         'googleMapsLink': _mapsCtrl.text.trim().isEmpty ? null : _mapsCtrl.text.trim(),
+        'latitude': _groundCoords?.lat,
+        'longitude': _groundCoords?.lng,
         'operatingHoursFrom': _openCtrl.text,
         'operatingHoursTo': _closeCtrl.text,
         'pricePerHour': _priceCtrl.text.trim(),
