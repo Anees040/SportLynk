@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sportlynk/models/chat_channel.dart';
 import 'package:sportlynk/screens/shared/chat_thread_screen.dart';
 
 import '../screen_harness.dart';
@@ -145,6 +146,9 @@ void main() {
     await settleData(tester);
 
     await tester.enterText(find.byType(TextField), 'On my way');
+    // Typing swaps the hold-to-record mic for the send button; a frame has to
+    // run for that rebuild before the send icon is in the tree to tap.
+    await tester.pump();
     await tapVisible(tester, find.byIcon(Icons.send_rounded));
     await settleData(tester);
 
@@ -166,5 +170,55 @@ void main() {
 
     expect(find.text('Green Turf Arena'), findsOneWidget);
     expect(find.text('Are we still on for six?'), findsOneWidget);
+  });
+
+  // The coordination room reaches its match from the inbox
+  //
+  // A captain channel's ref_id is the match, not a team, so the header's jump to
+  // the match centre needs the viewer's own team resolved from the server-computed
+  // context. `fromChannel` is the inbox path — the one entry point that has no team
+  // in hand — so without the context field the jump would never appear there and a
+  // captain could not reach the result/dispute controls the room exists to support.
+  group('the coordination room header, opened from the inbox', () {
+    ChatChannel captainChannel({String? myTeamId, String? myTeamName}) => ChatChannel(
+          id: 'c-1',
+          type: ChatChannelType.captain,
+          refId: 'match-1',
+          title: 'Falcons vs Titans',
+          role: 'admin',
+          context: ChatChannelContext(
+            kind: 'captain',
+            status: 'accepted',
+            title: 'Falcons vs Titans',
+            subtitle: 'Accepted',
+            opponentName: 'Titans',
+            myTeamId: myTeamId,
+            myTeamName: myTeamName,
+          ),
+        );
+
+    testWidgets('offers the match-centre jump when the viewer’s team is known', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        ChatThreadScreen.fromChannel(captainChannel(myTeamId: 'team-A', myTeamName: 'Falcons')),
+        auth: FakeAuth(token: null),
+      );
+      await settleData(tester);
+
+      expect(find.byTooltip('Match centre'), findsOneWidget);
+    });
+
+    testWidgets('hides the jump when the viewer’s team is unknown', (tester) async {
+      await pumpScreen(
+        tester,
+        ChatThreadScreen.fromChannel(captainChannel()),
+        auth: FakeAuth(token: null),
+      );
+      await settleData(tester);
+
+      expect(find.byTooltip('Match centre'), findsNothing);
+    });
   });
 }
