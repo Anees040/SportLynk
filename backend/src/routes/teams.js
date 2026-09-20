@@ -246,6 +246,7 @@ router.get('/:id', async (req, res, next) => {
       `SELECT ${access.TEAM_COLUMNS} FROM teams t WHERE t.id = $1`, [req.params.id],
     )).rows[0];
     if (!team) return fail(res, 404, 'Team not found.');
+    if (team.disbanded_at) return fail(res, 410, 'This team has been disbanded.');
 
     const me = (await pool.query(
       'SELECT role FROM team_members WHERE team_id = $1 AND user_id = $2',
@@ -290,7 +291,13 @@ router.patch('/:id', async (req, res, next) => {
     const vis = access.validateVisibility(req.body.visibility, g.team.visibility);
     const logo = access.validateMediaUrl(req.body.logo ?? req.body.logoUrl, { label: 'Logo' });
     const city = access.validateCity(req.body.city);
-    const invalid = [bio, vis, logo, city].find((x) => !x.ok);
+    // Name is only validated when the key is present, so a bio-only patch is not
+    // forced to resend the name; when absent the current name is carried through.
+    const nameSent = req.body.name !== undefined;
+    const name = nameSent
+      ? access.validateTeamName(req.body.name)
+      : { ok: true, value: g.team.name };
+    const invalid = [bio, vis, logo, city, name].find((x) => !x.ok);
     if (invalid) return bail(client, res, 400, invalid.message);
 
     // City is only written when the key is present. A bio-only patch
@@ -300,13 +307,14 @@ router.patch('/:id', async (req, res, next) => {
 
     const { rows } = await client.query(
       `UPDATE teams
-          SET bio = $1,
+          SET name = CASE WHEN $7::boolean THEN $8 ELSE name END,
+              bio = $1,
               visibility = $2,
               logo_url = COALESCE($3, logo_url),
               city = CASE WHEN $4::boolean THEN $5 ELSE city END
         WHERE id = $6
         RETURNING ${access.TEAM_COLUMNS.replace(/t\./g, '')}`,
-      [bio.value, vis.value, logo.value, citySent, city.value, req.params.id],
+      [bio.value, vis.value, logo.value, citySent, city.value, req.params.id, nameSent, name.value],
     );
     const team = rows[0];
     // Keep the chat channel's title/photo in step with the team's.
@@ -316,6 +324,11 @@ router.patch('/:id', async (req, res, next) => {
     // needs pinged about, so only the meaningful changes are announced.
     const actorName = await nameOf(client, req.user.id);
     const sysIds = [];
+    if (nameSent && name.value !== g.team.name) {
+      sysIds.push(await announce(client, channelId, 'title_changed', {
+        actorId: req.user.id, actorName, value: team.name,
+      }));
+    }
     if (vis.value !== g.team.visibility) {
       sysIds.push(await announce(client, channelId, 'visibility_changed', {
         actorId: req.user.id, actorName, value: vis.value,
@@ -330,7 +343,10 @@ router.patch('/:id', async (req, res, next) => {
     return ok(res, team, 'Team updated.');
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
-    next(e);
+    // A rename can collide with ux_teams_name_sport; map it to the same friendly
+    // 409 the create handler returns rather than letting it become a 500.
+    const f = friendlyDbError(e);
+    return f ? fail(res, f.status, f.message) : next(e);
   } finally {
     client.release();
   }
@@ -534,9 +550,10 @@ router.post('/:id/join-request', async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const t = (await client.query(
-      'SELECT id, name, visibility FROM teams WHERE id = $1 FOR UPDATE', [req.params.id],
+      'SELECT id, name, visibility, disbanded_at FROM teams WHERE id = $1 FOR UPDATE', [req.params.id],
     )).rows[0];
     if (!t) return bail(client, res, 404, 'Team not found.');
+    if (t.disbanded_at) return bail(client, res, 410, 'This team has been disbanded.');
     if (t.visibility !== 'public') return bail(client, res, 403, 'This team is invite-only.');
 
     const mine = await client.query(
@@ -754,6 +771,70 @@ router.delete('/:id/members/me', async (req, res, next) => {
     await chat.emitPersistedMessage(client, channelId, sysId);
     bus.emitToUsers(req.user.id, 'team:update', { teamId: req.params.id, left: true });
     return ok(res, { left: true }, 'You left the team.');
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(e);
+  } finally { client.release(); }
+});
+
+/**
+ * Disband a team (captain only). A soft delete: the row is kept so the matches,
+ * elo_history and tournament entries that reference teams.id are never orphaned,
+ * but disbanded_at is stamped, the roster is emptied, every live invite is
+ * revoked so the team cannot be rejoined, and the team drops out of discovery,
+ * rankings and every member's list. A final grey pill closes the chat thread and
+ * every other member is notified.
+ */
+router.delete('/:id', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const g = await access.requireRole(client, req.params.id, req.user.id, 'captain');
+    if (g.error) return bail(client, res, g.error.status, g.error.message);
+    if (g.team.disbanded_at) return bail(client, res, 410, 'This team has already been disbanded.');
+
+    const channelId = await chat.ensureTeamChannel(client, g.team);
+    const actorName = await nameOf(client, req.user.id);
+    // The fan-out list, gathered before the roster is cleared.
+    const memberIds = await access.teamMemberIds(client, req.params.id);
+
+    // Close the thread with a final pill while members are still in the channel.
+    const sysId = await announce(client, channelId, 'group_disbanded', {
+      actorId: req.user.id, actorName,
+    });
+
+    await client.query(
+      'UPDATE teams SET disbanded_at = now(), disbanded_by = $2 WHERE id = $1',
+      [req.params.id, req.user.id],
+    );
+    // Revoke every live invite, so an outstanding link cannot resurrect a member
+    // after the team is gone.
+    await client.query(
+      `UPDATE team_invites SET revoked_at = now()
+        WHERE team_id = $1 AND used_at IS NULL AND revoked_at IS NULL`,
+      [req.params.id],
+    );
+    // Empty the roster and remove everyone from the chat. History rows on
+    // teams / matches / elo_history are deliberately untouched.
+    for (const uid of memberIds) {
+      await chat.removeTeamMember(client, channelId, uid);
+    }
+    await client.query('DELETE FROM team_members WHERE team_id = $1', [req.params.id]);
+
+    for (const uid of memberIds) {
+      if (uid === req.user.id) continue;
+      await notify(client, {
+        userId: uid, type: 'team_role', title: g.team.name,
+        body: `${g.team.name} was disbanded.`,
+        payload: { teamId: req.params.id, teamName: g.team.name },
+        actorId: req.user.id,
+      });
+    }
+    await client.query('COMMIT');
+
+    await chat.emitPersistedMessage(client, channelId, sysId);
+    bus.emitToUsers(memberIds, 'team:update', { teamId: req.params.id, left: true });
+    return ok(res, { disbanded: true }, 'Team disbanded.');
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     next(e);
