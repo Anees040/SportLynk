@@ -377,6 +377,7 @@ async function discoverTeams(client, { userId, sport = null, q = '', limit = 60 
   const runner = client || pool;
   const params = [userId];
   let where = `t.visibility = 'public'
+      AND t.disbanded_at IS NULL
       AND NOT EXISTS (SELECT 1 FROM team_members m WHERE m.team_id = t.id AND m.user_id = $1)`;
   if (sport) {
     const s = access.validateSport(sport);
