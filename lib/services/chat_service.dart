@@ -37,11 +37,15 @@ class ChatService {
     String channelId, {
     required String body,
     required String clientId,
+    String? replyToId,
+    List<String>? mentions,
   }) =>
       _api.post(ApiConstants.chatMessages(channelId), {
         'kind': 'text',
         'body': body,
         'clientId': clientId,
+        'replyToId': ?replyToId,
+        if (mentions != null && mentions.isNotEmpty) 'mentions': mentions,
       }, token: token);
 
   Future<Map<String, dynamic>> sendImage(
@@ -53,6 +57,8 @@ class ChatService {
     int? mediaH,
     String? caption,
     required String clientId,
+    String? replyToId,
+    List<String>? mentions,
   }) =>
       _api.post(ApiConstants.chatMessages(channelId), {
         'kind': 'image',
@@ -62,6 +68,26 @@ class ChatService {
         'mediaH': ?mediaH,
         if (caption != null && caption.isNotEmpty) 'body': caption,
         'clientId': clientId,
+        'replyToId': ?replyToId,
+        if (mentions != null && mentions.isNotEmpty) 'mentions': mentions,
+      }, token: token);
+
+  Future<Map<String, dynamic>> sendAudio(
+    String token,
+    String channelId, {
+    required String mediaUrl,
+    String? mediaMime,
+    int? durationMs,
+    required String clientId,
+    String? replyToId,
+  }) =>
+      _api.post(ApiConstants.chatMessages(channelId), {
+        'kind': 'audio',
+        'mediaUrl': mediaUrl,
+        'mediaMime': ?mediaMime,
+        'durationMs': ?durationMs,
+        'clientId': clientId,
+        'replyToId': ?replyToId,
       }, token: token);
 
   /// Move my read watermark to now (or [at]) via REST — the fallback for when
@@ -87,6 +113,46 @@ class ChatService {
 
   Future<Map<String, dynamic>> deleteMessage(String token, String channelId, String messageId) =>
       _api.delete(ApiConstants.chatMessage(channelId, messageId), token: token);
+
+  /// Pin or unpin a message (admin only, enforced server-side). Returns the
+  /// re-hydrated message so the caller can upsert its new pinned state.
+  Future<Map<String, dynamic>> setPinned(
+    String token,
+    String channelId,
+    String messageId, {
+    required bool pinned,
+  }) =>
+      pinned
+          ? _api.post(ApiConstants.chatPin(channelId, messageId), const {}, token: token)
+          : _api.delete(ApiConstants.chatPin(channelId, messageId), token: token);
+
+  /// The channel's pinned messages, newest pin first — the banner's source.
+  Future<List<ChatMessage>> pinned(String token, String channelId) async {
+    final r = await _api.get(ApiConstants.chatPinned(channelId), token: token);
+    if (r['success'] != true) return <ChatMessage>[];
+    return (r['data'] as List? ?? [])
+        .whereType<Map>()
+        .map((m) => ChatMessage.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  /// One page of the channel's shared photos, newest first. Pass [before] (a
+  /// created_at cursor) to page into older photos.
+  Future<List<ChatMessage>> media(
+    String token,
+    String channelId, {
+    String? before,
+    int limit = 60,
+  }) async {
+    final params = <String, String>{'limit': '$limit'};
+    if (before != null) params['before'] = before;
+    final r = await _api.get(ApiConstants.chatMedia(channelId), token: token, queryParams: params);
+    if (r['success'] != true) return <ChatMessage>[];
+    return (r['data'] as List? ?? [])
+        .whereType<Map>()
+        .map((m) => ChatMessage.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
 
   // The inbox and the other two channel types
 
