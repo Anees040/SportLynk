@@ -89,12 +89,14 @@ class TeamService {
   Future<Map<String, dynamic>> update(
     String token,
     String id, {
+    String? name,
     String? bio,
     bool? isPublic,
     String? city,
     String? logo,
   }) =>
       _api.patch(ApiConstants.team(id), {
+        'name': ?name,
         'bio': ?bio,
         if (isPublic != null) 'visibility': isPublic ? 'public' : 'private',
         'city': ?city,
@@ -147,4 +149,10 @@ class TeamService {
 
   Future<Map<String, dynamic>> leave(String token, String id) =>
       _api.delete(ApiConstants.leaveTeam(id), token: token);
+
+  /// Disband a team (captain only). A soft delete on the server: the team's
+  /// history is kept, but the roster is emptied and it leaves discovery and the
+  /// leaderboard. Returns the raw envelope so the caller can surface the message.
+  Future<Map<String, dynamic>> disband(String token, String id) =>
+      _api.delete(ApiConstants.team(id), token: token);
 }
