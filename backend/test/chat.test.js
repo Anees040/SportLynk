@@ -403,3 +403,27 @@ test('31 — the routes delegate to the client-taking utils rather than re-query
     assert.ok(CHAT_ROUTES_SRC.includes(call), `routes/chat.js does not call ${call}`);
   }
 });
+
+// 32 — the captain context carries the viewer's own team
+//
+// The coordination room's ref_id is the match, not a team, so the thread header's
+// jump to the match centre (result, dispute, scoreline) needs the viewer's team
+// resolved server-side — the inbox is the one entry point that has none in hand.
+// contextFor does I/O, so this proves the field is written from the same
+// `on_challenger` flag the title uses; check_chat.js proves the value it produces.
+test('32 — the captain context returns the viewer’s own team for the match-centre jump', () => {
+  const cap = LIST_SRC.slice(
+    LIST_SRC.indexOf('if (byType.captain.length)'),
+    LIST_SRC.indexOf('if (byType.team.length)'),
+  );
+  assert.ok(cap.length > 0, 'the captain branch of contextFor was not found');
+  // Selected so a team id is actually available to return, not derived from nothing.
+  assert.ok(/m\.challenger_team/.test(cap) && /m\.opponent_team/.test(cap),
+    'the captain query does not select both team ids');
+  // Resolved from the same flag the title uses, so the team named and the team
+  // linked can never be opposite sides.
+  assert.ok(/myTeamId:/.test(cap), 'the captain context does not return myTeamId');
+  assert.ok(/myTeamName:/.test(cap), 'the captain context does not return myTeamName');
+  assert.ok(/on_challenger \? m\.challenger_team : m\.opponent_team/.test(cap),
+    'myTeamId is not resolved from on_challenger');
+});
