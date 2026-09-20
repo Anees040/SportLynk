@@ -247,6 +247,27 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     }
   }
 
+  /// Disband the team (captain only). Soft delete on the server: history is kept,
+  /// but the roster is emptied and the team leaves discovery and the leaderboard.
+  Future<void> _disband() async {
+    final confirmed = await _confirm(
+      title: 'Disband ${_team!.name}?',
+      message: 'This removes every member and takes the team off the leaderboard '
+          'and discovery. Match history is kept, but this cannot be undone.',
+      confirmLabel: 'Disband',
+      danger: true,
+    );
+    if (confirmed != true) return;
+    final r = await _service.disband(_token, _team!.id);
+    if (!mounted) return;
+    if (r['success'] == true) {
+      SnackbarUtil.showSuccess(context, r['message']?.toString() ?? 'Team disbanded.');
+      Navigator.pop(context, 'left');
+    } else {
+      SnackbarUtil.showError(context, r['message']?.toString() ?? 'Could not disband the team.');
+    }
+  }
+
   // Invite link
   /// Mint a single-use link. [note] is set only from the suggested-players rail,
   /// where it tags the link with the player's name so the invites list reads as
@@ -329,6 +350,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
 
   // Edit team (captain)
   Future<void> _editTeam() async {
+    final nameCtrl = TextEditingController(text: _team!.name);
     final bioCtrl = TextEditingController(text: _team!.bio ?? '');
     final cityCtrl = TextEditingController(text: _team!.city ?? '');
     var isPublic = _team!.isPublic;
@@ -380,6 +402,26 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                   child: Text('Tap to change logo',
                       style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary))),
               const SizedBox(height: 16),
+              const Text('TEAM NAME',
+                  style: TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w600,
+                      letterSpacing: 1, color: AppColors.textSecondary)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: nameCtrl,
+                maxLength: 40,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  hintText: 'Team name',
+                  counterText: '',
+                  filled: true,
+                  fillColor: AppColors.inputFill,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 10),
               const Text('BIO',
                   style: TextStyle(
                       fontSize: 11, fontWeight: FontWeight.w600,
@@ -451,6 +493,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     if (saved != true) return;
     await _run(
       () => _service.update(_token, _team!.id,
+          name: nameCtrl.text.trim(),
           bio: bioCtrl.text.trim(),
           isPublic: isPublic,
           city: cityCtrl.text.trim(),
@@ -549,6 +592,12 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                         // the leaderboard, so a visitor would otherwise be offered a
                         // button that can only fail.
                         if (_team!.role != null) _leaveButton(),
+                        // Disbanding is the captain's alone; it dissolves the team
+                        // for everyone, so it sits below Leave as the heavier action.
+                        if (_team!.amCaptain) ...[
+                          const SizedBox(height: 8),
+                          _disbandButton(),
+                        ],
                       ],
                     ),
                   ),
@@ -1039,6 +1088,19 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           ),
           onPressed: _busy ? null : _leave,
+        ),
+      );
+
+  Widget _disbandButton() => SizedBox(
+        width: double.infinity,
+        child: TextButton.icon(
+          icon: const Icon(Icons.delete_forever_outlined, size: 18),
+          label: const Text('Disband team'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.error,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+          onPressed: _busy ? null : _disband,
         ),
       );
 
