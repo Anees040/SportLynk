@@ -94,6 +94,9 @@ class ApiConstants {
   static String chatMembers(String channelId) => '/chat/$channelId/members';
   static String chatReactions(String channelId, String messageId) => '/chat/$channelId/messages/$messageId/reactions';
   static String chatMessage(String channelId, String messageId) => '/chat/$channelId/messages/$messageId';
+  static String chatPin(String channelId, String messageId) => '/chat/$channelId/messages/$messageId/pin';
+  static String chatPinned(String channelId) => '/chat/$channelId/pinned';
+  static String chatMedia(String channelId) => '/chat/$channelId/media';
 
   // Chat: the inbox and the other two channel types
   /// The inbox itself. `type` filters to one of booking/captain/team; `cursor` is
