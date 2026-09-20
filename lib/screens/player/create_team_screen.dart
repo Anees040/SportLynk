@@ -28,6 +28,42 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
   @override
   void dispose() { _nameCtrl.dispose(); _bioCtrl.dispose(); super.dispose(); }
 
+  /// Whether the user has entered anything worth warning about before leaving.
+  bool get _isDirty =>
+      _nameCtrl.text.trim().isNotEmpty ||
+      _bioCtrl.text.trim().isNotEmpty ||
+      _logoUrl != null;
+
+  /// Ask before discarding a part-filled form. Returns true when the user
+  /// confirms they want to leave.
+  Future<bool> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Discard team?',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        content: Text('The details you entered will be lost.',
+            style: GoogleFonts.poppins()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Keep Editing',
+                style: GoogleFonts.poppins(
+                    color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error, foregroundColor: Colors.white, elevation: 0),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Discard', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    return discard == true;
+  }
+
   /// Pick a logo from the gallery and upload it to Cloudinary's `teams` folder.
   /// Only the returned https URL is stored — the raw file never touches this API.
   Future<void> _pickLogo() async {
@@ -46,7 +82,19 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        // Captured before any await so context is never used across the gap.
+        final navigator = Navigator.of(context);
+        if (!_isDirty) {
+          navigator.pop();
+          return;
+        }
+        if (await _confirmDiscard()) navigator.pop();
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text('Create Your Team', style: GoogleFonts.poppins(
@@ -224,6 +272,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
           ])),
           const SizedBox(height: 24),
         ]),
+      ),
       ),
     );
   }
