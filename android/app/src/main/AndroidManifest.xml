@@ -7,6 +7,13 @@
          never buzzes. Declaring it does not grant it: the user is still asked
          once, by `FirebaseMessaging.requestPermission()`. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Gallery access for the in-app photo picker (photo_manager). READ_MEDIA_IMAGES
+         is the Android 13+ scoped permission; READ_EXTERNAL_STORAGE covers API 32 and
+         below and is capped so it is not requested on newer builds. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <!-- Microphone, for recording voice notes in chat. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="SportLynk"
         android:name="${applicationName}"
