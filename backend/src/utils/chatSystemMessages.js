@@ -60,6 +60,13 @@ function sentenceFor(event, { a = 'Someone', t = 'someone', v = null, role = nul
       return `${a} changed the team description`;
     case 'visibility_changed':
       return `${a} made the team ${v === 'private' ? 'private' : 'public'}`;
+    case 'group_disbanded':
+      return `${a} disbanded the team`;
+    // A pin is posted as a pill so the whole room sees an announcement was made,
+    // the same way a roster change is visible to everyone. Unpinning is silent:
+    // it removes the banner without adding a line nobody needs to read.
+    case 'message_pinned':
+      return `${a} pinned a message`;
 
     // Match lifecycle
     // These pills are posted into both teams' chats, so `v` is always the other
