@@ -5,6 +5,11 @@ const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const push = require('../services/pushService');
 
+// A constant hash used only to give the "no such account" path the same cost as a real
+// password comparison, so response timing cannot be used to tell a registered identifier
+// from an unregistered one (account enumeration).
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('sportlynk-nonexistent-account', 12);
+
 // POST /api/auth/register/player
 router.post('/register/player', async (req, res, next) => {
   try {
@@ -159,9 +164,25 @@ router.post('/login', async (req, res, next) => {
       ? await pool.query('SELECT * FROM users WHERE phone = $1', [cleaned])
       : await pool.query('SELECT * FROM users WHERE email = $1', [cleaned.toLowerCase()]);
 
-    if (userRes.rows.length === 0) return res.status(401).json({ success: false, message: 'No account found with this phone/email' });
+    // One message for both an unknown identifier and a wrong password: the response
+    // must never disclose whether an account exists for that phone or email. Every
+    // failed-credential path returns this verbatim.
+    const invalidCredentials = () =>
+      res.status(401).json({ success: false, message: 'Incorrect phone/email or password' });
+
+    if (userRes.rows.length === 0) {
+      // Spend the cost of a comparison anyway so the timing matches the found path.
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      return invalidCredentials();
+    }
     const user = userRes.rows[0];
 
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) return invalidCredentials();
+
+    // Account state is disclosed only after the password is verified. Revealing a
+    // suspension or an owner's review status to a caller who cannot prove ownership
+    // would itself confirm the account exists.
     if (!user.is_active) return res.status(403).json({ success: false, message: 'Account suspended. Contact support.' });
 
     if (user.role === 'owner') {
@@ -176,9 +197,6 @@ router.post('/login', async (req, res, next) => {
         }
       }
     }
-
-    const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return res.status(401).json({ success: false, message: 'Incorrect password' });
 
     const token = jwt.sign({ id: user.id, role: user.role, phone: user.phone }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
