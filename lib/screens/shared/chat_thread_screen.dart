@@ -4,6 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:wechat_assets_picker/wechat_assets_picker.dart';
+import 'chat_media_screen.dart';
+import 'image_caption_screen.dart';
 import 'package:provider/provider.dart';
 
 import '../../constants/colors.dart';
@@ -12,12 +15,16 @@ import '../../models/chat_message.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_controller.dart';
 import '../../services/chat_service.dart';
-import '../../services/cloudinary_service.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/chat/chat_composer.dart';
 import '../../widgets/chat/date_separator.dart';
+import '../../widgets/chat/image_album_bubble.dart';
+import '../../widgets/chat/image_viewer.dart';
+import '../../widgets/chat/mention_picker.dart';
 import '../../widgets/chat/message_bubble.dart';
+import '../../widgets/chat/pinned_banner.dart';
 import '../../widgets/chat/quick_reply_bar.dart';
+import '../../widgets/chat/reply_banner.dart';
 import '../../widgets/chat/system_message_pill.dart';
 import '../../widgets/chat/typing_indicator.dart';
 import '../player/match_center_screen.dart';
@@ -142,6 +149,13 @@ class ChatThreadScreen extends StatefulWidget {
         );
 
   /// Straight from an inbox row, which already carries everything.
+  ///
+  /// [teamId]/[teamName] are what the header's jump to the match centre needs. A
+  /// team room's own id is the team; a coordination room's ref_id is the match,
+  /// so the viewer's team is read from the server-computed context instead — the
+  /// inbox is the one entry point that has no team in hand otherwise, and without
+  /// this a captain who opened the room from their chat list could not reach the
+  /// match to submit a result or raise a dispute.
   ChatThreadScreen.fromChannel(ChatChannel c, {Key? key})
       : this(
           type: c.type,
@@ -150,8 +164,16 @@ class ChatThreadScreen extends StatefulWidget {
           refId: c.refId,
           imageUrl: c.imageUrl,
           contextLine: c.context?.subtitle,
-          teamId: c.type == ChatChannelType.team ? c.refId : null,
-          teamName: c.type == ChatChannelType.team ? c.title : null,
+          teamId: c.type == ChatChannelType.team
+              ? c.refId
+              : c.type == ChatChannelType.captain
+                  ? c.context?.myTeamId
+                  : null,
+          teamName: c.type == ChatChannelType.team
+              ? c.title
+              : c.type == ChatChannelType.captain
+                  ? c.context?.myTeamName
+                  : null,
           muted: c.muted,
           key: key,
         );
@@ -164,6 +186,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   static const _palette = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
 
   final _input = TextEditingController();
+  final _inputFocus = FocusNode();
   final _scroll = ScrollController();
   final _picker = ImagePicker();
 
@@ -173,6 +196,39 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   String? _channelId;
   String? _fatalError;
   int _lastCount = 0;
+
+  /// The message the composer is currently replying to, or null when the next
+  /// send is an ordinary one. Cleared after the send lands and by the reply
+  /// banner's cancel.
+  ChatMessage? _replyTo;
+
+  /// Whether the scroll-to-bottom button is showing. True once the user has
+  /// scrolled up far enough that the newest message is out of view.
+  bool _showJump = false;
+
+  /// A message briefly tinted after a quote was tapped to jump to it, so the eye
+  /// lands on the right line. Cleared by a timer.
+  String? _highlightId;
+
+  /// A stable key per rendered row, keyed by message id, so a tapped quote can
+  /// scroll its parent into view. Every id in an album run maps to the run's key.
+  final Map<String, GlobalKey> _rowKeys = {};
+
+  /// The user ids the composer has mentioned, mapped to the exact `@handle` token
+  /// inserted for each. On send, a mention counts only while its handle still
+  /// appears in the text — deleting the visible `@Ali` drops the ping.
+  final Map<String, String> _mentioned = {};
+
+  /// The mention candidates matching the `@token` currently under the caret, or
+  /// empty when no mention is being typed. Drives [MentionPicker].
+  List<ChatMember> _mentionMatches = const [];
+
+  /// The id of the message the "unread messages" divider sits above, resolved once
+  /// from the read watermark captured when the room opened. Null when there is
+  /// nothing unread to mark. [_unreadResolved] pins it so a live send does not
+  /// chase the divider down the thread as messages arrive.
+  String? _unreadAnchorId;
+  bool _unreadResolved = false;
 
   // FR8.10 reply suggestions
   // Only ever offered for the message somebody else just sent, and the endpoint
@@ -196,6 +252,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     _channelId = widget.channelId;
     _muted = widget.muted;
     _scroll.addListener(_onScroll);
+    _input.addListener(_onInputChanged);
     _bootstrap();
   }
 
@@ -266,7 +323,27 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
         WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
       }
     }
+    _resolveUnreadAnchor();
     if (_suggestsAutomatically) _maybeSuggest();
+  }
+
+  /// Fix the unread divider to the first message from someone else that arrived
+  /// after my read watermark, computed exactly once when the first page has
+  /// loaded. Pinning it here (rather than in the row builder) keeps the divider
+  /// still while I read and send — it only moves when the room is reopened.
+  void _resolveUnreadAnchor() {
+    final c = _controller;
+    if (_unreadResolved || c == null || c.loading) return;
+    _unreadResolved = true;
+    final boundary = c.unreadBoundary;
+    if (boundary == null) return;
+    for (final m in c.messages) {
+      if (m.isSystem || m.senderId == _myId) continue;
+      if (m.createdAt.isAfter(boundary)) {
+        _unreadAnchorId = m.id;
+        break;
+      }
+    }
   }
 
   // FR8.10: three replies, one tap
@@ -385,6 +462,88 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
         duration: const Duration(milliseconds: 240), curve: Curves.easeOut);
   }
 
+  /// The scroll-to-bottom control, shown only once the newest message is out of
+  /// view. Sized past the 48px tap-target floor and labelled for screen readers.
+  Widget _jumpButton() {
+    return Material(
+      color: AppColors.cardBg,
+      elevation: 3,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: _jumpToBottom,
+        child: Semantics(
+          button: true,
+          label: 'Scroll to latest messages',
+          child: const SizedBox(
+            width: 48,
+            height: 48,
+            child: Icon(Icons.keyboard_arrow_down, color: AppColors.primary, size: 28),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _unpinFromBanner(ChatMessage m) async {
+    final r = await _controller?.togglePin(m, pinned: false);
+    if (mounted && r != null && r['success'] != true) {
+      SnackbarUtil.showError(
+          context, r['message']?.toString() ?? 'Could not unpin the message.');
+    }
+  }
+
+  // Reply
+  //
+  // A reply carries the parent's id (so the server denormalises the quote) and an
+  // optimistic [ReplyPreview] built from the parent in hand (so the quote shows
+  // before the server echoes it back). The banner above the composer mirrors that
+  // quote while typing; the send clears it.
+
+  /// Begin replying to [m]. System pills and deleted messages are not quotable —
+  /// a quote of "this message was deleted" has no head to show and no anchor to
+  /// jump to.
+  void _startReply(ChatMessage m) {
+    if (m.isSystem || m.isDeleted) return;
+    setState(() => _replyTo = m);
+    _inputFocus.requestFocus();
+  }
+
+  void _cancelReply() => setState(() => _replyTo = null);
+
+  /// Jump to the message a tapped quote points at. When it is loaded, its row is
+  /// scrolled into view and briefly tinted; when it is not (far up the history, or
+  /// never loaded), the reader is told rather than left with a dead tap.
+  Future<void> _scrollToMessage(String messageId) async {
+    final key = _rowKeys[messageId];
+    final ctx = key?.currentContext;
+    if (ctx == null) {
+      SnackbarUtil.showInfo(context, 'Scroll up to load the original message.');
+      return;
+    }
+    await Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      alignment: 0.3,
+    );
+    if (!mounted) return;
+    setState(() => _highlightId = messageId);
+    Future.delayed(const Duration(milliseconds: 1400), () {
+      if (mounted && _highlightId == messageId) setState(() => _highlightId = null);
+    });
+  }
+
+  /// The reply context to attach to the next send, consumed once: it clears the
+  /// reply banner and returns the (id, preview) to thread through the send.
+  (String?, ReplyPreview?) _consumeReply() {
+    final target = _replyTo;
+    if (target == null) return (null, null);
+    final preview = ReplyPreview.of(target);
+    setState(() => _replyTo = null);
+    return (target.id, preview);
+  }
+
   void _onScroll() {
     // Reversed list: approaching maxScrollExtent nears the oldest loaded message,
     // so page in more history.
@@ -392,6 +551,96 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 240) {
       _controller?.loadMore();
     }
+    // Reversed list: pixels near 0 is the newest message. Show the jump button
+    // once the newest is comfortably out of view.
+    final show = _scroll.position.pixels > 400;
+    if (show != _showJump) setState(() => _showJump = show);
+  }
+
+  // @mentions
+  //
+  // Detection is local to the composer text: the token under the caret is matched
+  // against the room's members, and the picker offers the matches. Picking one
+  // inserts a single `@handle` token and records the member's id; the id is sent
+  // only while that handle still stands in the text, so backspacing the mention
+  // unpings the person exactly as one would expect.
+
+  /// The `@token` the caret is currently inside, as (start, query), or null when
+  /// the caret is not in a mention. A mention starts at an `@` that is at the
+  /// start of the text or follows whitespace, and runs while the characters are
+  /// word characters — so a mid-word `@` (an email) never opens the picker.
+  (int, String)? _activeMention() {
+    if (!_input.selection.isValid || !_input.selection.isCollapsed) return null;
+    final caret = _input.selection.baseOffset;
+    final text = _input.text;
+    if (caret < 0 || caret > text.length) return null;
+    var at = -1;
+    for (var i = caret - 1; i >= 0; i--) {
+      final ch = text[i];
+      if (ch == '@') {
+        at = i;
+        break;
+      }
+      if (!RegExp(r'\w').hasMatch(ch)) return null; // whitespace/punct ends it
+    }
+    if (at < 0) return null;
+    if (at > 0 && RegExp(r'\w').hasMatch(text[at - 1])) return null; // mid-word @
+    return (at, text.substring(at + 1, caret));
+  }
+
+  void _onInputChanged() {
+    final c = _controller;
+    if (c == null) return;
+    final active = _activeMention();
+    if (active == null) {
+      if (_mentionMatches.isNotEmpty) setState(() => _mentionMatches = const []);
+      return;
+    }
+    final q = active.$2.toLowerCase();
+    final matches = c.mentionCandidates
+        .where((m) => q.isEmpty || m.name.toLowerCase().contains(q))
+        .take(6)
+        .toList();
+    setState(() => _mentionMatches = matches);
+  }
+
+  /// A one-token handle from a display name: the first word, stripped to word
+  /// characters, so it renders and highlights as a single `@handle`.
+  String _handleFor(ChatMember m) {
+    final first = m.name.trim().split(RegExp(r'\s+')).first;
+    final cleaned = first.replaceAll(RegExp(r'\W'), '');
+    return cleaned.isEmpty ? 'member' : cleaned;
+  }
+
+  /// Replace the active `@token` with the picked member's `@handle` and record the
+  /// mention, leaving the caret after a trailing space so typing continues cleanly.
+  void _pickMention(ChatMember m) {
+    final active = _activeMention();
+    if (active == null) return;
+    final start = active.$1;
+    final caret = _input.selection.baseOffset;
+    final handle = _handleFor(m);
+    final text = _input.text;
+    final replacement = '@$handle ';
+    final next = text.replaceRange(start, caret, replacement);
+    _mentioned[m.userId] = '@$handle';
+    _input.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: start + replacement.length),
+    );
+    setState(() => _mentionMatches = const []);
+  }
+
+  /// The ids to send as mentions: those whose handle token still stands in the
+  /// text, as a whole token (so `@Ali` does not match inside `@Alina`).
+  List<String> _mentionsInText() {
+    final text = _input.text;
+    final out = <String>[];
+    _mentioned.forEach((userId, handle) {
+      final re = RegExp('${RegExp.escape(handle)}(?!\\w)');
+      if (re.hasMatch(text)) out.add(userId);
+    });
+    return out;
   }
 
   @override
@@ -403,7 +652,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _scroll.dispose();
+    _input.removeListener(_onInputChanged);
     _input.dispose();
+    _inputFocus.dispose();
     _controller?.removeListener(_onControllerChange);
     _controller?.dispose();
     super.dispose();
@@ -425,42 +676,108 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
             ListTile(
               leading: const Icon(Icons.photo_library_outlined, color: AppColors.primary),
               title: const Text('Choose from gallery'),
+              subtitle: const Text('Select one or several'),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
           ],
         ),
       ),
     );
-    if (source == null) return;
+    if (source == null || !mounted) return;
 
-    final picked =
-        await _picker.pickImage(source: source, maxWidth: 1600, imageQuality: 82);
-    if (picked == null || !mounted) return;
-
-    int? w, h;
-    try {
-      final bytes = await picked.readAsBytes();
-      final codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      w = frame.image.width;
-      h = frame.image.height;
-      frame.image.dispose();
-    } catch (_) {/* dimensions are a nicety, not required */}
-
-    if (!mounted) return;
-    SnackbarUtil.showSuccess(context, 'Sending photo…');
-    final url = await CloudinaryService().uploadImage(picked.path, folder: 'chat');
-    if (!mounted) return;
-    if (url == null) {
-      SnackbarUtil.showError(context, 'Could not upload the photo. Try again.');
+    if (source == ImageSource.camera) {
+      final picked =
+          await _picker.pickImage(source: ImageSource.camera, maxWidth: 1600, imageQuality: 82);
+      if (picked == null || !mounted) return;
+      await _sendOneWithCaption(picked);
       return;
     }
-    await _controller?.sendImage(
-      mediaUrl: url,
+
+    // Gallery: the in-app grid picker (recents thumbnails, multi-select). One
+    // photo goes through the caption screen; several are sent as a batch, each
+    // streaming in with its own instant preview and spinner.
+    final assets = await AssetPicker.pickAssets(
+      context,
+      pickerConfig: AssetPickerConfig(
+        maxAssets: 10,
+        requestType: RequestType.image,
+        themeColor: AppColors.accent,
+      ),
+    );
+    if (assets == null || assets.isEmpty || !mounted) return;
+
+    final files = <XFile>[];
+    for (final a in assets) {
+      final f = await a.file;
+      if (f != null) files.add(XFile(f.path, mimeType: a.mimeType));
+    }
+    if (files.isEmpty || !mounted) return;
+    if (files.length == 1) {
+      await _sendOneWithCaption(files.first);
+    } else {
+      await _sendBatch(files);
+    }
+  }
+
+  /// The natural pixel size of a picked file, used to give the bubble the right
+  /// aspect ratio before the image loads. A nicety, not required.
+  Future<(int?, int?)> _imageDims(XFile file) async {
+    try {
+      final bytes = await file.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final w = frame.image.width;
+      final h = frame.image.height;
+      frame.image.dispose();
+      return (w, h);
+    } catch (_) {
+      return (null, null);
+    }
+  }
+
+  /// A single photo: preview + optional caption, then send.
+  Future<void> _sendOneWithCaption(XFile picked) async {
+    final (w, h) = await _imageDims(picked);
+    if (!mounted) return;
+    // A null result means the user backed out; an empty string means "send with
+    // no caption".
+    final caption = await Navigator.push<String?>(
+      context,
+      MaterialPageRoute(builder: (_) => ImageCaptionScreen(localPath: picked.path)),
+    );
+    if (caption == null || !mounted) return;
+    final (replyToId, replyPreview) = _consumeReply();
+    await _controller?.sendImageLocal(
+      localPath: picked.path,
       mediaMime: picked.mimeType ?? 'image/jpeg',
       mediaW: w,
       mediaH: h,
+      caption: caption.isEmpty ? null : caption,
+      replyToId: replyToId,
+      replyPreview: replyPreview,
     );
+    _jumpToBottom();
+  }
+
+  /// Several photos at once: no caption step (matching a quick multi-send), each
+  /// dispatched in order so they arrive as a run.
+  Future<void> _sendBatch(List<XFile> files) async {
+    // A reply anchors one message; on a multi-photo send it rides the first photo.
+    var (replyToId, replyPreview) = _consumeReply();
+    for (final f in files) {
+      final (w, h) = await _imageDims(f);
+      if (!mounted) return;
+      await _controller?.sendImageLocal(
+        localPath: f.path,
+        mediaMime: f.mimeType ?? 'image/jpeg',
+        mediaW: w,
+        mediaH: h,
+        replyToId: replyToId,
+        replyPreview: replyPreview,
+      );
+      replyToId = null;
+      replyPreview = null;
+    }
     _jumpToBottom();
   }
 
@@ -500,6 +817,30 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
               ),
             ),
             const Divider(height: 1),
+            if (!m.isDeleted && !m.pending && !m.failed)
+              ListTile(
+                leading: const Icon(Icons.reply_outlined),
+                title: const Text('Reply'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _startReply(m);
+                },
+              ),
+            if (c.canPin(m))
+              ListTile(
+                leading: Icon(c.isPinned(m.id) ? Icons.push_pin : Icons.push_pin_outlined,
+                    color: AppColors.primary),
+                title: Text(c.isPinned(m.id) ? 'Unpin' : 'Pin'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final want = !c.isPinned(m.id);
+                  final r = await c.togglePin(m, pinned: want);
+                  if (mounted && r['success'] != true) {
+                    SnackbarUtil.showError(
+                        context, r['message']?.toString() ?? 'Could not update the pin.');
+                  }
+                },
+              ),
             if (m.kind == MessageKind.text && (m.body ?? '').isNotEmpty)
               ListTile(
                 leading: const Icon(Icons.copy_outlined),
@@ -535,7 +876,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     Navigator.of(context).push(PageRouteBuilder(
       opaque: false,
       barrierColor: Colors.black,
-      pageBuilder: (_, _, _) => _ImageViewer(url: url),
+      pageBuilder: (_, _, _) => ImageViewer(urls: [url]),
     ));
   }
 
@@ -564,6 +905,21 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
         builder: (_) => MatchCenterScreen(
           teamId: teamId,
           teamName: widget.teamName ?? widget.title,
+        ),
+      ),
+    );
+  }
+
+  void _openMedia() {
+    final channelId = _channelId;
+    if (channelId == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatMediaScreen(
+          token: _token,
+          channelId: channelId,
+          title: widget.title,
         ),
       ),
     );
@@ -598,23 +954,37 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
       body: Column(
         children: [
           _connectionBar(c),
+          ListenableBuilder(
+            listenable: c,
+            builder: (_, _) => PinnedBanner(
+              pinned: c.pinned,
+              onTap: (m) => _scrollToMessage(m.id),
+              onUnpin: c.amAdmin ? _unpinFromBanner : null,
+            ),
+          ),
           Expanded(
-            child: ListenableBuilder(
-              listenable: c,
-              builder: (context, _) {
-                if (c.loading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (c.messages.isEmpty) return _emptyState();
-                final rows = _buildRows(c);
-                return ListView.builder(
-                  controller: _scroll,
-                  reverse: true,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: rows.length,
-                  itemBuilder: (_, i) => rows[rows.length - 1 - i],
-                );
-              },
+            child: Stack(
+              children: [
+                ListenableBuilder(
+                  listenable: c,
+                  builder: (context, _) {
+                    if (c.loading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (c.messages.isEmpty) return _emptyState();
+                    final rows = _buildRows(c);
+                    return ListView.builder(
+                      controller: _scroll,
+                      reverse: true,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: rows.length,
+                      itemBuilder: (_, i) => rows[rows.length - 1 - i],
+                    );
+                  },
+                ),
+                if (_showJump)
+                  Positioned(right: 12, bottom: 12, child: _jumpButton()),
+              ],
             ),
           ),
           if (_qrLoading || _qr != null)
@@ -624,18 +994,39 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
               onPick: _pickSuggestion,
               onDismiss: _dismissSuggestions,
             ),
+          if (_mentionMatches.isNotEmpty)
+            MentionPicker(candidates: _mentionMatches, onPick: _pickMention),
+          if (_replyTo != null)
+            ReplyBanner(target: _replyTo!, onCancel: _cancelReply),
           ChatComposer(
             controller: _input,
+            focusNode: _inputFocus,
             onSend: (t) {
-              c.sendText(t);
+              final mentions = _mentionsInText();
+              final (replyToId, replyPreview) = _consumeReply();
+              c.sendText(t,
+                  replyToId: replyToId, replyPreview: replyPreview, mentions: mentions);
+              _mentioned.clear();
               // My own message is now the last word, so the chips that answered
               // theirs are stale — clear them rather than leave three sentences
               // hanging over a conversation that has moved on.
               _qr = null;
               _qrFor = null;
+              _mentionMatches = const [];
               _jumpToBottom();
             },
             onPickImage: _pickImage,
+            onSendAudio: (path, durationMs, mime) {
+              final (replyToId, replyPreview) = _consumeReply();
+              c.sendAudioLocal(
+                localPath: path,
+                mediaMime: mime,
+                durationMs: durationMs,
+                replyToId: replyToId,
+                replyPreview: replyPreview,
+              );
+              _jumpToBottom();
+            },
             onTyping: c.sendTyping,
           ),
         ],
@@ -719,11 +1110,14 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
                 _toggleMute();
               case 'suggest':
                 _suggestNow();
+              case 'media':
+                _openMedia();
             }
           },
           itemBuilder: (_) => [
             if (isTeam)
               const PopupMenuItem(value: 'info', child: Text('Group info')),
+            const PopupMenuItem(value: 'media', child: Text('Shared media')),
             if (_suggestsAtAll && !_suggestsAutomatically)
               const PopupMenuItem(value: 'suggest', child: Text('Suggest replies')),
             PopupMenuItem(
@@ -789,17 +1183,26 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
 
   /// Flatten the ascending timeline into widgets, inserting a day separator
   /// whenever the date changes and a typing bubble at the very bottom.
+  ///
+  /// Consecutive photos from one sender collapse into a single album grid (see
+  /// [_albumRun]); everything else — text, a lone photo, a captioned photo, a
+  /// photo still sending — stays its own bubble.
   List<Widget> _buildRows(ChatController c) {
     final msgs = c.messages;
     final rows = <Widget>[];
-    for (var i = 0; i < msgs.length; i++) {
+    var i = 0;
+    while (i < msgs.length) {
       final m = msgs[i];
       final prev = i > 0 ? msgs[i - 1] : null;
       if (prev == null || !_sameDay(prev.createdAt, m.createdAt)) {
         rows.add(DateSeparator(m.createdAt));
       }
+      // The unread divider sits above the first message that arrived after my
+      // watermark, once, at the anchor pinned when the room opened.
+      if (m.id == _unreadAnchorId) rows.add(const _UnreadDivider());
       if (m.isSystem) {
         rows.add(SystemMessagePill(m));
+        i++;
         continue;
       }
       final isMine = m.senderId == _myId;
@@ -808,52 +1211,149 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
               prev.isSystem ||
               prev.senderId != m.senderId ||
               !_sameDay(prev.createdAt, m.createdAt));
-      rows.add(MessageBubble(
-        message: m,
-        isMine: isMine,
-        showSender: showSender,
-        tickState: c.tickFor(m),
-        onLongPress: () => _showActions(m),
-        onReactionTap: (e) => c.toggleReaction(m.id, e),
-        onImageTap: () => _openImage(m.mediaUrl),
-        onRetry: () => c.retry(m),
+
+      // A run of two or more grouped photos becomes one album grid. Every id in
+      // the run maps to the run's key so a quote of any one of them can scroll to
+      // the album.
+      final run = _albumRun(msgs, i);
+      if (run > 1) {
+        final group = msgs.sublist(i, i + run);
+        final key = _keyFor(group.first.id);
+        rows.add(_rowWrap(
+          group.first.id,
+          key,
+          ImageAlbumBubble(
+            images: group,
+            isMine: isMine,
+            showSender: showSender,
+            tickState: c.tickFor(group.last),
+            onOpen: (idx) => _openAlbum(group, idx),
+            onLongPress: _showActions,
+          ),
+          replyTarget: group.first,
+        ));
+        i += run;
+        continue;
+      }
+
+      rows.add(_rowWrap(
+        m.id,
+        _keyFor(m.id),
+        MessageBubble(
+          message: m,
+          isMine: isMine,
+          showSender: showSender,
+          tickState: c.tickFor(m),
+          onLongPress: () => _showActions(m),
+          onReactionTap: (e) => c.toggleReaction(m.id, e),
+          onImageTap: () => _openImage(m.mediaUrl),
+          onRetry: () => c.retry(m),
+          onCancel: (m.pending && m.isImage) ? () => c.cancelPending(m) : null,
+          onQuoteTap: m.isReply ? () => _scrollToMessage(m.replyToId ?? m.replyPreview!.id) : null,
+        ),
+        replyTarget: (m.isDeleted || m.pending || m.failed) ? null : m,
       ));
+      i++;
     }
     if (c.typingText != null) rows.add(const TypingIndicator());
     return rows;
+  }
+
+  /// A stable key per message id, reused across rebuilds so a scroll target keeps
+  /// its element identity.
+  GlobalKey _keyFor(String id) => _rowKeys.putIfAbsent(id, () => GlobalKey());
+
+  /// Wrap a row with its scroll key, the brief tint applied after a quote jumps to
+  /// it, and — where the message is quotable — a swipe-to-reply gesture. The tint
+  /// is a background behind the bubble, so it reads as "this one" without touching
+  /// the bubble's own colour.
+  ///
+  /// Swipe uses a [Dismissible] whose `confirmDismiss` always returns false: the
+  /// row springs back rather than leaving, giving the drag animation and the reveal
+  /// icon while the release simply opens a reply — the standard chat idiom.
+  Widget _rowWrap(String id, GlobalKey key, Widget child, {ChatMessage? replyTarget}) {
+    final highlighted = _highlightId == id;
+    final tinted = AnimatedContainer(
+      key: key,
+      duration: const Duration(milliseconds: 300),
+      color: highlighted ? AppColors.accentLight : Colors.transparent,
+      child: child,
+    );
+    if (replyTarget == null) return tinted;
+    return Dismissible(
+      key: ValueKey('swipe:$id'),
+      direction: DismissDirection.startToEnd,
+      dismissThresholds: const {DismissDirection.startToEnd: 0.25},
+      confirmDismiss: (_) async {
+        _startReply(replyTarget);
+        return false;
+      },
+      background: const Padding(
+        padding: EdgeInsets.only(left: 24),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Icon(Icons.reply, color: AppColors.primary),
+        ),
+      ),
+      child: tinted,
+    );
+  }
+
+  /// How many messages starting at [start] form one photo album: same sender,
+  /// each a plain sent photo (no caption, not pending, not failed, not deleted,
+  /// so its own state is never hidden), within five minutes of the one before,
+  /// and on the same day. Returns 1 when the message at [start] does not group.
+  int _albumRun(List<ChatMessage> msgs, int start) {
+    bool eligible(ChatMessage m) =>
+        m.isImage && !m.isDeleted && !m.pending && !m.failed && !m.hasCaption;
+    final first = msgs[start];
+    if (!eligible(first)) return 1;
+    var n = 1;
+    for (var j = start + 1; j < msgs.length; j++) {
+      final m = msgs[j];
+      final prev = msgs[j - 1];
+      if (!eligible(m) ||
+          m.senderId != first.senderId ||
+          !_sameDay(prev.createdAt, m.createdAt) ||
+          m.createdAt.difference(prev.createdAt).inMinutes.abs() > 5) {
+        break;
+      }
+      n++;
+    }
+    return n;
+  }
+
+  void _openAlbum(List<ChatMessage> group, int index) {
+    final urls = group.map((m) => m.mediaUrl).whereType<String>().toList();
+    if (urls.isEmpty) return;
+    Navigator.of(context).push(PageRouteBuilder(
+      opaque: false,
+      barrierColor: Colors.black,
+      pageBuilder: (_, _, _) =>
+          ImageViewer(urls: urls, initialIndex: index.clamp(0, urls.length - 1)),
+    ));
   }
 
   bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
-/// Full-screen pinch-to-zoom image view for a chat photo.
-class _ImageViewer extends StatelessWidget {
-  final String url;
-  const _ImageViewer({required this.url});
+/// The "Unread messages" line drawn once above the first message that arrived
+/// after the reader's watermark — the WhatsApp marker that tells them where they
+/// left off, so a long backlog does not have to be re-read from the top.
+class _UnreadDivider extends StatelessWidget {
+  const _UnreadDivider();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Center(
-        child: InteractiveViewer(
-          minScale: 0.8,
-          maxScale: 4,
-          child: CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.contain,
-            placeholder: (_, _) =>
-                const CircularProgressIndicator(color: Colors.white),
-            errorWidget: (_, _, _) =>
-                const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
-          ),
-        ),
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      color: AppColors.accentLight,
+      alignment: Alignment.center,
+      child: const Text(
+        'Unread messages',
+        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.primary),
       ),
     );
   }
