@@ -1,8 +1,7 @@
 import 'team.dart' show asNum;
 
-/// The kind of a message. Mirrors the DB `kind` column exactly. `audio` exists
-/// so the client can render voice notes the moment the backend starts accepting
-/// them (a planned follow-up) without a model change.
+/// The kind of a message. Mirrors the DB `kind` column exactly. `audio` is a
+/// voice note: a hosted clip URL, its mime, and how long it runs in [durationMs].
 enum MessageKind { text, image, audio, system }
 
 MessageKind _kindFrom(dynamic raw) {
@@ -36,6 +35,58 @@ class MessageReaction {
       MessageReaction('${j['emoji']}', '${j['userId'] ?? j['user_id']}');
 }
 
+/// The quoted parent shown above a reply's own body. Denormalised by the server
+/// (chatCore.REPLY_PREVIEW_SQL) so a reply renders its quote without the parent
+/// being loaded — the parent is usually far up the scroll, or not loaded at all.
+/// [deleted] is true when the parent was deleted for everyone; the quote then
+/// reads "This message was deleted" rather than losing its head.
+class ReplyPreview {
+  final String id;
+  final String? senderName;
+  final MessageKind kind;
+  final bool deleted;
+  final String? body;
+
+  const ReplyPreview({
+    required this.id,
+    this.senderName,
+    this.kind = MessageKind.text,
+    this.deleted = false,
+    this.body,
+  });
+
+  factory ReplyPreview.fromJson(Map<String, dynamic> j) => ReplyPreview(
+        id: '${j['id']}',
+        senderName: j['senderName'] as String?,
+        kind: _kindFrom(j['kind']),
+        deleted: j['deleted'] == true,
+        body: j['body'] as String?,
+      );
+
+  /// Build a quote from a message already in hand — the optimistic reply shows
+  /// its quote immediately, before the server echoes the denormalised copy back.
+  factory ReplyPreview.of(ChatMessage m) => ReplyPreview(
+        id: m.id,
+        senderName: m.senderName,
+        kind: m.kind,
+        deleted: m.isDeleted,
+        body: m.body,
+      );
+
+  /// The one line the quote shows: a tombstone, a media label, or the text.
+  String get snippet {
+    if (deleted) return 'This message was deleted';
+    switch (kind) {
+      case MessageKind.image:
+        return 'Photo';
+      case MessageKind.audio:
+        return 'Voice message';
+      default:
+        return (body ?? '').trim();
+    }
+  }
+}
+
 class ChatMessage {
   final String id;
   final String? clientId;
@@ -51,6 +102,13 @@ class ChatMessage {
   final num mediaH;
   final num durationMs;
   final String? replyToId;
+  final ReplyPreview? replyPreview;
+
+  /// The user ids this message @-mentions. Validated against live membership by
+  /// the server, so every id here is (or was) a real member of the channel.
+  final List<String> mentions;
+
+  final DateTime? pinnedAt;
   final Map<String, dynamic>? systemMeta;
   final DateTime createdAt;
   final DateTime? editedAt;
@@ -61,6 +119,11 @@ class ChatMessage {
   /// [failed] flips true if the send errored so the bubble can offer a retry.
   final bool pending;
   final bool failed;
+
+  /// Client-only. The picked file's local path (a device path on mobile, a blob
+  /// URL on web), shown as an instant preview while the image uploads. Null once
+  /// the message is a real server row with a hosted [mediaUrl].
+  final String? localPath;
 
   ChatMessage({
     required this.id,
@@ -77,6 +140,9 @@ class ChatMessage {
     this.mediaH = 0,
     this.durationMs = 0,
     this.replyToId,
+    this.replyPreview,
+    this.mentions = const [],
+    this.pinnedAt,
     this.systemMeta,
     required this.createdAt,
     this.editedAt,
@@ -84,12 +150,26 @@ class ChatMessage {
     this.reactions = const [],
     this.pending = false,
     this.failed = false,
+    this.localPath,
   });
 
   bool get isSystem => kind == MessageKind.system;
   bool get isImage => kind == MessageKind.image;
+  bool get isAudio => kind == MessageKind.audio;
   bool get isDeleted => deletedAt != null;
   bool get hasCaption => (body ?? '').trim().isNotEmpty;
+  bool get isReply => replyPreview != null;
+  bool get isPinned => pinnedAt != null;
+
+  /// The voice note's length as `m:ss`, from [durationMs]. Falls back to `0:00`
+  /// when the length is not yet known (a still-uploading clip carries its own,
+  /// measured while recording).
+  String get durationLabel {
+    final total = (durationMs / 1000).round();
+    final m = total ~/ 60;
+    final s = (total % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
 
   /// The image's natural aspect ratio, clamped so a freak-tall or freak-wide
   /// photo can't blow out the bubble. Falls back to a gentle portrait.
@@ -113,6 +193,13 @@ class ChatMessage {
         mediaH: asNum(j['media_h']),
         durationMs: asNum(j['duration_ms']),
         replyToId: j['reply_to_id']?.toString(),
+        replyPreview: j['reply_preview'] is Map
+            ? ReplyPreview.fromJson(Map<String, dynamic>.from(j['reply_preview'] as Map))
+            : null,
+        mentions: (j['mentions'] as List? ?? [])
+            .map((e) => '$e')
+            .toList(),
+        pinnedAt: _date(j['pinned_at']),
         systemMeta: j['system_meta'] is Map
             ? Map<String, dynamic>.from(j['system_meta'] as Map)
             : null,
@@ -132,6 +219,7 @@ class ChatMessage {
     bool? failed,
     List<MessageReaction>? reactions,
     DateTime? deletedAt,
+    String? localPath,
   }) =>
       ChatMessage(
         id: id ?? this.id,
@@ -148,6 +236,9 @@ class ChatMessage {
         mediaH: mediaH,
         durationMs: durationMs,
         replyToId: replyToId,
+        replyPreview: replyPreview,
+        mentions: mentions,
+        pinnedAt: pinnedAt,
         systemMeta: systemMeta,
         createdAt: createdAt,
         editedAt: editedAt,
@@ -155,6 +246,7 @@ class ChatMessage {
         reactions: reactions ?? this.reactions,
         pending: pending ?? this.pending,
         failed: failed ?? this.failed,
+        localPath: localPath ?? this.localPath,
       );
 
   /// Reactions folded to `{emoji: count}`, preserving first-seen order so the
