@@ -112,6 +112,11 @@ async function contextFor(client, rows, userId) {
       const line = (m.score_challenger !== null && m.score_opponent !== null)
         ? ` · ${m.score_challenger}-${m.score_opponent}`
         : '';
+      // The viewer's own team, resolved from the same `on_challenger` flag the
+      // title uses. The thread header needs it to offer the jump to the match
+      // centre (result, dispute, scoreline): the channel's ref_id is the match,
+      // not a team, and the inbox is the one entry point that has no team in hand.
+      const myTeamId = m.on_challenger ? m.challenger_team : m.opponent_team;
       out.set(String(m.id), {
         kind: 'captain',
         status: m.status,
@@ -120,6 +125,8 @@ async function contextFor(client, rows, userId) {
         subtitle: `${humanStatus(m.status)}${line}`,
         opponentName: theirs,
         isTournament: !!m.tournament_id,
+        myTeamId: myTeamId ? String(myTeamId) : null,
+        myTeamName: mine,
       });
     }
   }
