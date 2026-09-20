@@ -143,7 +143,7 @@ Future<void> fillStep1(
   WidgetTester tester, {
   String business = 'Green Turf Arena',
   String address = 'Block 4, Clifton, near the sea view',
-  String maps = '',
+  String maps = '24.8607, 67.0011', // Karachi; the location field now requires a point.
   String price = '3000',
   String altPhone = '',
   String? groundType = 'Turf',
@@ -458,33 +458,63 @@ void main() {
       expect(find.text('Min 10 characters'), findsOneWidget);
     });
 
-    testWidgets('a link that is not a maps link is refused', (tester) async {
-      await reachGroundStep(tester);
-      await fillStep1(tester, maps: 'https://facebook.com/greenturf');
-      await tapContinue(tester);
-
-      expect(
-          find.text(
-              'Must be a Google Maps link (maps.google.com or maps.app.goo.gl)'),
-          findsOneWidget);
-    });
-
-    testWidgets('a shortened maps link is accepted', (tester) async {
-      // Google's share sheet hands out `maps.app.goo.gl` links, which is what an
-      // owner will actually paste.
+    testWidgets('a location with no coordinates cannot continue', (tester) async {
+      // A short share link carries no coordinates in the URL text, and discovery
+      // and the "near me" ranking need a real point, so the step cannot be left
+      // without one.
       await reachGroundStep(tester);
       await fillStep1(tester, maps: 'https://maps.app.goo.gl/abc123');
       await tapContinue(tester);
 
-      expect(find.text('Verification Documents'), findsOneWidget);
+      expect(find.text('Your Ground'), findsOneWidget);
+      expect(find.text('Verification Documents'), findsNothing);
     });
 
-    testWidgets('an empty maps link is accepted', (tester) async {
+    testWidgets('an empty location cannot continue', (tester) async {
       await reachGroundStep(tester);
       await fillStep1(tester, maps: '');
       await tapContinue(tester);
 
+      expect(find.text('Your Ground'), findsOneWidget);
+      expect(find.text('Verification Documents'), findsNothing);
+    });
+
+    testWidgets('a pasted coordinate pair is accepted', (tester) async {
+      // Long-pressing a point in Google Maps copies "lat, lng"; that is the most
+      // reliable thing an owner can paste and it is enough on its own.
+      await reachGroundStep(tester);
+      await fillStep1(tester, maps: '24.8607, 67.0011');
+      await tapContinue(tester);
+
       expect(find.text('Verification Documents'), findsOneWidget);
+    });
+
+    testWidgets('a full maps URL carrying coordinates is accepted',
+        (tester) async {
+      await reachGroundStep(tester);
+      await fillStep1(tester,
+          maps: 'https://www.google.com/maps/place/Arena/@24.8607,67.0011,17z');
+      await tapContinue(tester);
+
+      expect(find.text('Verification Documents'), findsOneWidget);
+    });
+
+    testWidgets('a valid location is confirmed on screen', (tester) async {
+      await reachGroundStep(tester);
+      await fillStep1(tester, maps: '24.8607, 67.0011');
+
+      expect(find.textContaining('Location set'), findsOneWidget);
+    });
+
+    testWidgets('a location outside Pakistan is refused', (tester) async {
+      // A coordinate can parse cleanly and still be wrong; the country box catches
+      // a point left on another country before it reaches the search results.
+      await reachGroundStep(tester);
+      await fillStep1(tester, maps: '51.5074, -0.1278'); // London
+      await tapContinue(tester);
+
+      expect(find.text('Your Ground'), findsOneWidget);
+      expect(find.text('Verification Documents'), findsNothing);
     });
 
     testWidgets('a price below the floor is refused', (tester) async {
@@ -734,6 +764,23 @@ void main() {
       await reachDocumentStep(tester);
 
       expect(find.text('0/6 photos added'), findsOneWidget);
+    });
+
+    testWidgets('consent is asked for and starts unticked', (tester) async {
+      // An owner uploads an identity card, so an explicit, opt-in agreement is
+      // captured rather than assumed; the box is unchecked until they tick it.
+      await reachDocumentStep(tester);
+
+      expect(find.textContaining('agree to the Terms of Service'), findsOneWidget);
+      expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+    });
+
+    testWidgets('the consent box can be ticked', (tester) async {
+      await reachDocumentStep(tester);
+      await tester.tap(find.byType(Checkbox));
+      await tester.pump();
+
+      expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
     });
 
     testWidgets('the progress bar is full', (tester) async {
