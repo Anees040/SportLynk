@@ -110,6 +110,8 @@ async function rankings(db, { sport = null, city = null, viewerId = null, limit 
 
   const conds = [
     "t.visibility = 'public'",
+    // A disbanded team keeps its history but leaves the board.
+    't.disbanded_at IS NULL',
     // FR2.6 — the same played-count elo.isRanked() applies, expressed in SQL.
     `(COALESCE(t.wins,0) + COALESCE(t.losses,0) + COALESCE(t.draws,0)) >= ${pMin}`,
   ];
@@ -216,6 +218,7 @@ async function rankedCities(db, { sport = null } = {}) {
     `SELECT min(btrim(t.city)) AS city, count(*)::int AS teams
        FROM teams t
       WHERE t.visibility = 'public'
+        AND t.disbanded_at IS NULL
         AND t.city IS NOT NULL AND btrim(t.city) <> ''
         AND (COALESCE(t.wins,0) + COALESCE(t.losses,0) + COALESCE(t.draws,0)) >= $1${extra}
       GROUP BY lower(btrim(t.city))
