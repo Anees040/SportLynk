@@ -7,6 +7,11 @@ class AppColors {
   // (~5.5:1). The previous 0xFF0A1F13 was so dark it read as black on headers and
   // primary buttons; this keeps the brand green legible as a large surface colour.
   static const Color primary = Color(0xFF166534);
+  // The deep forest of the logo's own field (#0F3723). It is the one startup
+  // surface: native splash, the Dart splash, the Get Started header and the login
+  // header all sit on it, so the logo's baked-in square blends in without a seam
+  // and the four greens the auth flow used to show read as one.
+  static const Color primaryDark = Color(0xFF0F3723);
   static const Color accent = Color(0xFF22C55E);
   static const Color accentLight = Color(0xFFDCFCE7);
   static const Color background = Color(0xFFF8FAFC);
