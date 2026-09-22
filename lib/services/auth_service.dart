@@ -80,4 +80,23 @@ class AuthService {
     }
     return null;
   }
+
+  /// A session refresh that distinguishes the two failures a bare [getMe] cannot:
+  /// a real 401 (the token is expired or revoked — the session must end) from an
+  /// unreachable server (offline or slow — the saved session should survive).
+  ///
+  /// Returns `{ user, expired }`: `user` is non-null only on a clean 200;
+  /// `expired` is true only for an explicit 401. A network failure yields
+  /// `{ user: null, expired: false }`, which the caller reads as "keep what we
+  /// have" rather than "log out".
+  Future<({User? user, bool expired})> refreshMe(String token) async {
+    final response = await _api.get(ApiConstants.me, token: token);
+    if (response['success'] == true && response['data'] != null) {
+      return (
+        user: User.fromJson(response['data']['user'] as Map<String, dynamic>),
+        expired: false,
+      );
+    }
+    return (user: null, expired: response['statusCode'] == 401);
+  }
 }
