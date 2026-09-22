@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../constants/colors.dart';
 import '../../widgets/custom_button.dart';
@@ -11,9 +12,17 @@ class WelcomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
 
-    return Scaffold(
-      backgroundColor: AppColors.primary,
-      body: Column(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark, // iOS
+      ),
+      child: Scaffold(
+        // The dark-forest field, so the white sheet's rounded corners reveal the
+        // same deep green as the section above rather than a lighter green edge.
+        backgroundColor: AppColors.primaryDark,
+        body: Column(
         children: [
           // Top 55 % dark section
           Expanded(
@@ -24,7 +33,7 @@ class WelcomeScreen extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF0A1F13), Color(0xFF1A3A25)],
+                  colors: [AppColors.primaryDark, AppColors.primary],
                 ),
               ),
               child: Center(
@@ -172,8 +181,9 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
