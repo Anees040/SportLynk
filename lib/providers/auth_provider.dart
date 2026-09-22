@@ -184,24 +184,58 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    try {
-      _token = await _authService.getToken();
-      if (_token != null && _token!.isNotEmpty) {
-        _currentUser = await _authService.getMe(_token!);
-        if (_currentUser == null) {
-          _token = null;
-          await _authService.clearToken();
-        }
-      }
-    } catch (e) {
+    _token = await _authService.getToken();
+    if (_token == null || _token!.isEmpty) {
       _token = null;
       _currentUser = null;
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    // The token alone already carries who this is (id, name, role), so the app can
+    // open to the right home screen immediately — no network wait on a cold or slow
+    // start. `getMe` then refreshes the full profile in the background.
+    _currentUser = _userFromToken(_token!);
+
+    // A refresh distinguishes an expired token (log out) from an unreachable server
+    // (stay logged in on the cached identity). Only an explicit 401 ends the session;
+    // offline or slow keeps the user in, which is what a phone with no signal expects.
+    final result = await _authService.refreshMe(_token!);
+    if (result.expired) {
+      _token = null;
+      _currentUser = null;
+      await _authService.clearToken();
+    } else if (result.user != null) {
+      _currentUser = result.user;
+    } else if (_currentUser == null) {
+      // No network AND the token would not decode: nothing trustworthy to show.
+      _token = null;
       await _authService.clearToken();
     }
 
     _bindSession();
     _isLoading = false;
     notifyListeners();
+  }
+
+  /// The minimal identity carried inside the JWT payload, or null if it cannot be
+  /// decoded. Enough to route to the correct home screen before any network call.
+  User? _userFromToken(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      final payload = json.decode(
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+      return User(
+        id: payload['id'].toString(),
+        name: payload['name'] ?? 'Player',
+        role: payload['role'] ?? '',
+        phone: payload['phone'],
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> tryAutoLogin() async {
