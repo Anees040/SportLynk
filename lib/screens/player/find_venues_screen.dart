@@ -1,12 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
-import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
-import '../../constants/api_constants.dart';
-import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
 import '../../utils/num_util.dart';
+import '../../widgets/network_error_view.dart';
 import 'venue_detail_screen.dart';
 
 class FindVenuesScreen extends StatefulWidget {
@@ -17,12 +14,17 @@ class FindVenuesScreen extends StatefulWidget {
 }
 
 class _FindVenuesScreenState extends State<FindVenuesScreen> {
+  final _api = ApiClient();
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _venues = [];
   List<Map<String, dynamic>> _recommended = [];
   String _recommendationSource = 'heuristic';
   String _recommendationLabel = 'For you';
   bool _loading = true;
+  // The sentence to show when the venue list itself could not be fetched, so a
+  // failed request is reported as a failure with a retry rather than as an empty
+  // search. Null whenever the last load succeeded.
+  String? _error;
   String _selectedSport = '';
   static const _sports = ['All', 'Football', 'Cricket'];
 
@@ -65,68 +67,61 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      
-      // Fetch profile for AI recommendations if needed
-      if (_userPrefs.isEmpty) {
-        try {
-          final pResp = await http.get(
-            Uri.parse('${ApiConstants.baseUrl}/users/me/player'),
-            headers: {'Authorization': 'Bearer $token'});
-          if (pResp.statusCode == 200) {
-            final pData = jsonDecode(pResp.body)['data'];
-            if (pData['sport_preferences'] != null) {
-              _userPrefs = List<String>.from(pData['sport_preferences']);
-            }
-          }
-        } catch (_) {}
-      }
 
-      // If no initial sport is selected, auto-select based on AI prefs
-      if (widget.initialSport == null && _selectedSport == '' && _userPrefs.isNotEmpty) {
-        final pref = _userPrefs.first.toLowerCase();
-        if (_sports.any((s) => s.toLowerCase() == pref)) {
-          _selectedSport = _sports.firstWhere((s) => s.toLowerCase() == pref);
-        }
+    // The profile read only seeds the sport auto-select; its failure is tolerated,
+    // exactly as the recommendation rail's is, and never blocks the venue list.
+    if (_userPrefs.isEmpty) {
+      final pResp = await _api.get('/users/me/player');
+      if (pResp['success'] == true && pResp['data']?['sport_preferences'] != null) {
+        _userPrefs = List<String>.from(pResp['data']['sport_preferences']);
       }
-
-      final params = <String, String>{};
-      if (_searchCtrl.text.trim().isNotEmpty) params['search'] = _searchCtrl.text.trim();
-      if (_selectedSport.isNotEmpty && _selectedSport.toLowerCase() != 'all') params['sport'] = _selectedSport.toLowerCase();
-      
-      if (_minPrice > 0) params['min_price'] = _minPrice.toString();
-      if (_maxPrice < 10000) params['max_price'] = _maxPrice.toString();
-      if (_minRating > 0) params['min_rating'] = _minRating.toString();
-      if (_sort != 'rating') params['sort'] = _sort;
-
-      final uri = Uri.parse('${ApiConstants.baseUrl}/venues').replace(queryParameters: params);
-      final responses = await Future.wait([
-        http.get(uri, headers: {'Authorization': 'Bearer $token'}),
-        http.get(Uri.parse('${ApiConstants.baseUrl}/venues/recommended?limit=5'), headers: {'Authorization': 'Bearer $token'}),
-      ]);
-      final resp = responses[0];
-      final data = jsonDecode(resp.body);
-      final recoData = responses[1].statusCode == 200 ? jsonDecode(responses[1].body) : null;
-      
-      if (mounted) {
-        setState(() {
-          if (data['success'] == true) {
-            _venues = List<Map<String, dynamic>>.from(data['data']);
-            final payload = recoData?['data'];
-            _recommended = payload is Map && payload['venues'] is List
-                ? List<Map<String, dynamic>>.from(payload['venues']) : [];
-            _recommendationSource = payload is Map ? (payload['source'] ?? 'heuristic').toString() : 'heuristic';
-            _recommendationLabel = payload is Map ? (payload['label'] ?? 'For you').toString() : 'For you';
-          } else {
-            _venues = [];
-          }
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
     }
+
+    // If no initial sport is selected, auto-select based on AI prefs
+    if (widget.initialSport == null && _selectedSport == '' && _userPrefs.isNotEmpty) {
+      final pref = _userPrefs.first.toLowerCase();
+      if (_sports.any((s) => s.toLowerCase() == pref)) {
+        _selectedSport = _sports.firstWhere((s) => s.toLowerCase() == pref);
+      }
+    }
+
+    final params = <String, String>{};
+    if (_searchCtrl.text.trim().isNotEmpty) params['search'] = _searchCtrl.text.trim();
+    if (_selectedSport.isNotEmpty && _selectedSport.toLowerCase() != 'all') params['sport'] = _selectedSport.toLowerCase();
+
+    if (_minPrice > 0) params['min_price'] = _minPrice.toString();
+    if (_maxPrice < 10000) params['max_price'] = _maxPrice.toString();
+    if (_minRating > 0) params['min_rating'] = _minRating.toString();
+    if (_sort != 'rating') params['sort'] = _sort;
+
+    // The venue list is required; the recommendation rail is optional. Both are
+    // requested together, but only the list's failure becomes the screen's error —
+    // a list that renders without its "For you" rail is the correct degradation.
+    final results = await Future.wait([
+      _api.get('/venues', queryParams: params),
+      _api.get('/venues/recommended', queryParams: {'limit': '5'}),
+    ]);
+    final data = results[0];
+    final recoData = results[1];
+
+    if (!mounted) return;
+    setState(() {
+      if (data['success'] == true) {
+        _error = null;
+        _venues = List<Map<String, dynamic>>.from(data['data'] as List);
+        final payload = recoData['success'] == true ? recoData['data'] : null;
+        _recommended = payload is Map && payload['venues'] is List
+            ? List<Map<String, dynamic>>.from(payload['venues']) : [];
+        _recommendationSource = payload is Map ? (payload['source'] ?? 'heuristic').toString() : 'heuristic';
+        _recommendationLabel = payload is Map ? (payload['label'] ?? 'For you').toString() : 'For you';
+      } else {
+        // The request failed. Surface the reason `ApiClient` translated (a 500, a
+        // dropped connection, a cold-start timeout) instead of an empty list that
+        // reads as "no venues here".
+        _error = data['message'] as String? ?? 'Could not load venues.';
+      }
+      _loading = false;
+    });
   }
 
   void _showFilterModal() {
@@ -395,6 +390,12 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
         Expanded(
           child: _loading
             ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+            : _error != null
+              ? RefreshIndicator(
+                  color: AppColors.accent,
+                  onRefresh: _load,
+                  child: NetworkErrorView(message: _error!, onRetry: _load),
+                )
             : _venues.isEmpty
               ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Container(
