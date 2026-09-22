@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
@@ -27,8 +28,14 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Very light cool gray background
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark, // iOS
+      ),
+      child: Scaffold(
+      backgroundColor: AppColors.background, // Very light cool gray background
       body: SingleChildScrollView(
         child: Stack(
           children: [
@@ -38,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [AppColors.primary, AppColors.accent], // Forest green to bright green
+                  colors: [AppColors.primaryDark, AppColors.primary], // Deep forest, matching splash + welcome
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -247,6 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 }
