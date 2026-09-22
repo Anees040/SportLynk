@@ -2,26 +2,24 @@
 // weakest surface.
 //
 // Four states are mandated for anything that waits on the network — loading, empty,
-// error with a retry, loaded — and this screen has three. `_load`
-// (lib/screens/player/find_venues_screen.dart:117) ends in a bare
-// `catch (_) { setState(() => _loading = false); }`, and the non-throwing failure path
-// at :112 sets `_venues = []`. Both land on the same empty state, so a 500 from the API
-// and a genuinely empty result set are indistinguishable on screen: the player is told
-// "No venues found — try a different search" when the truth is that the request failed
-// and there is nothing to retry with.
+// error with a retry, loaded — and this screen now has all four. `_load` routes
+// through `ApiClient`, which never throws and returns a `{success, message}`
+// envelope, so a failed request sets `_error` to the sentence `ApiClient` translated
+// and the build shows a `NetworkErrorView` with a Retry that re-runs `_load`. A 500,
+// a dropped connection and an unparseable body each reach that error state and carry
+// their own message, distinct from the "No venues found" empty state a genuinely
+// empty result reaches.
 //
-// That is pinned here as behaviour rather than fixed, because the fix is a `lib/` change
-// outside the scope of writing tests. Three tests carry it, each naming the line: a 500,
-// a dropped connection, and an unparseable body all reach the empty state. When the
-// error state is added, those three are the ones that must change, and the comment on
-// each says what to change it to.
+// The "when the request fails" group asserts that distinction: the message is shown,
+// a Retry is offered, the empty-state copy is not, and tapping Retry refetches. Those
+// four tests replaced the three that used to pin the failures as empty states.
 //
-// The rest of the file pins what the screen does get right. The recommendation strip is
-// a separate request whose failure is tolerated — a venue list that renders without its
-// "For you" rail is the correct degradation, and the test asserts the list survives a
-// recommender that returned 500. The filter chips and the search box are asserted
-// through the query string the screen actually sent rather than through its private
-// state, because the contract with the backend is the query, not the field.
+// The rest of the file pins what the screen already got right. The recommendation
+// strip is a separate request whose failure is tolerated — a venue list that renders
+// without its "For you" rail is the correct degradation, and the test asserts the
+// list survives a recommender that returned 500. The filter chips and the search box
+// are asserted through the query string the screen actually sent rather than through
+// its private state, because the contract with the backend is the query, not the field.
 //
 // Nothing here settles: the loading state is a `CircularProgressIndicator`, which
 // animates forever.
@@ -175,54 +173,69 @@ void main() {
   });
 
   group('when the request fails', () {
-    // Pinned as it behaves, not as it should. `_load`
-    // (lib/screens/player/find_venues_screen.dart:112) sets `_venues = []` when the
-    // envelope reports failure, and there is no `_error` field to render, so a 500
-    // reaches the same empty state an genuinely empty result does. The player is
-    // advised to change a search that was never run. The fix is an `_error` field, an
-    // error branch beside the `_venues.isEmpty` one, and a Retry that calls `_load`;
-    // this test should then assert the message and the button.
-    testWidgets('a server error is reported as an empty search', (tester) async {
+    // The message the API sent reaches the screen, and the empty-state copy does not:
+    // a 500 is a failure to retry, not an empty search to re-word.
+    testWidgets('a server error is shown with its message and a retry',
+        (tester) async {
       api.fail('/venues', 'Venue lookup failed');
 
       await pumpScreen(tester, const FindVenuesScreen());
       await settleData(tester);
 
-      expect(find.text('No venues found'), findsOneWidget);
-      expect(find.text('Venue lookup failed'), findsNothing,
-          reason: 'the message the API sent never reaches the screen');
-      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsNothing);
-      expect(find.widgetWithText(TextButton, 'Retry'), findsNothing);
+      expect(find.text('Venue lookup failed'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('No venues found'), findsNothing,
+          reason: 'a failed request must not be disguised as an empty result');
     });
 
-    // Pinned as it behaves, not as it should. Same cause, different path: a dropped
-    // connection throws, and `catch (_)`
-    // (lib/screens/player/find_venues_screen.dart:117) discards it and clears the
-    // spinner. This is the exact symptom of a missing `adb reverse`, and the screen
-    // reports it as "no venues in your city".
-    testWidgets('a dropped connection is reported as an empty search',
+    // A dropped connection — the exact symptom of a missing `adb reverse` — reaches
+    // the same error state with `ApiClient`'s connection sentence, not the spinner
+    // and not the empty search it used to be reported as.
+    testWidgets('a dropped connection is shown as an error with a retry',
         (tester) async {
       api.offline('/venues');
 
       await pumpScreen(tester, const FindVenuesScreen());
       await settleData(tester);
 
-      expect(find.text('No venues found'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('No venues found'), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsNothing,
           reason: 'a spinner that never resolves would be the worse bug');
     });
 
-    // Pinned as it behaves, not as it should. Same cause: `jsonDecode` throws on a
-    // body that is not JSON — an HTML error page from a proxy, for instance — and the
-    // same bare catch swallows it.
-    testWidgets('an unparseable body is reported as an empty search',
+    // A body that is not JSON — an HTML error page from a proxy — is decoded by
+    // `ApiClient` into a status-based message rather than throwing, so it too reaches
+    // the error state instead of the empty one.
+    testWidgets('an unparseable body is shown as an error with a retry',
         (tester) async {
       api.on('/venues', const FakeResponse(502, '<html>Bad Gateway</html>'));
 
       await pumpScreen(tester, const FindVenuesScreen());
       await settleData(tester);
 
-      expect(find.text('No venues found'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('No venues found'), findsNothing);
+    });
+
+    // The whole point of the error state: it is recoverable. A first load that failed,
+    // then a Retry once the API is answering, lands on the venue list.
+    testWidgets('tapping Retry refetches and shows the list on success',
+        (tester) async {
+      api.offline('/venues');
+
+      await pumpScreen(tester, const FindVenuesScreen());
+      await settleData(tester);
+      expect(find.text('Retry'), findsOneWidget);
+
+      // The second attempt succeeds: a later stub for the same path replaces the
+      // earlier one, which is how the harness models a network that came back.
+      api.ok('/venues', [venue()]);
+      await tester.tap(find.text('Retry'));
+      await settleData(tester);
+
+      expect(find.text('Karachi Sports Arena'), findsOneWidget);
+      expect(find.text('Retry'), findsNothing);
     });
 
     testWidgets('a failed recommender does not take the venue list with it',
