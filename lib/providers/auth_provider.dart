@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -195,27 +196,56 @@ class AuthProvider extends ChangeNotifier {
 
     // The token alone already carries who this is (id, name, role), so the app can
     // open to the right home screen immediately — no network wait on a cold or slow
-    // start. `getMe` then refreshes the full profile in the background.
+    // start.
     _currentUser = _userFromToken(_token!);
 
-    // A refresh distinguishes an expired token (log out) from an unreachable server
-    // (stay logged in on the cached identity). Only an explicit 401 ends the session;
-    // offline or slow keeps the user in, which is what a phone with no signal expects.
+    if (_currentUser != null) {
+      // Everything the wrapper needs to route is in hand. Bind the session and
+      // leave the splash now, then refresh the full profile without holding the
+      // first frame: a cold, slow, or unreachable server used to keep the user on
+      // the splash for the whole request timeout, which is the "it takes ten
+      // seconds to open" symptom this avoids.
+      _bindSession();
+      _isLoading = false;
+      notifyListeners();
+      unawaited(_refreshProfile());
+      return;
+    }
+
+    // The token would not decode, so there is nothing trustworthy to show without
+    // the network: wait for the refresh to establish identity (or fail).
     final result = await _authService.refreshMe(_token!);
-    if (result.expired) {
+    if (result.expired || result.user == null) {
       _token = null;
       _currentUser = null;
       await _authService.clearToken();
-    } else if (result.user != null) {
+    } else {
       _currentUser = result.user;
-    } else if (_currentUser == null) {
-      // No network AND the token would not decode: nothing trustworthy to show.
-      _token = null;
-      await _authService.clearToken();
     }
 
     _bindSession();
     _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Refreshes the full profile after the app has already left the splash on the
+  /// identity decoded from the token. A refresh distinguishes an expired token
+  /// (log out) from an unreachable server (stay logged in on the cached identity):
+  /// only an explicit 401 ends the session; offline or slow keeps the user in,
+  /// which is what a phone with no signal expects.
+  Future<void> _refreshProfile() async {
+    final token = _token;
+    if (token == null) return;
+    final result = await _authService.refreshMe(token);
+    if (result.expired) {
+      _token = null;
+      _currentUser = null;
+      await _authService.clearToken();
+      ApiClient.authToken = null;
+      RealtimeService().disconnect();
+    } else if (result.user != null) {
+      _currentUser = result.user;
+    }
     notifyListeners();
   }
 
