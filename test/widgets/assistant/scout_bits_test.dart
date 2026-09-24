@@ -27,11 +27,24 @@ import 'package:sportlynk/widgets/assistant/scout_theme.dart';
 
 import '../widget_harness.dart';
 
-/// The single decorated box a [ScoutAvatar] draws.
-BoxDecoration avatarBox(WidgetTester tester) => tester
-    .widget<Container>(find.descendant(
+/// The decorated boxes a [ScoutAvatar] draws. Idle it is a single tile; while it
+/// thinks a halo box wraps that tile, so the two are told apart by what each
+/// carries — the tile owns the fill colour, the halo owns the shadow.
+Iterable<BoxDecoration> avatarBoxes(WidgetTester tester) => tester
+    .widgetList<Container>(find.descendant(
         of: find.byType(ScoutAvatar), matching: find.byType(Container)))
-    .decoration! as BoxDecoration;
+    .map((c) => c.decoration! as BoxDecoration);
+
+/// The mascot tile: the box that fills itself with [ScoutTheme.accentFill].
+BoxDecoration tileBox(WidgetTester tester) =>
+    avatarBoxes(tester).firstWhere((d) => d.color != null);
+
+/// The breathing halo, or null when the avatar is idle and draws none.
+BoxDecoration? haloBox(WidgetTester tester) {
+  final shadowed =
+      avatarBoxes(tester).where((d) => (d.boxShadow ?? const []).isNotEmpty);
+  return shadowed.isEmpty ? null : shadowed.first;
+}
 
 void main() {
   group('Scout\'s face', () {
@@ -45,37 +58,39 @@ void main() {
           ),
         );
 
-    testWidgets('it is a gradient circle carrying one glyph', (tester) async {
+    testWidgets('it is the mascot on a squircle, not a circle', (tester) async {
       await pumpAvatar(tester);
-      expect(avatarBox(tester).shape, BoxShape.circle);
-      // The face uses the fixed fill gradient, not the palette's glyph accent:
-      // its glyph is white, and only [accentFill]/[accentFillDim] hold white text.
-      expect(avatarBox(tester).gradient, ScoutTheme.accentGradient);
+      final tile = tileBox(tester);
+      // A rounded rect, never a circle: the art is a launcher-style squircle with
+      // its own field, and a circular clip would crop the tile's own corners.
+      expect(tile.shape, BoxShape.rectangle);
+      expect(tile.borderRadius, BorderRadius.circular(34 * 0.3));
+      expect(tile.color, ScoutTheme.accentFill);
       expect(tester.getSize(find.byType(ScoutAvatar)), const Size(34, 34));
-      expect(tester.widget<Icon>(find.byIcon(Icons.auto_awesome)).size,
-          closeTo(17.68, 0.01),
-          reason: 'the glyph is a little over half the face at any size');
-      expect(tester.widget<Icon>(find.byIcon(Icons.auto_awesome)).color,
-          Colors.white);
+      final image = tester.widget<Image>(find.descendant(
+          of: find.byType(ScoutAvatar), matching: find.byType(Image)));
+      expect(image.fit, BoxFit.cover);
+      expect((image.image as AssetImage).assetName, ScoutTheme.mascotAsset);
     });
 
     // Every other animation in this feature repeats forever; this one is the exception a
     // screen test can settle on, which is only true while the avatar is idle.
-    testWidgets('an idle face is a still frame', (tester) async {
+    testWidgets('an idle face is a still frame with no halo', (tester) async {
       await pumpAvatar(tester);
-      final quiet = avatarBox(tester).boxShadow!.single;
-      expect(quiet.blurRadius, 6, reason: 'the cycle is parked at its start');
-      expect(quiet.spreadRadius, 0.5);
+      expect(haloBox(tester), isNull,
+          reason: 'the halo is drawn only while thinking');
+      // Nothing animates on an idle avatar, so a settle completes rather than
+      // timing out — and it is still haloless on the far side of it.
       await tester.pumpAndSettle(const Duration(milliseconds: 100),
           EnginePhase.sendSemanticsUpdate, const Duration(seconds: 2));
-      expect(avatarBox(tester).boxShadow!.single.blurRadius, 6);
+      expect(haloBox(tester), isNull);
     });
 
     testWidgets('a thinking face breathes and never settles', (tester) async {
       await pumpAvatar(tester, thinking: true);
-      final first = avatarBox(tester).boxShadow!.single;
+      final first = haloBox(tester)!.boxShadow!.single;
       await tester.pump(const Duration(milliseconds: 400));
-      final later = avatarBox(tester).boxShadow!.single;
+      final later = haloBox(tester)!.boxShadow!.single;
       expect(later.blurRadius, greaterThan(first.blurRadius));
       expect(later.color.a, greaterThan(first.color.a));
       await expectLater(
@@ -88,15 +103,14 @@ void main() {
 
     // The app bar's avatar is rebuilt with the flag flipped as each turn starts and
     // finishes, so both directions have to take effect without a remount.
-    testWidgets('the answer arriving parks it back at its quietest',
-        (tester) async {
+    testWidgets('the answer arriving removes the halo', (tester) async {
       await pumpAvatar(tester, thinking: true);
       await tester.pump(const Duration(milliseconds: 400));
-      expect(avatarBox(tester).boxShadow!.single.blurRadius, greaterThan(6));
+      expect(haloBox(tester), isNotNull);
 
       await pumpAvatar(tester);
-      expect(avatarBox(tester).boxShadow!.single.blurRadius, 6,
-          reason: 'stopping resets the cycle rather than freezing it mid-breath');
+      expect(haloBox(tester), isNull,
+          reason: 'stopping drops the halo rather than freezing it mid-breath');
       await tester.pumpAndSettle(const Duration(milliseconds: 100),
           EnginePhase.sendSemanticsUpdate, const Duration(seconds: 2));
     });
@@ -104,9 +118,9 @@ void main() {
     testWidgets('the next question starts it again', (tester) async {
       await pumpAvatar(tester);
       await pumpAvatar(tester, thinking: true);
-      final first = avatarBox(tester).boxShadow!.single;
+      final first = haloBox(tester)!.boxShadow!.single;
       await tester.pump(const Duration(milliseconds: 400));
-      expect(avatarBox(tester).boxShadow!.single.blurRadius,
+      expect(haloBox(tester)!.boxShadow!.single.blurRadius,
           greaterThan(first.blurRadius));
       await tester.pumpWidget(const SizedBox.shrink());
     });
