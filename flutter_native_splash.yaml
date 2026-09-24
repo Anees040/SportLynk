@@ -1,11 +1,14 @@
 # The background is the logo's own field colour (#0E3621, the mean of the logo
-# PNG's border ring). The centred logo blends into it with no visible square edge.
-# It must match AppColors.primaryDark and the Dart splash in auth_wrapper.dart, or
-# the native-to-Flutter handoff shows as a colour jump. Regenerate after any
-# change: flutter pub run flutter_native_splash:create
+# PNG's border ring). The image is splash_logo.png: the square logo cropped to a
+# circle on a transparent field with a feathered rim (built by .make_splash_logo.py),
+# so its corners no longer meet the flat background as a visible square edge and the
+# darker bottom vignette fades into the colour instead of drawing a line. It must
+# match AppColors.primaryDark and the Dart splash in auth_wrapper.dart, or the
+# native-to-Flutter handoff shows as a colour jump. Regenerate after any change:
+# flutter pub run flutter_native_splash:create
 flutter_native_splash:
   color: "#0E3621"
-  image: "assets/images/logo.png"
+  image: "assets/images/splash_logo.png"
   android: true
   ios: true
   web: false
