@@ -39,7 +39,7 @@ void main() {
       await settleData(tester);
 
       expect(find.textContaining('Good '), findsOneWidget);
-      expect(find.textContaining('Ready to'), findsOneWidget);
+      expect(find.textContaining('👋'), findsOneWidget);
       expect(find.text('Quick Actions'), findsOneWidget);
       expect(find.text('Book Venue'), findsOneWidget);
       expect(find.text('Find Opponent'), findsOneWidget);
@@ -47,15 +47,16 @@ void main() {
       expect(find.text('No upcoming bookings'), findsOneWidget);
     });
 
-    testWidgets('the home search surface routes to Find Venues', (
+    testWidgets('the in-page search surface is gone from home', (
       tester,
     ) async {
-      final log = await pumpHome(tester, api);
+      await pumpHome(tester, api);
       await settleData(tester);
 
-      await tapVisible(tester, find.textContaining('Find venues, sports'));
-
-      expect(log.sawRoute('/find-venues'), isTrue);
+      // The search field that used to redirect to a separate Find Venues screen
+      // has been removed by design; Book Venue and Scout are the paths to venue
+      // search now, so the field must no longer be present on the home surface.
+      expect(find.textContaining('Find venues, sports'), findsNothing);
     });
 
     testWidgets('the Book Venue action routes to Find Venues', (tester) async {
