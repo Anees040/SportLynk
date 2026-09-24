@@ -63,11 +63,20 @@ class _SplashView extends StatefulWidget {
   State<_SplashView> createState() => _SplashViewState();
 }
 
-class _SplashViewState extends State<_SplashView> with SingleTickerProviderStateMixin {
+class _SplashViewState extends State<_SplashView> with TickerProviderStateMixin {
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 650),
   )..forward();
+
+  // A slow, continuous breathing of the logo's glow so a cold start reads as a
+  // live screen the app is working behind, not a frozen image. It runs
+  // independently of the one-shot entrance so the mark keeps moving for the whole
+  // wait, however long the saved session takes to resolve.
+  late final AnimationController _pulseCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  )..repeat(reverse: true);
 
   late final Animation<double> _fade =
       CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
@@ -75,10 +84,13 @@ class _SplashViewState extends State<_SplashView> with SingleTickerProviderState
       Tween<double>(begin: 0.86, end: 1.0).animate(
     CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack),
   );
+  late final Animation<double> _pulse =
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut);
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _pulseCtrl.dispose();
     super.dispose();
   }
 
@@ -100,9 +112,35 @@ class _SplashViewState extends State<_SplashView> with SingleTickerProviderState
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // No white plate and no ClipOval: the logo's own dark-forest
-                  // field is the splash colour, so the mark blends straight in.
-                  Image.asset('assets/images/logo.png', width: 132, height: 132),
+                  // The same circular treatment the welcome screen uses — a white
+                  // avatar behind the mark and an accent glow — so the two startup
+                  // surfaces read as one design. The glow breathes with [_pulse]
+                  // to keep the screen feeling alive during the wait.
+                  AnimatedBuilder(
+                    animation: _pulse,
+                    builder: (context, child) {
+                      final t = _pulse.value;
+                      return Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.accent.withValues(
+                                  alpha: 0.18 + 0.16 * t),
+                              blurRadius: 24 + 12 * t,
+                              spreadRadius: 4 + 5 * t,
+                            ),
+                          ],
+                        ),
+                        child: child,
+                      );
+                    },
+                    child: const CircleAvatar(
+                      radius: 66,
+                      backgroundColor: AppColors.white,
+                      backgroundImage: AssetImage('assets/images/logo.png'),
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   RichText(
                     text: const TextSpan(children: [
