@@ -2,19 +2,19 @@
 // the animation is taken away.
 //
 // Scout is a floating button rather than a sixth tab, so in its collapsed form the
-// only thing on screen is a glyph. That makes the semantics label the entire
-// accessible name of the app's newest capability, and it is asserted on both forms
-// rather than left to the icon to imply.
+// only thing on screen is the mascot tile. That makes the semantics label the
+// entire accessible name of the app's newest capability, and it is asserted on both
+// forms rather than left to the art to imply.
 //
 // The halo breathes on a 2.4s cycle and is decoration only. Two frames are compared
-// to prove the shadow moves, and the icon, the label and the accessible name are then
-// checked to be identical on both — a button that only reads as one mid-animation
-// would be unusable with animations disabled.
+// to prove the shadow moves, and the mascot, the face and the accessible name are
+// then checked to be identical on both — a button that only reads as one
+// mid-animation would be unusable with animations disabled.
 //
-// The two shapes are the same tap. Each is pinned to the radius it draws, because a
-// circle and a rounded rectangle are the difference between a FAB and a pill and
-// swapping them renders perfectly. The controller repeats forever, so, as with
-// `CustomLoader`, `pumpAndSettle` can never be used on a tree containing the FAB.
+// Both forms are the same tap. Each is pinned to the radius it draws: the collapsed
+// face is the mascot's own squircle and the extended form a labelled pill. The
+// controller repeats forever, so, as with `CustomLoader`, `pumpAndSettle` can never
+// be used on a tree containing the FAB.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,38 +50,53 @@ void main() {
       return taps;
     }
 
-    testWidgets('collapsed it is a circle carrying one glyph', (tester) async {
+    testWidgets('collapsed it is a mascot squircle, not a circle', (tester) async {
       await pumpFab(tester);
-      expect(find.byIcon(Icons.auto_awesome_rounded), findsOneWidget);
-      expect(tester.widget<Icon>(find.byIcon(Icons.auto_awesome_rounded)).size, 22);
+      // The face is the mascot art now, not a sparkle glyph.
+      expect(
+          find.descendant(
+              of: find.byType(ScoutFab), matching: find.byType(Image)),
+          findsOneWidget);
       expect(find.text('Ask Scout'), findsNothing, reason: 'the label is the tooltip');
 
       final face = decorations(tester, find.byType(ScoutFab))[1];
-      expect(face.borderRadius, BorderRadius.circular(999));
-      // The face is the fixed fill gradient in both brightnesses: it is the one
-      // control carrying a white glyph, and only the fill accents hold white.
-      expect(face.gradient, ScoutTheme.accentGradient);
+      // A rounded rect at the mascot's own radius rather than a circle: the face is
+      // the art's launcher-style tile, and its fill is the one green that holds art.
+      expect(face.borderRadius, BorderRadius.circular(18));
+      expect(face.color, ScoutTheme.accentFill);
+      expect(face.gradient, isNull, reason: 'the tile is a flat fill behind the art');
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
     testWidgets('extended it is a pill that names itself', (tester) async {
       await pumpFab(tester, extended: true);
       expect(find.text('Ask Scout'), findsOneWidget);
-      expect(find.byIcon(Icons.auto_awesome_rounded), findsOneWidget);
-      for (final decoration in decorations(tester, find.byType(ScoutFab))) {
-        expect(decoration.borderRadius, BorderRadius.circular(18));
-      }
+      // The mascot rides the pill in place of the old sparkle glyph.
+      expect(
+          find.descendant(
+              of: find.byType(ScoutFab), matching: find.byType(Image)),
+          findsOneWidget);
+      final decos = decorations(tester, find.byType(ScoutFab));
+      // Halo and pill share the pill radius; the inset mascot tile draws its own,
+      // tighter one, so the two outer shapes are checked rather than the whole list.
+      expect(decos.first.borderRadius, BorderRadius.circular(18),
+          reason: 'the halo follows the pill');
+      expect(decos[1].gradient, ScoutTheme.accentGradient,
+          reason: 'the pill keeps the brand gradient behind the label');
+      expect(decos[1].borderRadius, BorderRadius.circular(18));
       expectTapTarget(tester, find.byType(ScoutFab));
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    // The collapsed form is a glyph and nothing else, so this sentence is the whole
-    // accessible name of the feature.
-    testWidgets('a screen reader is told what the glyph opens', (tester) async {
+    // The collapsed form is the mascot and nothing else, so this sentence is the
+    // whole accessible name of the feature.
+    testWidgets('a screen reader is told what the tile opens', (tester) async {
       final handle = tester.ensureSemantics();
       await pumpFab(tester);
+      // The mascot is the leaf; the enclosing node carries the button semantics.
       expect(
-          tester.getSemantics(find.byIcon(Icons.auto_awesome_rounded)),
+          tester.getSemantics(find.descendant(
+              of: find.byType(ScoutFab), matching: find.byType(Image))),
           matchesSemantics(
             label: 'Ask Scout, the SportLynk assistant',
             isButton: true,
@@ -132,22 +147,24 @@ void main() {
       final face = decorations(tester, find.byType(ScoutFab))[1];
       expect(first.blurRadius, 14, reason: 'the cycle starts at its quietest');
       expect(first.spreadRadius, 1);
-      expect(first.color.a, closeTo(0.16, 0.001));
+      expect(first.color.a, closeTo(0.20, 0.001));
 
       await tester.pump(const Duration(milliseconds: 600));
       final later = halo(tester);
       expect(later.blurRadius, greaterThan(first.blurRadius));
       expect(later.color.a, greaterThan(first.color.a));
 
-      // Decoration only: the same glyph, the same face, the same footprint.
-      expect(find.byIcon(Icons.auto_awesome_rounded), findsOneWidget);
-      expect(decorations(tester, find.byType(ScoutFab))[1].gradient, face.gradient);
+      // Decoration only: the same mascot, the same face, the same footprint.
+      expect(
+          find.descendant(
+              of: find.byType(ScoutFab), matching: find.byType(Image)),
+          findsOneWidget);
+      expect(decorations(tester, find.byType(ScoutFab))[1].color, face.color);
       expect(decorations(tester, find.byType(ScoutFab))[1].borderRadius,
           face.borderRadius);
-      // 15 of padding either side of a 22px glyph: comfortably over the project's
-      // 48px floor without a `SizedBox` to hold it there. The old 1px accent border
-      // is gone — a filled gradient control carries its own edge.
-      expect(tester.getSize(find.byType(ScoutFab)), const Size(52, 52));
+      // The collapsed face is a 56px mascot tile — comfortably over the project's
+      // 48px floor. The halo is a shadow, so it adds no layout size of its own.
+      expect(tester.getSize(find.byType(ScoutFab)), const Size(56, 56));
       expectTapTarget(tester, find.byType(ScoutFab));
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -216,18 +233,17 @@ void main() {
       expect(
           find.text('Book a ground, find players, check your wallet — just say it.'),
           findsOneWidget);
-      expect(find.byIcon(Icons.auto_awesome_rounded), findsOneWidget);
+      // The mascot tile stands in for the old sparkle glyph on the banner too.
+      final mascot = find.descendant(
+          of: find.byType(ScoutAskBanner), matching: find.byType(Image));
+      expect(mascot, findsOneWidget);
       expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget,
           reason: 'the arrow is what marks it as a way out of Home');
       expect(
-          tester.widget<Icon>(find.byIcon(Icons.auto_awesome_rounded)).color,
-          ScoutTheme.light.accent);
-      expect(
           tester.getSize(find.ancestor(
-              of: find.byIcon(Icons.auto_awesome_rounded),
-              matching: find.byType(Container)).first),
-          const Size(42, 42),
-          reason: 'the glyph sits in a tile, not loose beside the text');
+              of: mascot, matching: find.byType(Container)).first),
+          const Size(46, 46),
+          reason: 'the mascot sits in a tile, not loose beside the text');
     });
 
     testWidgets('the whole card is the target, not the arrow', (tester) async {
