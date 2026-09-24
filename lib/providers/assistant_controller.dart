@@ -117,20 +117,28 @@ class AssistantController extends ChangeNotifier {
   /// because the backend caps threads per user and opening the screen is not a decision
   /// to start a chat. The first POST with no `session_id` creates the thread and
   /// returns its id.
-  Future<void> start() async {
+  ///
+  /// [loadHistory] is false for a purpose-built surface that must open on a clean
+  /// slate rather than the user's last general chat — the Help & Support chat is one:
+  /// dropping a player into their half-finished booking conversation is the wrong
+  /// place to start asking about a refund. Capabilities and the classifier probe still
+  /// run, so a blank-started conversation degrades exactly like a resumed one.
+  Future<void> start({bool loadHistory = true}) async {
     _booting = true;
     _emit();
-    try {
-      final wanted = initialThreadId;
-      if (wanted != null && wanted.isNotEmpty) {
-        await _load(wanted);
-      } else {
-        final list = await _svc.threads(token);
-        final open = list.where((t) => !t.archived).toList();
-        if (open.isNotEmpty) await _load(open.first.id);
+    if (loadHistory) {
+      try {
+        final wanted = initialThreadId;
+        if (wanted != null && wanted.isNotEmpty) {
+          await _load(wanted);
+        } else {
+          final list = await _svc.threads(token);
+          final open = list.where((t) => !t.archived).toList();
+          if (open.isNotEmpty) await _load(open.first.id);
+        }
+      } catch (_) {
+        _notice = 'Could not load your earlier chats. You can still start a new one.';
       }
-    } catch (_) {
-      _notice = 'Could not load your earlier chats. You can still start a new one.';
     }
     _booting = false;
     _emit();
