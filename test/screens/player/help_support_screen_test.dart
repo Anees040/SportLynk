@@ -9,12 +9,11 @@
 // stating the old one. The tests below quote the figures, which is the only mechanism
 // available for noticing that drift.
 //
-// The second is that both contact cards are wired to `onTap: () {}` —
-// lib/screens/player/help_support_screen.dart:40 and :48. Live Chat and Email Us look
-// tappable, invite a tap, and do nothing. That is a placeholder in a path a user can
-// reach, so it is pinned as behaviour with the lines named: two tests tap each card and
-// assert nothing happens at all. When the cards are wired up, those two are the ones
-// that must change.
+// The second is that both contact cards now do something. Live Chat pushes the
+// SupportChatScreen — the Scout-backed support surface — and Email Us opens a mail
+// composer, copying the address as a fallback when no client answers. The two tests
+// below tap each card and assert that route and that fallback, which is what keeps the
+// wiring from silently regressing to the `onTap: () {}` no-ops these once were.
 //
 // A third finding is recorded here rather than tested, because it is a contradiction
 // between two screens rather than a defect in either: the wallet top-up FAQ says
@@ -23,8 +22,10 @@
 // `/wallet/topup`. One of the two is out of date.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sportlynk/screens/player/help_support_screen.dart';
+import 'package:sportlynk/screens/player/support_chat_screen.dart';
 
 import '../screen_harness.dart';
 
@@ -92,10 +93,14 @@ void main() {
       expect(find.text('Email Us'), findsOneWidget);
     });
 
-    testWidgets('live chat states its expected wait', (tester) async {
+    testWidgets('live chat names Scout rather than promising a human wait',
+        (tester) async {
+      // The card once read "Typically replies in minutes" — a wait-time claim for a
+      // person. Scout answers instantly and is not one, so the subtitle says so.
       await pumpScreen(tester, const HelpSupportScreen());
 
-      expect(find.text('Typically replies in minutes'), findsOneWidget);
+      expect(find.text('Instant help from Scout'), findsOneWidget);
+      expect(find.text('Typically replies in minutes'), findsNothing);
     });
 
     testWidgets('the support address is shown rather than hidden behind the tap',
@@ -114,38 +119,46 @@ void main() {
       expect(find.byIcon(Icons.email_outlined), findsOneWidget);
     });
 
-    // Pinned as it behaves, not as it should. `onTap: () {}`
-    // (lib/screens/player/help_support_screen.dart:40) is a silent no-op: the card
-    // looks tappable and invites a tap that cannot fail and cannot succeed. The fix is
-    // either a real route to the chat surface or removing the affordance until there
-    // is one; this test should then assert the navigation.
-    testWidgets('tapping live chat does nothing at all', (tester) async {
-      final log = await pumpScreen(tester, const HelpSupportScreen());
+    // Wired in place of the former `onTap: () {}` no-op. The card pushes the
+    // SupportChatScreen through a MaterialPageRoute, which onGenerateRoute does not
+    // record — so the proof is the surface itself being on screen, not the route log.
+    testWidgets('tapping live chat opens the support chat', (tester) async {
+      await pumpScreen(tester, const HelpSupportScreen());
 
       await tester.tap(find.text('Live Chat'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 500));
 
-      expect(log.isEmpty, isTrue,
-          reason: 'the card navigates nowhere');
-      expect(find.byType(SnackBar), findsNothing,
-          reason: 'and says nothing either');
-      expect(api.requests, isEmpty);
+      expect(find.byType(SupportChatScreen), findsOneWidget);
     });
 
-    // Pinned as it behaves, not as it should. Same defect, second card
-    // (lib/screens/player/help_support_screen.dart:48). A player who taps this expects
-    // a mail composer; nothing opens and no explanation is given, so the address above
-    // it is the only thing that actually works.
-    testWidgets('tapping email us does nothing at all', (tester) async {
-      final log = await pumpScreen(tester, const HelpSupportScreen());
+    // The card opens a mail composer; when no client answers — the web build, or a
+    // phone with no mail app — it copies the address and names it in a snackbar rather
+    // than doing nothing, which is what this card once did. Two channels are stubbed:
+    // url_launcher reports failure so the fallback runs, and the platform channel is
+    // answered so the clipboard write the fallback awaits actually completes.
+    testWidgets('tapping email us offers the address when no mail app answers',
+        (tester) async {
+      const launcher = MethodChannel('plugins.flutter.io/url_launcher');
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(launcher, (_) async => false);
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (_) async => null);
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(launcher, null);
+        messenger.setMockMethodCallHandler(SystemChannels.platform, null);
+      });
+
+      await pumpScreen(tester, const HelpSupportScreen());
 
       await tester.tap(find.text('Email Us'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+      // The fallback awaits the launch attempt and then the clipboard write before it
+      // shows the snackbar, so it takes a few frames to reach the tree.
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
-      expect(log.isEmpty, isTrue);
-      expect(find.byType(SnackBar), findsNothing);
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.textContaining('Address copied'), findsOneWidget);
     });
   });
 
