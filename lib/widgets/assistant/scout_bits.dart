@@ -5,8 +5,14 @@ import '../../models/assistant.dart';
 import 'scout_chips.dart';
 import 'scout_theme.dart';
 
-/// Scout's face. A ring that breathes while [thinking], so "is it working?" is
-/// answered in the app bar as well as by the typing bubble in the list.
+/// Scout's face: the mascot tile that identifies the assistant in the app bar, in
+/// the empty state and beside every answer. A soft green halo breathes around it
+/// while [thinking], so "is it working?" is answered here as well as by the typing
+/// bubble in the list.
+///
+/// The art is a launcher-style squircle with its own dark field, so it is clipped
+/// to a rounded rect (never a circle, which would crop the corners of the tile) and
+/// given a hairline border for definition on both the light and dark canvases.
 class ScoutAvatar extends StatefulWidget {
   final double size;
   final bool thinking;
@@ -19,63 +25,94 @@ class ScoutAvatar extends StatefulWidget {
 
 class _ScoutAvatarState extends State<ScoutAvatar>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1600),
-  );
+  // Created on demand rather than eagerly: an idle avatar (the app bar, every answer
+  // row) never breathes, so it should hold no ticker. A `late final` field would be
+  // constructed by the `dispose` call below on an avatar that never thought, and that
+  // lazy build reaches for an inherited widget mid-unmount, which is an error.
+  AnimationController? _c;
+
+  AnimationController _ensureController() => _c ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 1600),
+      );
 
   @override
   void initState() {
     super.initState();
-    if (widget.thinking) _c.repeat(reverse: true);
+    if (widget.thinking) _ensureController().repeat(reverse: true);
   }
 
   @override
   void didUpdateWidget(ScoutAvatar old) {
     super.didUpdateWidget(old);
-    if (widget.thinking && !_c.isAnimating) {
-      _c.repeat(reverse: true);
-    } else if (!widget.thinking && _c.isAnimating) {
-      _c.stop();
-      _c.value = 0;
+    if (widget.thinking) {
+      final c = _ensureController();
+      if (!c.isAnimating) c.repeat(reverse: true);
+    } else if (_c != null && _c!.isAnimating) {
+      _c!.stop();
+      _c!.value = 0;
     }
   }
 
   @override
   void dispose() {
-    _c.dispose();
+    _c?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = widget.size;
+    final radius = size * 0.3;
+    final line = ScoutTheme.of(context).line;
+    final tile = _tile(size, radius, line);
+
+    if (!widget.thinking) return tile;
+
+    final controller = _ensureController();
     return AnimatedBuilder(
-      animation: _c,
-      builder: (_, _) {
-        final pulse = _c.value;
+      animation: controller,
+      builder: (context, child) {
+        final pulse = Curves.easeInOut.transform(controller.value);
         return Container(
-          width: widget.size,
-          height: widget.size,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: ScoutTheme.accentGradient,
+            borderRadius: BorderRadius.circular(radius),
             boxShadow: [
               BoxShadow(
-                color: ScoutTheme.accentFill.withValues(alpha: 0.18 + 0.34 * pulse),
-                blurRadius: 6 + 10 * pulse,
+                color: ScoutTheme.accentFill
+                    .withValues(alpha: 0.18 + 0.34 * pulse),
+                blurRadius: 6 + 12 * pulse,
                 spreadRadius: 0.5 + 1.5 * pulse,
               ),
             ],
           ),
-          child: Icon(
-            Icons.auto_awesome,
-            size: widget.size * 0.52,
-            color: ScoutTheme.onAccentFill,
-          ),
+          child: Transform.scale(scale: 0.96 + 0.04 * pulse, child: child),
         );
       },
+      child: tile,
     );
   }
+
+  Widget _tile(double size, double radius, Color line) => Container(
+        width: size,
+        height: size,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: ScoutTheme.accentFill,
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: line),
+        ),
+        child: Image.asset(
+          ScoutTheme.mascotAsset,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.medium,
+          // Brand art beside a text label, never the sole carrier of meaning, so it
+          // is not announced as a separate image to a screen reader.
+          excludeFromSemantics: true,
+        ),
+      );
 }
 
 /// The provenance pill: where this answer came from, on the answer itself.
