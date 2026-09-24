@@ -37,16 +37,17 @@ class _ScoutFabState extends State<ScoutFab> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(18);
     return AnimatedBuilder(
       animation: _c,
       builder: (context, child) {
         final t = Curves.easeInOut.transform(_c.value);
         return Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(widget.extended ? 18 : 999),
+            borderRadius: radius,
             boxShadow: [
               BoxShadow(
-                color: ScoutTheme.accentFill.withValues(alpha: 0.16 + 0.16 * t),
+                color: ScoutTheme.accentFill.withValues(alpha: 0.20 + 0.18 * t),
                 blurRadius: 14 + 10 * t,
                 spreadRadius: 1 + 2 * t,
               ),
@@ -60,44 +61,61 @@ class _ScoutFabState extends State<ScoutFab> with SingleTickerProviderStateMixin
         label: 'Ask Scout, the SportLynk assistant',
         child: Material(
           color: Colors.transparent,
+          borderRadius: radius,
+          clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(widget.extended ? 18 : 999),
-            child: Container(
-              padding: widget.extended
-                  ? const EdgeInsets.symmetric(horizontal: 16, vertical: 13)
-                  : const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                gradient: ScoutTheme.accentGradient,
-                borderRadius: BorderRadius.circular(widget.extended ? 18 : 999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.auto_awesome_rounded,
-                    color: ScoutTheme.onAccentFill,
-                    size: 22,
-                  ),
-                  if (widget.extended) ...[
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Ask Scout',
-                      style: TextStyle(
-                        color: ScoutTheme.onAccentFill,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+            child: widget.extended ? _extended() : _mascot(56, 18),
           ),
         ),
       ),
     );
   }
+
+  /// The collapsed FAB: the mascot tile itself is the button face, so Scout's
+  /// identity is the control rather than a generic sparkle on a green pill.
+  Widget _mascot(double d, double radius) => Container(
+        width: d,
+        height: d,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: ScoutTheme.accentFill,
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: Image.asset(
+          ScoutTheme.mascotAsset,
+          fit: BoxFit.cover,
+          // Decorative: the control carries its own label, so the mascot is not
+          // announced as a separate image to a screen reader.
+          excludeFromSemantics: true,
+        ),
+      );
+
+  /// The extended pill keeps the brand gradient behind the mascot and label, for
+  /// the callers that ask for a labelled entry point rather than a bare tile.
+  Widget _extended() => Container(
+        padding: const EdgeInsets.fromLTRB(9, 8, 16, 8),
+        decoration: BoxDecoration(
+          gradient: ScoutTheme.accentGradient,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _mascot(34, 11),
+            const SizedBox(width: 9),
+            const Text(
+              'Ask Scout',
+              style: TextStyle(
+                color: ScoutTheme.onAccentFill,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 /// The same entry point as a banner, for the Home tab's quick actions.
@@ -137,18 +155,20 @@ class ScoutAskBanner extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 42,
-                height: 42,
+                width: 46,
+                height: 46,
+                clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  color: t.accent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(13),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: t.accent.withValues(alpha: 0.35)),
                 ),
-                child: Icon(
-                  Icons.auto_awesome_rounded,
-                  color: t.accent,
-                  size: 21,
-                ),
+                child: Image.asset(
+          ScoutTheme.mascotAsset,
+          fit: BoxFit.cover,
+          // Decorative: the control carries its own label, so the mascot is not
+          // announced as a separate image to a screen reader.
+          excludeFromSemantics: true,
+        ),
               ),
               const SizedBox(width: 13),
               Expanded(
