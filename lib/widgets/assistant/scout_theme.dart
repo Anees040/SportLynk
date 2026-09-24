@@ -125,6 +125,13 @@ class ScoutTheme {
     colors: [accentFill, accentFillDim],
   );
 
+  /// Scout's mascot, the one bitmap that stands in for the assistant everywhere it
+  /// appears: the launcher-style tile in [ScoutAvatar], the home FAB and the "Ask
+  /// Scout" banner. Declared once here so the three call sites cannot drift onto
+  /// different files. The art carries its own dark-green field and a rounded
+  /// squircle, so it is drawn on a rounded-rect clip rather than a circle.
+  static const String mascotAsset = 'assets/images/scout.png';
+
   // Metrics
 
   static const double cardRadius = 16;
