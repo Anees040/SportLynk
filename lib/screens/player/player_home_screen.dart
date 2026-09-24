@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -240,206 +241,49 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   }
 
   // Home tab
+  //
+  // The header is a fixed [Column] child above the scrollable body, not the first
+  // sliver in it: a sliver header scrolls away with the list, and under
+  // [BouncingScrollPhysics] an overscroll opens a band of background above it.
+  // Lifted out, the header cannot move and the status bar keeps its green backdrop.
   Widget _buildHome(AuthProvider auth) {
-    final userName = auth.currentUser?.name ?? 'Player';
-    final firstName = userName.split(' ').first;
-
-    final wallet = _homeData?['wallet'] as Map<String, dynamic>?;
+    final firstName = (auth.currentUser?.name ?? 'Player').split(' ').first;
     final profile = _homeData?['profile'] as Map<String, dynamic>?;
-    final upcomingBookings = (_homeData?['upcomingBookings'] as List?) ?? [];
-    final balance = _parseNum(wallet?['balance'], 0);
+    final upcoming = (_homeData?['upcomingBookings'] as List?) ?? [];
     final trustScore = _parseNum(profile?['trust_score'], 100).round();
-    final upcomingCount = upcomingBookings.length;
 
-    return RefreshIndicator(
-      color: AppColors.accent,
-      onRefresh: _load,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-        slivers: [
-          // Hero HEADER
-          SliverToBoxAdapter(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF052010), Color(0xFF0D3B20), Color(0xFF166534)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Stack(children: [
-                // Decorative circles
-                Positioned(right: -30, top: -30,
-                  child: Container(width: 160, height: 160,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.04)))),
-                Positioned(right: 60, top: 60,
-                  child: Container(width: 80, height: 80,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.accent.withValues(alpha: 0.08)))),
-
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      // Top row: the wordmark, and the two live actions.
-                      //
-                      // The logo tile and the profile avatar are both gone on
-                      // purpose. The tile and the wordmark said the same thing
-                      // twice — and the asset fell back to a letter in a green
-                      // square whenever it failed to load — while the avatar was
-                      // a second route to a tab that is already in the bottom bar.
-                      // What takes their place is the two things this screen has
-                      // no other way to reach: the inbox and the bell.
-                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                        const BrandWordmark(),
-                        Row(children: [
-                          HeaderIconButton(
-                            icon: Icons.chat_bubble_outline,
-                            tooltip: 'Chats',
-                            badge: _chatUnread,
-                            onTap: _openChats,
-                          ),
-                          const SizedBox(width: 10),
-                          // Live. The bell also boots the notification
-                          // stack for the session -- see NotificationBell.
-                          const NotificationBell(),
-                        ]),
-                      ]),
-
-                      const SizedBox(height: 20),
-
-                      // Greeting
-                      Text('Good ${_greeting()}, $firstName! 👋',
-                        style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13)),
-                      const SizedBox(height: 4),
-                      Text('Ready to\nPlay Today?',
-                        style: GoogleFonts.poppins(color: Colors.white,
-                          fontSize: 28, fontWeight: FontWeight.w800, height: 1.15)),
-
-                      const SizedBox(height: 20),
-
-                      // Stats strip inside header
-                      Row(children: [
-                        _headerStat('$upcomingCount', 'Bookings', Icons.calendar_month_rounded),
-                        _headerDivider(),
-                        _headerStat('$trustScore', 'Trust Score', Icons.shield_rounded),
-                        _headerDivider(),
-                        _headerStat('PKR ${balance.toStringAsFixed(0)}', 'Balance', Icons.account_balance_wallet_rounded),
-                      ]),
-                    ]),
-                  ),
-                ),
-              ]),
-            ),
-          ),
-
-          // Search bar
-          SliverToBoxAdapter(
-            child: Transform.translate(
-              offset: const Offset(0, -1),
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                child: GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/find-venues'),
-                  child: Container(
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(
-                        color: AppColors.accent.withValues(alpha: 0.15),
-                        blurRadius: 16, offset: const Offset(0, 4))],
-                      border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppColors.accent, borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.search_rounded, color: Colors.white, size: 16),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(child: Text('Find venues, sports, opponents...',
-                        style: GoogleFonts.poppins(color: const Color(0xFF94A3B8), fontSize: 13))),
-                      const Icon(Icons.tune_rounded, color: AppColors.accent, size: 18),
-                    ]),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // Ask Scout
-          // Above Quick Actions, because it is the shortest path to every one of
-          // them: "koi ground milega kal shaam" beats four taps through the grid.
-          // The FAB handles discovery on the other tabs; this is the pitch.
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-              child: ScoutAskBanner(onTap: _openScout),
-            ),
-          ),
-
-          // Quick ACTIONS
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Quick Actions',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-                const SizedBox(height: 14),
-                // 2×2 Grid
-                Row(children: [
-                  _quickTile(
-                    Icons.stadium_rounded, 'Book Venue',
-                    'Find & book grounds',
-                    const Color(0xFF22C55E), const Color(0xFFDCFCE7),
-                    () => Navigator.pushNamed(context, '/find-venues'),
-                  ),
-                  const SizedBox(width: 12),
-                  _quickTile(
-                    Icons.sports_kabaddi, 'Find Opponent',
-                    'Challenge players',
-                    const Color(0xFF6366F1), const Color(0xFFE0E7FF),
-                    () => Navigator.pushNamed(context, '/find-opponents'),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  _quickTile(
-                    Icons.emoji_events_rounded, 'Tournaments',
-                    'Join competitions',
-                    const Color(0xFFF59E0B), const Color(0xFFFEF3C7),
-                    () => Navigator.pushNamed(context, '/tournaments'),
-                  ),
-                  const SizedBox(width: 12),
-                  _quickTile(
-                    Icons.leaderboard_rounded, 'Rankings',
-                    'Team leaderboard',
-                    const Color(0xFFEC4899), const Color(0xFFFCE7F3),
-                    () => Navigator.pushNamed(context, '/team-rankings'),
-                  ),
-                ]),
-              ]),
-            ),
-          ),
-
-          // UPCOMING bookings
-          SliverToBoxAdapter(child: _buildUpcomingBookings()),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
-        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
       ),
+      child: Column(children: [
+        _fixedHeader(),
+        Expanded(
+          child: RefreshIndicator(
+            color: AppColors.accent,
+            onRefresh: _load,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics()),
+              slivers: [
+                SliverToBoxAdapter(child: _greetingBlock(firstName)),
+                SliverToBoxAdapter(child: _statsRow(upcoming.length, trustScore)),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+                    child: ScoutAskBanner(onTap: _openScout),
+                  ),
+                ),
+                SliverToBoxAdapter(child: _quickActions()),
+                SliverToBoxAdapter(child: _buildUpcomingBookings()),
+                const SliverToBoxAdapter(child: SizedBox(height: 32)),
+              ],
+            ),
+          ),
+        ),
+      ]),
     );
   }
 
@@ -457,24 +301,192 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     return num.tryParse(val.toString()) ?? fallback;
   }
 
-  Widget _headerStat(String value, String label, IconData icon) {
-    return Expanded(
-      child: Column(children: [
-        Icon(icon, color: AppColors.accent, size: 16),
-        const SizedBox(height: 4),
-        Text(value, style: GoogleFonts.poppins(
-          color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-        Text(label, style: GoogleFonts.poppins(color: Colors.white54, fontSize: 10)),
+  /// The fixed brand header: wordmark on the left, the two live actions on the
+  /// right. The wallet balance, the greeting and the stat strip that used to sit
+  /// here have moved onto the scrollable canvas below; a header that never moves
+  /// carries identity and the two destinations the bottom bar cannot reach — the
+  /// inbox and the bell — and nothing that scrolls.
+  Widget _fixedHeader() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.primaryDark, AppColors.primary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 12, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: 56,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const BrandWordmark(),
+                Row(children: [
+                  HeaderIconButton(
+                    icon: Icons.chat_bubble_outline,
+                    tooltip: 'Chats',
+                    badge: _chatUnread,
+                    onTap: _openChats,
+                  ),
+                  const SizedBox(width: 10),
+                  const NotificationBell(),
+                ]),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The greeting, lifted off the header and onto the light canvas. It scrolls
+  /// with the content now, which is the point: the fixed header stays terse.
+  Widget _greetingBlock(String firstName) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Good ${_greeting()},',
+            style: GoogleFonts.poppins(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                fontWeight: FontWeight.w500)),
+        const SizedBox(height: 2),
+        Text('$firstName 👋',
+            style: GoogleFonts.poppins(
+                color: AppColors.textPrimary,
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                height: 1.1)),
       ]),
     );
   }
 
-  Widget _headerDivider() => Container(
-    width: 1, height: 36,
-    color: Colors.white.withValues(alpha: 0.15),
-    margin: const EdgeInsets.symmetric(horizontal: 4),
-  );
+  /// Upcoming bookings and trust score — the two header stats that survived the
+  /// wallet figure's removal — as cards on the canvas. The bookings card is
+  /// tappable and jumps to that tab; trust score has no screen of its own.
+  Widget _statsRow(int upcomingCount, int trustScore) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Row(children: [
+        Expanded(
+          child: _statCard(
+            icon: Icons.event_available_rounded,
+            value: '$upcomingCount',
+            label: upcomingCount == 1 ? 'Upcoming booking' : 'Upcoming bookings',
+            onTap: () => _onTabChanged(1),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _statCard(
+            icon: Icons.verified_user_rounded,
+            value: '$trustScore',
+            label: 'Trust score',
+          ),
+        ),
+      ]),
+    );
+  }
+  Widget _statCard({
+    required IconData icon,
+    required String value,
+    required String label,
+    VoidCallback? onTap,
+  }) {
+    final card = Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+              color: AppColors.accentLight,
+              borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: AppColors.primary, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(value,
+                  style: GoogleFonts.poppins(
+                      fontSize: 18, fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(label,
+                  style: GoogleFonts.poppins(
+                      fontSize: 10.5, color: AppColors.textSecondary),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+      ]),
+    );
+    if (onTap == null) return card;
+    return GestureDetector(onTap: onTap, child: card);
+  }
+  /// The 2×2 quick-action grid. Icons, colours and routes are deliberately
+  /// unchanged — the request was to keep these tiles as they were — so this is the
+  /// old sliver's body moved verbatim into its own helper, nothing more.
+  Widget _quickActions() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Quick Actions',
+            style: GoogleFonts.poppins(
+                fontSize: 16, fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary)),
+        const SizedBox(height: 14),
+        Row(children: [
+          _quickTile(
+            Icons.stadium_rounded, 'Book Venue', 'Find & book grounds',
+            const Color(0xFF22C55E), const Color(0xFFDCFCE7),
+            () => Navigator.pushNamed(context, '/find-venues'),
+          ),
+          const SizedBox(width: 12),
+          _quickTile(
+            Icons.sports_kabaddi, 'Find Opponent', 'Challenge players',
+            const Color(0xFF6366F1), const Color(0xFFE0E7FF),
+            () => Navigator.pushNamed(context, '/find-opponents'),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          _quickTile(
+            Icons.emoji_events_rounded, 'Tournaments', 'Join competitions',
+            const Color(0xFFF59E0B), const Color(0xFFFEF3C7),
+            () => Navigator.pushNamed(context, '/tournaments'),
+          ),
+          const SizedBox(width: 12),
+          _quickTile(
+            Icons.leaderboard_rounded, 'Rankings', 'Team leaderboard',
+            const Color(0xFFEC4899), const Color(0xFFFCE7F3),
+            () => Navigator.pushNamed(context, '/team-rankings'),
+          ),
+        ]),
+      ]),
+    );
+  }
 
   Widget _quickTile(
     IconData icon, String title, String subtitle,
