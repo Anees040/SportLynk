@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../constants/colors.dart';
+import 'support_chat_screen.dart';
 
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
+
+  /// The address the "Email Us" card opens and, when no mail client answers, copies.
+  /// The same address is shown as that card's subtitle, so the two cannot drift.
+  static const String _supportEmail = 'support@sportlynk.com';
 
   @override
   Widget build(BuildContext context) {
@@ -35,17 +42,19 @@ class HelpSupportScreen extends StatelessWidget {
                 Expanded(child: _contactCard(
                   icon: Icons.chat_bubble_outline,
                   title: 'Live Chat',
-                  subtitle: 'Typically replies in minutes',
+                  subtitle: 'Instant help from Scout',
                   color: Colors.blue,
-                  onTap: () {},
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SupportChatScreen()),
+                  ),
                 )),
                 const SizedBox(width: 16),
                 Expanded(child: _contactCard(
                   icon: Icons.email_outlined,
                   title: 'Email Us',
-                  subtitle: 'support@sportlynk.com',
+                  subtitle: _supportEmail,
                   color: AppColors.accent,
-                  onTap: () {},
+                  onTap: () => _emailSupport(context),
                 )),
               ],
             ),
@@ -64,6 +73,27 @@ class HelpSupportScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// Open the mail app on a pre-addressed message. When no client answers — the web
+  /// build, or a phone with no mail app — the address is copied and named in a
+  /// snackbar, so the card does something the user can act on rather than nothing.
+  Future<void> _emailSupport(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final uri = Uri(
+      scheme: 'mailto',
+      path: _supportEmail,
+      queryParameters: {'subject': 'SportLynk support'},
+    );
+    try {
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+    } catch (_) {
+      // Fall through to the clipboard.
+    }
+    await Clipboard.setData(const ClipboardData(text: _supportEmail));
+    messenger.showSnackBar(
+      SnackBar(content: Text('No mail app opened. Address copied: $_supportEmail')),
     );
   }
 
