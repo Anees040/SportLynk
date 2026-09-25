@@ -168,11 +168,11 @@ void main() {
     });
   });
 
-  group('the photo button and the disabled bar', () {
-    testWidgets('the photo button is labelled and reports its tap', (tester) async {
+  group('the attach button and the disabled bar', () {
+    testWidgets('the attach button is labelled and reports its tap', (tester) async {
       await pumpComposer(tester);
-      expect(find.byTooltip('Send a photo'), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.image_outlined));
+      expect(find.byTooltip('Attach'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.attach_file));
       await tester.pump();
       expect(photos, 1);
     });
@@ -186,7 +186,7 @@ void main() {
       expect(
           tester
               .widget<IconButton>(
-                  find.widgetWithIcon(IconButton, Icons.image_outlined))
+                  find.widgetWithIcon(IconButton, Icons.attach_file))
               .onPressed,
           isNull);
 
