@@ -7,27 +7,29 @@ import 'package:record/record.dart';
 
 import '../../constants/colors.dart';
 
-/// The message input bar. Owns three subtleties that make chat feel right:
-///   • the send button only appears once there's something to send;
-///   • when the field is empty a hold-to-record mic takes its place, so a voice
-///     note is one gesture — hold to record, release to send, slide to cancel;
+/// The message input bar. Owns the behaviours that make chat feel right:
+///   • the send button only appears once there is something to send;
+///   • an attachment button sits beside the mic, so a photo is one tap away
+///     without crowding the text field;
+///   • when the field is empty a hold-to-record mic takes the send button's
+///     place — hold to record, release to send, slide left to cancel, slide up
+///     to lock it hands-free, then pause or send at leisure;
 ///   • typing is announced on the first keystroke and auto-stopped after a short
-///     lull, so the other side sees "typing…" appear and fade like WhatsApp —
-///     without a socket event per character.
+///     lull, so the other side sees "typing…" appear and fade — without a socket
+///     event per character.
 ///
-/// [onSendAudio] is optional: without it the mic is not offered and the bar
-/// behaves exactly as a text-and-photo composer (the shape the widget tests
-/// exercise). Recording is unavailable on web — the browser cannot hand back a
-/// file the Cloudinary uploader can read — so the mic there explains itself
-/// rather than failing silently.
+/// [onSendAudio] is optional: without it the mic is not offered and the bar is a
+/// plain text-and-attachment composer (the shape the widget tests exercise).
+/// Recording is unavailable on web — the browser cannot hand back a file the
+/// uploader can read — so the mic there explains itself rather than failing.
 class ChatComposer extends StatefulWidget {
   final TextEditingController controller;
   final void Function(String text) onSend;
   final VoidCallback onPickImage;
   final void Function(bool isTyping) onTyping;
 
-  /// Called with the recorded clip's path, its length in milliseconds, and its
-  /// mime once a voice note is released. Null disables voice notes entirely.
+  /// Called with the clip's path, its length in milliseconds, and its mime once a
+  /// voice note is released. Null disables voice notes entirely.
   final void Function(String path, int durationMs, String mime)? onSendAudio;
 
   /// Optional external focus, so the screen can put the caret in the field when a
@@ -54,9 +56,11 @@ class ChatComposer extends StatefulWidget {
 class _ChatComposerState extends State<ChatComposer> {
   // Beyond this drag to the left, releasing cancels instead of sending.
   static const _cancelThreshold = 80.0;
+  // Beyond this drag upward, recording latches hands-free and the finger can lift.
+  static const _lockThreshold = 80.0;
   // A recording shorter than this was a mis-tap, not a message.
   static const _minMs = 1000;
-  // Cloudinary's free tier is finite; a voice note is not a podcast.
+  // A voice note is not a podcast; the uploader's free tier is finite.
   static const _maxRecording = Duration(minutes: 5);
 
   Timer? _stopTimer;
@@ -67,11 +71,24 @@ class _ChatComposerState extends State<ChatComposer> {
   bool _recording = false;
   bool _armed = false; // finger still down (the press may outlive the async start)
   bool _cancelHint = false;
+  bool _towardLock = false; // finger dragging up toward the lock affordance
+  bool _locked = false; // hands-free: recording continues after the finger lifts
+  bool _paused = false;
   Timer? _ticker;
-  DateTime? _startedAt;
-  Duration _elapsed = Duration.zero;
+
+  // Elapsed time accumulates across pause/resume: [_elapsedBase] holds the time
+  // banked by finished runs, and [_runStart] marks the current unpaused run.
+  Duration _elapsedBase = Duration.zero;
+  DateTime? _runStart;
 
   bool get _voiceEnabled => widget.onSendAudio != null;
+
+  /// The recording's running length, excluding any paused stretches.
+  Duration get _elapsed {
+    final start = _runStart;
+    if (start == null || _paused) return _elapsedBase;
+    return _elapsedBase + DateTime.now().difference(start);
+  }
 
   @override
   void initState() {
@@ -135,6 +152,9 @@ class _ChatComposerState extends State<ChatComposer> {
     if (_recording || !widget.enabled) return;
     _armed = true;
     _cancelHint = false;
+    _towardLock = false;
+    _locked = false;
+    _paused = false;
 
     if (kIsWeb) {
       _armed = false;
@@ -158,9 +178,8 @@ class _ChatComposerState extends State<ChatComposer> {
         return;
       }
       final dir = await getTemporaryDirectory();
-      // This branch is mobile-only (web returns early above), so a POSIX join is
-      // safe; path_provider hands back a native temp directory on each platform.
-      final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final path =
+          '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
       // Mono AAC at a voice-grade bitrate: intelligible speech, small files.
       await rec.start(
         const RecordConfig(
@@ -181,65 +200,125 @@ class _ChatComposerState extends State<ChatComposer> {
       return;
     }
 
-    // The finger may have lifted during the async start; if so, stop at once
-    // and treat it as a tap rather than leaving a recorder running.
+    // The finger may have lifted during the async start; if so, stop at once and
+    // treat it as a tap rather than leaving a recorder running.
     if (!_armed) {
       await rec.stop();
       return;
     }
 
-    _startedAt = DateTime.now();
-    _elapsed = Duration.zero;
-    _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
-      final started = _startedAt;
-      if (started == null) return;
-      final e = DateTime.now().difference(started);
-      if (e >= _maxRecording) {
-        _finishRecording(cancel: false);
-        return;
-      }
-      setState(() => _elapsed = e);
-    });
+    _elapsedBase = Duration.zero;
+    _runStart = DateTime.now();
+    _startTicker();
     setState(() => _recording = true);
   }
 
+  void _startTicker() {
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      if (_elapsed >= _maxRecording) {
+        _finishRecording(cancel: false);
+        return;
+      }
+      setState(() {});
+    });
+  }
+
+  /// Fold the current unpaused run into [_elapsedBase] and stop the run clock.
+  void _accumulate() {
+    final start = _runStart;
+    if (start != null) {
+      _elapsedBase += DateTime.now().difference(start);
+      _runStart = null;
+    }
+  }
+
   void _onMicMove(LongPressMoveUpdateDetails d) {
-    if (!_recording) return;
-    final wantCancel = d.offsetFromOrigin.dx < -_cancelThreshold;
-    if (wantCancel != _cancelHint) setState(() => _cancelHint = wantCancel);
+    if (!_recording || _locked) return;
+    final dy = d.offsetFromOrigin.dy;
+    // Upward past the threshold latches the recording so the finger can lift.
+    if (dy < -_lockThreshold) {
+      _lockRecording();
+      return;
+    }
+    final towardLock = dy < -_lockThreshold * 0.4;
+    final wantCancel =
+        !towardLock && d.offsetFromOrigin.dx < -_cancelThreshold;
+    if (towardLock != _towardLock || wantCancel != _cancelHint) {
+      setState(() {
+        _towardLock = towardLock;
+        _cancelHint = wantCancel;
+      });
+    }
+  }
+
+  void _lockRecording() {
+    if (_locked) return;
+    setState(() {
+      _locked = true;
+      _towardLock = false;
+      _cancelHint = false;
+    });
   }
 
   void _onMicRelease() {
     _armed = false;
-    if (!_recording) return;
+    // A locked recording keeps going hands-free; its own buttons end it.
+    if (!_recording || _locked) return;
     _finishRecording(cancel: _cancelHint);
+  }
+
+  Future<void> _togglePause() async {
+    final rec = _recorder;
+    if (rec == null || !_recording) return;
+    if (_paused) {
+      try {
+        await rec.resume();
+      } catch (_) {}
+      _runStart = DateTime.now();
+      _startTicker();
+      if (mounted) setState(() => _paused = false);
+    } else {
+      try {
+        await rec.pause();
+      } catch (_) {}
+      _accumulate();
+      _ticker?.cancel();
+      _ticker = null;
+      if (mounted) setState(() => _paused = true);
+    }
   }
 
   Future<void> _finishRecording({required bool cancel}) async {
     _ticker?.cancel();
     _ticker = null;
+    _accumulate();
     final rec = _recorder;
-    final started = _startedAt;
-    final ms = started == null ? 0 : DateTime.now().difference(started).inMilliseconds;
-    _startedAt = null;
+    final ms = _elapsedBase.inMilliseconds;
     if (mounted) {
       setState(() {
         _recording = false;
+        _locked = false;
+        _paused = false;
         _cancelHint = false;
-        _elapsed = Duration.zero;
+        _towardLock = false;
+        _elapsedBase = Duration.zero;
+        _runStart = null;
       });
     } else {
       _recording = false;
+      _locked = false;
+      _paused = false;
     }
     if (rec == null) return;
 
     // A cancel or a too-short clip is dropped without a trace; both stop the
-    // recorder so the temp file is not left half-written on disk.
+    // recorder so a half-written temp file is not left on disk.
     if (cancel || ms < _minMs) {
       try {
         await rec.stop();
       } catch (_) {}
-      if (cancel == false && ms < _minMs && mounted) {
+      if (!cancel && ms < _minMs && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Hold to record, release to send'),
           duration: Duration(seconds: 2),
@@ -269,15 +348,35 @@ class _ChatComposerState extends State<ChatComposer> {
           color: AppColors.background,
           border: Border(top: BorderSide(color: AppColors.border)),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(child: _recording ? _recordingBar() : _inputField()),
-            const SizedBox(width: 6),
-            _rightButton(),
-          ],
-        ),
+        child: _locked
+            ? _lockedBar()
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_recording) _lockHint(),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                          child:
+                              _recording ? _recordingBar() : _inputField()),
+                      if (!_recording) _attachButton(),
+                      const SizedBox(width: 6),
+                      _rightButton(),
+                    ],
+                  ),
+                ],
+              ),
       ),
+    );
+  }
+
+  Widget _attachButton() {
+    return IconButton(
+      icon: const Icon(Icons.attach_file, color: AppColors.textSecondary),
+      tooltip: 'Attach',
+      onPressed: widget.enabled ? widget.onPickImage : null,
     );
   }
 
@@ -291,11 +390,7 @@ class _ChatComposerState extends State<ChatComposer> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          IconButton(
-            icon: const Icon(Icons.image_outlined, color: AppColors.textSecondary),
-            tooltip: 'Send a photo',
-            onPressed: widget.enabled ? widget.onPickImage : null,
-          ),
+          const SizedBox(width: 16),
           Expanded(
             child: TextField(
               controller: widget.controller,
@@ -321,12 +416,43 @@ class _ChatComposerState extends State<ChatComposer> {
     );
   }
 
-  /// Replaces the input field while recording: a pulsing dot, the running time,
-  /// and the slide-to-cancel affordance that turns red once past the threshold.
+  /// The lock affordance shown above the mic while recording by hand: sliding the
+  /// finger up onto it latches the recording so it continues without holding.
+  Widget _lockHint() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, right: 14),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: EdgeInsets.all(_towardLock ? 8 : 6),
+          decoration: BoxDecoration(
+            color: AppColors.cardBg,
+            shape: BoxShape.circle,
+            border: Border.all(
+                color: _towardLock ? AppColors.accent : AppColors.border),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_outline,
+                  size: _towardLock ? 20 : 16,
+                  color:
+                      _towardLock ? AppColors.accent : AppColors.textSecondary),
+              const Icon(Icons.keyboard_arrow_up,
+                  size: 14, color: AppColors.textSecondary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Replaces the field while recording by hand: a pulsing dot, the running time,
+  /// and the slide-to-cancel hint that turns red past the threshold.
   Widget _recordingBar() {
     final m = _elapsed.inMinutes;
     final s = (_elapsed.inSeconds % 60).toString().padLeft(2, '0');
-    // Pulse the dot roughly twice a second off the same clock as the label.
     final on = (_elapsed.inMilliseconds ~/ 500) % 2 == 0;
     return Container(
       height: 46,
@@ -338,26 +464,21 @@ class _ChatComposerState extends State<ChatComposer> {
       ),
       child: Row(
         children: [
-          AnimatedOpacity(
-            opacity: on ? 1 : 0.25,
-            duration: const Duration(milliseconds: 200),
-            child: Container(
-              width: 10,
-              height: 10,
-              decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
-            ),
-          ),
+          _pulseDot(on),
           const SizedBox(width: 10),
           Text('$m:$s',
-              style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+              style:
+                  const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
           Expanded(
             child: Center(
               child: Text(
                 _cancelHint ? 'Release to cancel' : '‹ Slide to cancel',
                 style: TextStyle(
                   fontSize: 12.5,
-                  color: _cancelHint ? AppColors.error : AppColors.textSecondary,
-                  fontWeight: _cancelHint ? FontWeight.w600 : FontWeight.w400,
+                  color:
+                      _cancelHint ? AppColors.error : AppColors.textSecondary,
+                  fontWeight:
+                      _cancelHint ? FontWeight.w600 : FontWeight.w400,
                 ),
               ),
             ),
@@ -367,10 +488,69 @@ class _ChatComposerState extends State<ChatComposer> {
     );
   }
 
+  Widget _pulseDot(bool on) => AnimatedOpacity(
+        opacity: on ? 1 : 0.25,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          width: 10,
+          height: 10,
+          decoration: const BoxDecoration(
+              color: AppColors.error, shape: BoxShape.circle),
+        ),
+      );
+
+  /// The hands-free bar shown once a recording is locked: discard on the left,
+  /// the running time and state in the middle, then pause/resume and send.
+  Widget _lockedBar() {
+    final m = _elapsed.inMinutes;
+    final s = (_elapsed.inSeconds % 60).toString().padLeft(2, '0');
+    final on = _paused || (_elapsed.inMilliseconds ~/ 500) % 2 == 0;
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.delete_outline, color: AppColors.error),
+          tooltip: 'Discard recording',
+          onPressed: () => _finishRecording(cancel: true),
+        ),
+        _pulseDot(on),
+        const SizedBox(width: 10),
+        Text('$m:$s',
+            style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            _paused ? 'Paused' : 'Recording…',
+            style: const TextStyle(
+                fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+        ),
+        IconButton(
+          icon: Icon(_paused ? Icons.play_arrow : Icons.pause,
+              color: AppColors.primary),
+          tooltip: _paused ? 'Resume recording' : 'Pause recording',
+          onPressed: _togglePause,
+        ),
+        const SizedBox(width: 4),
+        Material(
+          color: AppColors.accent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => _finishRecording(cancel: false),
+            child: const Padding(
+              padding: EdgeInsets.all(12),
+              child: Icon(Icons.send_rounded, color: Colors.white, size: 22),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _rightButton() {
-    // The mic, when voice is on and there is nothing to send, and the enlarged
-    // red mic while recording — the same GestureDetector throughout, so the
-    // long-press that started recording carries through the rebuild.
+    // The mic — plain when idle, enlarged and red while recording — kept on the
+    // same GestureDetector throughout, so the long-press that started recording
+    // carries through the rebuild.
     if (_recording || (_voiceEnabled && !_hasText)) {
       final size = _recording ? 30.0 : 22.0;
       return GestureDetector(
@@ -379,20 +559,24 @@ class _ChatComposerState extends State<ChatComposer> {
         onLongPressMoveUpdate: _onMicMove,
         onLongPressEnd: (_) => _onMicRelease(),
         onLongPressCancel: _onMicRelease,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: EdgeInsets.all(_recording ? 14 : 12),
-          decoration: BoxDecoration(
-            color: _recording ? AppColors.error : AppColors.accent,
-            shape: BoxShape.circle,
+        child: Semantics(
+          label: _recording ? 'Recording, release to send' : 'Hold to record',
+          button: true,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: EdgeInsets.all(_recording ? 14 : 12),
+            decoration: BoxDecoration(
+              color: _recording ? AppColors.error : AppColors.accent,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.mic, color: Colors.white, size: size),
           ),
-          child: Icon(Icons.mic, color: Colors.white, size: size),
         ),
       );
     }
 
-    // The send button: a state, not a decoration — grey and inert until there
-    // is something to send.
+    // The send button: a state, not a decoration — grey and inert until there is
+    // something to send.
     return AnimatedScale(
       scale: _hasText ? 1 : 0.9,
       duration: const Duration(milliseconds: 120),
