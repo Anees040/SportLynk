@@ -1,10 +1,10 @@
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import 'chat_media_screen.dart';
 import 'image_caption_screen.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +16,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/chat_controller.dart';
 import '../../services/chat_service.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/chat/attachment_sheet.dart';
 import '../../widgets/chat/chat_composer.dart';
 import '../../widgets/chat/date_separator.dart';
 import '../../widgets/chat/image_album_bubble.dart';
@@ -661,55 +662,18 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   }
 
   // Sending an image
+  //
+  // The attachment sheet is the mobile path: a camera tile and the device's
+  // recent photos in one draggable grid. Web has no photo_manager gallery, so it
+  // falls back to the platform's own multi-image chooser. One photo goes through
+  // the caption screen; several are sent as a batch, each streaming in with its
+  // own instant preview and spinner.
   Future<void> _pickImage() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined, color: AppColors.primary),
-              title: const Text('Take photo'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined, color: AppColors.primary),
-              title: const Text('Choose from gallery'),
-              subtitle: const Text('Select one or several'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null || !mounted) return;
-
-    if (source == ImageSource.camera) {
-      final picked =
-          await _picker.pickImage(source: ImageSource.camera, maxWidth: 1600, imageQuality: 82);
-      if (picked == null || !mounted) return;
-      await _sendOneWithCaption(picked);
-      return;
-    }
-
-    // Gallery: the in-app grid picker (recents thumbnails, multi-select). One
-    // photo goes through the caption screen; several are sent as a batch, each
-    // streaming in with its own instant preview and spinner.
-    final assets = await AssetPicker.pickAssets(
-      context,
-      pickerConfig: AssetPickerConfig(
-        maxAssets: 10,
-        requestType: RequestType.image,
-        themeColor: AppColors.accent,
-      ),
-    );
-    if (assets == null || assets.isEmpty || !mounted) return;
-
-    final files = <XFile>[];
-    for (final a in assets) {
-      final f = await a.file;
-      if (f != null) files.add(XFile(f.path, mimeType: a.mimeType));
+    final List<XFile> files;
+    if (kIsWeb) {
+      files = await _picker.pickMultiImage();
+    } else {
+      files = await showAttachmentSheet(context, maxAssets: 10) ?? const [];
     }
     if (files.isEmpty || !mounted) return;
     if (files.length == 1) {
@@ -978,7 +942,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
                       reverse: true,
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       itemCount: rows.length,
-                      itemBuilder: (_, i) => rows[rows.length - 1 - i],
+                      // The rows are builder closures, so ListView.builder
+                      // constructs only the visible ones: a typing or presence
+                      // tick no longer rebuilds the whole history, and the
+                      // RepaintBoundary keeps each row's repaint to itself.
+                      itemBuilder: (_, i) =>
+                          RepaintBoundary(child: rows[rows.length - 1 - i]()),
                     );
                   },
                 ),
@@ -1187,21 +1156,26 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   /// Consecutive photos from one sender collapse into a single album grid (see
   /// [_albumRun]); everything else — text, a lone photo, a captioned photo, a
   /// photo still sending — stays its own bubble.
-  List<Widget> _buildRows(ChatController c) {
+  /// The message list as a flat list of row builders — closures, not built
+  /// widgets — so `ListView.builder` constructs only the rows currently on
+  /// screen rather than the whole history on every controller notification. The
+  /// lightweight grouping decisions (day breaks, sender runs, album runs) are
+  /// still computed here; only the widget construction is deferred.
+  List<Widget Function()> _buildRows(ChatController c) {
     final msgs = c.messages;
-    final rows = <Widget>[];
+    final rows = <Widget Function()>[];
     var i = 0;
     while (i < msgs.length) {
       final m = msgs[i];
       final prev = i > 0 ? msgs[i - 1] : null;
       if (prev == null || !_sameDay(prev.createdAt, m.createdAt)) {
-        rows.add(DateSeparator(m.createdAt));
+        rows.add(() => DateSeparator(m.createdAt));
       }
       // The unread divider sits above the first message that arrived after my
       // watermark, once, at the anchor pinned when the room opened.
-      if (m.id == _unreadAnchorId) rows.add(const _UnreadDivider());
+      if (m.id == _unreadAnchorId) rows.add(() => const _UnreadDivider());
       if (m.isSystem) {
-        rows.add(SystemMessagePill(m));
+        rows.add(() => SystemMessagePill(m));
         i++;
         continue;
       }
@@ -1218,44 +1192,46 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
       final run = _albumRun(msgs, i);
       if (run > 1) {
         final group = msgs.sublist(i, i + run);
-        final key = _keyFor(group.first.id);
-        rows.add(_rowWrap(
-          group.first.id,
-          key,
-          ImageAlbumBubble(
-            images: group,
-            isMine: isMine,
-            showSender: showSender,
-            tickState: c.tickFor(group.last),
-            onOpen: (idx) => _openAlbum(group, idx),
-            onLongPress: _showActions,
-          ),
-          replyTarget: group.first,
-        ));
+        rows.add(() => _rowWrap(
+              group.first.id,
+              _keyFor(group.first.id),
+              ImageAlbumBubble(
+                images: group,
+                isMine: isMine,
+                showSender: showSender,
+                tickState: c.tickFor(group.last),
+                onOpen: (idx) => _openAlbum(group, idx),
+                onLongPress: _showActions,
+              ),
+              replyTarget: group.first,
+            ));
         i += run;
         continue;
       }
 
-      rows.add(_rowWrap(
-        m.id,
-        _keyFor(m.id),
-        MessageBubble(
-          message: m,
-          isMine: isMine,
-          showSender: showSender,
-          tickState: c.tickFor(m),
-          onLongPress: () => _showActions(m),
-          onReactionTap: (e) => c.toggleReaction(m.id, e),
-          onImageTap: () => _openImage(m.mediaUrl),
-          onRetry: () => c.retry(m),
-          onCancel: (m.pending && m.isImage) ? () => c.cancelPending(m) : null,
-          onQuoteTap: m.isReply ? () => _scrollToMessage(m.replyToId ?? m.replyPreview!.id) : null,
-        ),
-        replyTarget: (m.isDeleted || m.pending || m.failed) ? null : m,
-      ));
+      rows.add(() => _rowWrap(
+            m.id,
+            _keyFor(m.id),
+            MessageBubble(
+              message: m,
+              isMine: isMine,
+              showSender: showSender,
+              tickState: c.tickFor(m),
+              onLongPress: () => _showActions(m),
+              onReactionTap: (e) => c.toggleReaction(m.id, e),
+              onImageTap: () => _openImage(m.mediaUrl),
+              onRetry: () => c.retry(m),
+              onCancel:
+                  (m.pending && m.isImage) ? () => c.cancelPending(m) : null,
+              onQuoteTap: m.isReply
+                  ? () => _scrollToMessage(m.replyToId ?? m.replyPreview!.id)
+                  : null,
+            ),
+            replyTarget: (m.isDeleted || m.pending || m.failed) ? null : m,
+          ));
       i++;
     }
-    if (c.typingText != null) rows.add(const TypingIndicator());
+    if (c.typingText != null) rows.add(() => const TypingIndicator());
     return rows;
   }
 
