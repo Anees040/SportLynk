@@ -54,6 +54,13 @@ dependencies:
   # version — it only stops `depend_on_referenced_packages` firing on the import.
   url_launcher: ^6.3.2
 
+  # S.C Wave — the chat's camera-first attachment sheet reads the device's recent
+  # photos to show them inline (drag up for the full gallery), which needs
+  # photo_manager directly. It was ALREADY a transitive dependency (wechat_assets_picker
+  # bundles it) and is pinned at 3.12.0 in pubspec.lock, so declaring it here moves no
+  # version and adds no download — it only makes the direct import legitimate.
+  photo_manager: ^3.12.0
+
   # -- S.7 Wave C - Notifications ----------------------------------------------
   # firebase_messaging pairs with the firebase_core ^3.6.0 already here for OTP,
   # so this adds a plugin, not a platform: google-services.json, the Gradle
