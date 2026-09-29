@@ -33,6 +33,8 @@ class MessageReaction {
 
   factory MessageReaction.fromJson(Map<String, dynamic> j) =>
       MessageReaction('${j['emoji']}', '${j['userId'] ?? j['user_id']}');
+
+  Map<String, dynamic> toJson() => {'emoji': emoji, 'userId': userId};
 }
 
 /// The quoted parent shown above a reply's own body. Denormalised by the server
@@ -62,6 +64,14 @@ class ReplyPreview {
         deleted: j['deleted'] == true,
         body: j['body'] as String?,
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'senderName': senderName,
+        'kind': kind.name,
+        'deleted': deleted,
+        'body': body,
+      };
 
   /// Build a quote from a message already in hand — the optimistic reply shows
   /// its quote immediately, before the server echoes the denormalised copy back.
@@ -211,7 +221,44 @@ class ChatMessage {
             .whereType<Map>()
             .map((r) => MessageReaction.fromJson(Map<String, dynamic>.from(r)))
             .toList(),
+        // Client-only fields. Absent on a server payload (defaulting to
+        // false/null); present only when a message is rehydrated from the local
+        // cache, so an offline-queued or failed bubble comes back in its state.
+        pending: j['pending'] == true,
+        failed: j['failed'] == true,
+        localPath: j['local_path'] as String?,
       );
+
+  /// Server-shaped map for the local cache, symmetric with [fromJson]. Includes
+  /// the client-only [pending]/[failed]/[localPath] so a queued or failed message
+  /// survives an app restart and can be flushed or retried on reconnect.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'client_id': clientId,
+        'channel_id': channelId,
+        'sender_id': senderId,
+        'sender_name': senderName,
+        'sender_avatar': senderAvatar,
+        'kind': kind.name,
+        'body': body,
+        'media_url': mediaUrl,
+        'media_mime': mediaMime,
+        'media_w': mediaW,
+        'media_h': mediaH,
+        'duration_ms': durationMs,
+        'reply_to_id': replyToId,
+        'reply_preview': replyPreview?.toJson(),
+        'mentions': mentions,
+        'pinned_at': pinnedAt?.toUtc().toIso8601String(),
+        'system_meta': systemMeta,
+        'created_at': createdAt.toUtc().toIso8601String(),
+        'edited_at': editedAt?.toUtc().toIso8601String(),
+        'deleted_at': deletedAt?.toUtc().toIso8601String(),
+        'reactions': reactions.map((r) => r.toJson()).toList(),
+        'pending': pending,
+        'failed': failed,
+        'local_path': localPath,
+      };
 
   ChatMessage copyWith({
     String? id,
