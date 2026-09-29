@@ -107,7 +107,20 @@ class ApiConstants {
   static String chatForBooking(String bookingId) => '/chat/booking/$bookingId';
   static String chatForMatch(String matchId) => '/chat/match/$matchId';
   static String chatMute(String channelId) => '/chat/$channelId/mute';
+  static String chatHide(String channelId) => '/chat/$channelId/hide';
   static String chatQuickReplies(String channelId) => '/chat/$channelId/quick-replies';
+
+  // Requests (matchmaking) — direct player-to-player play requests (module 8c)
+  /// Discovery plus the request state machine. `discover?sport&limit` is the honest
+  /// list of players to ask; `incoming`/`outgoing?status` are the two inbox tabs;
+  /// `POST /requests` sends one, and respond/cancel act on a single request id. An
+  /// accepted request opens a 1:1 `direct` chat, reached through [chatMessages].
+  static const String requests = '/requests';
+  static const String requestsDiscover = '/requests/discover';
+  static const String requestsIncoming = '/requests/incoming';
+  static const String requestsOutgoing = '/requests/outgoing';
+  static String requestRespond(String id) => '/requests/$id/respond';
+  static String requestCancel(String id) => '/requests/$id/cancel';
 
   // Notifications
   /// The feed. `cursor` is the previous page's `nextCursor`, passed back verbatim:
