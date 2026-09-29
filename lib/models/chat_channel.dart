@@ -13,19 +13,23 @@ library;
 
 import 'team.dart' show asNum;
 
-/// The three human channel types. `assistant` is deliberately absent — Scout has
-/// its own screen and the inbox endpoint filters it out, so a value the client
-/// cannot receive should not be nameable here.
+/// The human channel types. `assistant` is deliberately absent — Scout has its
+/// own screen and the inbox endpoint filters it out, so a value the client cannot
+/// receive should not be nameable here. `direct` is the 1:1 room a matchmaking
+/// request opens once accepted (module 8c); it flows through the same inbox as
+/// every other type, so it earns a name here rather than falling into `unknown`.
 enum ChatChannelType {
   booking,
   captain,
   team,
+  direct,
   unknown;
 
   static ChatChannelType parse(String? raw) => switch (raw) {
         'booking' => ChatChannelType.booking,
         'captain' => ChatChannelType.captain,
         'team' => ChatChannelType.team,
+        'direct' => ChatChannelType.direct,
         _ => ChatChannelType.unknown,
       };
 
@@ -36,6 +40,7 @@ enum ChatChannelType {
         ChatChannelType.booking => 'Bookings',
         ChatChannelType.captain => 'Matches',
         ChatChannelType.team => 'Teams',
+        ChatChannelType.direct => 'Direct',
         ChatChannelType.unknown => 'Other',
       };
 }
@@ -44,7 +49,7 @@ enum ChatChannelType {
 /// apply to a type are present, so everything past [subtitle] is nullable and the
 /// UI asks for what it needs rather than switching on `kind` twice.
 class ChatChannelContext {
-  final String kind; // 'booking' | 'captain' | 'team'
+  final String kind; // 'booking' | 'captain' | 'team' | 'direct'
   final String? status; // booking status, or match status; absent on a team
   final String? title;
   final String? subtitle;
