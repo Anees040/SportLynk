@@ -25,9 +25,29 @@ class AppColors {
   static const Color textSecondary = Color(0xFF6B7280);
   static const Color error = Color(0xFFDC2626);
   static const Color warning = Color(0xFFF59E0B);
+  // Legible text/icon tone for use on a pale [warning]-tinted surface, where the
+  // bright amber itself fails contrast.
+  static const Color warningText = Color(0xFF92600A);
   static const Color disabled = Color(0xFFD1D5DB);
   static const Color border = Color(0xFFE5E7EB);
   static const Color divider = Color(0xFFE5E7EB);
   static const Color success = Color(0xFF16A34A);
   static const Color white = Color(0xFFFFFFFF);
+
+  // Team-chat surfaces. The thread sits on a warm neutral rather than the app's
+  // near-white background: against white, the pale "mine" bubble lost its
+  // right-aligned reading and looked centred. On this ground a light-green
+  // "mine" and a white "theirs" both stand out — the WhatsApp convention users
+  // expect. [chatPattern] is the faint doodle tint painted over [chatBackground]
+  // by the default background preset.
+  static const Color chatBackground = Color(0xFFEDE7DE);
+  static const Color chatBubbleMine = Color(0xFFD7F4C4);
+  static const Color chatBubbleOther = Color(0xFFFFFFFF);
+  static const Color chatPattern = Color(0x0F0E3621);
+
+  // Alternate chat-background presets (Issue 5). Each is a flat ground; the
+  // default preset additionally paints [chatPattern] over its ground.
+  static const Color chatBgMint = Color(0xFFE3F0E4);
+  static const Color chatBgSlate = Color(0xFFE6E9EE);
+  static const Color chatBgPlain = Color(0xFFF4F1EC);
 }
