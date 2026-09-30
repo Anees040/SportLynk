@@ -208,72 +208,63 @@ void main() {
   });
 
   group('when the wallet cannot be read', () {
-    // Pinned as it behaves, not as it should. `_load`
-    // (lib/screens/player/wallet_screen.dart:43) sets `_wallet = null` when the
-    // envelope reports failure, and the balance is rendered as
-    // `asNum(_wallet?['balance'])` (:160) — which is 0. So a failed read is displayed
-    // as a wallet containing nothing, with no error and no retry. The fix is an
-    // `_error` field, an error branch replacing the balance card, and a Retry that
-    // calls `_load`.
-    testWidgets('a server error is displayed as a zero balance', (tester) async {
+    // A failed `/wallet/me` read is never shown as a wallet containing nothing.
+    // `_load` leaves `_wallet` null and records `_error`, and the build replaces
+    // the balance card and both actions with a NetworkErrorView that carries the
+    // message and a Retry calling `_load`.
+    testWidgets('a server error shows the message and a retry, not a zero balance',
+        (tester) async {
       api.fail('/wallet/me', 'Wallet lookup failed');
 
       await pumpScreen(tester, const WalletScreen());
       await settleData(tester);
 
-      expect(find.text('PKR 0'), findsNWidgets(3),
-          reason: 'headline, available and frozen all read zero');
-      expect(find.text('Wallet lookup failed'), findsNothing,
-          reason: 'the message the API sent never reaches the screen');
-      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsNothing);
-      expect(find.widgetWithText(TextButton, 'Retry'), findsNothing);
+      expect(find.text('PKR 0'), findsNothing,
+          reason: 'a failed read is never rendered as an empty wallet');
+      expect(find.text('Could not load wallet'), findsOneWidget);
+      expect(find.text('Wallet lookup failed'), findsOneWidget,
+          reason: 'the message the API sent now reaches the screen');
+      expect(find.text('Retry'), findsOneWidget);
     });
 
-    // Pinned as it behaves, not as it should. Same cause, different path: a dropped
-    // connection throws and `catch (_)`
-    // (lib/screens/player/wallet_screen.dart:49) discards it, leaving `_wallet` null.
-    // This is the exact symptom of a missing `adb reverse`, and the screen reports it
-    // as an empty wallet.
-    testWidgets('a dropped connection is displayed as a zero balance',
+    testWidgets('a dropped connection shows the retry state, not a zero balance',
         (tester) async {
       api.offline('/wallet/me');
 
       await pumpScreen(tester, const WalletScreen());
       await settleData(tester);
 
-      expect(find.text('PKR 0'), findsNWidgets(3));
+      expect(find.text('PKR 0'), findsNothing);
+      expect(find.text('Could not load wallet'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing,
           reason: 'a spinner that never resolves would be the worse bug');
     });
 
-    // Pinned as it behaves, not as it should. Same cause: `jsonDecode` throws on a
-    // body that is not JSON — an HTML error page from a proxy — and the same bare
-    // catch swallows it.
-    testWidgets('an unparseable body is displayed as a zero balance',
+    testWidgets('an unparseable body shows the retry state, not a zero balance',
         (tester) async {
       api.on('/wallet/me', const FakeResponse(502, '<html>Bad Gateway</html>'));
 
       await pumpScreen(tester, const WalletScreen());
       await settleData(tester);
 
-      expect(find.text('PKR 0'), findsNWidgets(3));
+      expect(find.text('PKR 0'), findsNothing);
+      expect(find.text('Could not load wallet'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
     });
 
-    // Pinned as it behaves, not as it should. The consequence worth stating on its
-    // own: the actions stay live over an unknown balance, so a player can open the
-    // withdraw sheet against a figure the screen never actually read.
-    testWidgets('a failed read leaves the actions enabled', (tester) async {
+    testWidgets('a failed read replaces the actions with a retry', (tester) async {
+      // The consequence worth stating on its own: the top-up and withdraw actions
+      // no longer stand live over a balance the screen never read — the error
+      // branch replaces them with a single retry.
       api.fail('/wallet/me', 'server down');
 
       await pumpScreen(tester, const WalletScreen());
       await settleData(tester);
 
-      final topUp = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'Top Up Wallet'));
-      expect(topUp.onPressed, isNotNull);
-      final withdraw = tester.widget<OutlinedButton>(
-          find.widgetWithText(OutlinedButton, 'Withdraw'));
-      expect(withdraw.onPressed, isNotNull);
+      expect(find.widgetWithText(ElevatedButton, 'Top Up Wallet'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Withdraw'), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
     });
 
     testWidgets('a failed transaction list still renders the balance',
@@ -838,8 +829,9 @@ void main() {
     });
 
     testWidgets('a dropped connection during a top-up is reported', (tester) async {
-      // Money is involved, so this is the one error path on this screen that does
-      // surface: `catch (e)` (:75) closes the dialog and shows the error.
+      // Money is involved, so this error path surfaces. `_topUp` routes through
+      // `ApiClient`, which phrases a dropped connection as a calm sentence — not the
+      // raw `Error: <exception>` the earlier catch printed.
       api.offline('/wallet/topup');
 
       await pumpScreen(tester, const WalletScreen());
@@ -855,7 +847,9 @@ void main() {
       await settleTopUp(tester);
 
       expect(find.byType(SnackBar), findsOneWidget);
-      expect(find.textContaining('Error:'), findsOneWidget);
+      expect(find.textContaining('Could not reach the server'), findsOneWidget);
+      expect(find.textContaining('Error:'), findsNothing,
+          reason: 'the raw exception no longer reaches the user');
     });
   });
 
