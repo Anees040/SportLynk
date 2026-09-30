@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/reconnect_refresh.dart';
 
 import 'owner_add_venue_screen.dart';
 import 'owner_venue_management_screen.dart';
@@ -16,7 +17,8 @@ class OwnerMyVenuesScreen extends StatefulWidget {
   State<OwnerMyVenuesScreen> createState() => _OwnerMyVenuesScreenState();
 }
 
-class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen> {
+class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen>
+    with ReconnectRefresh<OwnerMyVenuesScreen> {
   List<Map<String, dynamic>> _venues = [];
   bool _loading = true;
 
@@ -25,6 +27,10 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen> {
     super.initState();
     _load();
   }
+
+  // A venue list opened offline fills itself in once the socket reconnects.
+  @override
+  void onReconnect() => _load();
 
   Future<void> _load() async {
     setState(() => _loading = true);
