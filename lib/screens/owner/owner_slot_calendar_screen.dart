@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/reconnect_refresh.dart';
 
 class OwnerSlotCalendarScreen extends StatefulWidget {
   const OwnerSlotCalendarScreen({super.key});
@@ -13,7 +14,8 @@ class OwnerSlotCalendarScreen extends StatefulWidget {
   State<OwnerSlotCalendarScreen> createState() => _OwnerSlotCalendarScreenState();
 }
 
-class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
+class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
+    with ReconnectRefresh<OwnerSlotCalendarScreen> {
   DateTime _selectedDate = DateTime.now();
   List<Map<String, dynamic>> _slots = [];
   List<Map<String, dynamic>> _venues = [];
@@ -26,6 +28,11 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen> {
     super.initState();
     _loadVenues();
   }
+
+  // The calendar re-reads venues and slots once the socket returns, so a screen
+  // opened offline recovers without a manual pull.
+  @override
+  void onReconnect() => _loadVenues();
 
   String _dateStr(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
