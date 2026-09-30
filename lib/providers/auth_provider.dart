@@ -161,18 +161,25 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> resetPassword(String phone, String newPassword, String firebaseUid) async {
+  Future<bool> resetPassword(String phone, String code, String newPassword) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
       final response = await _authService.forgotPasswordReset(
-        phone: phone, newPassword: newPassword, firebaseUid: firebaseUid,
+        phone: phone, code: code, newPassword: newPassword,
       );
+      final ok = response['success'] == true;
+      // Surface the server's reason on failure, the way login does. Without this an
+      // expired code or a password the server rejected is dropped and the screen can
+      // only show a generic 'Reset failed'.
+      if (!ok) {
+        _errorMessage = response['message'] as String? ?? 'Reset failed';
+      }
       _isLoading = false;
       notifyListeners();
-      return response['success'] == true;
+      return ok;
     } catch (e) {
       _errorMessage = e.toString();
       _isLoading = false;
