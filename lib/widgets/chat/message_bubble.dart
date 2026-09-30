@@ -51,7 +51,7 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final maxW = MediaQuery.sizeOf(context).width * 0.78;
-    final bubbleColor = isMine ? AppColors.accentLight : Colors.white;
+    final bubbleColor = isMine ? AppColors.chatBubbleMine : AppColors.chatBubbleOther;
 
     return Padding(
       padding: EdgeInsets.only(
