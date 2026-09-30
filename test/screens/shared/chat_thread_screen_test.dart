@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sportlynk/models/chat_channel.dart';
 import 'package:sportlynk/screens/shared/chat_thread_screen.dart';
+import 'package:sportlynk/services/realtime_service.dart';
 
 import '../screen_harness.dart';
 
@@ -145,6 +146,14 @@ void main() {
     await pumpThread(tester, api);
     await settleData(tester);
 
+    // The socket is never created under flutter test, so the controller opens in
+    // its offline state and a send would be held for the reconnect flush rather
+    // than posted. Drive a connect edge so the send takes the live path a
+    // signed-in client normally has — the socket connects at login, before a
+    // chat is ever opened — which is the path this test exists to cover.
+    RealtimeService().emitConnectionForTest(true);
+    await settleData(tester);
+
     await tester.enterText(find.byType(TextField), 'On my way');
     // Typing swaps the hold-to-record mic for the send button; a frame has to
     // run for that rebuild before the send icon is in the tree to tap.
@@ -159,6 +168,39 @@ void main() {
     expect(body['body'], 'On my way');
     expect(body['clientId'], isNotEmpty);
     expect(find.text('On my way'), findsOneWidget);
+  });
+
+  // The offline compose path: a send made while the socket is down is held as a
+  // pending bubble and posted on the reconnect flush, reusing its clientId so the
+  // server dedupes rather than doubling it. This is the half of the outbound queue
+  // that the plain send above deliberately steps past by connecting first.
+  testWidgets('a send composed offline is flushed on reconnect', (tester) async {
+    await pumpThread(tester, api);
+    await settleData(tester);
+
+    // No connect edge: the controller is offline, so the send is queued.
+    await tester.enterText(find.byType(TextField), 'On my way');
+    await tester.pump();
+    await tapVisible(tester, find.byIcon(Icons.send_rounded));
+    await settleData(tester);
+
+    expect(find.text('On my way'), findsOneWidget,
+        reason: 'the offline send shows immediately as a pending bubble');
+    expect(
+      api.to(kMessages).where((r) => r.method == 'POST'),
+      isEmpty,
+      reason: 'nothing is posted while offline',
+    );
+
+    // Reconnect drains the outbox in order.
+    RealtimeService().emitConnectionForTest(true);
+    await settleData(tester);
+
+    final sent = api.to(kMessages).where((r) => r.method == 'POST').toList();
+    expect(sent, hasLength(1));
+    final body = jsonDecode(sent.single.body!) as Map<String, dynamic>;
+    expect(body['body'], 'On my way');
+    expect(body['clientId'], isNotEmpty);
   });
 
   testWidgets('a doubled text scale keeps the room title and message present', (
