@@ -22,6 +22,7 @@ import '../screens/player/match_center_screen.dart';
 import '../screens/player/player_booking_detail_screen.dart';
 import '../screens/player/player_home_screen.dart';
 import '../screens/player/rate_experience_screen.dart';
+import '../screens/player/requests_inbox_screen.dart';
 import '../screens/player/team_rankings_screen.dart';
 import '../screens/player/team_roster_screen.dart';
 import '../screens/player/tournament_detail_screen.dart';
@@ -149,6 +150,11 @@ class AppRoutes {
     },
     '/find-opponents': (_) =>
         const AuthGuard(requiredRole: 'player', child: FindOpponentsScreen()),
+    // The matchmaking request inbox (module 8c). Player-guarded and argument-free:
+    // `requestsInboxLink` in notificationTypes.js emits it with no args because the
+    // screen reads the caller's own incoming and outgoing asks.
+    '/requests-inbox': (_) =>
+        const AuthGuard(requiredRole: 'player', child: RequestsInboxScreen()),
     '/team-rankings': (_) =>
         const AuthGuard(requiredRole: 'player', child: TeamRankingsScreen()),
     '/tournaments': (_) =>
