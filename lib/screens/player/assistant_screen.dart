@@ -41,7 +41,9 @@ class ScoutExit {
 /// nothing is worse than no microphone at all — it is the single most tapped affordance
 /// in any chat UI and a dead one reads as a broken app. Text-first, as specified.
 class AssistantScreen extends StatefulWidget {
-  /// Open straight into a specific conversation. Null means "wherever I left off".
+  /// Open straight into a specific conversation. Null opens a fresh chat rather
+  /// than resuming the last one, so the default entry is never mid-conversation
+  /// the user did not just choose (Issue 8a).
   final String? threadId;
 
   const AssistantScreen({this.threadId, super.key});
@@ -111,7 +113,12 @@ class _AssistantScreenState extends State<AssistantScreen> {
       );
       c.addListener(_onControllerChanged);
       _c = c;
-      c.start();
+      // Scout opens on a clean slate every time. A specific thread reached from
+      // the history list still loads (its id arrives as [widget.threadId]); only
+      // the default entry starts blank rather than resuming the last chat, so the
+      // assistant is never mid-conversation the user did not just choose.
+      final wanted = widget.threadId;
+      c.start(loadHistory: wanted != null && wanted.isNotEmpty);
     }
     _scroll.addListener(_onScroll);
   }
