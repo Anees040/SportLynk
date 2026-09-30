@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -68,6 +70,9 @@ class _ChatComposerState extends State<ChatComposer> {
   bool _hasText = false;
 
   AudioRecorder? _recorder;
+  // Plays the short cue when a recording starts (Issue 4). Created lazily so a
+  // composer that never records a voice note pays nothing for it.
+  AudioPlayer? _cuePlayer;
   bool _recording = false;
   bool _armed = false; // finger still down (the press may outlive the async start)
   bool _cancelHint = false;
@@ -102,7 +107,21 @@ class _ChatComposerState extends State<ChatComposer> {
     _stopTimer?.cancel();
     _ticker?.cancel();
     _recorder?.dispose();
+    _cuePlayer?.dispose();
     super.dispose();
+  }
+
+  /// The short start-of-recording cue: a light haptic and a brief tone, played
+  /// the moment recording begins (Issue 4). Failures are swallowed — a missing
+  /// audio route must never stop a voice note from being recorded.
+  Future<void> _playRecStartCue() async {
+    HapticFeedback.mediumImpact();
+    try {
+      final p = _cuePlayer ??= AudioPlayer();
+      await p.setAsset('assets/sounds/rec_start.wav');
+      await p.seek(Duration.zero);
+      await p.play();
+    } catch (_) {}
   }
 
   void _onChanged() {
@@ -139,13 +158,13 @@ class _ChatComposerState extends State<ChatComposer> {
 
   // Voice recording
 
-  void _onMicTap() {
-    // A tap is not a hold: explain the gesture rather than record a blank.
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Hold to record, release to send'),
-      duration: Duration(seconds: 2),
-    ));
+  /// A tap starts a hands-free (locked) recording — the WhatsApp shortcut for a
+  /// longer note without holding the finger down. Holding still records too, and
+  /// can slide up to lock or left to cancel.
+  Future<void> _onMicTap() async {
+    if (_recording || !widget.enabled) return;
+    await _startRecording();
+    if (mounted && _recording) _lockRecording();
   }
 
   Future<void> _startRecording() async {
@@ -211,6 +230,7 @@ class _ChatComposerState extends State<ChatComposer> {
     _runStart = DateTime.now();
     _startTicker();
     setState(() => _recording = true);
+    unawaited(_playRecStartCue());
   }
 
   void _startTicker() {
@@ -373,9 +393,12 @@ class _ChatComposerState extends State<ChatComposer> {
   }
 
   Widget _attachButton() {
+    // A camera icon, not a paperclip: tapping it opens the live camera, from
+    // which the gallery is one tap away (Issue 2). The screen owns what opens;
+    // this button only signals the intent.
     return IconButton(
-      icon: const Icon(Icons.attach_file, color: AppColors.textSecondary),
-      tooltip: 'Attach',
+      icon: const Icon(Icons.photo_camera_outlined, color: AppColors.textSecondary),
+      tooltip: 'Camera',
       onPressed: widget.enabled ? widget.onPickImage : null,
     );
   }
