@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
@@ -21,8 +22,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _phone = TextEditingController();
   final _newPass = TextEditingController();
   final _confirmPass = TextEditingController();
+  final _code = TextEditingController();
   bool _obscureNew = true, _obscureConfirm = true;
-  String? _firebaseUid;
   bool _loading = false;
   String _pwText = '';
 
@@ -37,6 +38,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     _phone.dispose();
     _newPass.dispose();
     _confirmPass.dispose();
+    _code.dispose();
     super.dispose();
   }
 
@@ -48,7 +50,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
   }
 
-  // Step 0: Send OTP
+  // Sends (or resends) the server-owned reset code to the entered phone. When [advance]
+  // is set the phone field is validated first and a success moves to the code step; the
+  // step 1 "Resend code" affordance reuses this without leaving the step, so the number
+  // that received the code and the number whose password changes stay one value.
+  Future<void> _sendCode({bool advance = false}) async {
+    if (advance && !_formKey.currentState!.validate()) return;
+    setState(() => _loading = true);
+    try {
+      final resp = await AuthService().forgotPasswordSendOtp(_phone.text.trim());
+      if (!mounted) return;
+      setState(() => _loading = false);
+      if (resp['success'] != true) {
+        _snack(resp['message'] ?? 'Could not send the code. Please try again.');
+        return;
+      }
+      _snack(resp['message'] ?? 'A verification code has been sent to your phone.', bg: AppColors.accent);
+      if (advance) setState(() => _step = 1);
+    } catch (e) {
+      if (mounted) { setState(() => _loading = false); _snack('Network error'); }
+    }
+  }
+
+  // Step 0: enter the phone that will receive the code
   Widget _buildStep0() {
     return Column(children: [
       Container(
@@ -71,34 +95,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       ),
       const SizedBox(height: 24),
       CustomButton(
-        text: 'Send OTP',
+        text: 'Send Code',
         isLoading: _loading,
-        onPressed: () async {
-          if (!_formKey.currentState!.validate()) return;
-          setState(() => _loading = true);
-          try {
-            final authService = AuthService();
-            final resp = await authService.forgotPasswordSendOtp(_phone.text.trim());
-            if (!mounted) return;
-            setState(() => _loading = false);
-            if (resp['success'] != true) {
-              _snack(resp['message'] ?? 'Phone not found');
-              return;
-            }
-            final uid = await Navigator.pushNamed(context, '/otp', arguments: _phone.text.trim());
-            if (uid != null && uid is String) {
-              _firebaseUid = uid;
-              setState(() => _step = 1);
-            }
-          } catch (e) {
-            if (mounted) { setState(() => _loading = false); _snack('Network error'); }
-          }
-        },
+        onPressed: () => _sendCode(advance: true),
       ),
     ]);
   }
 
-  // Step 1: New password
+  // Step 1: enter the code and the new password
   Widget _buildStep1() {
     return Column(children: [
       Container(
@@ -107,8 +111,30 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         child: const Icon(Icons.lock_open, size: 72, color: AppColors.accent),
       ),
       const SizedBox(height: 20),
-      Text('Create New Password', style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textPrimary), textAlign: TextAlign.center),
-      const SizedBox(height: 32),
+      Text('Verify & Reset', style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textPrimary), textAlign: TextAlign.center),
+      const SizedBox(height: 8),
+      Text('Enter the 6-digit code sent by SMS, then choose a new password', style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary), textAlign: TextAlign.center),
+      const SizedBox(height: 28),
+      SportTextField(
+        label: 'Verification Code *',
+        hint: 'Enter the 6-digit code',
+        prefixIcon: Icons.sms_outlined,
+        controller: _code,
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(6),
+        ],
+        validator: (v) => v == null || !RegExp(r'^[0-9]{6}$').hasMatch(v.trim()) ? 'Enter the 6-digit code' : null,
+      ),
+      Align(
+        alignment: Alignment.centerRight,
+        child: TextButton(
+          onPressed: _loading ? null : () => _sendCode(),
+          child: Text('Resend code', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.accent)),
+        ),
+      ),
+      const SizedBox(height: 4),
       SportTextField(
         label: 'New Password *',
         hint: '8+ characters',
@@ -148,7 +174,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           isLoading: auth.isLoading,
           onPressed: () async {
             if (!_formKey.currentState!.validate()) return;
-            final ok = await auth.resetPassword(_phone.text.trim(), _newPass.text, _firebaseUid!);
+            final ok = await auth.resetPassword(_phone.text.trim(), _code.text.trim(), _newPass.text);
             if (!context.mounted) return;
             if (ok) {
               _snack('Password changed successfully!', bg: AppColors.accent);
