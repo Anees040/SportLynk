@@ -1,10 +1,8 @@
-// The player's profile: a spinner on mount, then a GET of `/users/me/player`. The
-// screen degrades rather than fails — every unhappy load path (non-200, a thrown
-// request, a null token) funnels into `_setFromAuth`, which fills the profile from
-// the cached `AuthProvider` identity. One consequence is pinned below: the
-// `_profile == null` branch with its Retry button (player_profile_screen.dart:233) is
-// unreachable, because `_setFromAuth` always assigns a non-null map. A failed load
-// therefore reads as "your identity, with default stats", never as an error card.
+// The player's profile: a spinner on mount, then a GET of `/users/me/player`. Issue 6
+// removed the fabricated degrade — a failed load no longer funnels into `_setFromAuth`
+// and invented stats (ELO 1000, trust 100). A load that returns no profile now renders
+// the mandated error card with a Retry (player_profile_screen.dart:227), and identity
+// is watched from `AuthProvider` so a background refresh repaints the loaded view.
 //
 // Mount note: the load reads `auth.token`; `FakeAuth` supplies it, so the request is
 // actually issued. The avatar fixture is left null so the CircleAvatar draws its
@@ -109,26 +107,21 @@ void main() {
   });
 
   group('when the load fails', () {
-    testWidgets('the profile degrades to the cached identity, not an error', (
+    testWidgets('the profile shows the retry state, not invented stats', (
       tester,
     ) async {
-      // Defect, pinned: the Retry error state (`_profile == null`) is unreachable —
-      // a non-200 funnels into `_setFromAuth`, so the screen shows the auth identity
-      // with default stats (ELO 1000, trust 100) rather than an error with retry.
+      // Issue 6: a failed read no longer fabricates defaults (ELO 1000, trust 100).
+      // With no profile to show, the screen renders the mandated error card and a
+      // retry rather than an identity dressed in invented numbers.
       api.fail(kProfile, 'boom');
       await pumpProfile(tester, api);
       await settleData(tester);
 
-      expect(find.text('Bilal Ahmed'), findsOneWidget); // from AuthProvider
-      expect(
-        find.text('100/100'),
-        findsOneWidget,
-      ); // the fallback trust, not 92
-      expect(find.text('No interests added.'), findsOneWidget);
-      expect(
-        find.text('Retry'),
-        findsNothing,
-      ); // the error branch never renders
+      expect(find.text('Could not load profile'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget); // the error branch now renders
+      expect(find.text('100/100'), findsNothing); // no fabricated trust
+      expect(find.text('1000'), findsNothing); // no fabricated ELO
+      expect(find.text('Bilal Ahmed'), findsNothing); // no identity header on failure
     });
   });
 
