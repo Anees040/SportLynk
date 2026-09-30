@@ -91,6 +91,15 @@ class RealtimeService {
 
   bool get isConnected => _socket?.connected ?? false;
 
+  /// Drive a connection transition without a live socket. Under `flutter test`
+  /// the socket is never created (see [ensureConnected]), so a test that needs a
+  /// connected client — the state a signed-in device is in the moment it opens a
+  /// chat, since the socket connects at login — has no other way to reach the
+  /// [connection] up-edge that the chat controller's live delivery and its
+  /// offline-send flush both hang on.
+  @visibleForTesting
+  void emitConnectionForTest(bool up) => _connection.add(up);
+
   /// Connect if not already connected for this token. Idempotent: called on every
   /// chat open, on app resume, and right after login — a matching live socket is
   /// reused, a stale-token socket is replaced.
