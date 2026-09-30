@@ -8,6 +8,7 @@ import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/num_util.dart';
+import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
 
 class BookingsScreen extends StatefulWidget {
@@ -17,7 +18,7 @@ class BookingsScreen extends StatefulWidget {
 }
 
 class BookingsScreenState extends State<BookingsScreen>
-    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin, WidgetsBindingObserver, ReconnectRefresh<BookingsScreen> {
   late TabController _tab;
   List<Map<String, dynamic>> _upcoming = [], _past = [];
   bool _loading = true;
@@ -45,6 +46,12 @@ class BookingsScreenState extends State<BookingsScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _refreshIfStale();
   }
+
+  // Reconnecting after a drop is the same trigger as resuming: pull anything the
+  // list missed while offline, throttled by the same staleness guard so a resume
+  // and a reconnect firing together do not double-load.
+  @override
+  void onReconnect() => _refreshIfStale();
 
   /// Called by parent (PlayerHomeScreen) when Bookings tab becomes active
   void refreshIfNeeded() => _refreshIfStale();
