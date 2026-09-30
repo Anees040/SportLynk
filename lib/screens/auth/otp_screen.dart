@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -139,28 +140,42 @@ class _OtpScreenState extends State<OtpScreen> {
                 Text('Sending verification code...', style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
               ])
             else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(6, (i) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  child: SizedBox(width: 48, height: 58, child: TextFormField(
-                    controller: _ctrls[i], focusNode: _foci[i],
-                    textAlign: TextAlign.center, keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(1)],
-                    decoration: InputDecoration(
-                      counterText: '', filled: true, fillColor: AppColors.inputFill,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.accent, width: 2)),
-                    ),
-                    style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                    onChanged: (v) {
-                      if (v.isNotEmpty && i < 5) _foci[i + 1].requestFocus();
-                      if (v.isNotEmpty && i == 5) _verifyOtp();
-                      if (v.isEmpty && i > 0) _foci[i - 1].requestFocus();
-                    },
-                  )),
-                )),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  // Six fixed 48px boxes and their gaps need 348px, which overflows
+                  // a 360dp-wide phone by the reported 36px. Size each cell from the
+                  // width actually available so the row always fits, capped so the
+                  // boxes do not sprawl on a tablet or in landscape.
+                  const gap = 8.0;
+                  final double cell =
+                      math.min(52.0, (constraints.maxWidth - gap * 5) / 6);
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(6, (i) => Container(
+                      width: cell,
+                      height: cell * 1.25,
+                      margin: EdgeInsets.only(right: i == 5 ? 0 : gap),
+                      child: TextFormField(
+                        controller: _ctrls[i], focusNode: _foci[i],
+                        textAlign: TextAlign.center, keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(1)],
+                        decoration: InputDecoration(
+                          counterText: '', filled: true, fillColor: AppColors.inputFill,
+                          contentPadding: EdgeInsets.zero,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.accent, width: 2)),
+                        ),
+                        style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                        onChanged: (v) {
+                          if (v.isNotEmpty && i < 5) _foci[i + 1].requestFocus();
+                          if (v.isNotEmpty && i == 5) _verifyOtp();
+                          if (v.isEmpty && i > 0) _foci[i - 1].requestFocus();
+                        },
+                      ),
+                    )),
+                  );
+                },
               ),
             const SizedBox(height: 32),
             if (!_sending) CustomButton(text: 'Verify Code', isLoading: _loading, onPressed: _loading ? null : _verifyOtp),
