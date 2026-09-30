@@ -14,6 +14,7 @@ import 'wallet_screen.dart';
 import 'teams_screen.dart';
 import '../../services/chat_service.dart';
 import '../../services/realtime_service.dart';
+import '../../utils/reconnect_refresh.dart';
 import '../../widgets/assistant/scout_fab.dart';
 import '../../widgets/header_actions.dart';
 import '../../widgets/notification_bell.dart';
@@ -26,7 +27,8 @@ class PlayerHomeScreen extends StatefulWidget {
   State<PlayerHomeScreen> createState() => _PlayerHomeScreenState();
 }
 
-class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
+class _PlayerHomeScreenState extends State<PlayerHomeScreen>
+    with ReconnectRefresh<PlayerHomeScreen> {
   int _tab = 0;
   int _prevTab = 0;
   Map<String, dynamic>? _homeData;
@@ -57,6 +59,15 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     _badgeDebounce?.cancel();
     _msgSub?.cancel();
     super.dispose();
+  }
+
+  // Recover a home payload that failed to load while offline, and re-read the chat
+  // badge for anything that arrived during the outage. A payload already loaded is
+  // left alone so a transient socket blip cannot blank the dashboard.
+  @override
+  void onReconnect() {
+    if (_homeData == null) _load();
+    _loadChatBadge();
   }
 
   /// Keep the header badge honest for as long as this screen lives.
@@ -160,24 +171,33 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: IndexedStack(
-        index: _tab,
-        children: [
-          _buildHome(auth),
-          BookingsScreen(key: _bookingsKey),
-          const TeamsScreen(),
-          const WalletScreen(),
-          const PlayerProfileScreen(),
-        ],
+    // A back gesture off the Home tab returns to Home rather than closing the app;
+    // only a back press while already on Home is allowed to exit, matching the
+    // convention of a phone's home-as-root shell.
+    return PopScope(
+      canPop: _tab == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _tab != 0) _onTabChanged(0);
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: IndexedStack(
+          index: _tab,
+          children: [
+            _buildHome(auth),
+            BookingsScreen(key: _bookingsKey),
+            const TeamsScreen(),
+            const WalletScreen(),
+            const PlayerProfileScreen(),
+          ],
+        ),
+        // Scout rides the shell, not the individual tabs, so it survives tab switches
+        // and keeps one instance. It is hidden on Teams — that tab has its own FAB and
+        // two stacked circles is a design bug, not a feature — and on Profile, which is
+        // settings, where a chat button is only noise.
+        floatingActionButton: (_tab == 2 || _tab == 4) ? null : ScoutFab(onTap: _openScout),
+        bottomNavigationBar: _buildNav(),
       ),
-      // Scout rides the shell, not the individual tabs, so it survives tab switches
-      // and keeps one instance. It is hidden on Teams — that tab has its own FAB and
-      // two stacked circles is a design bug, not a feature — and on Profile, which is
-      // settings, where a chat button is only noise.
-      floatingActionButton: (_tab == 2 || _tab == 4) ? null : ScoutFab(onTap: _openScout),
-      bottomNavigationBar: _buildNav(),
     );
   }
 
@@ -301,11 +321,12 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     return num.tryParse(val.toString()) ?? fallback;
   }
 
-  /// The fixed brand header: wordmark on the left, the two live actions on the
+  /// The fixed brand header: wordmark on the left, the live actions on the
   /// right. The wallet balance, the greeting and the stat strip that used to sit
   /// here have moved onto the scrollable canvas below; a header that never moves
-  /// carries identity and the two destinations the bottom bar cannot reach — the
-  /// inbox and the bell — and nothing that scrolls.
+  /// carries identity and the destinations the bottom bar cannot reach — the
+  /// matchmaking request inbox, the chat inbox and the bell — and nothing that
+  /// scrolls.
   Widget _fixedHeader() {
     return Container(
       decoration: BoxDecoration(
@@ -331,6 +352,12 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
               children: [
                 const BrandWordmark(),
                 Row(children: [
+                  HeaderIconButton(
+                    icon: Icons.handshake_outlined,
+                    tooltip: 'Play requests',
+                    onTap: () => Navigator.pushNamed(context, '/requests-inbox'),
+                  ),
+                  const SizedBox(width: 10),
                   HeaderIconButton(
                     icon: Icons.chat_bubble_outline,
                     tooltip: 'Chats',
