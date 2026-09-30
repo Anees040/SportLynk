@@ -51,6 +51,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sportlynk/constants/app_theme.dart';
 import 'package:sportlynk/models/user.dart';
 import 'package:sportlynk/providers/auth_provider.dart';
@@ -590,6 +591,10 @@ Future<RouteLog> pumpScreen(
   GlobalKey<NavigatorState>? navigatorKey,
 }) async {
   GoogleFonts.config.allowRuntimeFetching = false;
+  // Screens that host a ChatController hydrate a per-channel cache from
+  // shared_preferences during init; without a mocked store the platform channel
+  // never answers and the controller's _init hangs before its first fetch.
+  SharedPreferences.setMockInitialValues(const <String, Object>{});
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
