@@ -1,14 +1,14 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
-import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
 import '../../utils/num_util.dart';
+import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/frozen_balance_sheet.dart';
+import '../../widgets/network_error_view.dart';
 import '../../widgets/transaction_detail_sheet.dart';
 import '../../widgets/withdraw_sheet.dart';
 import 'wallet_history_screen.dart';
@@ -19,38 +19,54 @@ class WalletScreen extends StatefulWidget {
   State<WalletScreen> createState() => _WalletScreenState();
 }
 
-class _WalletScreenState extends State<WalletScreen> {
+class _WalletScreenState extends State<WalletScreen> with ReconnectRefresh<WalletScreen> {
+  final _api = ApiClient();
   Map<String, dynamic>? _wallet;
   List<Map<String, dynamic>> _txns = [];
   bool _loading = true;
+  String? _error;
   static const _amounts = [500.0, 1000.0, 2000.0, 5000.0];
 
   @override
   void initState() { super.initState(); _load(); }
 
+  // Balance and transactions can move while the app sits backgrounded or offline;
+  // a returning connection refetches them without a manual pull.
+  @override
+  void onReconnect() => _load();
+
   Future<void> _load() async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) {
+      // No verified identity: the screen shows its error branch and a retry
+      // rather than dereferencing a null token and crashing the host shell.
+      setState(() { _loading = false; _error = 'Please sign in again to view your wallet.'; });
+      return;
+    }
     setState(() => _loading = true);
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final walletResp = await http.get(Uri.parse('${ApiConstants.baseUrl}/wallet/me'),
-        headers: {'Authorization': 'Bearer $token'});
-      final txnResp = await http.get(Uri.parse('${ApiConstants.baseUrl}/wallet/transactions?limit=5'),
-        headers: {'Authorization': 'Bearer $token'});
-      if (mounted) {
-        final wData = jsonDecode(walletResp.body);
-        final tData = jsonDecode(txnResp.body);
-        setState(() {
-          _wallet = wData['success'] == true ? wData['data'] : null;
-          _txns = tData['success'] == true
-            ? List<Map<String,dynamic>>.from(tData['data']) : [];
-          _loading = false;
-        });
+    final walletResp = await _api.get('/wallet/me', token: token);
+    final txnResp =
+        await _api.get('/wallet/transactions', token: token, queryParams: {'limit': '5'});
+    if (!mounted) return;
+    setState(() {
+      if (walletResp['success'] == true && walletResp['data'] is Map) {
+        _wallet = Map<String, dynamic>.from(walletResp['data'] as Map);
+        _txns = txnResp['success'] == true && txnResp['data'] is List
+            ? List<Map<String, dynamic>>.from(txnResp['data'] as List)
+            : const [];
+        _error = null;
+      } else {
+        // A balance is never shown as a fabricated zero: on failure the screen
+        // keeps whatever it last held and offers a retry rather than inventing 0.
+        _error = '${walletResp['message'] ?? 'Could not load your wallet.'}';
       }
-    } catch (_) { if (mounted) setState(() => _loading = false); }
+      _loading = false;
+    });
   }
 
   Future<void> _topUp(double amount) async {
-    final token = Provider.of<AuthProvider>(context, listen: false).token!;
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -58,25 +74,16 @@ class _WalletScreenState extends State<WalletScreen> {
     );
     await Future.delayed(const Duration(seconds: 3));
 
-    try {
-      final resp = await http.post(Uri.parse('${ApiConstants.baseUrl}/wallet/topup'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({'amount': amount}));
-      final data = jsonDecode(resp.body);
-      if (mounted) {
-        Navigator.pop(context); // close simulation dialog
-        if (data['success'] == true) {
-          SnackbarUtil.showSuccess(context, 'PKR ${amount.toStringAsFixed(0)} added to wallet!');
-          _load();
-        } else {
-          SnackbarUtil.showError(context, data['message'] ?? 'Top-up failed');
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        SnackbarUtil.showError(context, 'Error: $e');
-      }
+    final resp = await _api.post('/wallet/topup', {'amount': amount}, token: token);
+    if (!mounted) return;
+    Navigator.pop(context); // close simulation dialog
+    if (resp['success'] == true) {
+      SnackbarUtil.showSuccess(context, 'PKR ${amount.toStringAsFixed(0)} added to wallet!');
+      _load();
+    } else {
+      // ApiClient phrases connectivity and server errors for display, so an
+      // offline top-up reads as a calm sentence, not a raw exception.
+      SnackbarUtil.showError(context, '${resp['message'] ?? 'Top-up failed'}');
     }
   }
 
@@ -139,7 +146,14 @@ class _WalletScreenState extends State<WalletScreen> {
       ),
       body: _loading
         ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-        : RefreshIndicator(color: AppColors.accent, onRefresh: _load,
+        : _wallet == null
+          ? RefreshIndicator(color: AppColors.accent, onRefresh: _load,
+              child: NetworkErrorView(
+                title: 'Could not load wallet',
+                message: _error ?? 'Please try again.',
+                onRetry: _load,
+              ))
+          : RefreshIndicator(color: AppColors.accent, onRefresh: _load,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
