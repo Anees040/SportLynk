@@ -119,7 +119,7 @@ void main() {
     testWidgets('mine is tinted, unbordered and inset from the left',
         (tester) async {
       await pumpBubble(tester, msg(), isMine: true);
-      expect(bubbleDecoration(tester).color, AppColors.accentLight);
+      expect(bubbleDecoration(tester).color, AppColors.chatBubbleMine);
       expect(bubbleDecoration(tester).border, isNull);
       expect(outerPadding(tester).left, 40);
       expect(outerPadding(tester).right, 8);
