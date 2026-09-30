@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/reconnect_refresh.dart';
 import '../shared/chat_thread_screen.dart';
 
 class OwnerBookingRequestsScreen extends StatefulWidget {
@@ -15,7 +16,7 @@ class OwnerBookingRequestsScreen extends StatefulWidget {
 }
 
 class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, ReconnectRefresh<OwnerBookingRequestsScreen> {
   late TabController _tab;
   final _tabs = ['pending', 'confirmed', 'rejected'];
   final _lists = <String, List<Map<String, dynamic>>>{
@@ -32,6 +33,10 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
     _tab = TabController(length: 3, vsync: this);
     _loadAll();
   }
+
+  // Requests that arrived while offline surface the moment the socket returns.
+  @override
+  void onReconnect() => _loadAll();
 
   @override
   void dispose() {
