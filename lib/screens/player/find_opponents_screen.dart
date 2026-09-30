@@ -8,23 +8,29 @@ import '../../models/team.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/match_service.dart';
 import '../../services/team_service.dart';
+import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/discover_players_list.dart';
 import '../../widgets/match_widgets.dart';
 import '../../widgets/reco_widgets.dart';
 import 'create_team_screen.dart';
 import 'match_challenge_screen.dart';
 
-/// Opponent discovery (FR5.3 – FR5.5).
+/// Matchmaking discovery — two tabs behind one screen.
 ///
-/// The list is always *relative to one of my teams*, which is the change that
-/// makes it useful: closest rating first (FR5.3), a competitiveness score per row
-/// (FR5.4), and the opponent roster's trust badge (FR5.5) — none of which mean
-/// anything without a "my team" to compare against.
+/// **Opponents** is team-to-team (FR5.3 – FR5.5): the list is always *relative to
+/// one of my teams*, which is the change that makes it useful — closest rating first
+/// (FR5.3), a competitiveness score per row (FR5.4), and the opponent roster's trust
+/// badge (FR5.5), none of which mean anything without a "my team" to compare against.
+/// That is also why the sport chips are gone: sport is no longer a browsing filter
+/// but a property of the pairing — my football team can only play football teams, and
+/// the backend refuses a cross-sport challenge outright. Switching which team I am
+/// playing as is what switches the sport now, and it does so honestly. This tab keeps
+/// its own "create a team first" gate, since a challenge needs a team to send it.
 ///
-/// That is also why the sport chips are gone. Sport is no longer a browsing filter
-/// but a property of the pairing: my football team can only play football teams,
-/// and the backend refuses a cross-sport challenge outright. Switching which team
-/// I am playing as is what switches the sport now, and it does so honestly.
+/// **Players** (module 8c) is player-to-player and needs no team: any signed-in user
+/// can find real accounts and send a direct play request. It lives in
+/// [DiscoverPlayersList] so the team-gated chrome above stays out of its way.
 class FindOpponentsScreen extends StatefulWidget {
   /// Pre-selects the team to search on behalf of — passed when arriving from a
   /// team's Match Center, so the user does not re-pick what they just tapped.
@@ -36,10 +42,12 @@ class FindOpponentsScreen extends StatefulWidget {
   State<FindOpponentsScreen> createState() => _FindOpponentsScreenState();
 }
 
-class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
+class _FindOpponentsScreenState extends State<FindOpponentsScreen>
+    with ReconnectRefresh<FindOpponentsScreen>, SingleTickerProviderStateMixin {
   final _matches = MatchService();
   final _teams = TeamService();
   final _searchCtrl = TextEditingController();
+  late final TabController _tabs;
 
   String get _token => context.read<AuthProvider>().token ?? '';
 
@@ -55,13 +63,21 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
   @override
   void initState() {
     super.initState();
+    _tabs = TabController(length: 2, vsync: this);
     _teamId = widget.teamId;
     // A frame late so `context.read` is legal and the first paint is the spinner.
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
   }
 
+  // Recover a failed or never-completed first load once the socket returns.
+  @override
+  void onReconnect() {
+    if (_failed || _myTeams == null) _bootstrap();
+  }
+
   @override
   void dispose() {
+    _tabs.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -141,39 +157,66 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Find Opponents',
+          'Matchmaking',
           style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primary,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
+        bottom: TabBar(
+          controller: _tabs,
+          indicatorColor: AppColors.accent,
+          indicatorWeight: 3,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+          tabs: const [
+            Tab(text: 'Opponents'),
+            Tab(text: 'Players'),
+          ],
+        ),
       ),
-      body: _loadingTeams
-          ? const Center(child: CircularProgressIndicator())
-          : (_myTeams == null || _myTeams!.isEmpty)
-              ? MatchEmptyState(
-                  icon: Icons.groups_outlined,
-                  text:
-                      'Matchmaking works team-to-team.\n\nCreate or join a team first, then come back to find opponents at your level.',
-                  action: FilledButton.icon(
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Create a team'),
-                    onPressed: () async {
-                      await Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => const CreateTeamScreen()));
-                      if (mounted) _bootstrap();
-                    },
-                  ),
-                )
-              : Column(
-                  children: [
-                    _teamStrip(),
-                    _searchField(),
-                    if (_list.myTeam != null && !_list.canChallenge) _captainNotice(),
-                    Expanded(child: _body()),
-                  ],
-                ),
+      body: TabBarView(
+        controller: _tabs,
+        children: [
+          _opponentsTab(),
+          const DiscoverPlayersList(),
+        ],
+      ),
+    );
+  }
+
+  /// The team-to-team tab. Keeps its own "create a team first" gate: a challenge is
+  /// a team action, so with no team there is nothing this tab can do — the Players
+  /// tab beside it is the no-team path.
+  Widget _opponentsTab() {
+    if (_loadingTeams) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_myTeams == null || _myTeams!.isEmpty) {
+      return MatchEmptyState(
+        icon: Icons.groups_outlined,
+        text:
+            'Matchmaking works team-to-team.\n\nCreate or join a team first, then come back to find opponents at your level.',
+        action: FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
+          icon: const Icon(Icons.add),
+          label: const Text('Create a team'),
+          onPressed: () async {
+            await Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const CreateTeamScreen()));
+            if (mounted) _bootstrap();
+          },
+        ),
+      );
+    }
+    return Column(
+      children: [
+        _teamStrip(),
+        _searchField(),
+        if (_list.myTeam != null && !_list.canChallenge) _captainNotice(),
+        Expanded(child: _body()),
+      ],
     );
   }
 
