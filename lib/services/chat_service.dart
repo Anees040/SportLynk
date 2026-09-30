@@ -233,4 +233,16 @@ class ChatService {
         'muted': muted,
         'hours': ?hours,
       }, token: token);
+
+  /// Hide (clear) one room from my inbox, WhatsApp's "Delete chat". A per-member
+  /// view only: I stay in the channel and the room returns on the next message.
+  /// Passing `hidden: false` restores it. Returns the server's own state.
+  Future<Map<String, dynamic>> hideChannel(
+    String token,
+    String channelId, {
+    bool hidden = true,
+  }) =>
+      _api.post(ApiConstants.chatHide(channelId), {
+        'hidden': hidden,
+      }, token: token);
 }
