@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../constants/colors.dart';
 import '../../services/api_service.dart';
 import '../../utils/num_util.dart';
+import '../../utils/reconnect_refresh.dart';
 import '../../widgets/network_error_view.dart';
 import 'venue_detail_screen.dart';
 
@@ -13,7 +14,8 @@ class FindVenuesScreen extends StatefulWidget {
   State<FindVenuesScreen> createState() => _FindVenuesScreenState();
 }
 
-class _FindVenuesScreenState extends State<FindVenuesScreen> {
+class _FindVenuesScreenState extends State<FindVenuesScreen>
+    with ReconnectRefresh<FindVenuesScreen> {
   final _api = ApiClient();
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _venues = [];
@@ -47,6 +49,13 @@ class _FindVenuesScreenState extends State<FindVenuesScreen> {
     _searchCtrl.removeListener(_onSearch);
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  // Only refetch on reconnect when the last load actually failed; a spurious
+  // socket blip must not reset an active search or the filters mid-browse.
+  @override
+  void onReconnect() {
+    if (_error != null) _load();
   }
 
   String _lastSearch = '';
