@@ -8,6 +8,7 @@ import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/notification_bell.dart';
 import '../../services/review_service.dart';
+import '../../utils/reconnect_refresh.dart';
 import 'admin_registration_detail_screen.dart';
 import 'admin_moderation_screen.dart';
 import '../../services/admin_service.dart';
@@ -19,7 +20,7 @@ class AdminHomeScreen extends StatefulWidget {
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, ReconnectRefresh<AdminHomeScreen> {
   late TabController _tab;
   Map<String, dynamic>? _stats;
   List<Map<String, dynamic>> _pending = [];
@@ -54,6 +55,23 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     _loadVenues();
     _loadFlags();
     _loadDisputes();
+  }
+
+  // On reconnect refresh the desk tiles and whichever list the current tab shows,
+  // so an admin who was offline sees the real queue without a manual pull.
+  @override
+  void onReconnect() {
+    _loadStats();
+    _loadFlags();
+    _loadDisputes();
+    const statuses = ['pending', 'approved', 'rejected'];
+    if (_tab.index >= 1 && _tab.index <= 3) {
+      _loadList(statuses[_tab.index - 1]);
+    } else if (_tab.index == 4) {
+      _loadVenues();
+    } else {
+      _loadList('pending');
+    }
   }
 
   @override
@@ -210,7 +228,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // A back gesture off the Dashboard tab returns to it rather than closing the
+    // app; only a back press while already on Dashboard exits.
+    return PopScope(
+      canPop: _tab.index == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _tab.index != 0) _tab.animateTo(0);
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
@@ -293,6 +318,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
           _buildList('rejected'),
           _buildVenueList(),
         ],
+      ),
       ),
     );
   }
