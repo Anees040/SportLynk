@@ -130,18 +130,18 @@ void main() {
       expect(api.body(), {'phone': '+923001234567'});
     });
 
-    test('forgotPasswordReset proves the OTP with the Firebase uid', () async {
+    test('forgotPasswordReset proves the code the server sent, not a client uid', () async {
       api.ok(null);
       await api.run(() => service.forgotPasswordReset(
             phone: '+923001234567',
+            code: '123456',
             newPassword: 'newsecret',
-            firebaseUid: 'uid-3',
           ));
       expect(api.endpoint(), '/auth/forgot-password/reset');
       expect(api.body(), {
         'phone': '+923001234567',
+        'code': '123456',
         'newPassword': 'newsecret',
-        'firebaseUid': 'uid-3',
       });
     });
   });
