@@ -1,9 +1,10 @@
 // Scout, the in-app assistant, on its own screen. The screen builds an
 // `AssistantController` on mount (it needs `AuthProvider.token`, which `FakeAuth`
-// supplies) and calls `start()`, which reads the user's thread list and, if an open
-// thread exists, its most recent transcript. A single boot spinner covers that; the
-// screen then resolves to one of two shapes — the seed "Ask Scout" screen when the
-// account has no open chat, or the transcript when it does.
+// supplies) and calls `start()`. The default entry (no `threadId`) opens on a clean
+// slate rather than resuming the last chat, so it does not read the thread list and
+// lands directly on the seed "Ask Scout" screen (Issue 8a). A conversation reached
+// from the history list arrives as `threadId` and does load its transcript, behind a
+// single boot spinner.
 //
 // One behaviour is worth pinning because it is deliberate rather than accidental:
 // `AssistantService.threads` and `.history` both swallow a failed read (they return
@@ -84,10 +85,11 @@ Map<String, dynamic> historyData({String title = 'Booking help'}) => {
 /// empty list keeps that fetch quiet so it never repaints during a boot assertion.
 Map<String, dynamic> capabilitiesData() => {'capabilities': const []};
 
-Future<RouteLog> pumpAssistant(WidgetTester tester, {double textScale = 1.0}) {
+Future<RouteLog> pumpAssistant(WidgetTester tester,
+    {double textScale = 1.0, String? threadId}) {
   return pumpScreen(
     tester,
-    const AssistantScreen(),
+    AssistantScreen(threadId: threadId),
     auth: FakeAuth(
         role: 'player', id: 'u-1', name: 'Bilal Ahmed', token: 'test-token'),
     textScale: textScale,
@@ -116,16 +118,21 @@ void main() {
   });
 
   group('the assistant as it boots', () {
-    testWidgets('a spinner stands while the boot read is in flight',
+    testWidgets('the default entry opens a fresh chat, not the last one',
         (tester) async {
-      api.ok(kThreads, threadsData(), delay: const Duration(milliseconds: 300));
+      // A prior open chat exists, but the default entry never resumes it: Scout
+      // opens on a clean slate, so the thread transcript is not read on boot.
+      api.ok(kThreads, threadsData(threads: [threadRow()]));
+      api.ok(kHistory, historyData());
       await pumpAssistant(tester);
+      await settleBoot(tester);
 
-      expectLoading(tester);
-
-      await settleData(tester, step: const Duration(milliseconds: 400));
-      await settleData(tester);
-      expect(find.text('Ask Scout'), findsOneWidget); // the seed heading
+      expect(find.text('Ask Scout'), findsOneWidget); // the seed heading, a fresh chat
+      expect(find.text('Booking help'), findsNothing); // the prior thread was not resumed
+      expect(
+        api.requests.where((r) => r.uri.path.endsWith('/messages')),
+        isEmpty,
+      );
     });
 
     testWidgets('an empty account opens to the seed screen', (tester) async {
@@ -152,10 +159,13 @@ void main() {
   });
 
   group('a prior conversation', () {
-    testWidgets('loads its transcript and titles the bar', (tester) async {
+    testWidgets('reached from history, loads its transcript and titles the bar',
+        (tester) async {
+      // A specific thread reached from the history list still opens directly:
+      // its id arrives as `threadId`, so `start(loadHistory: true)` loads it.
       api.ok(kThreads, threadsData(threads: [threadRow()]));
       api.ok(kHistory, historyData());
-      await pumpAssistant(tester);
+      await pumpAssistant(tester, threadId: 'th-1');
       await settleBoot(tester);
 
       expect(find.text('Booking help'), findsOneWidget); // title from the thread
