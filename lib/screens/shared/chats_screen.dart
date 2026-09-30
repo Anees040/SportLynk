@@ -10,17 +10,18 @@ import '../../models/chat_channel.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/chat_service.dart';
 import '../../services/realtime_service.dart';
+import '../../services/team_service.dart';
 import 'chat_thread_screen.dart';
 
-/// The inbox — every room this person is in, newest first, in three sections.
+/// The inbox — every room this person is in, newest first, grouped in sections.
 ///
 /// Why SECTIONS and not one flat list
-/// A booking room, a match coordination room and a team room are read for
-/// different reasons: one is a transaction in progress, one is a fixture tonight,
-/// one is a group of friends. Sorting them together by recency buries the booking
-/// a player is waiting on under team banter. The server still returns one recency-
-/// ordered page — the grouping is presentational, and paging works on the page,
-/// not on a section.
+/// A booking room, a match coordination room, a team room and a direct message are
+/// read for different reasons: one is a transaction in progress, one is a fixture
+/// tonight, one is a group of friends, one is a player who accepted a request to
+/// play. Sorting them together by recency buries the booking a player is waiting on
+/// under team banter. The server still returns one recency-ordered page — the
+/// grouping is presentational, and paging works on the page, not on a section.
 ///
 /// Scout is not here. The assistant has its own screen and its own entry point;
 /// the server excludes `type = 'assistant'` from this list, so there is nothing to
@@ -37,10 +38,12 @@ class _ChatsScreenState extends State<ChatsScreen> {
     ChatChannelType.booking,
     ChatChannelType.captain,
     ChatChannelType.team,
+    ChatChannelType.direct,
   ];
 
   final _scroll = ScrollController();
   final _chat = ChatService();
+  final _team = TeamService();
 
   late String _token;
   late String _myId;
@@ -173,6 +176,275 @@ class _ChatsScreenState extends State<ChatsScreen> {
     if (mounted) await _load();
   }
 
+  /// The WhatsApp-style long-press sheet: the actions that belong to a whole room
+  /// rather than to a message. Mute lives here, not in the thread's overflow menu,
+  /// so a room can be silenced without opening it.
+  void _showActions(ChatChannel c) {
+    final isTeam = c.type == ChatChannelType.team;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.cardBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      c.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.divider),
+            if (c.unread > 0)
+              _actionTile(
+                icon: Icons.mark_chat_read_outlined,
+                label: 'Mark as read',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _markRead(c);
+                },
+              ),
+            _actionTile(
+              icon: c.muted
+                  ? Icons.notifications_active_outlined
+                  : Icons.notifications_off_outlined,
+              label: c.muted ? 'Unmute' : 'Mute notifications',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                if (c.muted) {
+                  _setMuted(c, muted: false);
+                } else {
+                  _pickMuteInterval(c);
+                }
+              },
+            ),
+            if (isTeam)
+              _actionTile(
+                icon: Icons.logout,
+                label: 'Leave team',
+                danger: true,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _confirmLeave(c);
+                },
+              ),
+            _actionTile(
+              icon: Icons.delete_outline,
+              label: 'Delete chat',
+              danger: true,
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _confirmDelete(c);
+              },
+            ),
+            const SizedBox(height: 4),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _actionTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool danger = false,
+  }) {
+    final color = danger ? AppColors.error : AppColors.textPrimary;
+    return ListTile(
+      leading: Icon(icon, color: color, size: 22),
+      title: Text(
+        label,
+        style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: color),
+      ),
+      onTap: onTap,
+    );
+  }
+
+  Future<void> _markRead(ChatChannel c) async {
+    final i = _items.indexWhere((x) => x.id == c.id);
+    if (i >= 0) setState(() => _items[i] = _items[i].copyWith(unread: 0));
+    await _chat.markRead(_token, c.id);
+  }
+
+  /// Offer the three WhatsApp mute windows. "Always" is a year, the server's cap,
+  /// so it reads as permanent without a separate never-expires code path.
+  void _pickMuteInterval(ChatChannel c) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.cardBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Mute for',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.divider),
+            _actionTile(
+              icon: Icons.schedule,
+              label: '8 hours',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _setMuted(c, muted: true, hours: 8);
+              },
+            ),
+            _actionTile(
+              icon: Icons.today_outlined,
+              label: '1 day',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _setMuted(c, muted: true, hours: 24);
+              },
+            ),
+            _actionTile(
+              icon: Icons.all_inclusive,
+              label: 'Always',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _setMuted(c, muted: true, hours: 24 * 365);
+              },
+            ),
+            const SizedBox(height: 4),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _setMuted(ChatChannel c, {required bool muted, int? hours}) async {
+    final r = await _chat.mute(_token, c.id, muted: muted, hours: hours);
+    if (!mounted) return;
+    if (r['success'] != true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update mute. Try again when connected.')),
+      );
+      return;
+    }
+    // Read the muted state back from the server rather than assuming it — the
+    // server owns the "muted" definition (and clears mutedUntil on unmute).
+    final data = r['data'] is Map ? Map<String, dynamic>.from(r['data'] as Map) : const {};
+    final nowMuted = data['muted'] == true ? true : (data['muted'] == false ? false : muted);
+    final until = data['mutedUntil'] == null
+        ? null
+        : DateTime.tryParse('${data['mutedUntil']}')?.toLocal();
+    final i = _items.indexWhere((x) => x.id == c.id);
+    if (i >= 0) {
+      setState(() => _items[i] = _items[i].copyWith(
+            muted: nowMuted,
+            mutedUntil: until,
+          ));
+    }
+  }
+
+  Future<void> _confirmLeave(ChatChannel c) async {
+    final teamId = c.refId;
+    if (teamId == null || teamId.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text('Leave team?'),
+        content: Text(
+          'You will stop receiving messages from ${c.title} and be removed from '
+          'its roster. You can be added again by a captain.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final r = await _team.leave(_token, teamId);
+    if (!mounted) return;
+    if (r['success'] == true) {
+      setState(() => _items.removeWhere((x) => x.id == c.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You left ${c.title}.')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${r['message'] ?? 'Could not leave the team.'}')),
+      );
+    }
+  }
+
+  /// Clear a conversation from this inbox. WhatsApp's "Delete chat": the room drops
+  /// off the list and returns on the next message; it is not a leave, so the copy
+  /// says so plainly rather than implying the team was left.
+  Future<void> _confirmDelete(ChatChannel c) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text('Delete chat?'),
+        content: Text(
+          'This clears ${c.title} from your chats. You stay in the conversation, '
+          'and it returns here when a new message arrives.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final r = await _chat.hideChannel(_token, c.id);
+    if (!mounted) return;
+    if (r['success'] == true) {
+      setState(() => _items.removeWhere((x) => x.id == c.id));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not delete the chat. Try again when connected.')),
+      );
+    }
+  }
+
   /// The page, flattened once per build: a section heading followed by its rows,
   /// and a section with nothing in it is not rendered at all (an empty "Matches"
   /// heading is furniture, not information).
@@ -258,6 +530,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                         channel: row as ChatChannel,
                         myUserId: _myId,
                         onTap: () => _open(row),
+                        onLongPress: () => _showActions(row),
                       );
                     },
                   ),
@@ -347,17 +620,20 @@ class _ChatRow extends StatelessWidget {
   final ChatChannel channel;
   final String myUserId;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   const _ChatRow({
     required this.channel,
     required this.myUserId,
     required this.onTap,
+    required this.onLongPress,
   });
 
   IconData get _fallbackIcon => switch (channel.type) {
         ChatChannelType.booking => Icons.stadium_outlined,
         ChatChannelType.captain => Icons.sports_kabaddi,
         ChatChannelType.team => Icons.groups,
+        ChatChannelType.direct => Icons.person_outline,
         ChatChannelType.unknown => Icons.chat_bubble_outline,
       };
 
@@ -392,6 +668,7 @@ class _ChatRow extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         decoration: const BoxDecoration(
