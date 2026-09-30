@@ -47,13 +47,13 @@ class AuthService {
 
   Future<Map<String, dynamic>> forgotPasswordReset({
     required String phone,
+    required String code,
     required String newPassword,
-    required String firebaseUid,
   }) async {
     return _api.post(ApiConstants.forgotPasswordReset, {
       'phone': phone,
+      'code': code,
       'newPassword': newPassword,
-      'firebaseUid': firebaseUid,
     });
   }
 
