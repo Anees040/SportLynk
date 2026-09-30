@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/chat_message.dart';
 import '../services/chat_service.dart';
@@ -61,12 +63,29 @@ class ChatController extends ChangeNotifier {
   /// uploading; their upload result is dropped when it eventually returns.
   final Set<String> _canceled = {};
 
+  /// Sends composed while the socket was down, held in arrival order and drained
+  /// by [_flushOutbox] on reconnect. Each carries the clientId the optimistic
+  /// bubble already shows, so a flush reuses that idempotency key rather than
+  /// duplicating a row the server may have accepted before the drop.
+  final List<_Queued> _outbox = [];
+  bool _flushing = false;
+
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _connected = false;
   String? _error;
   int _sendCounter = 0;
+
+  /// The visible "Connecting…" state, held back behind a short grace so a brief
+  /// blip does not flash the bar. Distinct from [_connected], which flips at once
+  /// because read-marking and the outbox key off the true socket state.
+  bool _showConnecting = false;
+  Timer? _connectingTimer;
+
+  /// Debounces cache writes: the timeline rebuilds on nearly every event, but the
+  /// cache only needs the settled result a moment later.
+  Timer? _persistTimer;
 
   // Public view
   List<ChatMessage> get messages => _ordered;
@@ -76,6 +95,10 @@ class ChatController extends ChangeNotifier {
   bool get loading => _loading;
   bool get hasMore => _hasMore;
   bool get connected => _connected;
+
+  /// Whether to show the "Connecting…" bar: only once we have been offline past
+  /// the grace, so a momentary reconnect stays silent.
+  bool get reconnecting => _showConnecting;
   String? get error => _error;
   int get memberCount => _members.length;
 
@@ -111,12 +134,18 @@ class ChatController extends ChangeNotifier {
 
   // Init & teardown
   Future<void> _init() async {
+    // Show the last cached page immediately so a reopened room — cold or offline
+    // — is never a blank screen while the network resolves. The REST load below
+    // upserts over this by id, so nothing double-renders.
+    await _hydrateFromCache();
+
     _rt.ensureConnected(token);
     // Seed from the socket's current state. The connection stream is a broadcast
     // with no replay, so a chat opened after the socket already connected (the
     // common case — it connects at login) would otherwise never receive an
     // onConnect event and would sit on "Connecting…" forever despite being live.
     _connected = _rt.isConnected;
+    if (!_connected) _scheduleConnectingBar();
     _subs.add(_rt.messages.listen(_onMessage));
     _subs.add(_rt.receipts.listen(_onReceipt));
     _subs.add(_rt.typing.listen(_onTyping));
@@ -125,9 +154,80 @@ class ChatController extends ChangeNotifier {
     _subs.add(_rt.connection.listen(_onConnection));
 
     _rt.joinChannel(channelId);
+    // A cold open can rehydrate a pending send from a prior offline session while
+    // the socket is already up (it connects at login, before this listener). No
+    // up-edge will fire in that case, so drain the outbox once here.
+    if (_connected) _flushOutbox();
     await _loadMembers();
     await _loadInitial();
     await _loadPinned();
+  }
+
+  // Local cache — a single per-channel key holding the newest page as JSON, so a
+  // reopened room shows history before the socket or REST resolves.
+  String get _cacheKey => 'chat_cache_$channelId';
+  static const int _cacheLimit = 40;
+
+  Future<void> _hydrateFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cacheKey);
+      if (raw == null || raw.isEmpty) return;
+      final list = (jsonDecode(raw) as List).whereType<Map>();
+      for (final j in list) {
+        final m = ChatMessage.fromJson(Map<String, dynamic>.from(j));
+        _byId.putIfAbsent(m.id, () => m);
+        // A cached-pending send from a previous session is re-queued so it flushes
+        // on reconnect; text and any still-present local media can resume, while a
+        // send whose source is gone is surfaced as failed rather than a stuck clock.
+        if (m.pending) _requeueFromCache(m);
+      }
+      if (_byId.isNotEmpty) {
+        _loading = false;
+        _rebuild();
+      }
+    } catch (_) {
+      // A corrupt or version-skewed cache is discarded silently: it is only an
+      // optimisation, and the REST load is the source of truth.
+    }
+  }
+
+  void _requeueFromCache(ChatMessage m) {
+    final cid = m.clientId;
+    if (cid == null) return;
+    switch (m.kind) {
+      case MessageKind.text:
+        _enqueue(cid, () => _doSendText(cid, m.body ?? '', m.replyToId, m.mentions));
+      case MessageKind.image when m.localPath != null:
+        _enqueue(cid, () => _uploadAndSendImage(cid, m.localPath!, m.mediaMime,
+            m.mediaW.toInt(), m.mediaH.toInt(), m.body, m.replyToId));
+      case MessageKind.audio when m.localPath != null:
+        _enqueue(cid, () => _uploadAndSendAudio(
+            cid, m.localPath!, m.mediaMime, m.durationMs.toInt(), m.replyToId));
+      default:
+        _byId[m.id] = m.copyWith(pending: false, failed: true);
+    }
+  }
+
+  void _persistSoon() {
+    _persistTimer?.cancel();
+    _persistTimer = Timer(const Duration(milliseconds: 500), _persistCache);
+  }
+
+  Future<void> _persistCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Newest page only; a pending tail is always kept so a queued send survives
+      // a restart even when it sits beyond the newest window.
+      final tail = _ordered.length <= _cacheLimit
+          ? _ordered
+          : _ordered.sublist(_ordered.length - _cacheLimit);
+      final pending = _ordered.where((m) => m.pending && !tail.contains(m));
+      final keep = [...tail, ...pending];
+      await prefs.setString(_cacheKey, jsonEncode(keep.map((m) => m.toJson()).toList()));
+    } catch (_) {
+      // Best-effort; a failed write only costs the next cold open its instant page.
+    }
   }
 
   Future<void> _loadMembers() async {
@@ -185,6 +285,13 @@ class ChatController extends ChangeNotifier {
     for (final t in _typingTimers.values) {
       t.cancel();
     }
+    _connectingTimer?.cancel();
+    // Flush any debounced cache write immediately so the newest page is not lost
+    // when the room is closed within the debounce window.
+    if (_persistTimer?.isActive ?? false) {
+      _persistTimer!.cancel();
+      _persistCache();
+    }
     _rt.leaveChannel(channelId);
     super.dispose();
   }
@@ -216,6 +323,19 @@ class ChatController extends ChangeNotifier {
       pending: true,
     ));
 
+    // Offline: hold the send as a pending bubble and queue it for the reconnect
+    // flush. A send attempted while connected that then fails still falls through
+    // to the red retry state via [_reconcile] — the queue is only for the offline
+    // compose, not for masking genuine failures.
+    if (!_connected) {
+      _enqueue(clientId, () => _doSendText(clientId, body, replyToId, mentions));
+      return;
+    }
+    await _doSendText(clientId, body, replyToId, mentions);
+  }
+
+  Future<void> _doSendText(String clientId, String body, String? replyToId,
+      List<String> mentions) async {
     final r = await _chat.sendText(
       token,
       channelId,
@@ -302,6 +422,18 @@ class ChatController extends ChangeNotifier {
       pending: true,
     ));
 
+    // Offline: the upload cannot proceed, so hold the bubble pending and defer the
+    // whole upload-and-send to the reconnect flush rather than failing it red.
+    if (!_connected) {
+      _enqueue(clientId,
+          () => _uploadAndSendImage(clientId, localPath, mediaMime, mediaW ?? 0, mediaH ?? 0, caption, replyToId));
+      return;
+    }
+    await _uploadAndSendImage(clientId, localPath, mediaMime, mediaW ?? 0, mediaH ?? 0, caption, replyToId);
+  }
+
+  Future<void> _uploadAndSendImage(String clientId, String localPath,
+      String? mediaMime, int mediaW, int mediaH, String? caption, String? replyToId) async {
     final url = await CloudinaryService().uploadImage(localPath, folder: 'chat');
     if (_canceled.remove(clientId)) return; // cancelled during upload
 
@@ -356,6 +488,18 @@ class ChatController extends ChangeNotifier {
       pending: true,
     ));
 
+    // Offline: defer the upload-and-send to the reconnect flush rather than
+    // failing it red, mirroring the image path.
+    if (!_connected) {
+      _enqueue(clientId,
+          () => _uploadAndSendAudio(clientId, localPath, mediaMime, durationMs, replyToId));
+      return;
+    }
+    await _uploadAndSendAudio(clientId, localPath, mediaMime, durationMs, replyToId);
+  }
+
+  Future<void> _uploadAndSendAudio(String clientId, String localPath,
+      String? mediaMime, int durationMs, String? replyToId) async {
     final url = await CloudinaryService().uploadAudio(localPath, folder: 'chat_audio');
     if (_canceled.remove(clientId)) return; // cancelled during upload
 
@@ -596,12 +740,53 @@ class ChatController extends ChangeNotifier {
   void _onConnection(bool up) {
     _connected = up;
     if (up) {
-      // Reconnected: re-enter the room, then refresh members and the latest page
-      // so anything missed while offline is folded in (upsert dedupes overlaps).
+      // Reconnected: clear the grace, drain anything composed while offline, then
+      // refresh members and the latest page so what was missed is folded in
+      // (upsert dedupes overlaps, and the flush reuses each clientId).
+      _connectingTimer?.cancel();
+      _showConnecting = false;
       _rt.joinChannel(channelId);
+      _flushOutbox();
       _resync();
+    } else {
+      _scheduleConnectingBar();
     }
     notifyListeners();
+  }
+
+  /// Reveal the "Connecting…" bar only after a short grace, so a momentary drop
+  /// or the sliver of offline time at a cold open does not flash it.
+  void _scheduleConnectingBar() {
+    _connectingTimer?.cancel();
+    _connectingTimer = Timer(const Duration(seconds: 3), () {
+      if (!_connected) {
+        _showConnecting = true;
+        notifyListeners();
+      }
+    });
+  }
+
+  void _enqueue(String clientId, Future<void> Function() send) {
+    _outbox.removeWhere((q) => q.clientId == clientId); // collapse a re-queue
+    _outbox.add(_Queued(clientId, send));
+  }
+
+  /// Drain the offline outbox in arrival order once the socket is back. Each send
+  /// carries its original clientId, so a message the server accepted just before
+  /// the drop is deduped rather than doubled.
+  Future<void> _flushOutbox() async {
+    if (_flushing || _outbox.isEmpty) return;
+    _flushing = true;
+    final queued = List<_Queued>.from(_outbox);
+    _outbox.clear();
+    for (final q in queued) {
+      if (!_connected) {
+        _outbox.add(q); // dropped again mid-flush; hold for the next reconnect
+        continue;
+      }
+      await q.send();
+    }
+    _flushing = false;
   }
 
   Future<void> _resync() async {
@@ -666,8 +851,18 @@ class ChatController extends ChangeNotifier {
       });
     _ordered = list;
     notifyListeners();
+    _persistSoon();
   }
 
   static final DateTime _epoch = DateTime.fromMillisecondsSinceEpoch(0);
   static final DateTime _farFuture = DateTime.fromMillisecondsSinceEpoch(99999999999999);
+}
+
+/// A send held back while the socket is down. [clientId] is the idempotency key
+/// the optimistic bubble already carries; [send] performs the real network call
+/// when the reconnect flush runs it.
+class _Queued {
+  _Queued(this.clientId, this.send);
+  final String clientId;
+  final Future<void> Function() send;
 }
