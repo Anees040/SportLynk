@@ -10,6 +10,7 @@ import '../../models/tournament.dart' show TeamTournamentRecord;
 import '../../providers/auth_provider.dart';
 import '../../services/realtime_service.dart';
 import '../../services/team_service.dart';
+import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/tournament_widgets.dart' show TeamRecordLine;
 import '../shared/chat_thread_screen.dart';
@@ -27,7 +28,8 @@ class TeamsScreen extends StatefulWidget {
   State<TeamsScreen> createState() => _TeamsScreenState();
 }
 
-class _TeamsScreenState extends State<TeamsScreen> {
+class _TeamsScreenState extends State<TeamsScreen>
+    with ReconnectRefresh<TeamsScreen> {
   final _service = TeamService();
   late Future<List<Team>> _future;
   StreamSubscription? _sub;
@@ -49,6 +51,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
       if (mounted) _reload();
     });
   }
+
+  // The list I missed while offline fills itself in the moment the socket returns.
+  @override
+  void onReconnect() => _reload();
 
   @override
   void dispose() {
