@@ -12,6 +12,7 @@ import '../../services/chat_service.dart';
 import '../../services/match_service.dart';
 import '../../services/pricing_service.dart';
 import '../../services/realtime_service.dart';
+import '../../utils/reconnect_refresh.dart';
 import '../../widgets/apply_price_sheet.dart';
 import '../../widgets/header_actions.dart';
 import '../../widgets/notification_bell.dart';
@@ -30,7 +31,8 @@ class OwnerHomeScreen extends StatefulWidget {
   State<OwnerHomeScreen> createState() => _OwnerHomeScreenState();
 }
 
-class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
+class _OwnerHomeScreenState extends State<OwnerHomeScreen>
+    with ReconnectRefresh<OwnerHomeScreen> {
   int _tab = 0;
   Map<String, dynamic>? _data;
   bool _loading = true;
@@ -82,6 +84,15 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
     _badgeDebounce?.cancel();
     _msgSub?.cancel();
     super.dispose();
+  }
+
+  // Recover a dashboard that failed to load while offline, and re-read the chat
+  // badge for anything that arrived during the outage. A dashboard already loaded
+  // is left alone so a transient socket blip cannot blank the revenue figures.
+  @override
+  void onReconnect() {
+    if (_data == null) _refreshAll();
+    _loadChatBadge();
   }
 
   /// The badge is re-read on activity rather than counted up here: the server is what
@@ -198,16 +209,24 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: IndexedStack(index: _tab, children: [
-        _dashboardTab(),
-        const OwnerBookingRequestsScreen(),
-        const OwnerSlotCalendarScreen(),
-        const OwnerMyVenuesScreen(),   // multi-venue list
-        const OwnerProfileScreen(),
-      ]),
-      bottomNavigationBar: _buildNav(),
+    // A back gesture off the Dashboard tab returns to it rather than closing the
+    // app; only a back press while already on Dashboard exits.
+    return PopScope(
+      canPop: _tab == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _tab != 0) setState(() => _tab = 0);
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: IndexedStack(index: _tab, children: [
+          _dashboardTab(),
+          const OwnerBookingRequestsScreen(),
+          const OwnerSlotCalendarScreen(),
+          const OwnerMyVenuesScreen(),   // multi-venue list
+          const OwnerProfileScreen(),
+        ]),
+        bottomNavigationBar: _buildNav(),
+      ),
     );
   }
 
