@@ -1,16 +1,16 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import '../../constants/api_constants.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
 import '../../widgets/custom_button.dart';
+import '../../widgets/network_error_view.dart';
 import '../../services/cloudinary_service.dart';
 import 'trust_score_screen.dart';
+import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
 import 'help_support_screen.dart';
 
@@ -20,10 +20,17 @@ class PlayerProfileScreen extends StatefulWidget {
   State<PlayerProfileScreen> createState() => _PlayerProfileScreenState();
 }
 
-class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
+class _PlayerProfileScreenState extends State<PlayerProfileScreen>
+    with ReconnectRefresh<PlayerProfileScreen> {
+  final _api = ApiClient();
+
   Map<String, dynamic>? _profile;
   bool _loading = true, _saving = false;
   bool _isEditing = false;
+  // The human-readable reason the last load failed, or null when it succeeded.
+  // A non-null error with no cached profile is what drives the retry view — the
+  // screen never invents stats to fill the gap.
+  String? _error;
 
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
@@ -37,6 +44,13 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
     _load();
   }
 
+  // Fill in the moment connectivity returns, but only when the first load never
+  // succeeded — a loaded profile already refreshes through AuthProvider.
+  @override
+  void onReconnect() {
+    if (_profile == null) _load();
+  }
+
   @override
   void dispose() {
     _nameCtrl.dispose();
@@ -46,63 +60,41 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
 
   Future<void> _load() async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
-    try {
-      final token = auth.token;
-      if (token == null) {
-        _setFromAuth(auth);
-        return;
+    final token = auth.token;
+    if (token == null || token.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Your session has expired. Please log in again.';
+        });
       }
-      final resp = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/users/me/player'),
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 8));
-
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body);
-        if (mounted && data['success'] == true) {
-          final d = data['data'] as Map<String, dynamic>;
-          setState(() {
-            _profile = d;
-            _nameCtrl.text = d['name'] ?? '';
-            _emailCtrl.text = d['email'] ?? '';
-            final prefs = d['sport_preferences'];
-            if (prefs is List) {
-              _sports = prefs.map((e) => e.toString()).where((s) => _allowedSports.contains(s)).toList();
-            } else {
-              _sports = [];
-            }
-            _loading = false;
-          });
-          return;
-        }
-      }
-      _setFromAuth(auth);
-    } catch (e) {
-      debugPrint('Profile load error: $e');
-      _setFromAuth(auth);
+      return;
     }
-  }
-
-  void _setFromAuth(AuthProvider auth) {
+    if (mounted && _profile == null) setState(() => _loading = true);
+    // ApiClient owns the cold/warm timeout and never throws: a slow or absent
+    // server comes back as {success: false, message: <sentence>}, which becomes
+    // the retry view rather than a fabricated set of stats.
+    final resp = await _api.get('/users/me/player', token: token);
     if (!mounted) return;
-    final user = auth.currentUser;
-    setState(() {
-      _profile = {
-        'name': user?.name ?? 'Player',
-        'email': user?.email,
-        'phone': user?.phone ?? '',
-        'avatar_url': user?.avatarUrl,
-        'created_at': DateTime.now().toIso8601String(),
-        'elo_rating': 1000,
-        'trust_score': 100,
-        'balance': 0,
-        'sport_preferences': [],
-      };
-      _nameCtrl.text = _profile!['name'] ?? '';
-      _emailCtrl.text = _profile!['email'] ?? '';
-      _sports = [];
-      _loading = false;
-    });
+    if (resp['success'] == true && resp['data'] is Map) {
+      final d = Map<String, dynamic>.from(resp['data'] as Map);
+      setState(() {
+        _profile = d;
+        _error = null;
+        _nameCtrl.text = d['name'] ?? '';
+        _emailCtrl.text = d['email'] ?? '';
+        final prefs = d['sport_preferences'];
+        _sports = prefs is List
+            ? prefs.map((e) => e.toString()).where((s) => _allowedSports.contains(s)).toList()
+            : [];
+        _loading = false;
+      });
+    } else {
+      setState(() {
+        _loading = false;
+        _error = '${resp['message'] ?? 'Could not load your profile.'}';
+      });
+    }
   }
 
   Future<void> _pickAvatar() async {
@@ -134,40 +126,29 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
       return;
     }
     setState(() => _saving = true);
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final body = {
-        'name': _nameCtrl.text.trim(),
-        'email': _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
-        'sportPreferences': _sports,
-      };
-      if (avatarUrl != null) {
-        body['avatarUrl'] = avatarUrl;
-      }
+    final token = Provider.of<AuthProvider>(context, listen: false).token!;
+    final body = <String, dynamic>{
+      'name': _nameCtrl.text.trim(),
+      'email': _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
+      'sportPreferences': _sports,
+    };
+    if (avatarUrl != null) body['avatarUrl'] = avatarUrl;
 
-      final resp = await http.patch(
-        Uri.parse('${ApiConstants.baseUrl}/users/me/update'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 8));
-
-      final data = jsonDecode(resp.body);
-      if (mounted) {
-        setState(() => _saving = false);
-        if (data['success'] == true) {
-          Provider.of<AuthProvider>(context, listen: false)
-            .updateLocalUser(data['data'] as Map<String, dynamic>);
-          setState(() {
-            _profile = {...?_profile, ...data['data'] as Map<String, dynamic>};
-            _isEditing = false;
-          });
-          _snack('Profile updated successfully!', AppColors.success);
-        } else {
-          _snack(data['message'] ?? 'Update failed', AppColors.error);
-        }
-      }
-    } catch (e) {
-      if (mounted) { setState(() => _saving = false); _snack('Error: $e', AppColors.error); }
+    final data = await _api.patch('/users/me/update', body, token: token);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (data['success'] == true && data['data'] is Map) {
+      final updated = Map<String, dynamic>.from(data['data'] as Map);
+      Provider.of<AuthProvider>(context, listen: false).updateLocalUser(updated);
+      setState(() {
+        _profile = {...?_profile, ...updated};
+        _isEditing = false;
+      });
+      _snack('Profile updated successfully!', AppColors.success);
+    } else {
+      // ApiClient's message is already phrased for the user (offline, timeout, or
+      // the server's own validation text) — surface it as-is rather than a red block.
+      _snack('${data['message'] ?? 'Update failed'}', AppColors.error);
     }
   }
 
@@ -225,25 +206,48 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
     }
   }
 
+  /// The bare title bar used by the error state, which has no profile to edit.
+  AppBar _appBar() => AppBar(
+        title: Text('My Profile', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.textPrimary,
+      );
+
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    // Watch, not read: when `_refreshProfile` populates the full identity
+    // (name/email/avatar) after the app opened on the JWT alone, this rebuilds
+    // with the real values instead of waiting for a manual pull.
+    final auth = context.watch<AuthProvider>();
+
+    if (_loading && _profile == null) {
       return const Center(child: CircularProgressIndicator(color: AppColors.accent));
     }
     if (_profile == null) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.error_outline, color: AppColors.error, size: 48),
-        const SizedBox(height: 12),
-        Text('Could not load profile',
-          style: GoogleFonts.poppins(color: AppColors.textSecondary)),
-        const SizedBox(height: 12),
-        TextButton(onPressed: () { setState(() => _loading = true); _load(); },
-          child: Text('Retry', style: GoogleFonts.poppins(color: AppColors.accent))),
-      ]));
+      // No stats to show and the fetch failed: the mandated retry state, never
+      // invented numbers standing in for a profile that did not load.
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: _appBar(),
+        body: RefreshIndicator(
+          color: AppColors.accent,
+          onRefresh: _load,
+          child: NetworkErrorView(
+            title: 'Could not load profile',
+            message: _error ?? 'Please try again.',
+            onRetry: _load,
+          ),
+        ),
+      );
     }
 
-    final avatarUrl = _profile!['avatar_url'] as String?;
-    final name = _profile!['name'] ?? 'Player';
+    // Profile-first, identity from the provider as the fallback — so a field the
+    // player endpoint omits still shows the value already known from the session.
+    final user = auth.currentUser;
+    final avatarUrl = (_profile!['avatar_url'] as String?) ?? user?.avatarUrl;
+    final name = '${_profile!['name'] ?? user?.name ?? 'Player'}';
+    final email = (_profile!['email'] as String?) ?? user?.email;
     final initial = name.isNotEmpty ? name[0].toUpperCase() : 'P';
     final joinedDate = _formatDate(_profile!['created_at']);
 
@@ -283,9 +287,12 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        child: Column(children: [
+      body: RefreshIndicator(
+        color: AppColors.accent,
+        onRefresh: _load,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(children: [
           Container(
             color: Colors.white,
             width: double.infinity,
@@ -318,7 +325,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
                 if (!_isEditing) ...[
                   Text(name, style: GoogleFonts.poppins(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text(_profile!['email'] ?? 'No email linked', style: GoogleFonts.poppins(color: AppColors.textSecondary, fontSize: 14)),
+                  Text(email ?? 'No email linked', style: GoogleFonts.poppins(color: AppColors.textSecondary, fontSize: 14)),
                   const SizedBox(height: 4),
                   Text('Joined $joinedDate', style: GoogleFonts.poppins(color: AppColors.textSecondary, fontSize: 12)),
                 ] else ...[
@@ -425,7 +432,8 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
             ),
             const SizedBox(height: 40),
           ]
-        ]),
+          ]),
+        ),
       ),
     );
   }
@@ -552,43 +560,35 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
     }
 
     setState(() => _saving = true);
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final resp = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/users/me/change-password'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({'currentPassword': cur, 'newPassword': newP}),
-      ).timeout(const Duration(seconds: 8));
-
-      final data = jsonDecode(resp.body);
-      if (mounted) {
-        setState(() => _saving = false);
-        if (data['success'] == true) {
-          // Pop the sheet first
-          Navigator.pop(context);
-          // Then show success snackbar on the parent scaffold
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Row(children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 16),
-                const SizedBox(width: 8),
-                Text('Password changed successfully!',
-                    style: GoogleFonts.poppins(color: Colors.white, fontSize: 13)),
-              ]),
-              backgroundColor: AppColors.accent,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              margin: const EdgeInsets.all(16),
-            ));
-          });
-        } else {
-          _showError(data['message'] ?? 'Failed to change password');
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() { _saving = false; _errorMsg = 'Network error. Check your connection.'; });
-      }
+    final token = Provider.of<AuthProvider>(context, listen: false).token!;
+    final data = await ApiClient().post(
+      '/users/me/change-password',
+      {'currentPassword': cur, 'newPassword': newP},
+      token: token,
+    );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (data['success'] == true) {
+      // Pop the sheet first
+      Navigator.pop(context);
+      // Then show success snackbar on the parent scaffold
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Row(children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Text('Password changed successfully!',
+                style: GoogleFonts.poppins(color: Colors.white, fontSize: 13)),
+          ]),
+          backgroundColor: AppColors.accent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(16),
+        ));
+      });
+    } else {
+      // ApiClient's message already reads for a user offline or on a bad password.
+      _showError('${data['message'] ?? 'Failed to change password'}');
     }
   }
 
