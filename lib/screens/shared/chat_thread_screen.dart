@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'camera_capture_screen.dart';
 import 'chat_media_screen.dart';
 import 'image_caption_screen.dart';
 import 'package:provider/provider.dart';
@@ -16,7 +17,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/chat_controller.dart';
 import '../../services/chat_service.dart';
 import '../../utils/snackbar_util.dart';
-import '../../widgets/chat/attachment_sheet.dart';
+import '../../widgets/chat/chat_background.dart';
 import '../../widgets/chat/chat_composer.dart';
 import '../../widgets/chat/date_separator.dart';
 import '../../widgets/chat/image_album_bubble.dart';
@@ -243,6 +244,10 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
 
   late bool _muted;
 
+  /// The chosen chat-background preset (Issue 5). Defaults to the doodle until
+  /// the stored preference loads a frame or two later.
+  ChatBgPreset _bg = ChatBgPreset.doodle;
+
   @override
   void initState() {
     super.initState();
@@ -254,7 +259,18 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     _muted = widget.muted;
     _scroll.addListener(_onScroll);
     _input.addListener(_onInputChanged);
+    _loadBackground();
     _bootstrap();
+  }
+
+  Future<void> _loadBackground() async {
+    final p = await ChatBgPreset.load();
+    if (mounted && p != _bg) setState(() => _bg = p);
+  }
+
+  Future<void> _pickBackground() async {
+    final p = await showChatBackgroundPicker(context, _bg);
+    if (p != null && mounted) setState(() => _bg = p);
   }
 
   /// Resolve the room, then open the controller.
@@ -282,6 +298,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
             _channelId = await ChatService().channelForBooking(_token, ref);
           case ChatChannelType.captain:
             _channelId = await ChatService().channelForMatch(_token, ref);
+          case ChatChannelType.direct:
           case ChatChannelType.unknown:
             break;
         }
@@ -429,28 +446,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
         _qr = null;
       });
 
-  // Mute
-  //
-  // `muted_until` is a timestamp on the server, not a boolean, so "mute for 8
-  // hours" un-mutes itself. The room keeps showing its own unread count in the
-  // inbox either way — muting only takes it out of the header badge.
-  Future<void> _toggleMute() async {
-    final channelId = _channelId;
-    if (channelId == null) return;
-    final want = !_muted;
-    final r = await ChatService()
-        .mute(_token, channelId, muted: want, hours: want ? 8 : null);
-    if (!mounted) return;
-    if (r['success'] != true) {
-      SnackbarUtil.showError(
-          context, r['message']?.toString() ?? 'Could not change notifications.');
-      return;
-    }
-    final data = r['data'];
-    setState(() => _muted = (data is Map && data['muted'] == true) || (data is! Map && want));
-    SnackbarUtil.showSuccess(
-        context, _muted ? 'Muted for 8 hours' : 'Notifications on');
-  }
+  // Mute now lives on the chats list, reached by long-pressing the row (Issue 1),
+  // where the interval (8 hours / 1 day / always) is chosen. This screen only
+  // reflects the muted state, via the indicator beside the title.
 
   bool get _isNearBottom {
     if (!_scroll.hasClients) return true;
@@ -671,9 +669,17 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   Future<void> _pickImage() async {
     final List<XFile> files;
     if (kIsWeb) {
+      // The browser cannot host a live camera the uploader can read, so web keeps
+      // the multi-image picker.
       files = await _picker.pickMultiImage();
     } else {
-      files = await showAttachmentSheet(context, maxAssets: 10) ?? const [];
+      // The camera icon opens the live camera; the gallery (multi-select) is
+      // reachable from inside it. Both return the same list shape.
+      files = await Navigator.push<List<XFile>>(
+            context,
+            MaterialPageRoute(builder: (_) => const CameraCaptureScreen()),
+          ) ??
+          const [];
     }
     if (files.isEmpty || !mounted) return;
     if (files.length == 1) {
@@ -707,7 +713,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     // no caption".
     final caption = await Navigator.push<String?>(
       context,
-      MaterialPageRoute(builder: (_) => ImageCaptionScreen(localPath: picked.path)),
+      MaterialPageRoute(
+        builder: (_) => ImageCaptionScreen(
+          localPath: picked.path,
+          recipientName: widget.title,
+        ),
+      ),
     );
     if (caption == null || !mounted) return;
     final (replyToId, replyPreview) = _consumeReply();
@@ -913,7 +924,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F5F4),
+      backgroundColor: _bg.ground,
       appBar: _appBar(c),
       body: Column(
         children: [
@@ -927,7 +938,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
             ),
           ),
           Expanded(
-            child: Stack(
+            child: ChatBackground(
+              preset: _bg,
+              child: Stack(
               children: [
                 ListenableBuilder(
                   listenable: c,
@@ -954,6 +967,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
                 if (_showJump)
                   Positioned(right: 12, bottom: 12, child: _jumpButton()),
               ],
+              ),
             ),
           ),
           if (_qrLoading || _qr != null)
@@ -1040,11 +1054,24 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(widget.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(widget.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white)),
+                        ),
+                        if (_muted) ...[
+                          const SizedBox(width: 6),
+                          const Icon(Icons.notifications_off,
+                              size: 15, color: Colors.white70),
+                        ],
+                      ],
+                    ),
                     Text(c.typingText ?? widget.contextLine ?? c.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1075,8 +1102,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
             switch (v) {
               case 'info':
                 _openGroupInfo();
-              case 'mute':
-                _toggleMute();
+              case 'background':
+                _pickBackground();
               case 'suggest':
                 _suggestNow();
               case 'media':
@@ -1089,10 +1116,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
             const PopupMenuItem(value: 'media', child: Text('Shared media')),
             if (_suggestsAtAll && !_suggestsAutomatically)
               const PopupMenuItem(value: 'suggest', child: Text('Suggest replies')),
-            PopupMenuItem(
-              value: 'mute',
-              child: Text(_muted ? 'Unmute notifications' : 'Mute for 8 hours'),
-            ),
+            const PopupMenuItem(
+                value: 'background', child: Text('Chat background')),
           ],
         ),
       ],
@@ -1103,6 +1128,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
         ChatChannelType.booking => Icons.stadium_outlined,
         ChatChannelType.captain => Icons.sports_kabaddi,
         ChatChannelType.team => Icons.groups,
+        ChatChannelType.direct => Icons.person_outline,
         ChatChannelType.unknown => Icons.chat_bubble_outline,
       };
 
@@ -1110,14 +1136,14 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     return ListenableBuilder(
       listenable: c,
       builder: (_, _) {
-        if (c.connected) return const SizedBox.shrink();
+        if (!c.reconnecting) return const SizedBox.shrink();
         return Container(
           width: double.infinity,
           color: AppColors.warning.withValues(alpha: 0.15),
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: const Text('Connecting…',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11.5, color: Color(0xFF92600A))),
+              style: TextStyle(fontSize: 11.5, color: AppColors.warningText)),
         );
       },
     );
@@ -1140,6 +1166,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
                 ChatChannelType.captain =>
                   'Coordinate this match with the other captain.\nKit colours, arrival time, who brings the ball.',
                 ChatChannelType.team => 'This is the start of your team chat.\nSay hello 👋',
+                ChatChannelType.direct =>
+                  'You are now connected.\nSay hello and set up a game.',
                 ChatChannelType.unknown => 'No messages yet.',
               },
               textAlign: TextAlign.center,
