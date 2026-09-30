@@ -168,11 +168,11 @@ void main() {
     });
   });
 
-  group('the attach button and the disabled bar', () {
-    testWidgets('the attach button is labelled and reports its tap', (tester) async {
+  group('the camera button and the disabled bar', () {
+    testWidgets('the camera button is labelled and reports its tap', (tester) async {
       await pumpComposer(tester);
-      expect(find.byTooltip('Attach'), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.attach_file));
+      expect(find.byTooltip('Camera'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.photo_camera_outlined));
       await tester.pump();
       expect(photos, 1);
     });
@@ -186,7 +186,7 @@ void main() {
       expect(
           tester
               .widget<IconButton>(
-                  find.widgetWithIcon(IconButton, Icons.attach_file))
+                  find.widgetWithIcon(IconButton, Icons.photo_camera_outlined))
               .onPressed,
           isNull);
 
