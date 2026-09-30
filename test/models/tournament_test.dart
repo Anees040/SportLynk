@@ -359,8 +359,13 @@ void main() {
     test('a future deadline stamp is used when no countdown was sent', () {
       final soon = DateTime.now().add(const Duration(hours: 5)).toIso8601String();
       final x = t({'registrationDeadline': soon});
+      // The stamp is five hours out, but the microseconds between building it and
+      // reading `countdown` usually truncate `inHours` to four; the exact-boundary
+      // case leaves it at five. Both assertions carry that 4/5 tolerance so the
+      // test does not flake on which side of the hour the read happens to land.
       expect(x.timeLeft!.inHours, anyOf(4, 5));
-      expect(x.countdown, startsWith('Closes in 4h'));
+      expect(x.countdown,
+          anyOf(startsWith('Closes in 4h'), startsWith('Closes in 5h')));
     });
 
     test('with no deadline at all an open tournament says so', () {
