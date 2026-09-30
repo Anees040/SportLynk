@@ -1,9 +1,12 @@
-// Opponent discovery (FR5.3 – FR5.5): the one player screen whose list is always
-// relative to one of *my* teams, so it opens with two sequential loads —
-// `TeamService.mine` to learn which teams I have, then `MatchService.opponents`
-// for the chosen one. The first paint is a spinner while `mine` is in flight, and
-// the team picked is the first one I captain, because landing on a team whose
-// Challenge buttons are all disabled would read as the feature being broken.
+// Opponent discovery (FR5.3 – FR5.5): the screen carries two tabs — team-to-team
+// Opponents and player-to-player Players — and these tests cover the Opponents tab,
+// whose list is always relative to one of *my* teams, so it opens with two
+// sequential loads — `TeamService.mine` to learn which teams I have, then
+// `MatchService.opponents` for the chosen one. The first paint is a spinner while
+// `mine` is in flight, and the team picked is the first one I captain, because
+// landing on a team whose Challenge buttons are all disabled would read as the
+// feature being broken. The Players tab is lazily built by `TabBarView` and has its
+// own widget tests, so it is not stubbed here.
 //
 // Three outcomes are worth pinning apart. A player in no team is sent to create
 // one — matchmaking has nothing to compare against without a team. A genuine read
@@ -189,9 +192,23 @@ void main() {
       await pumpFind(tester);
       await settleBoot(tester);
 
-      expect(find.text('Find Opponents'), findsOneWidget); // app-bar
+      expect(find.text('Matchmaking'), findsOneWidget); // app-bar
       expect(find.text('Karachi Kings'), findsOneWidget);
       expect(find.text('Challenge'), findsOneWidget);
+    });
+
+    testWidgets('both discovery tabs are offered', (tester) async {
+      // The screen carries two tabs — team-to-team Opponents and player-to-player
+      // Players — so the no-team gate lives inside the Opponents tab, not over the
+      // whole screen. Only the labels are asserted; the Players tab body loads its
+      // own list lazily and is exercised by the widget's own tests.
+      api.ok(kMine, [teamRow()]);
+      api.ok(kOpponents, opponentList(opponents: [opponent()]));
+      await pumpFind(tester);
+      await settleBoot(tester);
+
+      expect(find.text('Opponents'), findsOneWidget);
+      expect(find.text('Players'), findsOneWidget);
     });
 
     testWidgets('a failed read is a real error state, not an empty one', (
