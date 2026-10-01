@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const push = require('../services/pushService');
+const passwordReset = require('../services/passwordResetService');
 
 // A constant hash used only to give the "no such account" path the same cost as a real
 // password comparison, so response timing cannot be used to tell a registered identifier
@@ -239,26 +240,33 @@ router.post('/verify-phone', async (req, res, next) => {
 });
 
 // POST /api/auth/forgot-password/send-otp
+// Issues a server-owned one-time code over SMS. The code and its guardrails live in
+// passwordResetService; the route stays thin and runs against the pool in autocommit
+// (no transaction — see the service header for why a rejected verification must persist).
 router.post('/forgot-password/send-otp', async (req, res, next) => {
   try {
-    const { phone } = req.body;
-    if (!phone) return res.status(400).json({ success: false, message: 'Phone required' });
-    const user = await pool.query('SELECT id FROM users WHERE phone = $1', [phone.replace(/\s/g, '')]);
-    if (user.rows.length === 0) return res.status(404).json({ success: false, message: 'No account found with this phone number' });
-    return res.json({ success: true, message: 'Proceed with Firebase OTP verification' });
+    const result = await passwordReset.sendCode(pool, { phone: req.body.phone });
+    return res.status(result.status).json({
+      success: result.ok,
+      message: result.message,
+      ...(result.data ? { data: result.data } : {}),
+    });
   } catch (err) { next(err); }
 });
 
 // POST /api/auth/forgot-password/reset
+// Verifies the submitted code server-side and, only on a match, sets the new password.
+// The trusted `firebaseUid` the old handler accepted is gone: verification is proven by
+// the code the server sent and hashed, not asserted by the client.
 router.post('/forgot-password/reset', async (req, res, next) => {
   try {
-    const { phone, newPassword, firebaseUid } = req.body;
-    if (!firebaseUid) return res.status(403).json({ success: false, message: 'OTP verification required' });
-    if (!newPassword || newPassword.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
-    const hashed = await bcrypt.hash(newPassword, 12);
-    const result = await pool.query('UPDATE users SET password_hash = $1 WHERE phone = $2 RETURNING id', [hashed, phone.replace(/\s/g, '')]);
-    if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'No account found' });
-    return res.json({ success: true, message: 'Password reset successful' });
+    const { phone, code, newPassword } = req.body;
+    const result = await passwordReset.verifyAndReset(pool, { phone, code, newPassword });
+    return res.status(result.status).json({
+      success: result.ok,
+      message: result.message,
+      ...(result.data ? { data: result.data } : {}),
+    });
   } catch (err) { next(err); }
 });
 
