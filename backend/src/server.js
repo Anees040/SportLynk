@@ -50,6 +50,7 @@ const userRoutes = require("./routes/users");
 const slotRoutes = require("./routes/slotLock");
 const teamRoutes = require("./routes/teams");
 const chatRoutes = require("./routes/chat");
+const requestRoutes = require("./routes/requests");
 const matchRoutes = require("./routes/matches");
 const reviewRoutes = require("./routes/reviews");
 const internalRoutes = require("./routes/internal");
@@ -88,6 +89,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/slots", slotRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/requests", requestRoutes);
 // Notifications. routes/notifications.js declares /summary,
 // /preferences, /devices, /read-all, /test and /types before /:id, for the same
 // declaration-order reason as tournaments below.
