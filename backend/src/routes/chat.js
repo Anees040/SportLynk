@@ -81,7 +81,7 @@ async function member(client, channelId, userId) {
 router.get('/', async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 50);
-    const type = ['booking', 'captain', 'team'].includes(req.query.type) ? req.query.type : null;
+    const type = ['booking', 'captain', 'team', 'direct'].includes(req.query.type) ? req.query.type : null;
     const page = await list.listChats(pool, {
       userId: req.user.id, limit, cursor: req.query.cursor || null, type,
     });
@@ -550,6 +550,32 @@ router.post('/:channelId/mute', async (req, res, next) => {
     }
     return ok(res, await list.setMute(client, {
       channelId: m.id, userId: req.user.id, until,
+    }));
+  } catch (e) { next(e); } finally { client.release(); }
+});
+
+// Hide (clear) a conversation for the caller only
+
+/**
+ * POST /api/chat/:channelId/hide — body `{hidden}` (default true).
+ *
+ * WhatsApp's "Delete chat": drops the room from THIS member's inbox and leaves
+ * every other member's untouched. It is a per-member view watermark (hidden_at,
+ * migration 027), not a delete of any message and not a leave — the caller stays a
+ * live member, keeps receiving messages, and the room reappears the moment one
+ * arrives after the stamp. `{hidden:false}` restores it immediately.
+ *
+ * Membership is proved first, exactly like mute, so a stranger cannot clear a room
+ * they were never in.
+ */
+router.post('/:channelId/hide', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const m = await member(client, req.params.channelId, req.user.id);
+    if (!m) return fail(res, 403, 'You are not a chat member.');
+    const at = (req.body || {}).hidden === false ? null : 'now';
+    return ok(res, await list.setHidden(client, {
+      channelId: m.id, userId: req.user.id, at,
     }));
   } catch (e) { next(e); } finally { client.release(); }
 });
