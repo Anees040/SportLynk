@@ -119,6 +119,10 @@ const teamLink = ({ payload }) => (payload?.teamId
 
 const walletLink = () => ({ route: '/wallet', args: {} });
 
+// A play request lands in the recipient's request inbox, where it is accepted or
+// declined. The screen needs no argument — it reads the caller's own incoming asks.
+const requestsInboxLink = () => ({ route: '/requests-inbox', args: {} });
+
 const chatLink = ({ payload }) => (payload?.channelId
   ? {
     route: '/chat-thread',
@@ -253,6 +257,24 @@ const TYPES = {
     deepLink: ({ payload }) => (payload?.teamId
       ? { route: '/match-center', args: { teamId: payload.teamId } }
       : null),
+  },
+
+  // Matchmaking (direct play requests)
+  // A player asked another player to play. NORMAL, not HIGH: it is a social ask
+  // like a team join request, not a challenge with a slot and a deadline behind it,
+  // so it waits for the next unlock rather than waking the phone. The tap opens the
+  // request inbox, where it is accepted or declined.
+  play_request: {
+    category: CATEGORY.MATCH, priority: PRIORITY.NORMAL,
+    icon: 'sports', entity: null, deepLink: requestsInboxLink,
+  },
+  // The requester's side: the other player said yes, and a 1:1 chat is now open.
+  // Tapping it lands in that room, so the payload carries the channel exactly the
+  // way chat_message does (channelId, channelType='direct', channelTitle=the other
+  // player's name) and reuses the same chatLink resolver.
+  play_request_accepted: {
+    category: CATEGORY.MATCH, priority: PRIORITY.NORMAL,
+    icon: 'chat', entity: 'channel', deepLink: chatLink,
   },
 
   // Tournaments
