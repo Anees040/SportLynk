@@ -399,7 +399,7 @@ test('31 — the routes delegate to the client-taking utils rather than re-query
   // the script call the same function, one with `pool` and one with an open
   // transaction. A route that inlined its own SQL would be unverifiable.
   for (const call of ['list.listChats(', 'list.unreadCounts(', 'list.channelForRef(',
-    'list.setMute(', 'qr.suggestFor(']) {
+    'list.setMute(', 'list.setHidden(', 'qr.suggestFor(']) {
     assert.ok(CHAT_ROUTES_SRC.includes(call), `routes/chat.js does not call ${call}`);
   }
 });
@@ -426,4 +426,41 @@ test('32 — the captain context returns the viewer’s own team for the match-c
   assert.ok(/myTeamName:/.test(cap), 'the captain context does not return myTeamName');
   assert.ok(/on_challenger \? m\.challenger_team : m\.opponent_team/.test(cap),
     'myTeamId is not resolved from on_challenger');
+});
+
+// 33 — the per-member hide (migration 027): both inbox reads exclude a cleared room
+//
+// "Delete chat" is a per-member view watermark (chat_channel_members.hidden_at), so
+// the room must drop out of BOTH the list and the badge, and must reappear the
+// moment a message lands after the stamp. check_chat.js proves the rows; this proves
+// the same rule is written into both readers and keyed on activity, not on a flag.
+test('33 — a hidden room is excluded from the list and the badge until a newer message', () => {
+  const listFn = LIST_SRC.slice(
+    LIST_SRC.indexOf('async function listChats'),
+    LIST_SRC.indexOf('async function unreadCounts'),
+  );
+  const badge = LIST_SRC.slice(LIST_SRC.indexOf('async function unreadCounts'));
+  for (const [name, src] of [['list', listFn], ['badge', badge]]) {
+    assert.ok(/hidden_at IS NULL/.test(src), `the ${name} does not exclude hidden rooms`);
+    // Keyed on last activity, so the next message un-hides the room rather than the
+    // user having to un-hide it by hand. A bare `hidden_at IS NULL` would hide it
+    // forever.
+    assert.ok(/last_message_at, c\.created_at\) > m\.hidden_at/.test(src),
+      `the ${name} hides on a flag rather than on activity newer than the stamp`);
+  }
+});
+
+test('34 — the hide route exists, proves membership, and clears for the caller only', () => {
+  assert.notEqual(at('post', '/:channelId/hide'), -1, 'POST /api/chat/:id/hide is not declared');
+  // The handler runs from the mute route to the quick-replies section; it must prove
+  // membership before writing, exactly like mute, so a stranger cannot clear a room.
+  const start = CHAT_ROUTES_SRC.indexOf("router.post('/:channelId/hide'");
+  const body = CHAT_ROUTES_SRC.slice(start, start + 600);
+  assert.ok(/await member\(/.test(body), 'the hide route does not prove membership first');
+  assert.ok(/list\.setHidden\(/.test(body), 'the hide route does not delegate to setHidden');
+  // setHidden only ever touches a live membership row (left_at IS NULL): clearing a
+  // view must never be confused with leaving, and a left member has no row to clear.
+  const setHidden = LIST_SRC.slice(LIST_SRC.indexOf('async function setHidden'));
+  assert.ok(/left_at IS NULL/.test(setHidden.slice(0, 400)),
+    'setHidden writes to rows regardless of membership');
 });
