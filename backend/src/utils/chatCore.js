@@ -353,6 +353,67 @@ async function ensureCaptainChannel(client, { matchId, title = null, memberIds =
   return channelId;
 }
 
+/**
+ * The 1:1 room for two players, created idempotently.
+ *
+ * A direct channel belongs to a PAIR, not to a single entity, so its ref_id stays
+ * NULL and the pair is deduped through direct_channels (canonical user_lo < user_hi)
+ * rather than through ux_chat_channels_type_ref, which keys on (type, ref_id). The
+ * mapping row is the authority: when it exists its channel is returned untouched, so
+ * two accepted requests between the same two people always share one room.
+ *
+ * Both members are plain 'member': a DM has no moderator and neither person outranks
+ * the other, unlike a booking room's owner or a coordination room's captains.
+ */
+async function ensureDirectChannel(client, userA, userB) {
+  if (!userA || !userB || String(userA) === String(userB)) return null;
+  const lo = String(userA) < String(userB) ? userA : userB;
+  const hi = String(userA) < String(userB) ? userB : userA;
+
+  const existing = await client.query(
+    'SELECT channel_id FROM direct_channels WHERE user_lo = $1 AND user_hi = $2',
+    [lo, hi],
+  );
+  if (existing.rows[0]) return existing.rows[0].channel_id;
+
+  const { rows } = await client.query(
+    "INSERT INTO chat_channels (type, ref_id, created_by) VALUES ('direct', NULL, $1) RETURNING id",
+    [userA],
+  );
+  const channelId = rows[0].id;
+  await addMember(client, channelId, lo, 'member');
+  await addMember(client, channelId, hi, 'member');
+
+  // DO NOTHING covers the one race the pending-request guard cannot: two different
+  // requests between the same pair accepted at the same instant. The loser re-reads
+  // the winning row and returns it, leaving its own just-made channel unreferenced
+  // rather than handing back a room the map does not point at.
+  const claimed = await client.query(
+    `INSERT INTO direct_channels (user_lo, user_hi, channel_id)
+     VALUES ($1, $2, $3) ON CONFLICT (user_lo, user_hi) DO NOTHING
+     RETURNING channel_id`,
+    [lo, hi, channelId],
+  );
+  if (claimed.rows[0]) return claimed.rows[0].channel_id;
+  const winner = await client.query(
+    'SELECT channel_id FROM direct_channels WHERE user_lo = $1 AND user_hi = $2',
+    [lo, hi],
+  );
+  return winner.rows[0] ? winner.rows[0].channel_id : channelId;
+}
+
+/** The direct room for a pair, or null if the two have never connected. */
+async function directChannelId(client, userA, userB) {
+  if (!userA || !userB || String(userA) === String(userB)) return null;
+  const lo = String(userA) < String(userB) ? userA : userB;
+  const hi = String(userA) < String(userB) ? userB : userA;
+  const { rows } = await client.query(
+    'SELECT channel_id FROM direct_channels WHERE user_lo = $1 AND user_hi = $2',
+    [lo, hi],
+  );
+  return rows[0] ? rows[0].channel_id : null;
+}
+
 /** The captain room for a match, or null if the challenge predates the rooms. */
 async function captainChannelId(client, matchId) {
   if (!matchId) return null;
@@ -613,8 +674,8 @@ async function notifyNewMessage(client, { channelId, message, mentionedIds = [] 
 module.exports = {
   ensureTeamChannel, syncTeamMember, removeTeamMember, channelMemberIds,
   insertMessage, postSystemMessage, hydrateMessage, emitPersistedMessage,
-  addMember, ensureBookingChannel, ensureCaptainChannel,
-  captainChannelId, bookingChannelId,
+  addMember, ensureBookingChannel, ensureCaptainChannel, ensureDirectChannel,
+  captainChannelId, bookingChannelId, directChannelId,
   openBookingRoom, announceInRoom, emitPills,
   messagePreview, notifyNewMessage,
   setMentions, setPinned, listPinned, listMedia, emitPinnedChanged,
