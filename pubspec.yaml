@@ -83,6 +83,10 @@ dependencies:
   record: ^6.2.1
   just_audio: ^0.10.6
   path_provider: ^2.1.5
+  # In-app live camera for chat (Issue 2): a WhatsApp-style capture screen with
+  # preview, flash and lens flip. Gallery multi-select still routes through the
+  # existing attachment sheet.
+  camera: ^0.11.0+2
 
 dev_dependencies:
   flutter_test:
@@ -119,6 +123,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/images/
+    - assets/sounds/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
