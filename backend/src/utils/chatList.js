@@ -149,6 +149,33 @@ async function contextFor(client, rows, userId) {
       });
     }
   }
+
+  // Direct (1:1) rooms carry no ref_id — a DM is about a pair of people, not an
+  // entity — so their context is keyed by channel id, and the "counterparty" is
+  // simply the OTHER live member. One batched read across every direct row on the
+  // page, keyed 'dm:<channelId>' so it cannot collide with a booking/captain/team
+  // ref_id in the same map. No subtitle: a DM row shows its last message, exactly
+  // like WhatsApp, rather than a status line.
+  const directIds = rows.filter((r) => r.type === 'direct').map((r) => r.id);
+  if (directIds.length) {
+    const q = await client.query(
+      `SELECT cm.channel_id, u.id AS user_id, u.name, u.avatar_url
+         FROM chat_channel_members cm
+         JOIN users u ON u.id = cm.user_id
+        WHERE cm.channel_id = ANY($1::uuid[])
+          AND cm.user_id <> $2 AND cm.left_at IS NULL`,
+      [directIds, userId],
+    );
+    for (const r of q.rows) {
+      out.set(`dm:${r.channel_id}`, {
+        kind: 'direct',
+        title: r.name,
+        imageUrl: r.avatar_url,
+        subtitle: null,
+        otherUserId: String(r.user_id),
+      });
+    }
+  }
   return out;
 }
 
@@ -175,7 +202,7 @@ const UNREAD_SQL = `(SELECT count(*) FROM chat_messages x
  */
 async function listChats(client, { userId, limit = 30, cursor = null, type = null }) {
   const lim = Math.min(Math.max(Number(limit) || 30, 1), 60);
-  const typeFilter = ['booking', 'captain', 'team'].includes(type) ? type : null;
+  const typeFilter = ['booking', 'captain', 'team', 'direct'].includes(type) ? type : null;
 
   const { rows } = await client.query(
     `SELECT c.id, c.type, c.ref_id, c.title, c.image_url, c.created_at,
@@ -190,6 +217,8 @@ async function listChats(client, { userId, limit = 30, cursor = null, type = nul
       WHERE m.user_id = $1 AND m.left_at IS NULL
         AND c.type <> 'assistant'
         AND c.archived_at IS NULL
+        AND (m.hidden_at IS NULL
+             OR COALESCE(c.last_message_at, c.created_at) > m.hidden_at)
         AND ($2::text IS NULL OR c.type = $2)
         AND ($3::timestamptz IS NULL OR COALESCE(c.last_message_at, c.created_at) < $3)
       ORDER BY sort_at DESC
@@ -200,7 +229,8 @@ async function listChats(client, { userId, limit = 30, cursor = null, type = nul
   const ctx = await contextFor(client, rows, userId);
   const now = Date.now();
   const items = rows.map((r) => {
-    const c = ctx.get(String(r.ref_id)) || null;
+    // A direct room has no ref_id; its context is keyed by channel id (see contextFor).
+    const c = (r.type === 'direct' ? ctx.get(`dm:${r.id}`) : ctx.get(String(r.ref_id))) || null;
     return {
       id: r.id,
       type: r.type,
@@ -242,11 +272,13 @@ async function unreadCounts(client, userId) {
        JOIN chat_channels c ON c.id = m.channel_id
       WHERE m.user_id = $1 AND m.left_at IS NULL
         AND c.type <> 'assistant' AND c.archived_at IS NULL
+        AND (m.hidden_at IS NULL
+             OR COALESCE(c.last_message_at, c.created_at) > m.hidden_at)
         AND (m.muted_until IS NULL OR m.muted_until <= now())
       GROUP BY c.type`,
     [userId],
   );
-  const byType = { booking: 0, captain: 0, team: 0 };
+  const byType = { booking: 0, captain: 0, team: 0, direct: 0 };
   let total = 0;
   let rooms = 0;
   for (const r of rows) {
@@ -299,6 +331,26 @@ async function setMute(client, { channelId, userId, until = null }) {
   };
 }
 
+/**
+ * Hide (clear) one room from one member's inbox, or restore it with `at = null`.
+ *
+ * The stamp is `now()` by default so the current backlog falls behind it and the
+ * room drops out of the list; the next message, being newer, brings it back. This
+ * is a view watermark and nothing more — left_at is untouched, so the member stays
+ * in the channel, keeps receiving messages and still counts for the group ticks.
+ * The row must be a live membership (left_at IS NULL): a member who has left has no
+ * inbox row to hide.
+ */
+async function setHidden(client, { channelId, userId, at = 'now' }) {
+  const { rowCount } = await client.query(
+    `UPDATE chat_channel_members
+        SET hidden_at = ${at === null ? 'NULL' : 'now()'}
+      WHERE channel_id = $1 AND user_id = $2 AND left_at IS NULL`,
+    [channelId, userId],
+  );
+  return { channelId, hidden: at !== null, updated: rowCount };
+}
+
 module.exports = {
-  humanStatus, slotLabel, contextFor, listChats, unreadCounts, channelForRef, setMute,
+  humanStatus, slotLabel, contextFor, listChats, unreadCounts, channelForRef, setMute, setHidden,
 };
