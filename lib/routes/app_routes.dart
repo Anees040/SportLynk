@@ -18,6 +18,7 @@ import '../screens/auth/welcome_screen.dart';
 import '../screens/player/assistant_screen.dart';
 import '../screens/player/find_opponents_screen.dart';
 import '../screens/player/find_venues_screen.dart';
+import '../screens/player/help_support_screen.dart';
 import '../screens/player/match_center_screen.dart';
 import '../screens/player/player_booking_detail_screen.dart';
 import '../screens/player/player_home_screen.dart';
@@ -46,6 +47,7 @@ import '../screens/owner/owner_wallet_screen.dart';
 // Admin
 import '../screens/admin/admin_dispute_detail_screen.dart';
 import '../screens/admin/admin_disputes_screen.dart';
+import '../screens/admin/admin_booking_disputes_screen.dart';
 import '../screens/admin/admin_home_screen.dart';
 import '../screens/admin/admin_moderation_screen.dart';
 import '../screens/admin/admin_settings_screen.dart';
@@ -161,6 +163,7 @@ class AppRoutes {
         const AuthGuard(requiredRole: 'player', child: TournamentsScreen()),
     '/assistant': (_) =>
         const AuthGuard(requiredRole: 'player', child: AssistantScreen()),
+    '/help-support': (_) => const AuthGuard(child: HelpSupportScreen()),
     '/booking-detail': (ctx) {
       final args = ModalRoute.of(ctx)!.settings.arguments as Map<String, dynamic>;
       return AuthGuard(
@@ -291,6 +294,8 @@ class AppRoutes {
         const AuthGuard(requiredRole: 'admin', child: AdminModerationScreen()),
     '/admin-disputes': (_) =>
         const AuthGuard(requiredRole: 'admin', child: AdminDisputesScreen()),
+    '/admin-booking-disputes': (_) =>
+        const AuthGuard(requiredRole: 'admin', child: AdminBookingDisputesScreen()),
     '/admin-dispute': (ctx) {
       final a = (ModalRoute.of(ctx)!.settings.arguments as Map?) ?? const {};
       final id = a['disputeId']?.toString();
