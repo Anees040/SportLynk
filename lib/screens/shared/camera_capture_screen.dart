@@ -1,5 +1,6 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../widgets/chat/attachment_sheet.dart';
 
@@ -171,18 +172,41 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          _preview(),
-          _topBar(),
-          _bottomBar(),
-        ],
+    // Light status-bar icons so the clock, battery and signal read over the dark
+    // preview; AnnotatedRegion restores the app's own overlay style on pop.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            _preview(),
+            _topScrim(),
+            _topBar(),
+            _bottomBar(),
+          ],
+        ),
       ),
     );
   }
+
+  /// A short top gradient so the status bar and the close/flash controls stay
+  /// legible over a bright scene.
+  Widget _topScrim() => Align(
+        alignment: Alignment.topCenter,
+        child: Container(
+          height: 150,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.black.withValues(alpha: 0.45), Colors.transparent],
+            ),
+          ),
+        ),
+      );
 
   Widget _preview() {
     if (_error != null) return _errorView();
@@ -233,10 +257,14 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
   }
 
   Widget _topBar() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Row(
+    // Pinned to the top; without the Align this fills the expanded Stack and the
+    // controls float vertically centred in the middle of the screen.
+    return Align(
+      alignment: Alignment.topCenter,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
           children: [
             IconButton(
               icon: const Icon(Icons.close, color: Colors.white, size: 28),
@@ -250,7 +278,8 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
                 tooltip: 'Flash',
                 onPressed: _cycleFlash,
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
