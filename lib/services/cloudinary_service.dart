@@ -13,7 +13,16 @@ class CloudinaryService {
     cache: false,
   );
 
-  Future<String?> uploadImage(String filePath, {String folder = 'general'}) async {
+  /// Uploads an image, optionally reporting byte progress. `onProgress` is the
+  /// dio send-progress callback the uploader exposes: `(sent, total)` in bytes,
+  /// with `total <= 0` until the request body is measured. It drives the real
+  /// upload percentage on the optimistic bubble instead of an indeterminate
+  /// spinner.
+  Future<String?> uploadImage(
+    String filePath, {
+    String folder = 'general',
+    void Function(int sent, int total)? onProgress,
+  }) async {
     try {
       if (AppConfig.cloudinaryCloudName.isEmpty || AppConfig.cloudinaryUploadPreset.isEmpty) {
         debugPrint('Cloudinary not configured. Skipping upload (no --dart-define provided).');
@@ -26,6 +35,7 @@ class CloudinaryService {
           resourceType: CloudinaryResourceType.Image,
           folder: folder,
         ),
+        onProgress: onProgress,
       );
 
       return response.secureUrl;
