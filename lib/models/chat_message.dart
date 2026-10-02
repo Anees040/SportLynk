@@ -2,7 +2,9 @@ import 'team.dart' show asNum;
 
 /// The kind of a message. Mirrors the DB `kind` column exactly. `audio` is a
 /// voice note: a hosted clip URL, its mime, and how long it runs in [durationMs].
-enum MessageKind { text, image, audio, system }
+/// `poll` is a question with options; its tallies live in [ChatPoll], carried
+/// alongside the message.
+enum MessageKind { text, image, audio, poll, system }
 
 MessageKind _kindFrom(dynamic raw) {
   switch ('$raw') {
@@ -10,6 +12,8 @@ MessageKind _kindFrom(dynamic raw) {
       return MessageKind.image;
     case 'audio':
       return MessageKind.audio;
+    case 'poll':
+      return MessageKind.poll;
     case 'system':
       return MessageKind.system;
     default:
@@ -97,6 +101,87 @@ class ReplyPreview {
   }
 }
 
+/// One vote on a poll: which option, and who cast it (votes are named, so a tap
+/// on a tally can show the voters).
+class PollVote {
+  final int optionIndex;
+  final String userId;
+  final String userName;
+  const PollVote(
+      {required this.optionIndex, required this.userId, required this.userName});
+
+  factory PollVote.fromJson(Map<String, dynamic> j) => PollVote(
+        optionIndex: asNum(j['optionIndex']).toInt(),
+        userId: '${j['userId']}',
+        userName: '${j['userName'] ?? 'Someone'}',
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'optionIndex': optionIndex, 'userId': userId, 'userName': userName};
+}
+
+/// A poll carried by a message of kind [MessageKind.poll]: the question, the
+/// fixed options, whether more than one may be chosen, and every vote. The UI
+/// derives tallies and percentages from [votes] so a vote arriving over the
+/// socket needs no separate count to stay in sync.
+class ChatPoll {
+  final String id;
+  final String question;
+  final List<String> options;
+  final bool allowMultiple;
+  final bool closed;
+  final List<PollVote> votes;
+
+  const ChatPoll({
+    required this.id,
+    required this.question,
+    required this.options,
+    this.allowMultiple = false,
+    this.closed = false,
+    this.votes = const [],
+  });
+
+  factory ChatPoll.fromJson(Map<String, dynamic> j) => ChatPoll(
+        id: '${j['id']}',
+        question: '${j['question'] ?? ''}',
+        options: (j['options'] as List? ?? const []).map((e) => '$e').toList(),
+        allowMultiple: j['allowMultiple'] == true,
+        closed: j['closed'] == true,
+        votes: (j['votes'] as List? ?? const [])
+            .whereType<Map>()
+            .map((v) => PollVote.fromJson(Map<String, dynamic>.from(v)))
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'question': question,
+        'options': options,
+        'allowMultiple': allowMultiple,
+        'closed': closed,
+        'votes': votes.map((v) => v.toJson()).toList(),
+      };
+
+  int countFor(int optionIndex) =>
+      votes.where((v) => v.optionIndex == optionIndex).length;
+
+  /// Distinct people who have voted — the denominator for an option's share.
+  int get totalVoters => votes.map((v) => v.userId).toSet().length;
+
+  bool didVote(String userId, int optionIndex) =>
+      votes.any((v) => v.userId == userId && v.optionIndex == optionIndex);
+
+  List<String> voterNames(int optionIndex) => votes
+      .where((v) => v.optionIndex == optionIndex)
+      .map((v) => v.userName)
+      .toList();
+
+  double fraction(int optionIndex) {
+    final denom = totalVoters;
+    return denom == 0 ? 0 : countFor(optionIndex) / denom;
+  }
+}
+
 class ChatMessage {
   final String id;
   final String? clientId;
@@ -111,8 +196,18 @@ class ChatMessage {
   final num mediaW;
   final num mediaH;
   final num durationMs;
+
+  /// Amplitude samples (0..1) captured while a voice note recorded, drawn as the
+  /// player's waveform. Empty for a text/image message, or for a voice note
+  /// recorded before the client started sending samples — the player then falls
+  /// back to a plain progress track rather than inventing a shape.
+  final List<double> waveform;
+
   final String? replyToId;
   final ReplyPreview? replyPreview;
+
+  /// The poll carried by a [MessageKind.poll] message, null for any other kind.
+  final ChatPoll? poll;
 
   /// The user ids this message @-mentions. Validated against live membership by
   /// the server, so every id here is (or was) a real member of the channel.
@@ -149,8 +244,10 @@ class ChatMessage {
     this.mediaW = 0,
     this.mediaH = 0,
     this.durationMs = 0,
+    this.waveform = const [],
     this.replyToId,
     this.replyPreview,
+    this.poll,
     this.mentions = const [],
     this.pinnedAt,
     this.systemMeta,
@@ -166,6 +263,7 @@ class ChatMessage {
   bool get isSystem => kind == MessageKind.system;
   bool get isImage => kind == MessageKind.image;
   bool get isAudio => kind == MessageKind.audio;
+  bool get isPoll => kind == MessageKind.poll;
   bool get isDeleted => deletedAt != null;
   bool get hasCaption => (body ?? '').trim().isNotEmpty;
   bool get isReply => replyPreview != null;
@@ -202,9 +300,15 @@ class ChatMessage {
         mediaW: asNum(j['media_w']),
         mediaH: asNum(j['media_h']),
         durationMs: asNum(j['duration_ms']),
+        waveform: (j['waveform'] as List? ?? const [])
+            .map((e) => (asNum(e)).toDouble().clamp(0.0, 1.0))
+            .toList(),
         replyToId: j['reply_to_id']?.toString(),
         replyPreview: j['reply_preview'] is Map
             ? ReplyPreview.fromJson(Map<String, dynamic>.from(j['reply_preview'] as Map))
+            : null,
+        poll: j['poll'] is Map
+            ? ChatPoll.fromJson(Map<String, dynamic>.from(j['poll'] as Map))
             : null,
         mentions: (j['mentions'] as List? ?? [])
             .map((e) => '$e')
@@ -246,8 +350,10 @@ class ChatMessage {
         'media_w': mediaW,
         'media_h': mediaH,
         'duration_ms': durationMs,
+        'waveform': waveform,
         'reply_to_id': replyToId,
         'reply_preview': replyPreview?.toJson(),
+        'poll': poll?.toJson(),
         'mentions': mentions,
         'pinned_at': pinnedAt?.toUtc().toIso8601String(),
         'system_meta': systemMeta,
@@ -267,6 +373,7 @@ class ChatMessage {
     List<MessageReaction>? reactions,
     DateTime? deletedAt,
     String? localPath,
+    ChatPoll? poll,
   }) =>
       ChatMessage(
         id: id ?? this.id,
@@ -282,8 +389,10 @@ class ChatMessage {
         mediaW: mediaW,
         mediaH: mediaH,
         durationMs: durationMs,
+        waveform: waveform,
         replyToId: replyToId,
         replyPreview: replyPreview,
+        poll: poll ?? this.poll,
         mentions: mentions,
         pinnedAt: pinnedAt,
         systemMeta: systemMeta,
