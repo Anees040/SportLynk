@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../constants/colors.dart';
 
@@ -48,12 +49,15 @@ class _ImageCaptionScreenState extends State<ImageCaptionScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    return Scaffold(
-      backgroundColor: Colors.black,
-      // resizeToAvoidBottomInset is handled manually so the image does not jump
-      // when the keyboard opens — only the caption bar rises with it.
-      resizeToAvoidBottomInset: false,
-      body: Stack(
+    // Light status-bar icons so they read over the photo and the top scrim.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        // resizeToAvoidBottomInset is handled manually so the image does not jump
+        // when the keyboard opens — only the caption bar rises with it.
+        resizeToAvoidBottomInset: false,
+        body: Stack(
         children: [
           // The photo fills the frame and can be pinch-zoomed.
           Positioned.fill(
@@ -206,7 +210,8 @@ class _ImageCaptionScreenState extends State<ImageCaptionScreen> {
               ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
