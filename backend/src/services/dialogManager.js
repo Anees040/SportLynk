@@ -86,6 +86,41 @@ const FILLER = new Set([
 ]);
 
 /**
+ * The "more of the same" LEXICON — a follow-up that asks for the next page.
+ *
+ * "More grounds" exists as a chip and works. Typing the same thing in words did not,
+ * and could not: no intent label means "the page after the one you just showed me", so
+ * the classifier abstains on "aur koi?" and is right to. The reply was then the
+ * capability menu — the worst answer Scout can give, because the user had just been
+ * shown a list and had every reason to expect the obvious follow-up to work.
+ *
+ * Held to whole utterances only, like AFFIRM and DENY and for the same reason: "aur koi
+ * ground DHA mein" carries a new search and must reach the classifier rather than being
+ * answered with page two of the previous one.
+ *
+ * Entries are space-free because `verdictOf`'s comparison joins the utterance's words —
+ * "aur koi" arrives here as "aurkoi".
+ */
+const FOLLOW_UP = Object.freeze([
+  'aur', 'aurkoi', 'koiaur', 'aurdikhao', 'aurdikhaen', 'aurbatao', 'aurkuch',
+  'baqi', 'baki', 'iskealawa', 'dusra', 'doosra', 'dusre', 'doosre',
+  'more', 'anymore', 'anyother', 'anyothers', 'others', 'other', 'otherones',
+  'showmore', 'showothers', 'moreplease', 'morepls', 'next', 'nextpage',
+  'continue', 'goon', 'whatelse', 'else', 'anythingelse',
+]);
+const FOLLOW_UP_SET = new Set(FOLLOW_UP);
+
+/**
+ * Intents whose action reads `offset`, and which can therefore answer "show me more".
+ *
+ * Deliberately not every listing intent. An action that does not page would answer
+ * "any more?" with the identical list, which asserts that these are different rows and
+ * is a worse answer than admitting the question was not understood. `searchVenues` is
+ * the one that pages today; this set grows when another action does.
+ */
+const PAGEABLE_INTENTS = Object.freeze(new Set(['find_venue']));
+
+/**
  * `pending` → the slot that answers it.
  *
  * When Scout asked "Which day at Rawal?" the next thing the user types is an answer,
@@ -168,6 +203,22 @@ function verdictOf(text) {
   if (yes && !no) return 'affirm';
   if (no && !yes) return 'deny';
   return null;
+}
+
+/**
+ * Is this whole utterance nothing but "give me more of that"?
+ *
+ * Same whole-utterance rule as [verdictOf], and load-bearing for the same reason: a
+ * follow-up that carries any other meaning is a new request. One unknown word and this
+ * is false, so the sentence reaches the classifier untouched.
+ */
+function isFollowUp(text) {
+  const w = words(text);
+  if (!w.length || w.length > 4) return false;
+  if (FOLLOW_UP_SET.has(w.join(''))) return true;
+  // A follow-up wrapped in politeness: "aur koi bhai", "more please".
+  const meaningful = w.filter((t) => !FILLER.has(t));
+  return meaningful.length > 0 && FOLLOW_UP_SET.has(meaningful.join(''));
 }
 
 /**
@@ -281,6 +332,29 @@ function mergeSlots(prev, incoming, { keepDecisions = true } = {}) {
     if (next[id] && base[id] && String(next[id]) !== String(base[id])) delete base[label];
   }
   return { ...base, ...next };
+}
+
+/**
+ * find_venue is a BROWSE, and a venue the user SELECTED on an earlier turn must not
+ * silently become a search filter that narrows the list back down to that one ground.
+ *
+ * The symptom this fixes: a user taps a ground to see its times (which records
+ * `venueName` in the session), then taps "Other grounds" / "More grounds" — and the
+ * list comes back holding only the ground they just left, because `findVenue` reads
+ * `venueName` as a free-text search term. "Other grounds" that shows the same ground
+ * is the exact report.
+ *
+ * The rule: on a find_venue turn a venue identity counts only when THIS turn carried
+ * it (the user typed "find Rawal", or a chip passed a venueId). An identity merged in
+ * from a previous turn's selection is dropped, so the browse is unfiltered. Nothing
+ * else is touched — `locality`, `sport`, `budget` stay as legitimate browse filters,
+ * and every other intent keeps the carried venue because for them it is the subject.
+ */
+function clearCarriedVenueForBrowse(intent, incoming, slots) {
+  if (intent !== 'find_venue') return slots;
+  if (incoming.venueId || incoming.venueName) return slots;
+  const { venueId, venueName, ...rest } = slots;
+  return rest;
 }
 
 /** What the telemetry row records as the machine's position after this turn. */
@@ -439,7 +513,9 @@ function slotSearchChip(slots) {
  * Every branch returns the capability menu, so ER2.6's "friendly help menu on low
  * confidence" holds for all five and no reply is ever text alone.
  */
-function abstainReply({ reason, alternatives = [], name = 'Scout', slotChip = null }) {
+function abstainReply({
+  reason, alternatives = [], name = 'Scout', slotChip = null, repeated = false,
+}) {
   // Mutating the built payload rather than assembling a second one: menu() is the
   // only place the capability card is built, and it must stay that way. One helper
   // so no branch can forget the lead chips -- the slot chip goes first on all five
@@ -451,6 +527,16 @@ function abstainReply({ reason, alternatives = [], name = 'Scout', slotChip = nu
     if (lead.length) out.chips = [...lead, ...out.chips].slice(0, 6);
     return out;
   };
+  // The same words, missed twice running. Reprinting the first answer verbatim is what
+  // makes an assistant look broken rather than limited, so the second one says what
+  // actually happened and points at the buttons that cannot be misread.
+  if (repeated) {
+    return withChips(menu(
+      'I still cannot place that one, and saying it again will not help me — '
+      + 'that is my limit, not yours. Tap what you need instead:',
+      { name },
+    ));
+  }
   if (reason === ml.NLU_ABSTAIN_UNAVAILABLE) {
     return withChips(menu(
       `I could not read that just now — my language model is not answering. `
@@ -570,6 +656,50 @@ async function decide({ said, chipAction, chipArgs, settings, threadId }) {
 }
 
 /**
+ * "Show me a DIFFERENT ground" — the one phrase that must never be answered with the
+ * ground already on screen.
+ *
+ * Reported from the phone: after picking a ground, "koi or ground" came back with the
+ * same ground. Two things caused that and this fixes the half a lexicon can fix. The
+ * other half (a selected ground leaking into a browse as a search filter) is
+ * clearCarriedVenueForBrowse; this one is the classifier reading "koi or ground" as
+ * something other than find_venue, after which that function never runs.
+ *
+ * The rule is deliberately narrow, because the cost of a false positive is throwing
+ * away a ground the user had chosen:
+ *   - an OTHER word  (aur / or / dusra / another / different ...), AND
+ *   - a venue noun   (ground / turf / pitch / jagah / maidan ...), AND
+ *   - NO demonstrative (is / us / wo / this / that / same ...).
+ *
+ * The demonstrative guard is what keeps "is ground ke baare me aur batao" ("tell me
+ * MORE about THIS ground") out: it carries both an OTHER word and a venue noun, and
+ * means the opposite. "aur koi?" with no venue noun is not here either — that is
+ * paging the same list, which isFollowUp already handles.
+ */
+const OTHER_WORDS = new Set([
+  'aur', 'or', 'dusra', 'doosra', 'dusre', 'doosre', 'dusri', 'doosri',
+  'another', 'other', 'others', 'different', 'alag', 'koi', 'naya', 'new',
+]);
+
+const VENUE_NOUNS = new Set([
+  'ground', 'grounds', 'venue', 'venues', 'turf', 'turfs', 'pitch', 'pitches',
+  'jagah', 'maidan', 'court', 'courts', 'field', 'fields', 'place', 'places',
+]);
+
+/** Words that point AT the current subject, which flips the meaning of "aur". */
+const DEMONSTRATIVES = new Set([
+  'is', 'isi', 'iska', 'iski', 'isko', 'us', 'usi', 'uska', 'uski', 'usko',
+  'wo', 'woh', 'ye', 'yeh', 'this', 'that', 'same', 'wahi', 'wohi', 'it',
+]);
+
+function wantsDifferentVenue(text) {
+  const w = words(text);
+  if (!w.length || w.length > 8) return false;
+  if (w.some((t) => DEMONSTRATIVES.has(t))) return false;
+  return w.some((t) => OTHER_WORDS.has(t)) && w.some((t) => VENUE_NOUNS.has(t));
+}
+
+/**
  * Is this an answer to what Scout just asked? — the slot-filling half of the machine.
  *
  * Without this, the state machine has a hole a demo walks straight into. Scout asks
@@ -593,26 +723,80 @@ async function decide({ said, chipAction, chipArgs, settings, threadId }) {
  *
  * A confident, different intent always wins. A user who abandons a half-built booking
  * to ask their wallet balance gets their balance.
+ *
+ * One continuation needs no pending question at all: a bare follow-up ("aur koi?",
+ * "any others?") continues the previous answer rather than answering a question, and
+ * is resolved from `ctx.lastShown` — see FOLLOW_UP and PAGEABLE_INTENTS.
  */
 function continuationOf({ prior, said, decided }) {
-  const pending = prior.pending ? String(prior.pending) : null;
-  if (!pending || !PENDING_SLOT[pending]) return null;
   if (decided.inputMode === 'chip') return null;
+
+  const pending = prior.pending ? String(prior.pending) : null;
+  const slot = pending ? PENDING_SLOT[pending] : null;
+  const usable = decided.intent && !decided.abstained && decided.intent !== 'out_of_scope';
+
+  // "aur koi?" — the page after the answer just given. Tested before the pending branch
+  // because "more" is never the value a pending question is waiting for, and only when
+  // the classifier found nothing usable, so a sentence it could read is never
+  // reinterpreted as paging.
+  //
+  // `lastShown` of zero is the guard that matters: it means the previous answer put no
+  // list on screen, and there is nothing for "more" to continue.
+  if (!usable && !slot && isFollowUp(said)) {
+    const ctx = prior.ctx || {};
+    const prev = prior.intent && PAGEABLE_INTENTS.has(prior.intent) ? prior.intent : null;
+    const shown = Number(ctx.lastShown || 0);
+    if (prev && shown > 0) {
+      return {
+        intent: prev,
+        fill: { offset: Number(ctx.lastOffset || 0) + shown },
+      };
+    }
+  }
+
+  if (!slot) return null;
 
   if (pending === 'question' && said) {
     return { intent: prior.intent || 'contact_owner', fill: { question: said } };
   }
-  const usable = decided.intent && !decided.abstained && decided.intent !== 'out_of_scope';
   if (usable) return null;
   if (!prior.intent) return null;
 
-  const slot = PENDING_SLOT[pending];
   const fill = {};
   if (!decided.incoming[slot] && said) {
     if (slot === 'venueId') fill.venueName = said;
     else if (slot === 'teamId') fill.teamName = said;
   }
   return { intent: prior.intent, fill };
+}
+
+/**
+ * Has Scout already failed to read these exact words, one turn ago?
+ *
+ * The capability menu is the right answer to an unreadable sentence once. Served twice
+ * running for the same words it stops being an answer and becomes a loop: the user
+ * changed nothing, Scout said nothing new, and the conversation is stuck with no signal
+ * that anything is wrong. Naming the repeat does not pretend to understand it — it just
+ * stops Scout reprinting the same paragraph at someone who has already read it.
+ *
+ * The previous utterance exists in exactly one place, the transcript, which is what
+ * `assistantThreads.recentTurns` reads: `session_state.ctx` carries the last INTENT and
+ * the last venue but never the last sentence, so it cannot answer this question.
+ *
+ * `turns` arrives oldest-first and its final row is the message being handled, because
+ * the user's bubble is written before the action runs.
+ */
+function repeatedMiss({ turns, said }) {
+  const key = words(said).join(' ');
+  if (!key || !Array.isArray(turns) || turns.length < 3) return false;
+  const before = turns.slice(0, -1);
+  const lastScout = before[before.length - 1];
+  const lastUser = before[before.length - 2];
+  if (!lastScout || lastScout.role !== 'scout' || lastScout.source !== SOURCES.MENU) {
+    return false;
+  }
+  return !!lastUser && lastUser.role === 'user'
+    && words(lastUser.text).join(' ') === key;
 }
 
 /** One telemetry row per turn. Never the text — its length, and nothing else. */
@@ -649,6 +833,8 @@ function fail(status, code, message) {
  * @param {string}  [input.action]  a chip's action — set, and no classification happens
  * @param {object}  [input.args]    a chip's structured args, whitelisted by cleanSlots
  * @param {string}  [input.clientId] the client's idempotency key for the user message
+ * @param {boolean} [input.newSession] the user deliberately started a new chat, so an
+ *                  absent threadId must create one rather than resume the newest
  * @returns {Promise<object>} `{ok, status, code, message, threadId, reply, state, ...}`
  *
  * Order of operations, and why it is this order:
@@ -663,7 +849,7 @@ function fail(status, code, message) {
  */
 async function handleTurn({
   userId, threadId = null, text = '', action = null, args = null,
-  clientId = null, persona = 'player', client: injected = null,
+  clientId = null, persona = 'player', newSession = false, client: injected = null,
 } = {}) {
   const t0 = nowMs();
   const said = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
@@ -689,7 +875,9 @@ async function handleTurn({
       rollback: 'ROLLBACK TO SAVEPOINT scout_turn' }
     : { begin: 'BEGIN', commit: 'COMMIT', rollback: 'ROLLBACK' };
 
-  const got = await threads.getOrCreate(runner, { userId, threadId, persona });
+  const got = await threads.getOrCreate(runner, {
+    userId, threadId, persona, forceNew: newSession === true && !threadId, clientId,
+  });
   if (!got.ok) return fail(got.status || 404, got.code || 'thread_error', got.message);
   const thread = got.row;
   const prior = threads.readState(thread.session_state);
@@ -703,11 +891,19 @@ async function handleTurn({
     said, chipAction, chipArgs: args, settings, threadId: thread.id,
   });
 
+  // "koi aur ground" — an explicit ask for a DIFFERENT ground. Decided before the
+  // continuation, and allowed to override it, because it is a change of subject
+  // rather than an answer: a user who says this while Scout is holding "which day?"
+  // wants the list, not to fill the slot. Forcing find_venue here is also what makes
+  // clearCarriedVenueForBrowse run, which is what actually drops the ground they are
+  // trying to get away from.
+  const otherVenue = !chipAction && wantsDifferentVenue(said);
+
   // Is this turn an answer to the question Scout asked last turn, rather than a new
   // request? continuationOf owns that judgement; see its comment for why a bare
   // "kal" cannot be classified but can still be understood.
-  const cont = continuationOf({ prior, said, decided });
-  const intent = cont ? cont.intent : decided.intent;
+  const cont = otherVenue ? null : continuationOf({ prior, said, decided });
+  const intent = otherVenue ? 'find_venue' : (cont ? cont.intent : decided.intent);
   const incoming = cont ? { ...decided.incoming, ...cont.fill } : decided.incoming;
 
   // Decisions (a chosen slot, a chosen booking) survive a follow-up that continues
@@ -715,7 +911,9 @@ async function handleTurn({
   // "book something else" would confirm against the slot they picked ten turns ago.
   const keepDecisions = !!cont || decided.keepDecisions
     || (!!intent && intent === prior.intent);
-  const slots = mergeSlots(prior.slots, incoming, { keepDecisions });
+  const slots = clearCarriedVenueForBrowse(
+    intent, incoming, mergeSlots(prior.slots, incoming, { keepDecisions }),
+  );
 
   // The confirm gate
   // An armed confirm block lives exactly one turn. Only these four inputs may fire
@@ -774,8 +972,16 @@ async function handleTurn({
       const topicHint = slots.venueId || prior.ctx.lastVenueId || null;
       payload = (decided.abstainReason !== ml.NLU_ABSTAIN_TOO_LONG && said
         ? await kbAnswer(client, { said, venueId: topicHint })
-        : null)
-        || abstainReply({
+        : null);
+      if (!payload) {
+        // Read the transcript only here: the abstain path is the one place the previous
+        // wording changes the answer, so the happy path pays nothing for it.
+        const recent = said
+          ? await threads.recentTurns(client, {
+            threadId: thread.id, limit: HISTORY_TURNS,
+          })
+          : [];
+        payload = abstainReply({
           reason: decided.abstainReason,
           alternatives: decided.nlu ? decided.nlu.alternatives : [],
           name: settings.name,
@@ -784,7 +990,9 @@ async function handleTurn({
           // ago on an unrelated unreadable message, which reads as Scout ignoring
           // the question it just admitted it could not read.
           slotChip: slotSearchChip(incoming),
+          repeated: repeatedMiss({ turns: recent, said }),
         });
+      }
     } else {
       const fn = actions.ACTIONS[actionKey];
       if (typeof fn !== 'function') {
@@ -828,6 +1036,12 @@ async function handleTurn({
         // ground the question is about, so an owner Q&A hit can be venue-scoped.
         lastIntent: intent || prior.ctx.lastIntent || null,
         lastVenueId: nextSlots.venueId || prior.ctx.lastVenueId || null,
+        // Where the list in the last answer started and how long it was, so a typed
+        // "aur koi?" asks for the page after it instead of repeating the one already
+        // on screen. Zero rows means there is nothing for a follow-up to continue,
+        // which is exactly what continuationOf checks.
+        lastOffset: Number(nextSlots.offset || 0),
+        lastShown: Array.isArray(payload.cards) ? payload.cards.length : 0,
         turns: Number(prior.ctx.turns || 0) + 1,
       },
     };
@@ -914,8 +1128,11 @@ module.exports = {
   DENY,
   words,
   verdictOf,
+  isFollowUp,
+  wantsDifferentVenue,
   cleanSlots,
   mergeSlots,
+  clearCarriedVenueForBrowse,
   slotsFromEntities,
   fsmStateOf,
   guessChips,
@@ -924,4 +1141,5 @@ module.exports = {
   abstainReply,
   labelFor,
   continuationOf,
+  repeatedMiss,
 };

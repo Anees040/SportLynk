@@ -27,6 +27,30 @@ const REPLY_PREVIEW_SQL = `(
    WHERE p.id = m.reply_to_id
 )`;
 
+// The poll carried by a message of kind 'poll', denormalised onto the row so a
+// poll bubble renders — question, options and every vote with its voter's name —
+// without a second request. NULL for any message that is not a poll. Votes are
+// returned in full (not pre-aggregated) because the UI shows both the per-option
+// tally and, on tap, who voted for what; a chat's membership keeps the array small.
+const POLL_SQL = `(
+  SELECT jsonb_build_object(
+           'id', pl.id,
+           'question', pl.question,
+           'options', pl.options,
+           'allowMultiple', pl.allow_multiple,
+           'closed', (pl.closed_at IS NOT NULL),
+           'votes', COALESCE((
+             SELECT jsonb_agg(jsonb_build_object(
+                      'optionIndex', v.option_index,
+                      'userId', v.user_id,
+                      'userName', vu.name))
+               FROM chat_poll_votes v
+               LEFT JOIN users vu ON vu.id = v.user_id
+              WHERE v.poll_id = pl.id), '[]'::jsonb)
+         )
+    FROM chat_polls pl WHERE pl.message_id = m.id
+)`;
+
 async function ensureTeamChannel(client, team) {
   const { rows } = await client.query(
     `INSERT INTO chat_channels (type, ref_id, title, image_url, created_by)
@@ -126,6 +150,7 @@ async function hydrateMessage(clientOrPool, messageId) {
   const { rows } = await (clientOrPool || pool).query(
     `SELECT m.*, u.name AS sender_name, u.avatar_url AS sender_avatar,
        ${REPLY_PREVIEW_SQL} AS reply_preview,
+       ${POLL_SQL} AS poll,
        COALESCE(jsonb_agg(jsonb_build_object('emoji', r.emoji, 'userId', r.user_id))
          FILTER (WHERE r.id IS NOT NULL), '[]'::jsonb) AS reactions
        FROM chat_messages m
@@ -200,12 +225,70 @@ async function setPinned(client, { messageId, pinned, by = null }) {
   const { rows } = await client.query(
     `UPDATE chat_messages
         SET pinned_at = CASE WHEN $2 THEN now() ELSE NULL END,
-            pinned_by = CASE WHEN $2 THEN $3 ELSE NULL END
+            pinned_by = CASE WHEN $2 THEN $3::uuid ELSE NULL END
       WHERE id = $1
       RETURNING id, pinned_at`,
     [messageId, pinned, by],
   );
   return rows[0] || null;
+}
+
+// Polls
+//
+// A poll is a message of kind 'poll' whose body is the question; its ballot and
+// votes live in chat_polls / chat_poll_votes (migration 031). createPoll writes
+// the anchoring message and the poll row together, and votePoll records a vote
+// with the single-choice / multi-choice rule and a toggle for un-voting.
+
+/** Create a poll: the announcing message plus its row. Returns the message id. */
+async function createPoll(client, { channelId, userId, question, options, allowMultiple }) {
+  const { message } = await insertMessage(client, {
+    channelId, senderId: userId, kind: 'poll', body: question,
+  });
+  await client.query(
+    `INSERT INTO chat_polls (channel_id, message_id, created_by, question, options, allow_multiple)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+    [channelId, message.id, userId, question, JSON.stringify(options), allowMultiple === true],
+  );
+  return message.id;
+}
+
+/**
+ * Record a vote. Tapping an option a voter already chose removes it (un-vote); a
+ * single-choice poll clears the voter's other picks first. The poll is scoped to
+ * its channel so a vote cannot be cast into a room the caller cannot see. Returns
+ * `{ ok, status, message, messageId, channelId }`.
+ */
+async function votePoll(client, { channelId, pollId, userId, optionIndex }) {
+  const poll = (await client.query(
+    `SELECT id, allow_multiple, closed_at, message_id,
+            jsonb_array_length(options) AS n
+       FROM chat_polls WHERE id = $1 AND channel_id = $2`,
+    [pollId, channelId],
+  )).rows[0];
+  if (!poll) return { ok: false, status: 404, message: 'Poll not found.' };
+  if (poll.closed_at) return { ok: false, status: 400, message: 'This poll is closed.' };
+  if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= poll.n) {
+    return { ok: false, status: 400, message: 'That option does not exist.' };
+  }
+
+  const existing = await client.query(
+    'SELECT id FROM chat_poll_votes WHERE poll_id = $1 AND user_id = $2 AND option_index = $3',
+    [pollId, userId, optionIndex],
+  );
+  if (existing.rows.length > 0) {
+    await client.query('DELETE FROM chat_poll_votes WHERE id = $1', [existing.rows[0].id]);
+  } else {
+    if (!poll.allow_multiple) {
+      await client.query('DELETE FROM chat_poll_votes WHERE poll_id = $1 AND user_id = $2',
+        [pollId, userId]);
+    }
+    await client.query(
+      'INSERT INTO chat_poll_votes (poll_id, option_index, user_id) VALUES ($1, $2, $3)',
+      [pollId, optionIndex, userId],
+    );
+  }
+  return { ok: true, status: 200, messageId: poll.message_id, channelId };
 }
 
 /**
@@ -679,5 +762,6 @@ module.exports = {
   openBookingRoom, announceInRoom, emitPills,
   messagePreview, notifyNewMessage,
   setMentions, setPinned, listPinned, listMedia, emitPinnedChanged,
-  REPLY_PREVIEW_SQL,
+  createPoll, votePoll,
+  REPLY_PREVIEW_SQL, POLL_SQL,
 };

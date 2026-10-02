@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -218,6 +219,54 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   /// and makes a tap on any bubble toggle its selection.
   final Set<String> _selected = {};
   bool get _selecting => _selected.isNotEmpty;
+
+  /// Where to float the quick-reaction pill: the top of the one selected row, in
+  /// the coordinate space of the timeline stack, with the side the bubble sits
+  /// on. Null when nothing is selected, when more than one is, or when the row is
+  /// scrolled out of the viewport — WhatsApp shows reactions against a message
+  /// you can see, and against exactly one.
+  double? _reactionTop;
+  bool _reactionRight = false;
+
+  /// Measures the selected row after layout and places the pill just above it.
+  /// Runs post-frame because the row's box is only correct once the contextual
+  /// app bar has been inserted and the list has settled under it.
+  void _placeReactionPill() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      double? top;
+      var right = false;
+      if (_selected.length == 1) {
+        final id = _selected.first;
+        final rowCtx = _rowKeys[id]?.currentContext;
+        final stackBox =
+            _listStackKey.currentContext?.findRenderObject() as RenderBox?;
+        final rowBox = rowCtx?.findRenderObject() as RenderBox?;
+        if (rowBox != null && stackBox != null && rowBox.hasSize) {
+          final y = rowBox.localToGlobal(Offset.zero, ancestor: stackBox).dy;
+          // Only when the row is actually on screen; otherwise the pill would
+          // float over an unrelated part of the thread.
+          if (y > -rowBox.size.height && y < stackBox.size.height) {
+            top = (y - _reactionPillHeight - 6)
+                .clamp(4.0, math.max(4.0, stackBox.size.height - _reactionPillHeight - 4));
+            right = _controller?.messageById(id)?.senderId == _myId;
+          }
+        }
+      }
+      if (top != _reactionTop || right != _reactionRight) {
+        setState(() {
+          _reactionTop = top;
+          _reactionRight = right;
+        });
+      }
+    });
+  }
+
+  static const double _reactionPillHeight = 48;
+
+  /// The timeline stack, used as the coordinate space the reaction pill is
+  /// positioned in.
+  final GlobalKey _listStackKey = GlobalKey();
 
   /// A stable key per rendered row, keyed by message id, so a tapped quote can
   /// scroll its parent into view. Every id in an album run maps to the run's key.
@@ -806,17 +855,22 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     if (m.isSystem || m.isDeleted) return;
     HapticFeedback.selectionClick();
     setState(() => _selected.add(m.id));
+    _placeReactionPill();
   }
 
   void _toggleSelect(String id) {
     setState(() {
       if (!_selected.remove(id)) _selected.add(id);
     });
+    _placeReactionPill();
   }
 
   void _clearSelection() {
     if (_selected.isEmpty) return;
-    setState(_selected.clear);
+    setState(() {
+      _selected.clear();
+      _reactionTop = null;
+    });
   }
 
   List<ChatMessage> get _selectedMessages {
@@ -832,7 +886,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     final msgs = _selectedMessages;
     final count = msgs.length;
     final single = count == 1 ? msgs.first : null;
-    final canDeleteAll = c != null && msgs.isNotEmpty && msgs.every(c.canDelete);
+    // Delete is always offered: "Delete for me" needs no permission, and the
+    // sheet decides whether "Delete for everyone" is among the choices.
+    final canDeleteAny = msgs.any((m) => !m.isSystem);
     final canForward = msgs.any((m) =>
         !m.isDeleted && !m.pending && !m.failed && m.kind != MessageKind.system);
     return AppBar(
@@ -870,50 +926,64 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
               icon: Icon(c.isPinned(single.id) ? Icons.push_pin : Icons.push_pin_outlined),
               tooltip: c.isPinned(single.id) ? 'Unpin' : 'Pin',
               onPressed: () => _pinSelected(single)),
-        if (canDeleteAll)
+        if (canDeleteAny)
           IconButton(
               icon: const Icon(Icons.delete_outline),
               tooltip: 'Delete',
               onPressed: _deleteSelected),
       ],
-      bottom: single != null && !single.isDeleted ? _reactionStrip(single) : null,
     );
   }
 
-  /// The emoji quick-react row under the selection bar, plus a "+" to the full
-  /// picker — the WhatsApp reaction affordance, applied to the one selected row.
-  PreferredSizeWidget _reactionStrip(ChatMessage m) {
+  /// The floating quick-reaction pill, placed just above the selected bubble the
+  /// way WhatsApp does rather than pinned under the header: a reaction is an
+  /// action on one message, so it belongs beside that message, not at the top of
+  /// a screen it may be nowhere near. Rounded, raised and on a light surface so
+  /// the emoji read; "+" opens the full picker.
+  Widget _reactionPill(ChatMessage m) {
     final c = _controller;
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(46),
+    return Material(
+      elevation: 6,
+      borderRadius: BorderRadius.circular(_reactionPillHeight / 2),
+      color: AppColors.white,
+      shadowColor: Colors.black.withValues(alpha: 0.3),
       child: Container(
-        color: AppColors.primaryDark,
-        height: 46,
+        height: _reactionPillHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          mainAxisSize: MainAxisSize.min,
           children: [
             ..._palette.map((e) {
               final mine = m.myReaction(_myId) == e;
-              return GestureDetector(
+              return InkWell(
+                customBorder: const CircleBorder(),
                 onTap: () {
                   c?.toggleReaction(m.id, e);
                   _clearSelection();
                 },
                 child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
                   padding: const EdgeInsets.all(5),
                   decoration: BoxDecoration(
-                    color: mine ? Colors.white24 : Colors.transparent,
+                    color: mine ? AppColors.accentLight : Colors.transparent,
                     shape: BoxShape.circle,
                   ),
                   child: Text(e, style: const TextStyle(fontSize: 21)),
                 ),
               );
             }),
-            GestureDetector(
+            InkWell(
+              customBorder: const CircleBorder(),
               onTap: () => _openEmojiPicker(m),
-              child: const Padding(
-                padding: EdgeInsets.all(5),
-                child: Icon(Icons.add_circle_outline, color: Colors.white, size: 24),
+              child: Container(
+                margin: const EdgeInsets.only(left: 2),
+                padding: const EdgeInsets.all(5),
+                decoration: const BoxDecoration(
+                  color: AppColors.inputFill,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.add,
+                    color: AppColors.textSecondary, size: 20),
               ),
             ),
           ],
@@ -940,32 +1010,72 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     }
   }
 
+  /// WhatsApp's delete sheet: "Delete for everyone" where the caller is allowed
+  /// it, "Delete for me" always, and Cancel. The two are genuinely different
+  /// operations — one tombstones the row for the room, the other hides it for
+  /// this reader only (migration 033) — so they are offered as separate choices
+  /// rather than one ambiguous "Delete".
   Future<void> _deleteSelected() async {
     final c = _controller;
     if (c == null) return;
-    final msgs = _selectedMessages.where(c.canDelete).toList();
+    final msgs = _selectedMessages.where((m) => !m.isSystem).toList();
     if (msgs.isEmpty) return;
-    final ok = await showDialog<bool>(
+    // Delete-for-everyone needs the right on every selected message; a mixed
+    // selection offers only the hide, rather than silently skipping some.
+    final canEveryone = msgs.every(c.canDelete);
+    final n = msgs.length;
+
+    final choice = await showModalBottomSheet<String>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(msgs.length == 1
-            ? 'Delete message?'
-            : 'Delete ${msgs.length} messages?'),
-        content: const Text('This removes it for everyone in the chat.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete', style: TextStyle(color: AppColors.error))),
-        ],
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+              child: Text(
+                n == 1 ? 'Delete message?' : 'Delete $n messages?',
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary),
+              ),
+            ),
+            if (canEveryone)
+              ListTile(
+                leading: const Icon(Icons.delete_forever_outlined,
+                    color: AppColors.error),
+                title: const Text('Delete for everyone',
+                    style: TextStyle(color: AppColors.error)),
+                subtitle: const Text('Removed from this chat for all members'),
+                onTap: () => Navigator.pop(sheetCtx, 'everyone'),
+              ),
+            ListTile(
+              leading: const Icon(Icons.visibility_off_outlined,
+                  color: AppColors.textPrimary),
+              title: const Text('Delete for me'),
+              subtitle: const Text('Hidden from your chat only'),
+              onTap: () => Navigator.pop(sheetCtx, 'me'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.close, color: AppColors.textSecondary),
+              title: const Text('Cancel',
+                  style: TextStyle(color: AppColors.textSecondary)),
+              onTap: () => Navigator.pop(sheetCtx),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
-    if (ok != true || !mounted) return;
+    if (choice == null || !mounted) return;
     _clearSelection();
     for (final m in msgs) {
-      final r = await c.deleteMessage(m.id);
+      final r = choice == 'everyone'
+          ? await c.deleteMessage(m.id)
+          : await c.hideMessage(m.id);
       if (!mounted) return;
       if (r['success'] != true) {
         SnackbarUtil.showError(
@@ -1191,6 +1301,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
             child: ChatBackground(
               preset: _bg,
               child: Stack(
+              key: _listStackKey,
               children: [
                 ListenableBuilder(
                   listenable: c,
@@ -1216,6 +1327,19 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
                 ),
                 if (_showJump)
                   Positioned(right: 12, bottom: 12, child: _jumpButton()),
+                // The quick-reaction pill, floated over the timeline just above
+                // the one selected bubble.
+                if (_reactionTop != null && _selected.length == 1)
+                  Builder(builder: (_) {
+                    final m = c.messageById(_selected.first);
+                    if (m == null || m.isDeleted) return const SizedBox.shrink();
+                    return Positioned(
+                      top: _reactionTop,
+                      left: _reactionRight ? null : 8,
+                      right: _reactionRight ? 8 : null,
+                      child: _reactionPill(m),
+                    );
+                  }),
               ],
               ),
             ),
@@ -1549,7 +1673,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
       width: double.infinity,
       duration: const Duration(milliseconds: 300),
       color: selected
-          ? AppColors.accentLight
+          ? AppColors.chatSelection
           : (highlighted ? AppColors.accentLight : Colors.transparent),
       child: child,
     );

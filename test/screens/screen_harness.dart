@@ -47,6 +47,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -581,6 +582,35 @@ class RouteLog {
 /// their own context — a notification tap goes through `DeepLink.navigatorKey`,
 /// which resolves to null in a tree that does not carry it, and a link that could
 /// not be used is indistinguishable from one that was never followed.
+/// Answers the geolocator platform channel so a screen that asks for a location
+/// gets a definite "no" instead of waiting on a plugin that is not there.
+///
+/// `LocationService.current()` is deliberately fail-soft and returns null when the
+/// location service is disabled, which is the honest state for a test device. The
+/// problem it solves is sequencing, not the value: `FindVenuesScreen._load` awaits
+/// `_location.current()` BEFORE it fetches the venue list, so with the channel
+/// unmocked the await never settles inside the test's pumps and the list request is
+/// never issued at all — every assertion about the list then fails for a reason that
+/// has nothing to do with the list. Screens that never ask for a location are
+/// unaffected.
+void _mockGeolocator() {
+  const channel = MethodChannel('flutter.baseflow.com/geolocator');
+  final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(channel, (call) async {
+    switch (call.method) {
+      case 'isLocationServiceEnabled':
+        return false;
+      case 'checkPermission':
+      case 'requestPermission':
+        // 0 == LocationPermission.denied in the plugin's enum ordering.
+        return 0;
+      default:
+        return null;
+    }
+  });
+  addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+}
+
 Future<RouteLog> pumpScreen(
   WidgetTester tester,
   Widget screen, {
@@ -595,6 +625,7 @@ Future<RouteLog> pumpScreen(
   // shared_preferences during init; without a mocked store the platform channel
   // never answers and the controller's _init hangs before its first fetch.
   SharedPreferences.setMockInitialValues(const <String, Object>{});
+  _mockGeolocator();
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {

@@ -342,6 +342,120 @@ void main() {
     });
   });
 
+  group('the sport selector', () {
+    testWidgets('tapping All after a sport clears the sport and stays cleared',
+        (tester) async {
+      // The reported bug: the preference auto-select used to re-run on EVERY load, so
+      // tapping All emptied the sport and the reload immediately re-applied the
+      // player's stated preference. A cricket player saw All jump to Cricket and could
+      // never widen the search. The auto-select is now a one-time seed.
+      api.ok('/venues', [venue()]);
+      api.ok('/users/me/player', {'sport_preferences': <String>['cricket']});
+
+      await pumpScreen(tester, const FindVenuesScreen());
+      await settleData(tester);
+      // Seeded from the preference on first open.
+      expect(api.to('/venues').last.param('sport'), 'cricket');
+
+      await tester.tap(find.text('Football'));
+      await settleData(tester);
+      expect(api.to('/venues').last.param('sport'), 'football');
+
+      await tester.tap(find.text('All'));
+      await settleData(tester);
+      expect(api.to('/venues').last.param('sport'), isNull,
+          reason: 'All must send no sport, not fall back to the preference');
+    });
+
+    testWidgets('All survives a later reload rather than being re-seeded',
+        (tester) async {
+      // The auto-select must not creep back on a subsequent fetch. Searching is used
+      // as the reload trigger because it definitely issues one.
+      api.ok('/venues', [venue()]);
+      api.ok('/users/me/player', {'sport_preferences': <String>['cricket']});
+
+      await pumpScreen(tester, const FindVenuesScreen());
+      await settleData(tester);
+
+      await tester.tap(find.text('All'));
+      await settleData(tester);
+      expect(api.to('/venues').last.param('sport'), isNull);
+
+      await tester.enterText(find.byType(TextField).first, 'Ka');
+      await settleData(tester);
+
+      expect(api.to('/venues').last.param('search'), 'Ka');
+      expect(api.to('/venues').last.param('sport'), isNull,
+          reason: 'the preference must not be re-applied on a later load');
+    });
+  });
+
+  group('searching', () {
+    testWidgets('a search hides the recommendation rail so matches come first',
+        (tester) async {
+      // The reported bug: the "For you" rail plus its header stand ~300px tall and
+      // rendered above the results even while searching, pushing the match the player
+      // just typed below the fold and under the keyboard.
+      api.ok('/venues', [venue(name: 'Match Ground')]);
+      api.ok('/venues/recommended', {
+        'venues': [venue(id: 'r-1', name: 'Rail Pick')],
+        'source': 'model',
+        'label': 'For you',
+      });
+
+      await pumpScreen(tester, const FindVenuesScreen());
+      await settleData(tester);
+      expect(find.text('For you'), findsOneWidget);
+      expect(find.text('Nearby Venues'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField).first, 'Match');
+      await settleData(tester);
+
+      expect(find.text('For you'), findsNothing,
+          reason: 'the rail is browse furniture, not a search result');
+      expect(find.text('Search results'), findsOneWidget);
+      expect(find.text('Match Ground'), findsOneWidget);
+    });
+
+    testWidgets('the rail comes back when the search is cleared', (tester) async {
+      api.ok('/venues', [venue()]);
+      api.ok('/venues/recommended', {
+        'venues': [venue(id: 'r-1', name: 'Rail Pick')],
+        'source': 'model',
+        'label': 'For you',
+      });
+
+      await pumpScreen(tester, const FindVenuesScreen());
+      await settleData(tester);
+      await tester.enterText(find.byType(TextField).first, 'Ka');
+      await settleData(tester);
+      expect(find.text('For you'), findsNothing);
+
+      await tester.enterText(find.byType(TextField).first, '');
+      await settleData(tester);
+      expect(find.text('For you'), findsOneWidget);
+      expect(find.text('Nearby Venues'), findsOneWidget);
+    });
+
+    testWidgets('a venue in the rail is not repeated in the list below',
+        (tester) async {
+      // The rail is the ranked few and the list is the rest; showing the same ground
+      // twice in one scroll wastes the fold and reads as a bug.
+      api.ok('/venues', [venue(id: 'v-1', name: 'Shared Ground'), venue(id: 'v-2', name: 'Only In List')]);
+      api.ok('/venues/recommended', {
+        'venues': [venue(id: 'v-1', name: 'Shared Ground')],
+        'source': 'model',
+        'label': 'For you',
+      });
+
+      await pumpScreen(tester, const FindVenuesScreen());
+      await settleData(tester);
+
+      expect(find.text('Shared Ground'), findsOneWidget);
+      expect(find.text('Only In List'), findsOneWidget);
+    });
+  });
+
   group('pulling to refresh', () {
     testWidgets('a pull refetches the list', (tester) async {
       api.ok('/venues', [venue()]);

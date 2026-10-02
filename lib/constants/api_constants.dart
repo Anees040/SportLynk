@@ -95,6 +95,7 @@ class ApiConstants {
   static String chatReactions(String channelId, String messageId) => '/chat/$channelId/messages/$messageId/reactions';
   static String chatMessage(String channelId, String messageId) => '/chat/$channelId/messages/$messageId';
   static String chatPin(String channelId, String messageId) => '/chat/$channelId/messages/$messageId/pin';
+  static String chatMessageHide(String channelId, String messageId) => '/chat/$channelId/messages/$messageId/hide';
   static String chatPinned(String channelId) => '/chat/$channelId/pinned';
   static String chatMedia(String channelId) => '/chat/$channelId/media';
 

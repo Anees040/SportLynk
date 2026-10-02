@@ -13,11 +13,23 @@
 # Every pin below was verified to have a cp314 wheel for the installed Python
 # (3.14.4) — no C compiler is needed to install this file on Windows.
 #
-# Install:
+# The container image (see Dockerfile) pins that same 3.14.4 so the Linux wheels
+# resolve against the interpreter these artifacts were pickled against. That image
+# carries no compiler either, so a pin without a published manylinux cp314 wheel
+# fails the build with a clear message rather than starting a source build.
+#
+# THIS FILE IS THE SERVING CONTRACT: what the image and Render install, and what
+# app/ actually imports. Training-only packages live in requirements-train.txt,
+# which installs this file and adds them on top.
+#
+# Install, serving only:
 #   cd ml-service
 #   python -m venv .venv
 #   .\.venv\Scripts\Activate.ps1
 #   pip install -r requirements.txt
+#
+# Install for training as well:
+#   pip install -r requirements-train.txt
 #
 # TRANSITIVE dependencies (scipy, pydantic, starlette, threadpoolctl, ...) are not
 # pinned here; this is a requirements file, not a lock file. scipy in particular
@@ -62,10 +74,13 @@ dateparser==1.4.2
 # entities.warm() in main.py's lifespan for exactly that reason — see the 50 ms
 # per-parse budget in routers/nlu.py.
 
-# ── Config & reporting ──────────────────────────────────────────────────
+# ── Config ──────────────────────────────────────────────────────────────
 python-dotenv==1.2.3
-matplotlib==3.11.1
-# matplotlib is a TRAINING dependency only (calibration curve, forecast plots for
-# reports/). Nothing under app/ imports it, so the serving path stays light — worth
-# knowing when ml-service is deployed to Render's free tier in S.7, where build
-# time and slug size are the constraints.
+
+# matplotlib is deliberately NOT here. It is a training-only dependency — the
+# calibration curve, the confusion matrices and the forecast plots written to
+# reports/ — and nothing under app/ imports it, so the serving image carries
+# neither it nor its dependency tree (pillow, fonttools, contourpy, kiwisolver).
+# It lives in requirements-train.txt. A trainer run in a serving-only environment
+# degrades rather than fails: every matplotlib import under training/ is lazy and
+# inside a try/except, and the trainers report which PNG was skipped.

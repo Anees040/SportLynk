@@ -18,6 +18,7 @@ const {
 } = require("../services/bookingService");
 const { notify } = require("../utils/notify");
 const { recomputeTrust } = require("../utils/trustScore");
+const bookingDisputes = require("../services/bookingDisputeService");
 
 // POST /api/bookings — create booking (player only)
 // Ledger: player balance -P, player frozen +P, status pending (P = slot price).
@@ -78,6 +79,17 @@ router.get("/my", authMiddleware, async (req, res, next) => {
   }
 });
 
+// GET /api/bookings/disputes/mine — the caller's own disputes, for the status line
+// on a booking. Declared BEFORE /:id so "disputes" is never read as a booking id.
+router.get("/disputes/mine", authMiddleware, async (req, res, next) => {
+  try {
+    const rows = await bookingDisputes.listMine(pool, { userId: req.user.id });
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // GET /api/bookings/:id — booking detail
 router.get("/:id", authMiddleware, async (req, res, next) => {
   try {
@@ -124,6 +136,40 @@ router.patch("/:id/cancel", authMiddleware, async (req, res, next) => {
   } catch (e) {
     console.error("Booking cancellation error:", e);
     next(e);
+  }
+});
+
+// POST /api/bookings/:id/dispute — player reports a problem with their booking.
+// The money, if a refund is owed, moves only when an admin UPHOLDS the dispute
+// (bookingDisputeService.resolve); this endpoint just files the claim. A transaction
+// is used so the open-dispute uniqueness race resolves to one clean 409, not a 500.
+router.post("/:id/dispute", authMiddleware, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const out = await bookingDisputes.raise(client, {
+      userId: req.user.id,
+      bookingId: req.params.id,
+      reason: (req.body || {}).reason,
+    });
+    if (!out.ok) {
+      await client.query("ROLLBACK");
+      return res.status(out.status).json({ success: false, message: out.message });
+    }
+    await client.query("COMMIT");
+    res.status(201).json({ success: true, data: out.row, message: out.message });
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    // The partial unique index is the final guard if two requests race past the
+    // in-transaction pre-check; surface it as the 409 it means.
+    if (e && e.code === "23505") {
+      return res.status(409).json({
+        success: false, message: "You already have an open dispute on this booking.",
+      });
+    }
+    next(e);
+  } finally {
+    client.release();
   }
 });
 

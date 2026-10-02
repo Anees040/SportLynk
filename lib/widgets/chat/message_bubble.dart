@@ -105,16 +105,22 @@ class MessageBubble extends StatelessWidget {
           ),
           if (message.reactions.isNotEmpty) _reactions(),
           if (message.failed)
-            Padding(
-              padding: const EdgeInsets.only(top: 2, right: 2),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, size: 12, color: AppColors.error),
-                  const SizedBox(width: 3),
-                  Text('Not sent · tap to retry',
-                      style: const TextStyle(fontSize: 10.5, color: AppColors.error)),
-                ],
+            // The marker is a retry target too, not just a caption: the whole
+            // failed bubble — body, media and this line — resends on a tap, so
+            // there is no instruction to read and no dead pixel to hit.
+            GestureDetector(
+              onTap: onRetry,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2, right: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 12, color: AppColors.error),
+                    const SizedBox(width: 3),
+                    const Text('Not sent',
+                        style: TextStyle(fontSize: 10.5, color: AppColors.error)),
+                  ],
+                ),
               ),
             ),
         ],
@@ -166,6 +172,8 @@ class MessageBubble extends StatelessWidget {
             durationMs: message.durationMs.toInt(),
             waveform: message.waveform,
             pending: message.pending,
+            failedToSend: message.failed,
+            onRetrySend: onRetry,
           ),
           Align(
             alignment: Alignment.centerRight,
@@ -371,13 +379,33 @@ class MessageBubble extends StatelessWidget {
             child: ClipRRect(
               borderRadius: radius,
               child: GestureDetector(
-                onTap: message.pending ? null : onImageTap,
+                // A failed photo resends on a tap on the photo itself — the whole
+                // target, not a line of text beside it. Opening the viewer would
+                // be the wrong action anyway: there is no hosted image yet.
+                onTap: message.failed
+                    ? onRetry
+                    : (message.pending ? null : onImageTap),
                 child: Stack(
                   children: [
                     AspectRatio(
                       aspectRatio: message.aspectRatio,
                       child: _imageContent(),
                     ),
+                    // The failed photo carries its own retry affordance, so the
+                    // action is visible rather than something to be guessed at.
+                    if (message.failed)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.38),
+                          child: const Center(
+                            child: CircleAvatar(
+                              radius: 20,
+                              backgroundColor: AppColors.error,
+                              child: Icon(Icons.refresh, color: Colors.white, size: 22),
+                            ),
+                          ),
+                        ),
+                      ),
                     if (message.pending)
                       Positioned.fill(
                         child: Container(

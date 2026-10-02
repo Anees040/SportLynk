@@ -71,6 +71,21 @@ function threadIdOf(body = {}, query = {}) {
   return access.isUuid(id) ? id : null;
 }
 
+/**
+ * Did the client deliberately start a new chat?
+ *
+ * An absent `session_id` means "the newest chat, or a new one", which is the right
+ * default for a client that does not track the id. It is the wrong answer when the
+ * user has just tapped "new chat": resuming then appends a fresh conversation to the
+ * one they left, and the history list ends up with a single row. This flag separates
+ * the two, and the spellings are tolerated for the same reason threadIdOf tolerates
+ * four of them.
+ */
+function newSessionOf(body = {}) {
+  const raw = body.new_session === undefined ? body.newSession : body.new_session;
+  return raw === true || raw === 1 || raw === '1' || raw === 'true';
+}
+
 // The turn
 
 /**
@@ -95,6 +110,7 @@ router.post('/message', async (req, res, next) => {
       args: b.args || null,
       clientId: b.client_id || b.clientId || null,
       persona: req.user.role === 'owner' ? 'owner' : 'player',
+      newSession: newSessionOf(b),
     });
     if (!out.ok) {
       if (out.error) console.error('[assistant] turn failed:', out.error);

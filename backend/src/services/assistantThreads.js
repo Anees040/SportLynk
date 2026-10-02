@@ -126,13 +126,66 @@ async function create(client, { userId, title = null, persona = 'player' } = {})
   return { ok: true, code: 'ok', status: 201, row: rows[0], message: null };
 }
 
-/** Find this user's most recent open thread, or start one. */
-async function getOrCreate(client, { userId, threadId = null, persona = 'player' } = {}) {
+/**
+ * The thread a given client_id already landed in, if it landed anywhere.
+ *
+ * chatCore.insertMessage de-duplicates on (channel_id, sender_id, client_id), which is
+ * scoped to one channel — correct for team chat, where the channel is known before the
+ * retry. A "new chat" retry has no channel yet: if the first attempt committed and only
+ * its response was lost, a second attempt that created another thread would be outside
+ * the scope that dedupe can see, and the user would get two chats holding the same
+ * sentence. Looking the key up across this user's own assistant threads closes that,
+ * and keeps the lookup inside created_by so it can only ever find their own rows.
+ */
+async function threadForClientId(client, { userId, clientId } = {}) {
+  if (!clientId) return null;
+  const { rows } = await (client || pool).query(
+    `SELECT c.id
+       FROM chat_messages m
+       JOIN chat_channels c ON c.id = m.channel_id
+      WHERE m.client_id = $2 AND m.sender_id = $1
+        AND c.type = 'assistant' AND c.created_by = $1
+      ORDER BY m.created_at DESC
+      LIMIT 1`,
+    [userId, clientId],
+  );
+  return rows[0] ? rows[0].id : null;
+}
+
+/**
+ * Find this user's most recent open thread, or start one.
+ *
+ * Why `forceNew` exists
+ * An absent threadId means "the newest chat, or a new one" — the contract a client
+ * that does not echo a session id back depends on. That resolution is also what made
+ * "new chat" fail to produce a new chat: the client cleared its own transcript, sent
+ * the next message with no session id, and this function appended it to the thread the
+ * user had just left. Three conversations became one row, and the history list had one
+ * thing to show. `forceNew` is the caller saying "the user deliberately started a new
+ * chat", which is a different statement from "I do not know which chat this is", and
+ * only the second one may resume. An explicit threadId still wins over it: that is a
+ * resume, and a resume is never a new thread.
+ *
+ * `clientId` is consulted only on the forceNew path, and only to recognise a retry of
+ * the turn that opened the chat — see threadForClientId.
+ */
+async function getOrCreate(client, {
+  userId, threadId = null, persona = 'player', forceNew = false, clientId = null,
+} = {}) {
   if (threadId) {
     const found = await get(client, { userId, threadId });
     if (found) return { ok: true, row: found, created: false };
     return { ok: false, code: 'thread_not_found', status: 404, row: null, created: false,
       message: 'That chat does not exist.' };
+  }
+  if (forceNew) {
+    const already = await threadForClientId(client, { userId, clientId });
+    if (already) {
+      const full = await get(client, { userId, threadId: already });
+      if (full) return { ok: true, row: full, created: false };
+    }
+    const made = await create(client, { userId, persona });
+    return { ...made, created: made.ok };
   }
   const open = await list(client, { userId, limit: 1 });
   if (open.length) {
@@ -356,6 +409,7 @@ module.exports = {
   list,
   create,
   getOrCreate,
+  threadForClientId,
   saveState,
   update,
   remove,

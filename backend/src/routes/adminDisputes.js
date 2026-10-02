@@ -25,6 +25,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const disputes = require('../services/disputeService');
+const bookingDisputes = require('../services/bookingDisputeService');
 const mc = require('../utils/matchCore');
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -163,5 +164,59 @@ function messageFor(out) {
   if (out.closed > 1) parts.push(`${out.closed} disputes closed.`);
   return parts.join(' ');
 }
+
+// Booking disputes — a separate queue from match disputes (migration 032).
+//
+// Why it lives here rather than in its own router: this file is already mounted behind
+// the single `auth, checkRole('admin')` gate in admin.js, which is the one place that
+// decides who is an admin. A booking dispute is adjudicated by the same person, so it
+// belongs behind the same gate rather than a second one that could drift.
+
+/** GET /api/admin/booking-disputes?status=open|upheld|rejected|all */
+router.get('/booking-disputes', async (req, res, next) => {
+  try {
+    const rows = await bookingDisputes.listForAdmin(pool, {
+      status: String(req.query.status || 'open'),
+      limit: Number(req.query.limit) || 100,
+    });
+    return res.json({ success: true, data: { disputes: rows } });
+  } catch (e) { return next(e); }
+});
+
+/**
+ * POST /api/admin/booking-disputes/:id/resolve  { uphold: boolean, notes?: string }
+ *
+ * The ruling and the refund are one transaction — see bookingDisputeService.resolve.
+ * An upheld dispute on a booking whose escrow is still held refunds it in full through
+ * the same escrow helpers cancelBooking uses; a rejected one moves no money.
+ */
+router.post('/booking-disputes/:id/resolve', async (req, res, next) => {
+  if (!RE_UUID.test(String(req.params.id))) return bad(res, 404, 'That dispute no longer exists.');
+  const body = req.body || {};
+  if (typeof body.uphold !== 'boolean') {
+    return bad(res, 400, 'Say whether the dispute is upheld (true) or rejected (false).');
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const out = await bookingDisputes.resolve(client, {
+      disputeId: req.params.id,
+      adminId: req.user.id,
+      uphold: body.uphold,
+      notes: body.notes,
+    });
+    if (!out.ok) {
+      await client.query('ROLLBACK');
+      return bad(res, out.status, out.message);
+    }
+    await client.query('COMMIT');
+    return res.json({ success: true, data: out.row, message: out.message });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    return next(e);
+  } finally {
+    client.release();
+  }
+});
 
 module.exports = router;

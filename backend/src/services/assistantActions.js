@@ -51,6 +51,21 @@ const TOP_VENUES = 3;
 const TOP_SLOTS = 6;
 const TOP_PEOPLE = 5;
 
+/**
+ * Utterances that mean "I need help", not "ask this ground's owner something".
+ *
+ * Whole utterances only, normalised to letters and single spaces. These reach
+ * `contact_owner` because reaching a human IS what they ask for — but the human is
+ * SportLynk support, not a venue owner, and escalating the bare word to an owner's
+ * queue helps nobody. See contactOwner.
+ */
+const GENERIC_HELP = new Set([
+  'support', 'help', 'need help', 'i need help', 'need support', 'i need support',
+  'help me', 'help please', 'support please', 'customer support', 'customer service',
+  'madad', 'madad chahiye', 'mujhe madad chahiye', 'help chahiye', 'support chahiye',
+  'mujhe help chahiye', 'koi madad', 'problem', 'issue', 'complaint',
+]);
+
 /** PKR, the way a person writes it. */
 const money = (n) => `PKR ${Number(round2(asNum(n))).toLocaleString('en-PK')}`;
 
@@ -374,6 +389,10 @@ async function findVenue(ctx) {
         sport: slots.sport || undefined, area: slots.area || undefined, offset: ranked.length,
       })] : []),
       chip('Cheapest first', 'find_venue', { sport: slots.sport || undefined, sort: 'price_low' }),
+      // The full browse+filter UI, for when the chat's shortlist is not enough. A
+      // deep-link, not another chat turn: searching by map, every filter and all
+      // grounds belongs on the Find Venues screen, not scrolled inside a bubble.
+      chip('Search all grounds', 'app_help', { screen: 'venues' }),
     ],
     meta: { matched: rows.length, ranker: source },
   }) };
@@ -624,6 +643,11 @@ async function bookVenue(ctx) {
         chip('Today', 'book_venue', { venueId: venue.id, date: pktDate() }),
         chip('Tomorrow', 'book_venue', { venueId: venue.id, date: pktDate(1) }),
         chip(day(pktDate(2)), 'book_venue', { venueId: venue.id, date: pktDate(2) }),
+        // A generic "ground book karna hai" continues with the ground already chosen,
+        // which is right mid-errand and wrong when the user has moved on. Naming the
+        // ground in the question is only half an answer; this is the other half -- a
+        // one-tap way out that does not cost them the booking if they did mean it.
+        chip('Different ground', 'find_venue', { sport: slots.sport || undefined }),
       ],
     }), state: { intent: 'book_venue', pending: 'date', slots } };
   }
@@ -650,7 +674,8 @@ async function bookVenue(ctx) {
     return { reply: reply(`Pick a time at ${venue.name} on ${day(slots.date)}:`, {
       source: SOURCES.LIVE,
       cards: [slotPickerCard(venue, free, { date: slots.date })],
-      chips: [chip('Another day', 'book_venue', { venueId: venue.id, date: pktDate(1) })],
+      chips: [chip('Another day', 'book_venue', { venueId: venue.id, date: pktDate(1) }),
+        chip('Different ground', 'find_venue', { sport: slots.sport || undefined })],
     }), state: { intent: 'book_venue', pending: 'slot', slots } };
   }
 
@@ -2254,11 +2279,17 @@ const SCREENS = Object.freeze({
   profile: ['Profile', 'Your details, position, skill level and trust score.'],
   chat: ['Chats', 'Your team and booking conversations — and me.'],
   tournaments: ['Tournaments', 'What is running, entry fee and the registration deadline.'],
+  // The app's own support channel: FAQs, how to report a problem, and the support
+  // email. This is where a generic "help"/"support"/"something is wrong" lands, as
+  // opposed to contact_owner, which asks a specific VENUE owner about a ground.
+  help_support: ['Help & Support', 'Contact support, FAQs, and how to report a problem.'],
 });
 
 async function appHelp(ctx) {
   const slots = ctx.slots || {};
-  const key = String(slots.screen || '').trim().toLowerCase();
+  let key = String(slots.screen || '').trim().toLowerCase();
+  // "support" is the word users type; the screen it means is Help & Support.
+  if (key === 'support') key = 'help_support';
   const hit = SCREENS[key];
   if (hit) {
     return {
@@ -2277,7 +2308,8 @@ async function appHelp(ctx) {
     reply: reply(`SportLynk in one paragraph — ${tour} Ask me for any of it in plain words and I will do it for you.`, {
       source: SOURCES.LIVE, action: 'app_help', actionOk: true,
       chips: [chip('Find a ground', 'find_venue'), chip('My bookings', 'my_bookings'),
-        chip('Wallet balance', 'wallet_balance'), chip('What can you do?', 'capability_menu')],
+        chip('Contact support', 'app_help', { screen: 'help_support' }),
+        chip('What can you do?', 'capability_menu')],
     }),
     state: { intent: null, slots: { ...slots, screen: null } },
   };
@@ -2337,6 +2369,30 @@ async function contactOwner(ctx) {
   const slots = { ...(ctx.slots || {}) };
   const question = String(slots.question || ctx.text || '').trim();
 
+  // A bare cry for help is not a question for a venue owner.
+  //
+  // "support", "help", "madad chahiye" classify as contact_owner (they are, literally,
+  // a request to reach a human), and with a ground still in the session slots from an
+  // earlier turn this escalated the WORD ITSELF to that ground's owner — the player saw
+  // "Asked the owner of <ground>" in answer to typing "support", and a real owner got a
+  // queue item reading "support". Neither is defensible, so these are answered with the
+  // app's own support channel instead and nothing is filed.
+  if (GENERIC_HELP.has(question.toLowerCase().replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').trim())) {
+    return {
+      reply: reply(
+        'For help with SportLynk itself — a booking, your wallet, or something not '
+        + 'working — Contact support is the place. If you meant a question about one '
+        + 'specific ground, tell me the ground and what to ask, and I will pass it to '
+        + 'its owner.', {
+          source: SOURCES.LIVE, action: 'contact_owner', actionOk: true,
+          chips: [chip('Contact support', 'app_help', { screen: 'help_support' }),
+            chip('Find a ground', 'find_venue'),
+            chip('What can you do?', 'capability_menu')],
+        }),
+      state: { intent: null, pending: null, slots: { ...slots, question: null } },
+    };
+  }
+
   const { one, many } = await resolveVenue(client, {
     venueId: slots.venueId, name: slots.venueName, sport: slots.sport, area: slots.locality || slots.city,
   });
@@ -2348,9 +2404,11 @@ async function contactOwner(ctx) {
         chips: many.slice(0, TOP_VENUES).map((v) => chip(v.name, 'contact_owner', { venueId: v.id })),
       }), state: { intent: 'contact_owner', pending: 'venue', slots: { ...slots, question } } };
     }
-    return { reply: reply(`${ask} Name it, or pick one from a search.`, {
+    return { reply: reply(`${ask} Name it, or pick one from a search. For help with the app itself, use Contact support.`, {
       source: SOURCES.LIVE,
-      chips: [chip('Find a ground', 'find_venue'), chip('What can you do?', 'capability_menu')],
+      chips: [chip('Find a ground', 'find_venue'),
+        chip('Contact support', 'app_help', { screen: 'help_support' }),
+        chip('What can you do?', 'capability_menu')],
     }), state: { intent: 'contact_owner', pending: 'venue', slots: { ...slots, question } } };
   }
 
@@ -2422,7 +2480,6 @@ async function contactOwner(ctx) {
 }
 
 // Confirmation  —  the two-turn gate in front of every write
-
 /**
  * `confirm` — the user said yes to an armed confirmation.
  *
@@ -2440,12 +2497,21 @@ async function runConfirmed(ctx) {
   const c = ctx.confirm || {};
   const run = EXECUTORS[String(c.action || '')];
   if (typeof run === 'function') return run(ctx);
+  // Nothing is armed. The honest reading is almost always a STALE CONFIRM CHIP: the
+  // confirm card stays in the transcript after its one turn is spent, so a second tap
+  // on it -- or a tap on it after scrolling back -- arrives with the block already
+  // consumed. The old wording ("I am not holding anything to confirm") reads as though
+  // the booking failed, which is the opposite of what happened: the first tap went
+  // through and the money moved. So say what is true -- the question was already
+  // answered, nothing ran twice -- and point at the record that settles it.
   return {
-    reply: reply('I am not holding anything to confirm. What would you like to do?', {
-      source: SOURCES.LIVE,
-      chips: [chip('Find a ground', 'find_venue'), chip('My bookings', 'my_bookings'),
-        chip('What can you do?', 'capability_menu')],
-    }),
+    reply: reply(
+      'That confirmation was already answered, so nothing has been done twice. '
+      + 'Your bookings show what actually went through.', {
+        source: SOURCES.LIVE,
+        chips: [chip('My bookings', 'my_bookings'), chip('Wallet balance', 'wallet_balance'),
+          chip('Find a ground', 'find_venue')],
+      }),
     state: { intent: null, pending: null, confirm: null, slots: {} },
   };
 }

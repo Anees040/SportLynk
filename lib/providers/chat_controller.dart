@@ -713,6 +713,27 @@ class ChatController extends ChangeNotifier {
     return r;
   }
 
+  /// "Delete for me": drop one message from this reader's view. The row stays on
+  /// the server for everyone else, so the only local effect is removing it from
+  /// the timeline — and because the server filters it out of future history
+  /// reads, it does not come back on a refresh. An optimistic message that never
+  /// reached the server is simply forgotten.
+  Future<Map<String, dynamic>> hideMessage(String messageId) async {
+    final m = _byId[messageId];
+    if (m == null) return {'success': false, 'message': 'Message not found.'};
+    if (m.id.startsWith('local:')) {
+      _byId.remove(messageId);
+      _rebuild();
+      return {'success': true};
+    }
+    final r = await _chat.hideMessage(token, channelId, messageId);
+    if (r['success'] == true) {
+      _byId.remove(messageId);
+      _rebuild();
+    }
+    return r;
+  }
+
   bool canDelete(ChatMessage m) {
     if (m.isSystem || m.isDeleted || m.pending) return false;
     if (m.senderId == myUserId) return true;

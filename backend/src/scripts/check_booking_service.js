@@ -104,7 +104,8 @@ async function cycle(client, { late }) {
   const slot = await findSlot(client, { late });
   if (!slot) {
     console.log('   ~ skipped: no available future slot on this side of the window.');
-    console.log('     (run: node src/scripts/add_future_slots.js)');
+    console.log('     (the API fills this window hourly once it is running; to');
+    console.log('      fill it now: node src/scripts/add_future_slots.js)');
     return;
   }
   const price = round2(slot.price);

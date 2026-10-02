@@ -45,9 +45,23 @@ class AppColors {
   static const Color chatBubbleOther = Color(0xFFFFFFFF);
   static const Color chatPattern = Color(0x0F0E3621);
 
-  // Alternate chat-background presets (Issue 5). Each is a flat ground; the
-  // default preset additionally paints [chatPattern] over its ground.
+  // Alternate chat-background presets (Issue 5). Each is a flat ground; a preset
+  // may additionally paint a pattern over it, tinted with [chatPattern] (or
+  // [chatPatternStrong] for the denser art styles, which need a little more
+  // presence to read as design rather than dirt).
   static const Color chatBgMint = Color(0xFFE3F0E4);
   static const Color chatBgSlate = Color(0xFFE6E9EE);
   static const Color chatBgPlain = Color(0xFFF4F1EC);
+  static const Color chatBgSand = Color(0xFFF3EADB);
+  static const Color chatBgDusk = Color(0xFFE8E6F2);
+  static const Color chatBgRose = Color(0xFFF6E9EA);
+  static const Color chatBgTeal = Color(0xFFDEEDEC);
+  static const Color chatPatternStrong = Color(0x1A0E3621);
+
+  /// The wash over a selected chat row. Translucent, so it reads over the pale
+  /// "mine" bubble, the white "theirs" bubble and the patterned ground alike —
+  /// a solid tint only showed up against one of the three. Deliberately stronger
+  /// than [accentLight], which marks the row a tapped quote jumped to, so
+  /// "selected" and "jumped to" are never mistaken for each other.
+  static const Color chatSelection = Color(0x3D166534);
 }

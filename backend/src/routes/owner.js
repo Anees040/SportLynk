@@ -20,6 +20,7 @@ const bookingService = require("../services/bookingService");
 const mlClient = require("../services/mlClient");
 const settings = require("../utils/globalSettings");
 const { TtlCache, ONE_HOUR_MS } = require("../utils/ttlCache");
+const slotService = require("../services/slotService");
 
 router.use(auth, checkRole("owner"));
 
@@ -336,7 +337,7 @@ router.patch("/venues/:id/slots/price", async (req, res, next) => {
     let updated = [];
     if (eligible.length) {
       const result = await client.query(
-        `UPDATE slots SET price=$1 WHERE id = ANY($2::uuid[]) RETURNING id, slot_date, start_time, price`,
+        `UPDATE slots SET price=$1, price_source='owner' WHERE id = ANY($2::uuid[]) RETURNING id, slot_date, start_time, price`,
         [finalPrice, eligible],
       );
       updated = result.rows;
@@ -394,19 +395,11 @@ async function autoGenerateVenueIfMissing(ownerId) {
         [ownerId, venueName, sportType, op.city || 'Unknown', op.full_address || 'Unknown', op.ground_photos || []]
       );
       const venueId = vRes.rows[0].id;
-      for (let i = 0; i < 14; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() + i);
-        const dateStr = d.toLocaleDateString("en-CA");
-        for (let hour = 18; hour <= 22; hour++) {
-          const sh = hour.toString().padStart(2, "0") + ":00:00";
-          const eh = (hour + 1).toString().padStart(2, "0") + ":00:00";
-          await pool.query(
-            "INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status) VALUES ($1,$2,$3,$4,$5,'available')",
-            [venueId, dateStr, sh, eh, 2000]
-          );
-        }
-      }
+      // Opens the full 08:00-23:00 window this venue was just given, not the
+      // 18:00-22:00 evening strip this path used to hardcode. The maintenance
+      // sweep keeps it rolling afterwards.
+      await slotService.ensureVenueSlots(pool, { venueId });
+      slotService.repriceVenueSlots(pool, { venueId }).catch(() => {});
     }
   }
 }
@@ -535,20 +528,19 @@ router.post("/venues", async (req, res, next) => {
 
     const venueId = vRes.rows[0].id;
 
-    // Auto-generate some slots so it's bookable immediately
-    for (let i = 0; i < 14; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      const dateStr = d.toLocaleDateString("en-CA");
-      for (let hour = 18; hour <= 22; hour++) {
-        const sh = hour.toString().padStart(2, "0") + ":00:00";
-        const eh = (hour + 1).toString().padStart(2, "0") + ":00:00";
-        await pool.query(
-          "INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status) VALUES ($1,$2,$3,$4,$5,'available')",
-          [venueId, dateStr, sh, eh, pricePerHour]
-        );
-      }
-    }
+    // Open the hours the owner actually entered. This path used to hardcode
+    // 18:00-22:00, so a ground registered as open 08:00-23:00 offered five
+    // evening hours and nothing else, with no indication the other ten were
+    // missing rather than sold.
+    //
+    // The venue is created inactive and is invisible to players until an admin
+    // approves it; generating now means it is bookable the moment it is, and the
+    // maintenance sweep takes the window over from there.
+    await slotService.ensureVenueSlots(pool, { venueId });
+    // Price those slots by the model, in the background — never awaited (the create
+    // must not wait on ml-service) and never inside a txn. The venue is inactive, so
+    // this only means it is already dynamically priced when it goes live.
+    slotService.repriceVenueSlots(pool, { venueId }).catch(() => {});
 
     res.json({ success: true, message: 'Venue successfully created', data: { id: venueId } });
   } catch (e) {
@@ -726,41 +718,53 @@ router.patch("/bookings/:id/reject", async (req, res, next) => {
 });
 
 // POST /api/owner/slots/generate
+//
+// Retained as a manual top-up an owner can trigger from the dashboard, but it is
+// no longer what keeps a venue bookable: jobs/slotMaintenanceJob.js maintains the
+// rolling window for every active venue. Pressing this button now only brings
+// forward work the next sweep would do anyway, which is why it reports the hours
+// it opened rather than a bare count.
 router.post("/slots/generate", async (req, res, next) => {
   try {
     const { venueId } = req.body;
     if (!venueId) return res.status(400).json({ success: false, message: 'venueId is required' });
 
-    // Ensure owner owns the venue
-    const check = await pool.query("SELECT price_per_hour FROM venues WHERE id=$1 AND owner_id=$2", [venueId, req.user.id]);
+    // Ownership gate. The venue row is carried into the generator so the hours and
+    // price come from the venue itself rather than from this route's own idea of
+    // an evening — it used to hardcode 18:00-22:00 over seven days.
+    const check = await pool.query(
+      `SELECT id, name, price_per_hour, base_price,
+              operating_hours_from, operating_hours_to
+         FROM venues WHERE id=$1 AND owner_id=$2`,
+      [venueId, req.user.id],
+    );
     if (!check.rows.length) return res.status(404).json({ success: false, message: 'Venue not found' });
-    const pricePerHour = check.rows[0].price_per_hour;
+    const venue = check.rows[0];
 
-    // Generate slots for next 7 days
-    let created = 0;
-    for (let i = 0; i < 7; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      const dateStr = d.toLocaleDateString("en-CA");
-      for (let hour = 18; hour <= 22; hour++) {
-        const sh = hour.toString().padStart(2, "0") + ":00:00";
-        const eh = (hour + 1).toString().padStart(2, "0") + ":00:00";
-        // Check if slot exists
-        const exists = await pool.query(
-          "SELECT id FROM slots WHERE venue_id=$1 AND slot_date=$2 AND start_time=$3",
-          [venueId, dateStr, sh]
-        );
-        if (exists.rows.length === 0) {
-          await pool.query(
-            "INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status) VALUES ($1,$2,$3,$4,$5,'available')",
-            [venueId, dateStr, sh, eh, pricePerHour]
-          );
-          created++;
-        }
-      }
+    const r = await slotService.ensureVenueSlots(pool, { venueId, venue });
+
+    // A venue with no price or a backwards hour range produces no slots, and the
+    // owner is told which it is instead of being shown "Generated 0 new slots".
+    if (r.skippedVenue) {
+      return res.status(409).json({
+        success: false,
+        message: `No slots could be opened — ${r.reason}. Set the price and operating hours on this venue first.`,
+      });
     }
 
-    res.json({ success: true, message: `Generated ${created} new slots for the next 7 days` });
+    // Price the window by the model in the background — the owner sees the slots
+    // open immediately; their dynamic prices land a moment later.
+    slotService.repriceVenueSlots(pool, { venueId, venue }).catch(() => {});
+
+    res.json({
+      success: true,
+      message: r.created > 0
+        ? `Opened ${r.created} new slot${r.created === 1 ? '' : 's'} `
+          + `(${slotService.describeWindow(r.fromHour, r.toHour)}, `
+          + `next ${slotService.HORIZON_DAYS} days)`
+        : `Already fully open for the next ${slotService.HORIZON_DAYS} days — nothing to add`,
+      data: { created: r.created, alreadyPresent: r.skipped },
+    });
   } catch (e) {
     next(e);
   }

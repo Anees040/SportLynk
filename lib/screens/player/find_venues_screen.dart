@@ -68,6 +68,11 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
 
   void _onSearch() {
     final query = _searchCtrl.text.trim();
+    // Rebuild on every keystroke, not only when a fetch is due: the clear button and
+    // the search/browse mode switch (which hides the recommendation rail) both read
+    // the field directly, so without this the first character typed would change
+    // neither until a second one arrived.
+    if (mounted) setState(() {});
     if (query == _lastSearch) return;
     if (query.isEmpty) {
       _lastSearch = '';
@@ -79,6 +84,52 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
   }
 
   List<String> _userPrefs = [];
+
+  /// The preference auto-select is a one-time courtesy on first open, not a rule.
+  ///
+  /// It used to run on every [_load], which made the "All" chip unusable: tapping All
+  /// sets [_selectedSport] to empty, the reload then saw an empty sport and instantly
+  /// re-applied the player's stated preference, so All appeared to jump to Cricket and
+  /// a cricket player could never widen their search. Seeding a default once is
+  /// helpful; overriding a deliberate choice every fetch is not.
+  bool _didAutoSelectSport = false;
+
+  /// True while the player has an active query. Search is a different mode from
+  /// browsing: the rail is suppressed and the list is titled as results.
+  bool get _isSearching => _searchCtrl.text.trim().isNotEmpty;
+
+  /// The venues the list renders.
+  ///
+  /// While the rail is showing, venues already in it are excluded so the same ground
+  /// is not presented twice in one scroll — the rail is the ranked few and the list is
+  /// the rest, rather than two overlapping views of the same catalogue.
+  List<Map<String, dynamic>> get _listVenues {
+    if (_isSearching || _recommended.isEmpty) return _venues;
+    final railIds = _recommended.map((v) => v['id'].toString()).toSet();
+    return _venues.where((v) => !railIds.contains(v['id'].toString())).toList();
+  }
+
+  /// How many filters are narrowing the list, for the context row's summary.
+  int get _activeFilterCount {
+    var n = 0;
+    if (_selectedSport.isNotEmpty) n++;
+    if (_minPrice > 0 || _maxPrice < 10000) n++;
+    if (_minRating > 0) n++;
+    if (_sort != 'rating') n++;
+    return n;
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      _searchCtrl.clear();
+      _selectedSport = '';
+      _minPrice = 0;
+      _maxPrice = 10000;
+      _minRating = 0;
+      _sort = 'rating';
+    });
+    _load();
+  }
 
   Future<void> _load() async {
     setState(() => _loading = true);
@@ -92,11 +143,16 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
       }
     }
 
-    // If no initial sport is selected, auto-select based on AI prefs
-    if (widget.initialSport == null && _selectedSport == '' && _userPrefs.isNotEmpty) {
-      final pref = _userPrefs.first.toLowerCase();
-      if (_sports.any((s) => s.toLowerCase() == pref)) {
-        _selectedSport = _sports.firstWhere((s) => s.toLowerCase() == pref);
+    // Seed the chip from the player's stated preference, once.
+    if (!_didAutoSelectSport) {
+      _didAutoSelectSport = true;
+      if (widget.initialSport == null && _selectedSport.isEmpty && _userPrefs.isNotEmpty) {
+        final pref = _userPrefs.first.toLowerCase();
+        if (_sports.any((s) => s.toLowerCase() == pref)) {
+          // Stored lower case: every comparison on this field lower-cases it, and
+          // assigning the capitalised label here made the field's case inconsistent.
+          _selectedSport = pref;
+        }
       }
     }
 
@@ -125,6 +181,11 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
       recoParams['lat'] = '$_lat';
       recoParams['lng'] = '$_lng';
       recoParams['sort'] = 'nearest';
+      // The browse list is annotated too, so a card under "Nearby Venues" can state
+      // how far away it is. Only annotated — the list keeps the player's chosen sort
+      // unless they explicitly pick Nearest, which the filter sheet offers.
+      params['lat'] = '$_lat';
+      params['lng'] = '$_lng';
     }
 
     // The venue list is required; the recommendation rail is optional. Both are
@@ -191,8 +252,13 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
+                  runSpacing: 8,
                   children: [
                     _filterChip('Top Rated', 'rating', _sort == 'rating', () => setModalState(() => _sort = 'rating')),
+                    // Offered only when a location is actually known — a sort the
+                    // server would ignore is worse than one that is absent.
+                    if (_lat != null && _lng != null)
+                      _filterChip('Nearest', 'nearest', _sort == 'nearest', () => setModalState(() => _sort = 'nearest')),
                     _filterChip('Price: Low to High', 'price_low', _sort == 'price_low', () => setModalState(() => _sort = 'price_low')),
                     _filterChip('Price: High to Low', 'price_high', _sort == 'price_high', () => setModalState(() => _sort = 'price_high')),
                   ],
@@ -316,6 +382,9 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Resolved once per build: the getter filters a list, and reading it from a
+    // sliver's itemBuilder would re-filter on every row.
+    final listVenues = _listVenues;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -390,31 +459,50 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
               ],
             ),
             const SizedBox(height: 12),
-            // Sport filter chips
-            SizedBox(height: 36,
-              child: ListView(scrollDirection: Axis.horizontal, children: _sports.map((s) {
-                final isAll = s == 'All';
-                final active = isAll ? _selectedSport.isEmpty || _selectedSport.toLowerCase() == 'all' : _selectedSport.toLowerCase() == s.toLowerCase();
-                return GestureDetector(
-                  onTap: () {
-                    setState(() => _selectedSport = isAll ? '' : s.toLowerCase());
-                    _load();
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: active ? AppColors.accent : Colors.white.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: active ? AppColors.accent : Colors.white.withValues(alpha: 0.2))),
-                    child: Center(child: Text(s, style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 13, fontWeight: active ? FontWeight.w600 : FontWeight.normal))),
-                  ),
-                );
-              }).toList()),
+            // Sport selector. A segmented control rather than loose chips: the three
+            // options are mutually exclusive and cover the whole catalogue, so one
+            // enclosed track with a filled selection states that better than three
+            // free-floating pills where "none selected" and "All" look alike.
+            Container(
+              height: 40,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: _sports.map((s) {
+                  final isAll = s == 'All';
+                  final active = isAll
+                      ? _selectedSport.isEmpty || _selectedSport.toLowerCase() == 'all'
+                      : _selectedSport.toLowerCase() == s.toLowerCase();
+                  return Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        final next = isAll ? '' : s.toLowerCase();
+                        if (next == _selectedSport) return;
+                        setState(() => _selectedSport = next);
+                        _load();
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        decoration: BoxDecoration(
+                          color: active ? AppColors.accent : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Center(
+                          child: Text(s,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: active ? FontWeight.w600 : FontWeight.normal)),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
           ]),
         ),
@@ -449,17 +537,7 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
                   const SizedBox(height: 24),
                   if (_searchCtrl.text.isNotEmpty || _selectedSport.isNotEmpty || _minPrice > 0 || _maxPrice < 10000 || _minRating > 0)
                     OutlinedButton(
-                      onPressed: () {
-                        setState(() {
-                          _searchCtrl.clear();
-                          _selectedSport = '';
-                          _minPrice = 0;
-                          _maxPrice = 10000;
-                          _minRating = 0;
-                          _sort = 'rating';
-                        });
-                        _load();
-                      },
+                      onPressed: _clearAllFilters,
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: AppColors.accent),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -473,7 +551,12 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
                   child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
-                      if (_recommended.isNotEmpty) ...[
+                      // The "For you" rail is browse furniture, not a search result.
+                      // While a query is active it is hidden: the rail plus its header
+                      // stand ~300px tall, which pushed every match below the fold and
+                      // under the keyboard, so the player had to dismiss the keyboard
+                      // to see what they had just searched for.
+                      if (!_isSearching && _recommended.isNotEmpty) ...[
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
@@ -501,27 +584,82 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
                           ),
                         ),
                       ],
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-                          child: Text('Nearby Venues',
-                            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                      // Hidden entirely when the rail already accounts for every
+                      // venue, rather than printing a "Nearby Venues · 0 venues"
+                      // header above nothing.
+                      if (listVenues.isNotEmpty) ...[
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _isSearching ? 'Search results' : 'Nearby Venues',
+                                    style: GoogleFonts.poppins(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textPrimary),
+                                  ),
+                                ),
+                                Text(
+                                  listVenues.length == 1
+                                      ? '1 venue'
+                                      : '${listVenues.length} venues',
+                                  style: GoogleFonts.poppins(
+                                      fontSize: 12, color: AppColors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                      SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (_, i) {
-                            // Not de-duplicated against the recommended rail above, so a venue can appear
-                            // in both. The rail is a ranking of a few; this list is coverage of everything.
-                            final venue = _venues[i];
-                            return Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                              child: _nearbyVenueCard(venue),
-                            );
-                          },
-                          childCount: _venues.length,
+                        // Active filters, stated plainly with one way out. Without
+                        // this a narrow result reads as "there are no grounds"
+                        // rather than "you are looking through three filters".
+                        if (_activeFilterCount > 0)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.filter_alt_outlined,
+                                      size: 14, color: AppColors.textSecondary),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      _activeFilterCount == 1
+                                          ? '1 filter applied'
+                                          : '$_activeFilterCount filters applied',
+                                      style: GoogleFonts.poppins(
+                                          fontSize: 11, color: AppColors.textSecondary),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: _clearAllFilters,
+                                    style: TextButton.styleFrom(
+                                      minimumSize: const Size(48, 48),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    ),
+                                    child: Text('Clear',
+                                        style: GoogleFonts.poppins(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.accent)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (_, i) => Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                              child: _venueCard(listVenues[i]),
+                            ),
+                            childCount: listVenues.length,
+                          ),
                         ),
-                      ),
+                      ],
                       const SliverToBoxAdapter(child: SizedBox(height: 24)),
                     ],
                   ),
@@ -646,10 +784,18 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
     );
   }
 
-  Widget _nearbyVenueCard(Map<String, dynamic> v) {
+  /// The one list card for a venue: photo left, facts right.
+  ///
+  /// Used for every row in the browse and search list, and the recommendation rail
+  /// uses a compact variant of the same anatomy so the screen reads as one system.
+  /// Facts are ordered by what a player decides on — sport, name, where, how far,
+  /// what it costs — rather than by what happens to be in the payload.
+  Widget _venueCard(Map<String, dynamic> v) {
     final sportType = (v['sport_type'] ?? 'sport').toString();
     final sportColor = _sportColor(sportType);
-    
+    final rating = asNum(v['rating']);
+    final distance = v['distance_km'];
+
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(
         builder: (_) => VenueDetailScreen(venueId: v['id']))),
@@ -659,58 +805,111 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
           border: Border.all(color: AppColors.border),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))]),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Image Left
             ClipRRect(
               borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
-              child: Container(
-                width: 120, height: 120,
-                decoration: BoxDecoration(color: const Color(0xFF0A1F13)),
-                child: (v['venue_photos'] != null && (v['venue_photos'] as List).isNotEmpty)
-                    ? Image.network(v['venue_photos'][0], fit: BoxFit.cover, width: 120, height: 120,
-                        errorBuilder: (ctx, err, stack) => Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.2), size: 48)))
-                    : Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.2), size: 48)),
+              child: SizedBox(
+                width: 112,
+                child: Container(
+                  color: AppColors.primaryDark,
+                  child: (v['venue_photos'] != null && (v['venue_photos'] as List).isNotEmpty)
+                      ? Image.network(v['venue_photos'][0], fit: BoxFit.cover,
+                          errorBuilder: (ctx, err, stack) => Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.2), size: 40)))
+                      : Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.2), size: 40)),
+                ),
               ),
             ),
-            // Details Right
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: sportColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
-                          child: Text(sportType.toUpperCase(),
-                            style: GoogleFonts.poppins(color: sportColor, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(color: sportColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                            child: Text(sportType.toUpperCase(),
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(color: sportColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                          ),
                         ),
-                        Row(
-                          children: [
-                            const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
-                            const SizedBox(width: 4),
-                            Text('${v['rating'] ?? 'N/A'}', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                          ],
-                        ),
+                        const SizedBox(width: 6),
+                        // An unrated venue shows "New" rather than a zero, which would
+                        // read as a bad score instead of an absent one.
+                        if (rating > 0) ...[
+                          const Icon(Icons.star_rounded, color: Colors.amber, size: 15),
+                          const SizedBox(width: 3),
+                          Text(rating.toStringAsFixed(1),
+                            maxLines: 1,
+                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                        ] else
+                          Text('New', maxLines: 1, style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(v['name'] ?? 'Venue', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
+                    Text(v['name'] ?? 'Venue',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 3),
                     Row(
                       children: [
-                        const Icon(Icons.location_on_outlined, color: AppColors.textSecondary, size: 14),
-                        const SizedBox(width: 4),
+                        const Icon(Icons.location_on_outlined, color: AppColors.textSecondary, size: 13),
+                        const SizedBox(width: 3),
                         Expanded(
-                          child: Text(v['address'] ?? v['city'] ?? '', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          child: Text(v['address'] ?? v['city'] ?? '',
+                            style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text('PKR ${asNum(v['price_per_hour']).toStringAsFixed(0)}/hr', style: GoogleFonts.poppins(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.bold)),
+                    // Price and distance share one line, so both have to survive a
+                    // large system text scale inside ~254 logical pixels. The price
+                    // is Flexible and ellipsises; the distance chip keeps its natural
+                    // width because an elided distance says nothing. Laid out as one
+                    // Text.rich rather than two Texts so the unit cannot be orphaned
+                    // onto its own overflowing line.
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: 'PKR ${asNum(v['price_per_hour']).toStringAsFixed(0)}',
+                                style: GoogleFonts.poppins(
+                                    color: AppColors.accent,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              TextSpan(
+                                text: ' /hr',
+                                style: GoogleFonts.poppins(
+                                    color: AppColors.textSecondary, fontSize: 11),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (distance != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.inputFill,
+                              borderRadius: BorderRadius.circular(6)),
+                            child: Text('$distance km',
+                              maxLines: 1,
+                              style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ),

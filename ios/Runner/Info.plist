@@ -8,6 +8,8 @@
 		<string>SportLynk uses the microphone to record voice notes and video in chat.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>SportLynk needs access to your photos so you can send them in chat.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>SportLynk uses your location to show the nearest grounds first. You can decline and still browse all grounds.</string>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>

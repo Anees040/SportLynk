@@ -1,0 +1,40 @@
+# Build context for the image defined by Dockerfile.
+#
+# This directory is ~961 MB on a development machine and the image needs ~12 MB of
+# it. Without this file every `docker build` ships the virtualenv, the training
+# corpora and 59 superseded model candidates to the Docker daemon before the first
+# instruction runs. Render builds from a git clone, where the ignored paths are
+# absent in any case, so what this file really does is make a LOCAL build behave
+# like the deployed one.
+#
+# It is a second line of defence, not the primary one: the Dockerfile copies only
+# requirements.txt, app/ and the four released artifacts, so nothing excluded here
+# could reach an image layer even if this file were deleted.
+
+# The virtualenv belongs to the host and is built for Windows; the image builds its
+# own from requirements.txt.
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Secrets never enter a build context. ml-service/.env holds ML_API_KEY, which is
+# configured through Render's dashboard instead. .env.example is not matched by
+# either pattern and is harmless.
+.env
+*.env
+
+# Training inputs, the offline pipeline and the evidence packs. None of it is read
+# at serve time.
+data/
+reports/
+training/
+
+# Every artifact except the four the registry actually serves.
+models/*
+!models/*_latest.joblib
+
+# Host-only tooling and scratch output.
+run_dev.ps1
+intent_errors.txt

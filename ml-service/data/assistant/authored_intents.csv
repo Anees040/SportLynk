@@ -652,3 +652,210 @@ au-650,jaldi se koi extra khiladi ka intezaam karo match 2 ghante me hai,find_pl
 au-651,hamari team me sirf 4 reh gaye hain 7 a side ke liye 3 aur chahiye,find_players,ru,numeric;run_on,fresh
 au-652,koi accha wicket keeper dhoondo yaar hamari bowling bekar ho rahi hai,find_players,ru,imperative;slang;run_on,fresh
 au-653,ek substitute chahiye kal ke cricket match ke liye,find_players,ru,numeric;multi_slot,fresh
+au-654,am i still in credit after the friday game,wallet_balance,en,indirect;question,"in credit asks the balance number, not the topup procedure"
+au-655,did the refund land or am i still short,wallet_balance,en,indirect;boundary;run_on,a refund is the context; the request is the current balance
+au-656,whats left on my account before i book anything,wallet_balance,en,indirect;boundary;question,"booking is the motive, the balance is what is asked for"
+au-657,is there anything held back from the last match or is it all free,wallet_balance,en,indirect;boundary;run_on,"held funds are escrow, which the spec assigns to wallet_balance"
+au-658,"i thought i had 2000 in there, can you check",wallet_balance,en,indirect;numeric,a figure recalled wrongly is still a balance query
+au-659,do i need to load more or am i covered for tonight,wallet_balance,en,indirect;boundary;run_on,pairs with the topup row of the same wording; asks whether the balance suffices
+au-660,how do i load more before tonight,topup_help,en,boundary;question,"same wording as the wallet pair, but asks the method rather than the amount"
+au-661,whats the minimum i can add by easypaisa,topup_help,en,boundary;numeric;question,"a numeric answer that is a rule of the topup procedure, not a balance"
+au-662,can you walk me through getting money out,topup_help,en,boundary;question,withdrawal is part of the procedure intent per the spec gloss
+au-663,what have i got lined up this week,my_bookings,en,indirect;question,no booking noun at all; the possessive is the only signal
+au-664,am i playing anywhere on saturday or did i imagine that,my_bookings,en,indirect;run_on,pairs with the availability row for saturday; this one asks about own bookings
+au-665,remind me where we are meant to be at 7,my_bookings,en,indirect;imperative;numeric,an imperative that retrieves an existing booking rather than making one
+au-666,did that friday one actually go through,my_bookings,en,indirect;boundary;ellipsis,"asks whether a booking exists, which is a lookup and not a booking act"
+au-667,whats on my plate for the weekend,my_bookings,en,indirect;slang;question,idiom carrying no domain vocabulary; the exam's English rows read like this
+au-668,"i have two games this week i think, which ones",my_bookings,en,indirect;numeric;run_on,a count plus a request to enumerate the user's own bookings
+au-669,whats still open on saturday,check_availability,en,boundary;short;question,"same day as the my_bookings pair, but the object is a free slot"
+au-670,anything free at 7 or is it all gone,check_availability,en,boundary;numeric;run_on,"same clock time as the my_bookings pair, but asks what is unbooked"
+au-671,"something came up, we cant make tonight",cancel_booking,en,indirect;negation,"states an inability, which in context is the instruction to cancel"
+au-672,pull us out of the saturday game please,cancel_booking,en,indirect;imperative;politeness,"withdrawal from a booked fixture, phrased without the verb cancel"
+au-673,we are a man short so drop tomorrows slot,cancel_booking,en,indirect;run_on,a reason welded to the instruction; drop is the cancelling verb here
+au-674,"the team bailed, get rid of the 9pm one",cancel_booking,en,indirect;slang;numeric,selects an existing booking by time and orders its removal
+au-675,i wont be needing friday after all,cancel_booking,en,indirect;negation,"negation over an existing booking, not a refusal of a Scout proposal"
+au-676,"scrap it, we are not playing sunday",cancel_booking,en,indirect;negation;short,"short and negated, but acts on a booking rather than answering Scout"
+au-677,if we cant make tonight what do we lose,refund_policy,en,boundary;indirect;question,"same premise as the cancel pair, but asks the rule and not for the act"
+au-678,whats the cutoff for pulling out without losing the deposit,refund_policy,en,boundary;question,"same wording as the cancel pair, but the object is the cancellation window"
+au-679,does rawal have floodlights or is it daytime only,venue_info,en,indirect;boundary;question,"a lights fact about one named ground, not a request to find a ground"
+au-680,is the pitch at that ground turf or matting,venue_info,en,question,the playing surface of a specific venue is a venue fact
+au-681,can you actually park a car at the gulberg place,venue_info,en,boundary;question,parking is an amenity of one venue; the slang place is still a named ground
+au-682,what time does the futsal court shut on weekdays,venue_info,en,numeric;question,"opening hours of a specific court, distinct from checking a free slot"
+au-683,how much an hour is the one down by the canal,venue_info,en,boundary;numeric;question,the price of a specific ground; boundary against find_venue by area
+au-684,is that place indoor because the forecast is grim,venue_info,en,indirect;boundary;run_on,indoor-or-not is a venue fact; the weather clause is the boundary vs out_of_scope
+au-685,lock the eight pm at rawal for us,book_venue,en,imperative;numeric,"lock is a booking verb and a concrete time is named: book_venue, not avail"
+au-686,go ahead and reserve saturday morning over there,book_venue,en,imperative,reserve carries the commit; this is not asking whether it is free
+au-687,put us down for the futsal court at six,book_venue,en,imperative;numeric,put us down commits to a slot rather than enquiring about one
+au-688,grab the cheaper nine pm one before it goes,book_venue,en,boundary;numeric;run_on,re-specifies a concrete option and acts on it; boundary against affirm
+au-689,secure tomorrow evening for me please,book_venue,en,imperative;politeness,secure is the booking verb; politeness does not change the commit
+au-690,whats the score in the psl game right now,out_of_scope,en,question,a live score is explicitly out of scope per the intent gloss
+au-691,did the national side pick a new captain yet,out_of_scope,en,question,"sports news about real teams, nothing SportLynk can act on"
+au-692,can you order a pizza for after the match,out_of_scope,en,boundary;run_on,an unrelated action welded to a match mention; still out of scope
+au-693,whats the weather doing this evening,out_of_scope,en,question,"weather is not a SportLynk capability, however relevant to playing"
+au-694,who won on tv last night,out_of_scope,en,short;question,"a result from broadcast sport, not a tournament hosted on the platform"
+au-695,any cricket tournaments coming up i can enter,tournament_list,en,question,"listing of competitions open to join, hosted on the platform"
+au-696,when does registration close for the next cup,tournament_list,en,question,"a tournament date and its entry deadline, not an app how-to"
+au-697,are there knockout events on this month,tournament_list,en,question,"listing tournaments by date, distinct from the user's own bookings"
+au-698,show me what competitions are open to join,tournament_list,en,imperative,"an imperative to list tournaments, not to open a screen"
+au-699,is there an entry fee for the weekend tournament,tournament_list,en,boundary;question,a registration detail of a tournament; boundary against the money intents
+au-700,where do we sit on the ladder right now,team_stats,en,indirect;question,"our current rank, a stat, not how the ladder works"
+au-701,how many have we won and lost this season,team_stats,en,numeric;question,the team's win-loss record is a stat about us
+au-702,whats my rating after yesterdays result,team_stats,en,question,"the user's own ELO number, not the rules that move it"
+au-703,are we still top of our group,team_stats,en,short;question,"a question about our standing, answered from our record"
+au-704,show our form over the last few games,team_stats,en,imperative,"recent results of the user's team, a stat lookup"
+au-705,line us up against someone this weekend,find_opponents,en,imperative,"asks the platform for a side to play against, not for our own stats"
+au-706,any teams willing to play us on sunday,find_opponents,en,question,"an opposing team for a fixture, distinct from recruiting players"
+au-707,we need a rival side for a friendly,find_opponents,en,plain,a rival is an opponent; find_players would be filling our own bench
+au-708,set up a match for us against another team,find_opponents,en,imperative,"requesting a match against others, the core of find_opponents"
+au-709,no leave that one for now,deny,en,negation,refuses the proposal on screen; nothing is booked yet to cancel
+au-710,actually dont bother with it,deny,en,negation,"withdraws from what Scout offered, not from a confirmed booking"
+au-711,lets not go with that,deny,en,negation,"declines the suggested option; a refusal, not a cancellation"
+au-712,where can we get a futsal court this side of town,find_venue,en,question,discovery by area; the user has no specific ground yet
+au-713,find us somewhere cheap for cricket tomorrow,find_venue,en,imperative;numeric,"discovery filtered by budget, sport and date"
+au-714,any decent grounds open around gulberg,find_venue,en,question,"browsing grounds by area, not asking a fact about one of them"
+au-715,ground book karne ka tareeqa kya hai,app_help,ru,indirect;question,"tareeqa/kaise flips the booking verb to a how-to; must be app_help, not book_venue"
+au-716,main ground kaise book karun,app_help,ru,question,"the reported failure: how-to-book, not a booking to slot-fill"
+au-717,booking kaise ki jati hai is app me,app_help,ru,question,how booking is done in the app
+au-718,slot book karne ke liye kya karna hoga,app_help,ru,indirect;question,"what must I do to book: procedure, not a booking verb to execute"
+au-719,wallet me balance kaise dekhun,app_help,ru,question,how to VIEW the balance; the number itself is wallet_balance
+au-720,apna trust score kaise barhaun,app_help,ru,question,how a concept works; app_help owns concept explanations
+au-721,is app me sign in kaise karte hain,app_help,ru,question,"how to sign in, an app how-to"
+au-722,escrow ka matlab kya hota hai,app_help,ru,question,what escrow means; gloss assigns concept-explanations to app_help
+au-723,mujhe batao how to book a ground here,app_help,mix,code_switch;imperative;question,"explicit how-to, code-switched; must not route to book_venue"
+au-724,is app pe booking kaise hoti hai exactly,app_help,mix,code_switch;question,"how booking works, EN word in a UR frame"
+au-725,yaar ground book karne ka process kya hai,app_help,mix,code_switch;question,process is the English anchor; still a how-to not an action
+au-726,wallet screen kahan hai aur balance kaise check karun,app_help,mix,code_switch;run_on;question,"where the screen is + how to check: both app how-to, not the balance number"
+au-727,wallet me paise kaise add karun,topup_help,ru,question,how to add money is the topup procedure
+au-728,paise kaise dalte hain wallet me,topup_help,ru,question,putting money in: adding-funds procedure
+au-729,withdrawal kaise karna hai,topup_help,ru,question,reported failure; withdrawal is named in the topup_help gloss
+au-730,paise nikalne ka tareeqa batao,topup_help,ru,imperative;indirect,how to withdraw; tareeqa marks the procedure
+au-731,easypaisa se top up kaise karun,topup_help,ru,question,a payment-method procedure question
+au-732,minimum kitna load karna parta hai,topup_help,ru,numeric;question,the minimum top-up is a procedure rule; boundary vs the balance number
+au-733,yaar paise withdraw kaise karte hain yahan,topup_help,mix,code_switch;question,"how to withdraw, code-switched"
+au-734,"balance add karna hai jazzcash se, kaise karun",topup_help,mix,code_switch;run_on;question,adding funds via a named method: topup procedure
+au-735,kal sham wala ground book kar do,book_venue,ru,imperative,"bare booking verb, no kaise: this one IS an action, the contrast to the how-to rows"
+au-736,mere wallet me kitne paise bache hain,wallet_balance,ru,question,"the balance NUMBER, the contrast to the topup how-to rows"
+au-737,whats the capital of france,out_of_scope,en,question,"general knowledge, nothing the app can act on"
+au-738,tell me a joke yaar,out_of_scope,mix,code_switch;imperative,"chit-chat, code-switched; off-domain"
+au-739,what is 25 times 4,out_of_scope,en,numeric;question,arithmetic is not a SportLynk capability
+au-740,aaj mausam kaisa hai bahar,out_of_scope,ru,question,"weather, off-platform however relevant to playing"
+au-741,who is the prime minister these days,out_of_scope,en,question,"current affairs, out of scope"
+au-742,biryani banane ka tareeqa batao,out_of_scope,ru,imperative;question,"a cooking how-to, not an app how-to; must not hit app_help"
+au-743,translate good morning into urdu,out_of_scope,en,imperative,"a translation request, nothing the platform does"
+au-744,cricket ki history kya hai,out_of_scope,ru,question,"sport word on purpose, but off-platform general knowledge"
+au-745,kal konsi team jeeti thi tv pe,out_of_scope,ru,question,"a broadcast result, not a tournament hosted here"
+au-746,do you even like football,out_of_scope,en,question,chit-chat with a sport word; carries no task
+au-747,whats in the news today,out_of_scope,en,question,"news headlines, out of scope"
+au-748,petrol kitne ka hai aaj kal,out_of_scope,ru,numeric;question,"fuel prices, nothing to do with the app"
+au-749,suggest a good movie to watch,out_of_scope,en,imperative,"entertainment recommendation, off-domain"
+au-750,zindagi ka maqsad kya hai,out_of_scope,ru,question,"a philosophical aside, clearly out of scope"
+au-751,wallet me kitna reh gaya hai,wallet_balance,ru,question,how much is left: the balance number
+au-752,mera balance zero to nahi ho gaya,wallet_balance,ru,negation;question,a worry about the balance is still a balance query
+au-753,how much have i got saved up right now,wallet_balance,en,question,"the current balance, phrased without the word balance"
+au-754,kitne paise hain mere pass abhi,wallet_balance,ru,question,"the amount on hand, a balance lookup"
+au-755,whats my current wallet amount,wallet_balance,en,question,a direct balance number request
+au-756,escrow me kitna phasa hua mera,wallet_balance,ru,question,held funds; the gloss assigns escrow amounts to wallet_balance
+au-757,account me kitna cash para hai,wallet_balance,mix,code_switch;question,"cash on the account is the balance, code-switched"
+au-758,do i have enough to cover a booking,wallet_balance,en,indirect;question,asks whether the balance suffices; boundary against topup_help
+au-759,meri aane wali bookings dikhao,my_bookings,ru,imperative,show my upcoming bookings
+au-760,konse grounds book kiye hue hain maine,my_bookings,ru,question,which grounds have I booked: a lookup of own bookings
+au-761,show me my upcoming games,my_bookings,en,imperative,list the user's own fixtures
+au-762,kya maine koi slot liya hua hai is week,my_bookings,ru,question,whether I have a booking this week
+au-763,list my past bookings,my_bookings,en,imperative,the user's booking history
+au-764,mujhe yaad nahi maine kya book kiya tha,my_bookings,ru,indirect,a recall request that resolves to listing own bookings
+au-765,whats my next game and where is it,my_bookings,en,run_on;question,the user's next booking and its venue
+au-766,pichle mahine ki meri bookings nikaalo,my_bookings,ru,imperative,last month's own bookings
+au-767,meri friday wali booking cancel kardo,cancel_booking,ru,imperative,cancel my friday booking: an explicit act
+au-768,cancel the nine pm slot i booked,cancel_booking,en,imperative;numeric,cancel a specific booked slot
+au-769,mujhe apni booking cancel karni hai,cancel_booking,ru,plain,I need to cancel my booking
+au-770,"that saturday booking, cancel it",cancel_booking,en,ellipsis,a fronted object then the cancel instruction
+au-771,ab nahi khel sakte wo booking hata do,cancel_booking,ru,run_on;negation,cannot play so remove the booking: a cancellation
+au-772,cancel my ground reservation for tomorrow,cancel_booking,en,imperative,cancel an existing reservation
+au-773,booking cancel karne ka irada hai mera,cancel_booking,ru,indirect,intent to cancel an existing booking
+au-774,scrap my sunday slot please,cancel_booking,en,imperative;politeness,"scrap a booked slot, politely"
+au-775,kal rawal pe koi slot khali hai,check_availability,ru,question,is a slot free tomorrow at a named ground
+au-776,is anything free tonight at the futsal place,check_availability,en,question,availability tonight at a venue
+au-777,koi slot available hai is weekend,check_availability,mix,code_switch;question,"weekend availability, code-switched"
+au-778,ground khali hai ya sab book ho gaya,check_availability,ru,run_on;question,is the ground free or fully booked
+au-779,us ground pe lights hain ya nahi,venue_info,ru,question,floodlights fact about a specific ground
+au-780,arena one ka rate kya hai per hour,venue_info,mix,code_switch;question,the hourly price of a named venue
+au-781,kya wahan changing room hai,venue_info,ru,question,an amenity of a specific venue
+au-782,is that pitch turf or natural grass,venue_info,en,question,the surface of one ground
+au-783,us jagah parking milti hai,venue_info,ru,question,parking at a specific place
+au-784,whats the rating of the gulberg ground,venue_info,en,question,a venue's rating is a venue fact
+au-785,wo ground indoor hai ya khula,venue_info,ru,question,"indoor-or-open, a fact about one ground"
+au-786,cancel karne pe paise wapas milte hain kya,refund_policy,ru,question,"the refund rule, not the act of cancelling"
+au-787,whats the refund rule if i pull out late,refund_policy,en,question,the cancellation window and refund share
+au-788,deposit wapas hoga agar match na khele,refund_policy,ru,negation;question,deposit rule on a no-show
+au-789,no show pe kya hota hai paison ka,refund_policy,ru,question,the no-show rule for money held
+au-790,how much do i get back on a cancellation,refund_policy,en,question,"the refund share, a rule"
+au-791,rawal ground tak kaise pahunchun,navigate,ru,question,"directions to a named ground, not a how-to about the app"
+au-792,how far is arena one from here,navigate,en,question,distance to a venue
+au-793,us ground ka location bhejo map pe,navigate,ru,imperative,a map pin for a venue
+au-794,directions to the futsal place please,navigate,en,imperative;politeness,a route request
+au-795,konse tournaments chal rahe hain abhi,tournament_list,ru,question,listing current tournaments
+au-796,any leagues i can register my team for,tournament_list,en,question,competitions open to enter
+au-797,agle mahine koi event hai khelne ko,tournament_list,ru,question,upcoming tournaments by date
+au-798,team ki current rating zara batao,team_stats,ru,imperative,"our rating number, a stat"
+au-799,hum kitne match jeete is season,team_stats,ru,question,"our win count, a record"
+au-800,whats our rank on the leaderboard,team_stats,en,question,"our standing, a stat"
+au-801,mera elo kitna hai abhi,team_stats,mix,code_switch;question,"my current rating number, not the rules that move it"
+au-802,koi team hai jo players dhoond rahi ho,find_teams,ru,question,"teams recruiting; the user wants to join, not to play against"
+au-803,i want to join a team near me,find_teams,en,plain,joining an existing squad
+au-804,kisi team me shaamil hona hai mujhe,find_teams,ru,plain,wanting to be on a team
+au-805,which teams are recruiting right now,find_teams,en,question,teams open to new players
+au-806,apni team kaise banau is app pe,create_team_help,ru,question,"how to make a team: the team-creation procedure, not generic app help"
+au-807,how do i invite players to my squad,create_team_help,en,question,"inviting players, part of the team procedure"
+au-808,team banane ke liye kitne log chahiye,create_team_help,ru,question,"minimum squad size, a team-creation rule"
+au-809,captain kaise banta hai team ka,create_team_help,ru,question,"captaincy, part of the team procedure"
+au-810,elo kaise barhta hai jeetne pe,elo_help,ru,question,"how the rating rises, a rule not a number"
+au-811,how does the rating system work,elo_help,en,question,the mechanics of ELO
+au-812,haarne pe points kitne katte hain,elo_help,ru,question,"what a loss costs, a rating rule"
+au-813,rating upar kaise le jaun,elo_help,ru,question,"how to climb, a rating rule"
+au-814,ground owner se baat karni hai,contact_owner,ru,plain,wanting to speak to the venue owner
+au-815,can you ask the venue manager something,contact_owner,en,question,passing a question to a human
+au-816,support se connect karao mujhe,contact_owner,mix,code_switch;imperative,"reach support, a human"
+au-817,owner ko message karna hai mera,contact_owner,ru,plain,message the owner
+au-818,assalam o alaikum scout,greeting,ru,plain,a greeting carrying no request
+au-819,hey there whats up,greeting,en,slang,a casual greeting
+au-820,shukriya yaar bohat madad hui,greeting,ru,plain,"thanks, a social sign-off"
+au-821,nahi rehne do abhi,deny,ru,negation,declines the proposal; nothing booked to cancel
+au-822,no not that one,deny,en,short;negation,refuses the offered option
+au-823,nah forget it,deny,en,short;slang,a casual refusal of the suggestion
+au-824,us ground ke baare me batao facilities kya hain,venue_info,ru,run_on;question,"amenities of a specific ground; a venue fact, not off-domain"
+au-825,does that place have washrooms and water,venue_info,en,run_on;question,amenities of one venue
+au-826,wahan baithne ki jagah hai spectators ke liye,venue_info,ru,question,"seating, an amenity of a specific venue"
+au-827,wo ground poora size ka hai ya chota,venue_info,ru,question,"the size of one ground, a venue fact"
+au-828,us turf pe raat ko light hoti hai na,venue_info,ru,question,floodlights at a specific turf
+au-829,whats parking like at the arena venue,venue_info,en,question,parking at a named venue
+au-830,kya us jagah pani aur washroom available hai,venue_info,ru,run_on;question,water and washroom at a place: venue amenities
+au-831,is the gulberg turf covered or open air,venue_info,en,question,"covered-or-open, a fact about one turf"
+au-832,us ground ka floor kaisa hai ghaas ya mitti,venue_info,ru,run_on;question,the surface of a specific ground
+au-833,how well kept is that venue overall,venue_info,en,question,"the condition of one venue, a fact about it"
+au-834,tournament me hissa kaise lun yahan,tournament_list,ru,question,"how to enter a tournament; tournament_list owns registration, not app_help"
+au-835,how do i sign my team up for a cup here,tournament_list,en,question,"tournament registration, a tournament matter"
+au-836,koi cup chal raha hai jisme khel sakun,tournament_list,ru,question,a tournament open to play in
+au-837,list the tournaments open for signup,tournament_list,en,imperative,listing tournaments open to enter
+au-838,meri book ki hui ground kaunsi thi,my_bookings,ru,question,which ground I booked: a lookup of an existing booking
+au-839,do i have anything booked for tonight,my_bookings,en,question,"whether I hold a booking, not whether a slot is free"
+au-840,maine jo slot liya tha wo kab ka hai,my_bookings,ru,question,when my booked slot is: an own-booking detail
+au-841,show the bookings under my name,my_bookings,en,imperative,list the user's own bookings
+au-842,bata do mere account me kitna para hai,wallet_balance,ru,imperative,how much is on the account: the balance
+au-843,how much money is left in my wallet,wallet_balance,en,question,the wallet balance number
+au-844,balance kitna bacha hai zara dekhna,wallet_balance,ru,imperative,check how much balance remains
+au-845,reserve kardo wo evening wala slot rawal pe,book_venue,ru,imperative,reserve commits to a specific slot
+au-846,book the six pm one at arena,book_venue,en,imperative;numeric,book re-specifies a concrete option and acts
+au-847,i need help with the app,app_help,en,plain,generic app help; app_help is the front door to support
+au-848,support chahiye mujhe app me,app_help,ru,plain,wants support with the app itself
+au-849,madad chahiye yahan,app_help,ru,plain,a bare help request; routes to the help front door
+au-850,help me use this app,app_help,en,imperative,"how to use the app, the core of app_help"
+au-851,i have a problem with the app,app_help,en,plain,an app problem; the honest destination is Help & Support
+au-852,app me koi masla aa raha hai,app_help,ru,plain,something is wrong in the app
+au-853,something is not working here,app_help,en,plain,a vague app fault; routes to support rather than abstaining
+au-854,report a problem to you,app_help,en,imperative,reporting an issue; app_help carries it to Help & Support
+au-855,mujhe ek issue report karna hai,app_help,ru,plain,wants to report an issue
+au-856,how do i get help here,app_help,en,question,asking where help is: app_help
+au-857,app theek se kaam nahi kar raha,app_help,ru,plain,the app is misbehaving; a support matter
+au-858,kuch gadbad hai app me madad karo,app_help,mix,code_switch;run_on,"something is off, help me: an app support request"
+au-859,us ground ke owner se baat karao,contact_owner,ru,imperative,talk to the owner of a specific ground
+au-860,ask the owner of that venue a question,contact_owner,en,imperative,pass a question to a named venue's owner

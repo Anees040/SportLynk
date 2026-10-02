@@ -320,6 +320,129 @@ test('continuationOf: nothing pending, nothing to continue', () => {
   }), null, 'a pending slot with no intent behind it is not resumable');
 });
 
+// A typed follow-up ("aur koi?") is the one continuation that needs no pending slot:
+// no intent label means "the page after the one I just saw", so the classifier abstains
+// and is right to. Before this, the reply was the capability menu -- the worst answer to
+// give a user who had just been shown a list and asked the obvious next thing.
+
+test('isFollowUp: a bare "more" in either language is a follow-up', () => {
+  for (const s of ['aur', 'aur koi', 'koi aur', 'aur dikhao', 'more', 'any others',
+    'show more', 'what else', 'next', 'aur koi bhai', 'more please']) {
+    assert.equal(dialog.isFollowUp(s), true, `"${s}" should be a follow-up`);
+  }
+});
+
+test('isFollowUp: anything carrying a new request is NOT a follow-up', () => {
+  for (const s of ['aur koi ground DHA mein', 'more grounds under 2000', 'cricket',
+    'book karo', '', 'kya haal hai']) {
+    assert.equal(dialog.isFollowUp(s), false, `"${s}" must reach the classifier`);
+  }
+});
+
+test('continuationOf: "aur koi?" pages the previous listing from where it stopped', () => {
+  const out = dialog.continuationOf({
+    prior: {
+      intent: 'find_venue', pending: null,
+      ctx: { lastOffset: 0, lastShown: 3 },
+    },
+    said: 'aur koi?',
+    decided: abstained({ intent: 'out_of_scope' }),
+  });
+  assert.equal(out.intent, 'find_venue');
+  assert.deepEqual(out.fill, { offset: 3 },
+    'the next page starts after the three already shown');
+});
+
+test('continuationOf: a follow-up with nothing shown yet continues nothing', () => {
+  const out = dialog.continuationOf({
+    prior: { intent: 'find_venue', pending: null, ctx: { lastShown: 0 } },
+    said: 'more',
+    decided: abstained(),
+  });
+  assert.equal(out, null, 'there is no list on screen for "more" to extend');
+});
+
+test('continuationOf: a follow-up after a non-pageable answer is not paged', () => {
+  // wallet_balance has one answer, not a list: "more" against it means nothing, and
+  // paging it would assert a second page that does not exist.
+  const out = dialog.continuationOf({
+    prior: { intent: 'wallet_balance', pending: null, ctx: { lastShown: 1 } },
+    said: 'aur',
+    decided: abstained(),
+  });
+  assert.equal(out, null);
+});
+
+test('continuationOf: a confident new search beats a follow-up reading', () => {
+  const out = dialog.continuationOf({
+    prior: { intent: 'find_venue', pending: null, ctx: { lastShown: 3 } },
+    said: 'aur koi ground',
+    decided: { intent: 'find_venue', abstained: false, confidence: 0.9, incoming: {}, inputMode: 'text' },
+  });
+  assert.equal(out, null, 'a sentence the model could read is never reinterpreted as paging');
+});
+
+// repeatedMiss catches the loop where the same unreadable words are answered with the
+// same capability menu twice running. The transcript is the only place the previous
+// utterance exists -- session_state.ctx carries the last intent, never the last words.
+
+const SRC = reply.SOURCES;
+
+test('repeatedMiss: the same words missed twice running is a repeat', () => {
+  const turns = [
+    { role: 'user', text: 'florb the glim' },
+    { role: 'scout', text: 'Here is what I can do.', source: SRC.MENU },
+    { role: 'user', text: 'florb the glim' },
+  ];
+  assert.equal(dialog.repeatedMiss({ turns, said: 'florb the glim' }), true);
+});
+
+test('repeatedMiss: punctuation and case do not save a repeat', () => {
+  const turns = [
+    { role: 'user', text: 'florb the glim' },
+    { role: 'scout', text: 'menu', source: SRC.MENU },
+    { role: 'user', text: 'FLORB, the glim!!!' },
+  ];
+  assert.equal(dialog.repeatedMiss({ turns, said: 'FLORB, the glim!!!' }), true,
+    'words() normalises both sides before they are compared');
+});
+
+test('repeatedMiss: a different sentence, or a real answer last turn, is not a repeat', () => {
+  const differentWords = [
+    { role: 'user', text: 'florb the glim' },
+    { role: 'scout', text: 'menu', source: SRC.MENU },
+    { role: 'user', text: 'something else entirely' },
+  ];
+  assert.equal(dialog.repeatedMiss({ turns: differentWords, said: 'something else entirely' }),
+    false, 'the user changed the words, so this is a first miss, not a loop');
+
+  const lastWasAnswer = [
+    { role: 'user', text: 'florb the glim' },
+    { role: 'scout', text: 'Your balance is PKR 1,600.', source: SRC.LIVE },
+    { role: 'user', text: 'florb the glim' },
+  ];
+  assert.equal(dialog.repeatedMiss({ turns: lastWasAnswer, said: 'florb the glim' }),
+    false, 'the previous turn was understood, so this is not a second miss');
+});
+
+test('repeatedMiss: too little history, or empty words, is never a repeat', () => {
+  assert.equal(dialog.repeatedMiss({ turns: [], said: 'x' }), false);
+  assert.equal(dialog.repeatedMiss({ turns: null, said: 'x' }), false);
+  assert.equal(dialog.repeatedMiss({ turns: [{ role: 'user', text: 'x' }], said: '!!!' }),
+    false, 'an utterance that normalises to nothing cannot repeat');
+});
+
+test('abstainReply: a repeated miss says so instead of reprinting the menu', () => {
+  const first = dialog.abstainReply({ reason: ml.NLU_ABSTAIN_NO_KNOWN_TERMS, name: 'Scout' });
+  const again = dialog.abstainReply({
+    reason: ml.NLU_ABSTAIN_NO_KNOWN_TERMS, name: 'Scout', repeated: true,
+  });
+  assert.notEqual(first.text, again.text, 'the second answer must not be the first verbatim');
+  assert.match(again.text, /will not help/i);
+  assert.ok(again.chips.length > 0, 'the buttons that cannot be misread are still offered');
+  assert.equal(again.source, reply.SOURCES.MENU, 'it is still a menu answer, just a different one');
+});
+
 // 7. The payload — Flutter renders by type, so a typo must die here
 
 test('reply(): source is required and validated', () => {
@@ -644,6 +767,96 @@ test('titleFrom(): the first message names the chat, the way every chat app does
   assert.ok(long.endsWith('...'));
 });
 
+// The "same ground" bug: a ground SELECTED on an earlier turn leaked into a later
+// find_venue BROWSE as a name filter, so "Other grounds" returned only the ground just
+// left. clearCarriedVenueForBrowse drops a carried venue identity on a browse turn.
+
+test('clearCarriedVenueForBrowse: a carried venue is dropped on a find_venue browse', () => {
+  const out = dialog.clearCarriedVenueForBrowse(
+    'find_venue', {}, { venueId: 'A', venueName: 'Rawal', sport: 'cricket', locality: 'DHA' },
+  );
+  assert.equal(out.venueId, undefined, 'the selected ground must not filter the browse');
+  assert.equal(out.venueName, undefined);
+  assert.equal(out.sport, 'cricket', 'a real browse filter survives');
+  assert.equal(out.locality, 'DHA', 'an area filter survives');
+});
+
+test('clearCarriedVenueForBrowse: a venue named THIS turn still filters', () => {
+  const out = dialog.clearCarriedVenueForBrowse(
+    'find_venue', { venueName: 'Rawal' }, { venueName: 'Rawal', sport: 'cricket' },
+  );
+  assert.equal(out.venueName, 'Rawal', '"find Rawal" this turn is a real search term');
+  const byId = dialog.clearCarriedVenueForBrowse(
+    'find_venue', { venueId: 'B' }, { venueId: 'B' },
+  );
+  assert.equal(byId.venueId, 'B', 'a ground chip tapped this turn still selects it');
+});
+
+test('clearCarriedVenueForBrowse: other intents keep the carried venue', () => {
+  for (const intent of ['check_availability', 'venue_info', 'navigate', 'book_venue']) {
+    const out = dialog.clearCarriedVenueForBrowse(intent, {}, { venueId: 'A', venueName: 'Rawal' });
+    assert.equal(out.venueId, 'A', `${intent} keeps the ground as its subject`);
+    assert.equal(out.venueName, 'Rawal');
+  }
+});
+
+// "koi or ground" came back with the SAME ground. clearCarriedVenueForBrowse only runs
+// when the turn is already find_venue, so when the classifier read the phrase as
+// anything else the carried ground survived. wantsDifferentVenue decides it from the
+// words instead, so the fix does not depend on model #4 getting this phrase right.
+
+test('wantsDifferentVenue: an explicit ask for another ground, in either language', () => {
+  for (const s of ['koi or ground', 'koi aur ground', 'koi aur ground dikhao',
+    'dusra ground', 'doosra ground batao', 'another ground', 'other grounds',
+    'different venue', 'koi alag jagah', 'another turf please', 'naya ground']) {
+    assert.equal(dialog.wantsDifferentVenue(s), true, `"${s}" asks for a different ground`);
+  }
+});
+
+test('wantsDifferentVenue: "more about THIS ground" is the opposite and must not fire', () => {
+  for (const s of ['is ground ke baare me aur batao', 'us ground ki aur detail',
+    'tell me more about this ground', 'same ground another time',
+    'yeh ground aur kya facilities']) {
+    assert.equal(dialog.wantsDifferentVenue(s), false,
+      `"${s}" points at the ground already on screen`);
+  }
+});
+
+test('wantsDifferentVenue: needs BOTH an other-word and a venue noun', () => {
+  assert.equal(dialog.wantsDifferentVenue('aur koi'), false,
+    'no venue noun: that is paging the same list, which isFollowUp owns');
+  assert.equal(dialog.wantsDifferentVenue('more'), false);
+  assert.equal(dialog.wantsDifferentVenue('ground book karna hai'), false,
+    'a ground noun with no other-word is an ordinary booking request');
+  assert.equal(dialog.wantsDifferentVenue(''), false);
+  assert.equal(dialog.wantsDifferentVenue(null), false);
+});
+
+// A stale Confirm chip: the confirm card stays in the transcript after its one turn is
+// spent, so tapping it again arrives with nothing armed. The old reply ("I am not
+// holding anything to confirm") read as though the booking had FAILED, while the first
+// tap had already booked it and moved the money — the exact report from the phone.
+
+test('confirm with nothing armed: says it was already answered, never that it failed', async () => {
+  const out = await actions.ACTIONS.confirm({ confirm: null, slots: {} });
+  const text = out.reply.text;
+  assert.match(text, /already answered/i);
+  assert.match(text, /nothing has been done twice/i,
+    'the user whose wallet already moved must be told nothing ran twice');
+  assert.doesNotMatch(text, /not holding anything/i, 'the old failure-sounding wording is gone');
+  assert.ok(out.reply.chips.some((c) => c.action === 'my_bookings'),
+    'it points at the record that settles what actually happened');
+  assert.equal(out.state.confirm, null, 'and leaves nothing armed');
+});
+
+test('confirm dispatches a REAL armed block to its executor, unchanged', async () => {
+  // The guard must not swallow a genuine confirmation. Proven through the dispatch
+  // table rather than by running a booking, which needs a database.
+  assert.equal(typeof actions.ACTIONS.confirm, 'function');
+  assert.equal(typeof actions.ACTIONS.book_venue, 'function',
+    'book_venue is the executor an armed confirm dispatches to');
+});
+
 test('decodeCursor(): a junk cursor is "no cursor", not a 400', () => {
   const id = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
   assert.equal(threads.decodeCursor(id), id);
@@ -653,6 +866,90 @@ test('decodeCursor(): a junk cursor is "no cursor", not a 400', () => {
   assert.equal(threads.decodeCursor(''), null);
   assert.equal(threads.decodeCursor(null), null);
   assert.equal(threads.decodeCursor(42), null);
+});
+
+/**
+ * A client standing in for one assistant thread's worth of SQL.
+ *
+ * getOrCreate takes a runner rather than reaching for the pool, which is what lets its
+ * branching be proved without a database. The stub answers the three shapes the
+ * function asks for and records every statement, so a test can assert on what was NOT
+ * run — "no SELECT for the newest thread" is the whole point of forceNew.
+ */
+function stubClient({ newest = [], byClientId = [], created = { id: 'new-id' } } = {}) {
+  const seen = [];
+  return {
+    seen,
+    async query(sql, args) {
+      seen.push({ sql: String(sql).replace(/\s+/g, ' ').trim(), args });
+      if (/^SELECT c\.id FROM chat_messages/i.test(seen[seen.length - 1].sql)) {
+        return { rows: byClientId, rowCount: byClientId.length };
+      }
+      if (/^SELECT count\(\*\)/i.test(seen[seen.length - 1].sql)) {
+        return { rows: [{ n: 0 }], rowCount: 1 };
+      }
+      if (/^INSERT INTO chat_channels/i.test(seen[seen.length - 1].sql)) {
+        return { rows: [created], rowCount: 1 };
+      }
+      // Both the list read and the single-thread read answer from `newest`.
+      return { rows: newest, rowCount: newest.length };
+    },
+  };
+}
+
+test('getOrCreate(): without forceNew an absent thread id resumes the newest chat', async () => {
+  const row = { id: 'old-id', title: 'yesterday', session_state: null };
+  const client = stubClient({ newest: [row] });
+  const out = await threads.getOrCreate(client, { userId: 'u1' });
+  assert.equal(out.ok, true);
+  assert.equal(out.row.id, 'old-id', 'the documented default contract must not move');
+  assert.equal(out.created, false);
+  assert.ok(!client.seen.some((q) => /^INSERT INTO chat_channels/i.test(q.sql)),
+    'resuming must not create a thread');
+});
+
+test('getOrCreate(): forceNew creates instead of resuming — the three-chats bug', async () => {
+  const row = { id: 'old-id', title: 'yesterday', session_state: null };
+  const client = stubClient({ newest: [row] });
+  const out = await threads.getOrCreate(client, { userId: 'u1', forceNew: true });
+  assert.equal(out.ok, true);
+  assert.equal(out.row.id, 'new-id',
+    'a deliberate new chat must not be appended to the one the user just left');
+  assert.equal(out.created, true);
+  assert.ok(client.seen.some((q) => /^INSERT INTO chat_channels/i.test(q.sql)));
+});
+
+test('getOrCreate(): an explicit thread id beats forceNew, because a resume is a resume', async () => {
+  const row = { id: 'wanted-id', title: 'that one', session_state: null };
+  const client = stubClient({ newest: [row] });
+  const out = await threads.getOrCreate(client, {
+    userId: 'u1', threadId: 'wanted-id', forceNew: true,
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.row.id, 'wanted-id');
+  assert.equal(out.created, false);
+  assert.ok(!client.seen.some((q) => /^INSERT INTO chat_channels/i.test(q.sql)));
+});
+
+test('getOrCreate(): a retried new chat returns its first attempt, not a second thread', async () => {
+  const made = { id: 'already-made', title: 'hi', session_state: null };
+  const client = stubClient({ newest: [made], byClientId: [{ id: 'already-made' }] });
+  const out = await threads.getOrCreate(client, {
+    userId: 'u1', forceNew: true, clientId: 'cid-1',
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.row.id, 'already-made');
+  assert.equal(out.created, false,
+    'the per-channel dedupe cannot see a retry that would open its own channel');
+  assert.ok(!client.seen.some((q) => /^INSERT INTO chat_channels/i.test(q.sql)));
+});
+
+test('threadForClientId(): no key means no lookup, and a miss is null', async () => {
+  const quiet = stubClient();
+  assert.equal(await threads.threadForClientId(quiet, { userId: 'u1' }), null);
+  assert.equal(quiet.seen.length, 0, 'a turn without a client id must not cost a query');
+  const miss = stubClient({ byClientId: [] });
+  assert.equal(await threads.threadForClientId(miss, { userId: 'u1', clientId: 'c' }), null);
 });
 
 // 12. CARDS — every action card has buttons (the spec's hard rule)

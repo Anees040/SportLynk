@@ -170,16 +170,23 @@ router.get('/:channelId/messages', async (req, res, next) => {
     const { rows } = await client.query(
       `SELECT m.*, u.name AS sender_name, u.avatar_url AS sender_avatar,
               ${chat.REPLY_PREVIEW_SQL} AS reply_preview,
+              ${chat.POLL_SQL} AS poll,
               COALESCE(jsonb_agg(jsonb_build_object('emoji', r.emoji, 'userId', r.user_id))
                 FILTER (WHERE r.id IS NOT NULL), '[]'::jsonb) AS reactions
          FROM chat_messages m
          LEFT JOIN users u ON u.id = m.sender_id
          LEFT JOIN chat_reactions r ON r.message_id = m.id
         WHERE m.channel_id = $1 AND m.created_at < $2
+          -- "Delete for me" (033): a message this reader hid is absent from their
+          -- history and present in everybody else's.
+          AND NOT EXISTS (
+            SELECT 1 FROM chat_message_hides h
+             WHERE h.message_id = m.id AND h.user_id = $4
+          )
         GROUP BY m.id, u.name, u.avatar_url
         ORDER BY m.created_at DESC
         LIMIT $3`,
-      [req.params.channelId, before, limit],
+      [req.params.channelId, before, limit, req.user.id],
     );
     return ok(res, rows.reverse());
   } catch (e) { next(e); } finally { client.release(); }
@@ -223,6 +230,17 @@ router.post('/:channelId/messages', async (req, res, next) => {
       const dur = Number.isFinite(+req.body.durationMs) ? Math.trunc(+req.body.durationMs) : 0;
       // Capped at ten minutes so a runaway recording cannot store an arbitrary blob.
       insert.durationMs = Math.max(0, Math.min(dur, 10 * 60 * 1000));
+      // The amplitude samples the waveform is drawn from. Client-supplied, so kept
+      // only as an array of finite numbers, each clamped to 0..1 and the whole
+      // capped at 64 bars — a crafted body cannot store an unbounded blob. The
+      // waveform column has existed since migration 015; null when none was sent.
+      if (Array.isArray(req.body.waveform)) {
+        const bars = req.body.waveform
+          .filter((n) => Number.isFinite(+n))
+          .slice(0, 64)
+          .map((n) => Math.max(0, Math.min(1, Math.round(+n * 1000) / 1000)));
+        insert.waveform = bars.length ? JSON.stringify(bars) : null;
+      }
     } else {
       const body = access.squashMultiline(req.body.body || '');
       if (!body) return fail(res, 400, 'Message cannot be empty.');
@@ -418,6 +436,39 @@ router.delete('/:channelId/messages/:messageId', async (req, res, next) => {
   } finally { client.release(); }
 });
 
+// DELETE FOR me  (033)
+//
+// Hides one message from the caller's own history and nothing more: the row is
+// untouched, every other member still sees it, and the sender is not told. No
+// socket event and no pill — a hide is private housekeeping, not an action on the
+// conversation, which is why it is a plain insert rather than a tombstone.
+//
+// Any member may hide any message they can see, including somebody else's and
+// including a message they are not allowed to delete for everyone.
+router.post('/:channelId/messages/:messageId/hide', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const m = await member(client, req.params.channelId, req.user.id);
+    if (!m) return fail(res, 403, 'You are not a chat member.');
+    if (!access.isUuid(req.params.messageId)) return fail(res, 404, 'Message not found.');
+
+    // Scoped to the channel the caller proved membership of, so a message id from
+    // another room cannot be hidden (harmless, but it would be an unchecked write).
+    const msg = (await client.query(
+      'SELECT id FROM chat_messages WHERE id = $1 AND channel_id = $2',
+      [req.params.messageId, req.params.channelId],
+    )).rows[0];
+    if (!msg) return fail(res, 404, 'Message not found.');
+
+    await client.query(
+      `INSERT INTO chat_message_hides (message_id, user_id) VALUES ($1, $2)
+       ON CONFLICT (message_id, user_id) DO NOTHING`,
+      [req.params.messageId, req.user.id],
+    );
+    return ok(res, { hidden: true });
+  } catch (e) { next(e); } finally { client.release(); }
+});
+
 // PIN  (a channel admin pins a message to the top of the thread)
 //
 // Pinning is an admin power — the same authority that deletes anyone's message: in
@@ -501,6 +552,70 @@ router.delete('/:channelId/messages/:messageId/pin', async (req, res, next) => {
     const hydrated = await chat.emitPersistedMessage(client, req.params.channelId, req.params.messageId);
     await chat.emitPinnedChanged(client, req.params.channelId);
     return ok(res, hydrated || { unpinned: true });
+  } catch (e) { next(e); } finally { client.release(); }
+});
+
+// POLLS  (a WhatsApp-style poll posted into the room)
+//
+// A poll is a message of kind 'poll' whose body is the question; the ballot and
+// the votes live in chat_polls / chat_poll_votes. Any member may create one and
+// any member may vote — a poll is a group question, not an admin announcement, so
+// it is not gated the way pinning is. Creating and voting both re-push the poll
+// message to the room so every open client sees the new tally at once.
+router.post('/:channelId/polls', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const m = await member(client, req.params.channelId, req.user.id);
+    if (!m) return fail(res, 403, 'You are not a chat member.');
+
+    const question = access.squashMultiline(req.body.question || '');
+    if (!question) return fail(res, 400, 'A poll needs a question.');
+    if (question.length > 300) return fail(res, 400, 'The question is too long.');
+
+    const options = (Array.isArray(req.body.options) ? req.body.options : [])
+      .map((o) => access.squashMultiline(String(o || '')).slice(0, 100))
+      .filter((o) => o.length > 0)
+      .slice(0, 12);
+    if (options.length < 2) return fail(res, 400, 'A poll needs at least two options.');
+
+    const allowMultiple = req.body.allowMultiple === true;
+
+    await client.query('BEGIN');
+    const messageId = await chat.createPoll(client, {
+      channelId: req.params.channelId,
+      userId: req.user.id,
+      question,
+      options,
+      allowMultiple,
+    });
+    await client.query('COMMIT');
+
+    const hydrated = await chat.emitPersistedMessage(client, req.params.channelId, messageId);
+    return ok(res, hydrated);
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) { /* already resolved */ }
+    next(e);
+  } finally { client.release(); }
+});
+
+router.post('/:channelId/polls/:pollId/vote', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const m = await member(client, req.params.channelId, req.user.id);
+    if (!m) return fail(res, 403, 'You are not a chat member.');
+    if (!access.isUuid(req.params.pollId)) return fail(res, 404, 'Poll not found.');
+
+    const optionIndex = Number.isInteger(+req.body.optionIndex) ? +req.body.optionIndex : -1;
+    const r = await chat.votePoll(client, {
+      channelId: req.params.channelId,
+      pollId: req.params.pollId,
+      userId: req.user.id,
+      optionIndex,
+    });
+    if (!r.ok) return fail(res, r.status, r.message);
+
+    const hydrated = await chat.emitPersistedMessage(client, r.channelId, r.messageId);
+    return ok(res, hydrated);
   } catch (e) { next(e); } finally { client.release(); }
 });
 

@@ -1,0 +1,36 @@
+# SportLynk ML service — TRAINING dependencies
+#
+# requirements.txt is the SERVING contract: what the container image and Render
+# install, and nothing else. This file is that file plus what only the offline
+# pipeline under training/ needs.
+#
+# The split exists for one measured reason. matplotlib brings its own dependency
+# tree (pillow, fonttools, contourpy, kiwisolver) and nothing under app/ imports it,
+# so carrying it in the serving image would spend build time and resident memory on
+# code the service never calls — and the free Render tier the service is deployed to
+# has ~512 MB to boot four scikit-learn artifacts in.
+#
+# Install on a machine that trains as well as serves:
+#   cd ml-service
+#   python -m venv .venv
+#   .\.venv\Scripts\Activate.ps1
+#   pip install -r requirements-train.txt
+#
+# `-r`, rather than a duplicated list: a pin written twice is a pin that will
+# eventually disagree with itself, and scikit-learn's version is the single number
+# that decides whether a released artifact still loads.
+-r requirements.txt
+
+# ── Reporting figures ───────────────────────────────────────────────────
+# The calibration curve, the confusion matrices, demand_patterns.png and the
+# per-model report figures. Every import of matplotlib under training/ is lazy and
+# inside a try/except, so a trainer run in a serving-only environment still releases
+# a model and reports which PNG it skipped: the figures are evidence, not a gate.
+matplotlib==3.11.1
+
+# RECORDED, not installed: training/export_bookings.py imports psycopg2, which was
+# declared in neither file before this split and is not declared now. It is the one
+# training script that reads the database directly, and it is outside the documented
+# pipeline — the pricing corpus is frozen at data/bookings_synth.csv and must not be
+# regenerated. The undeclared import is noted here so the gap is visible rather than
+# fixed silently by adding a database driver to an install contract that needs none.

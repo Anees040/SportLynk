@@ -5,31 +5,66 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../constants/colors.dart';
 
-/// The team-chat background (Issue 5). WhatsApp-like: a warm ground under the
-/// timeline so both bubble colours read, with a small set of presets the user
-/// picks from. The choice is per device — a preference, not account state — so
-/// it lives in [SharedPreferences] rather than the backend, keeping the feature
-/// simple as asked.
+/// The team-chat background. WhatsApp-like in intent — a warm ground under the
+/// timeline so both bubble colours read — but with a set of drawn patterns rather
+/// than one faint doodle, because a chat the user looks at every day is worth
+/// some design. The choice is per device (a preference, not account state) so it
+/// lives in [SharedPreferences] rather than the backend.
 ///
-/// A preset is a flat ground plus a flag for whether the faint doodle pattern is
-/// painted over it. The pattern is drawn by [_ChatPatternPainter], not shipped as
-/// an image asset, so it scales to any size and adds no binary weight.
-enum ChatBgPreset {
-  doodle('Doodle', AppColors.chatBackground, true),
-  plain('Plain', AppColors.chatBgPlain, false),
-  mint('Mint', AppColors.chatBgMint, false),
-  slate('Slate', AppColors.chatBgSlate, false);
+/// Every pattern is painted by [_ChatPatternPainter] from geometry, not shipped
+/// as an image asset: it scales to any screen, adds no binary weight, and its
+/// tint comes from [AppColors] so it can never fight a bubble. Each is drawn at a
+/// low alpha and on a deterministic per-cell seed, so the art is stable across
+/// repaints and does not re-randomise as the list scrolls.
+enum ChatPattern {
+  /// Nothing over the ground.
+  none,
 
-  const ChatBgPreset(this.label, this.ground, this.pattern);
+  /// Sparse rings and plus marks — the original, kept because it is the quietest.
+  doodle,
+
+  /// Balls, goalposts and pennants: the on-brand one for a sports app.
+  sport,
+
+  /// A hexagon lattice, the densest geometric option.
+  honeycomb,
+
+  /// Gentle horizontal sine bands.
+  waves,
+
+  /// Small tilted ticks and triangles scattered like confetti.
+  confetti,
+
+  /// A fine blueprint cross-hatch with a heavier rule every fourth line.
+  blueprint,
+
+  /// Concentric quarter-arcs, the art-deco fan.
+  arcs,
+}
+
+/// A background the user can pick: a ground colour plus the pattern drawn over
+/// it, and whether that pattern uses the stronger tint.
+enum ChatBgPreset {
+  doodle('Doodle', AppColors.chatBackground, ChatPattern.doodle),
+  sport('Sport', AppColors.chatBgSand, ChatPattern.sport, strong: true),
+  honeycomb('Hive', AppColors.chatBgTeal, ChatPattern.honeycomb),
+  waves('Waves', AppColors.chatBgMint, ChatPattern.waves, strong: true),
+  confetti('Confetti', AppColors.chatBgRose, ChatPattern.confetti, strong: true),
+  blueprint('Blueprint', AppColors.chatBgDusk, ChatPattern.blueprint),
+  arcs('Arcs', AppColors.chatBgSlate, ChatPattern.arcs, strong: true),
+  plain('Plain', AppColors.chatBgPlain, ChatPattern.none);
+
+  const ChatBgPreset(this.label, this.ground, this.pattern, {this.strong = false});
 
   final String label;
   final Color ground;
-  final bool pattern;
+  final ChatPattern pattern;
+  final bool strong;
 
   static const _prefsKey = 'chat_bg_preset';
 
   /// The saved preset, or [doodle] when nothing has been chosen or the stored
-  /// value no longer maps to a preset.
+  /// value no longer maps to a preset (a name dropped in a later version).
   static Future<ChatBgPreset> load() async {
     final prefs = await SharedPreferences.getInstance();
     final name = prefs.getString(_prefsKey);
@@ -46,7 +81,7 @@ enum ChatBgPreset {
 }
 
 /// Paints [preset] behind [child]. The child is expected to be the chat
-/// timeline; this widget owns only the ground and the optional pattern.
+/// timeline; this widget owns only the ground and the pattern over it.
 class ChatBackground extends StatelessWidget {
   final ChatBgPreset preset;
   final Widget child;
@@ -55,14 +90,20 @@ class ChatBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ground = ColoredBox(color: preset.ground);
     return Stack(
       fit: StackFit.expand,
       children: [
-        ground,
-        if (preset.pattern)
-          const Positioned.fill(
-            child: CustomPaint(painter: _ChatPatternPainter()),
+        ColoredBox(color: preset.ground),
+        if (preset.pattern != ChatPattern.none)
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _ChatPatternPainter(
+                pattern: preset.pattern,
+                tint: preset.strong
+                    ? AppColors.chatPatternStrong
+                    : AppColors.chatPattern,
+              ),
+            ),
           ),
         child,
       ],
@@ -70,50 +111,237 @@ class ChatBackground extends StatelessWidget {
   }
 }
 
-/// A sparse, faint doodle: small rings and plus marks on a jittered grid. Drawn
-/// in [AppColors.chatPattern] (a low-alpha forest tint) so it reads as texture
-/// rather than content and never competes with a bubble.
+/// Draws one of [ChatPattern] across the whole surface in [tint].
 class _ChatPatternPainter extends CustomPainter {
-  const _ChatPatternPainter();
+  final ChatPattern pattern;
+  final Color tint;
 
-  static const double _cell = 56;
+  const _ChatPatternPainter({required this.pattern, required this.tint});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.chatPattern
+    final stroke = Paint()
+      ..color = tint
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4
-      ..strokeCap = StrokeCap.round;
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final fill = Paint()..color = tint..style = PaintingStyle.fill;
 
-    final cols = (size.width / _cell).ceil() + 1;
-    final rows = (size.height / _cell).ceil() + 1;
+    switch (pattern) {
+      case ChatPattern.none:
+        return;
+      case ChatPattern.doodle:
+        _doodle(canvas, size, stroke);
+      case ChatPattern.sport:
+        _sport(canvas, size, stroke);
+      case ChatPattern.honeycomb:
+        _honeycomb(canvas, size, stroke);
+      case ChatPattern.waves:
+        _waves(canvas, size, stroke);
+      case ChatPattern.confetti:
+        _confetti(canvas, size, stroke, fill);
+      case ChatPattern.blueprint:
+        _blueprint(canvas, size, stroke);
+      case ChatPattern.arcs:
+        _arcs(canvas, size, stroke);
+    }
+  }
 
+  // A deterministic generator per grid cell, so the art never changes on repaint.
+  math.Random _cellRandom(int r, int c) =>
+      math.Random((r * 73856093) ^ (c * 19349663));
+
+  void _doodle(Canvas canvas, Size size, Paint p) {
+    const cell = 56.0;
+    _forEachCell(size, cell, (r, c, origin) {
+      final rnd = _cellRandom(r, c);
+      final centre = origin + Offset(rnd.nextDouble() * cell * 0.5, rnd.nextDouble() * cell * 0.5);
+      if (((r * 73856093) ^ (c * 19349663)).isEven) {
+        canvas.drawCircle(centre, 4.5, p);
+      } else {
+        canvas.drawLine(centre - const Offset(4, 0), centre + const Offset(4, 0), p);
+        canvas.drawLine(centre - const Offset(0, 4), centre + const Offset(0, 4), p);
+      }
+    });
+  }
+
+  /// Sports marks on a jittered grid, rotated a little so the field does not look
+  /// stamped: a ball with seams, a goal, a pennant and a whistle-ish ring.
+  void _sport(Canvas canvas, Size size, Paint p) {
+    const cell = 76.0;
+    _forEachCell(size, cell, (r, c, origin) {
+      final rnd = _cellRandom(r, c);
+      final centre = origin + Offset(rnd.nextDouble() * cell * 0.55, rnd.nextDouble() * cell * 0.55);
+      final kind = rnd.nextInt(4);
+      canvas.save();
+      canvas.translate(centre.dx, centre.dy);
+      canvas.rotate((rnd.nextDouble() - 0.5) * 0.7);
+      switch (kind) {
+        case 0: // ball: a circle with two seams
+          canvas.drawCircle(Offset.zero, 8, p);
+          canvas.drawArc(Rect.fromCircle(center: const Offset(-6, 0), radius: 9),
+              -0.9, 1.8, false, p);
+          canvas.drawArc(Rect.fromCircle(center: const Offset(6, 0), radius: 9),
+              math.pi - 0.9, 1.8, false, p);
+        case 1: // goal: two posts and a crossbar
+          canvas.drawLine(const Offset(-9, 7), const Offset(-9, -6), p);
+          canvas.drawLine(const Offset(9, 7), const Offset(9, -6), p);
+          canvas.drawLine(const Offset(-9, -6), const Offset(9, -6), p);
+        case 2: // pennant on a pole
+          canvas.drawLine(const Offset(-7, 9), const Offset(-7, -8), p);
+          canvas.drawPath(
+            Path()
+              ..moveTo(-7, -8)
+              ..lineTo(8, -4)
+              ..lineTo(-7, 0)
+              ..close(),
+            p,
+          );
+        default: // ring with a stub, read as a whistle
+          canvas.drawCircle(Offset.zero, 6, p);
+          canvas.drawLine(const Offset(5, -4), const Offset(10, -8), p);
+      }
+      canvas.restore();
+    });
+  }
+
+  void _honeycomb(Canvas canvas, Size size, Paint p) {
+    const radius = 17.0;
+    final w = radius * math.sqrt(3);
+    final rows = (size.height / (radius * 1.5)).ceil() + 2;
+    final cols = (size.width / w).ceil() + 2;
+    for (var r = -1; r < rows; r++) {
+      for (var c = -1; c < cols; c++) {
+        final cx = c * w + (r.isOdd ? w / 2 : 0);
+        final cy = r * radius * 1.5;
+        final path = Path();
+        for (var i = 0; i < 6; i++) {
+          final a = math.pi / 180 * (60 * i - 30);
+          final x = cx + radius * math.cos(a);
+          final y = cy + radius * math.sin(a);
+          if (i == 0) {
+            path.moveTo(x, y);
+          } else {
+            path.lineTo(x, y);
+          }
+        }
+        path.close();
+        canvas.drawPath(path, p);
+      }
+    }
+  }
+
+  void _waves(Canvas canvas, Size size, Paint p) {
+    const gap = 26.0;
+    const amp = 6.0;
+    const period = 90.0;
+    final rows = (size.height / gap).ceil() + 1;
+    for (var r = 0; r < rows; r++) {
+      final y = r * gap;
+      final path = Path()..moveTo(0, y);
+      // Offsetting alternate rows by half a period makes the bands interlock
+      // rather than stack into visible columns.
+      final phase = r.isEven ? 0.0 : period / 2;
+      for (var x = 0.0; x <= size.width; x += 6) {
+        path.lineTo(x, y + math.sin((x + phase) / period * 2 * math.pi) * amp);
+      }
+      canvas.drawPath(path, p);
+    }
+  }
+
+  void _confetti(Canvas canvas, Size size, Paint stroke, Paint fill) {
+    const cell = 44.0;
+    _forEachCell(size, cell, (r, c, origin) {
+      final rnd = _cellRandom(r, c);
+      final centre = origin + Offset(rnd.nextDouble() * cell * 0.7, rnd.nextDouble() * cell * 0.7);
+      canvas.save();
+      canvas.translate(centre.dx, centre.dy);
+      canvas.rotate(rnd.nextDouble() * math.pi);
+      switch (rnd.nextInt(3)) {
+        case 0:
+          canvas.drawLine(const Offset(-5, 0), const Offset(5, 0), stroke);
+        case 1:
+          canvas.drawPath(
+            Path()
+              ..moveTo(0, -4)
+              ..lineTo(4, 3)
+              ..lineTo(-4, 3)
+              ..close(),
+            stroke,
+          );
+        default:
+          canvas.drawCircle(Offset.zero, 2.2, fill);
+      }
+      canvas.restore();
+    });
+  }
+
+  void _blueprint(Canvas canvas, Size size, Paint p) {
+    const gap = 22.0;
+    final heavy = Paint()
+      ..color = p.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6;
+    final light = Paint()
+      ..color = p.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.7;
+    final cols = (size.width / gap).ceil() + 1;
+    final rows = (size.height / gap).ceil() + 1;
+    for (var c = 0; c < cols; c++) {
+      final x = c * gap;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), c % 4 == 0 ? heavy : light);
+    }
+    for (var r = 0; r < rows; r++) {
+      final y = r * gap;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), r % 4 == 0 ? heavy : light);
+    }
+  }
+
+  void _arcs(Canvas canvas, Size size, Paint p) {
+    const cell = 64.0;
+    _forEachCell(size, cell, (r, c, origin) {
+      // Each cell holds three nested quarter-arcs, with the corner they spring
+      // from rotating per cell so the fans tile without an obvious seam.
+      final corner = ((r * 73856093) ^ (c * 19349663)).abs() % 4;
+      final start = -math.pi / 2 * corner;
+      final pivot = switch (corner) {
+        0 => origin,
+        1 => origin + const Offset(cell, 0),
+        2 => origin + const Offset(cell, cell),
+        _ => origin + const Offset(0, cell),
+      };
+      for (final rad in const [cell * 0.3, cell * 0.55, cell * 0.8]) {
+        canvas.drawArc(
+          Rect.fromCircle(center: pivot, radius: rad),
+          start,
+          math.pi / 2,
+          false,
+          p,
+        );
+      }
+    });
+  }
+
+  void _forEachCell(Size size, double cell, void Function(int r, int c, Offset origin) draw) {
+    final cols = (size.width / cell).ceil() + 1;
+    final rows = (size.height / cell).ceil() + 1;
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        // A deterministic per-cell jitter and shape choice, so the pattern is
-        // stable across repaints and never re-randomises as the list scrolls.
-        final seed = (r * 73856093) ^ (c * 19349663);
-        final rnd = math.Random(seed);
-        final dx = c * _cell + rnd.nextDouble() * _cell * 0.5;
-        final dy = r * _cell + rnd.nextDouble() * _cell * 0.5;
-        final center = Offset(dx, dy);
-        if (seed.isEven) {
-          canvas.drawCircle(center, 4.5, paint);
-        } else {
-          canvas.drawLine(center - const Offset(4, 0), center + const Offset(4, 0), paint);
-          canvas.drawLine(center - const Offset(0, 4), center + const Offset(0, 4), paint);
-        }
+        draw(r, c, Offset(c * cell, r * cell));
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _ChatPatternPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _ChatPatternPainter old) =>
+      old.pattern != pattern || old.tint != tint;
 }
 
 /// The preset picker, opened from the thread's overflow menu. Returns the chosen
-/// preset (already persisted) or null if dismissed.
+/// preset (already persisted) or null if dismissed. Each swatch is the real
+/// painter at a small size, so what is previewed is exactly what is applied.
 Future<ChatBgPreset?> showChatBackgroundPicker(
   BuildContext context,
   ChatBgPreset current,
@@ -143,11 +371,15 @@ Future<ChatBgPreset?> showChatBackgroundPicker(
             const SizedBox(height: 16),
             const Text('Chat background',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            const Text('Pick a look for this device',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
             const SizedBox(height: 16),
             GridView.count(
               crossAxisCount: 4,
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
+              childAspectRatio: 0.78,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: ChatBgPreset.values.map((p) {
@@ -174,6 +406,8 @@ Future<ChatBgPreset?> showChatBackgroundPicker(
                       ),
                       const SizedBox(height: 6),
                       Text(p.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,

@@ -37,95 +37,9 @@ CORPUS = ROOT / "data" / "assistant" / "intents.csv"
 # feature rather than on topic vocabulary, which is what the exam's `indirect`
 # and `boundary` rows punish.
 PROPOSED: tuple[tuple[str, str, str, str, str], ...] = (
-    # wallet_balance: the balance NUMBER, asked indirectly and without the word
-    # "balance". Weakest intent on the exam -- recall 0.20, 8 of 68 errors.
-    ("am i still in credit after the friday game",
-     "wallet_balance", "en", "indirect;question",
-     "in credit asks the balance number, not the topup procedure"),
-    ("did the refund land or am i still short",
-     "wallet_balance", "en", "indirect;boundary;run_on",
-     "a refund is the context; the request is the current balance"),
-    ("whats left on my account before i book anything",
-     "wallet_balance", "en", "indirect;boundary;question",
-     "booking is the motive, the balance is what is asked for"),
-    ("is there anything held back from the last match or is it all free",
-     "wallet_balance", "en", "indirect;boundary;run_on",
-     "held funds are escrow, which the spec assigns to wallet_balance"),
-    ("i thought i had 2000 in there, can you check",
-     "wallet_balance", "en", "indirect;numeric",
-     "a figure recalled wrongly is still a balance query"),
-    ("do i need to load more or am i covered for tonight",
-     "wallet_balance", "en", "indirect;boundary;run_on",
-     "pairs with the topup row of the same wording; asks whether the balance suffices"),
-
-    # topup_help: the minimal-pair counterpart -- the PROCEDURE, not the number.
-    ("how do i load more before tonight",
-     "topup_help", "en", "boundary;question",
-     "same wording as the wallet pair, but asks the method rather than the amount"),
-    ("whats the minimum i can add by easypaisa",
-     "topup_help", "en", "boundary;numeric;question",
-     "a numeric answer that is a rule of the topup procedure, not a balance"),
-    ("can you walk me through getting money out",
-     "topup_help", "en", "boundary;question",
-     "withdrawal is part of the procedure intent per the spec gloss"),
-
-    # my_bookings: the user's OWN bookings, asked without a booking keyword.
-    # Recall 0.30 and precision 0.333 -- wrong in both directions.
-    ("what have i got lined up this week",
-     "my_bookings", "en", "indirect;question",
-     "no booking noun at all; the possessive is the only signal"),
-    ("am i playing anywhere on saturday or did i imagine that",
-     "my_bookings", "en", "indirect;run_on",
-     "pairs with the availability row for saturday; this one asks about own bookings"),
-    ("remind me where we are meant to be at 7",
-     "my_bookings", "en", "indirect;imperative;numeric",
-     "an imperative that retrieves an existing booking rather than making one"),
-    ("did that friday one actually go through",
-     "my_bookings", "en", "indirect;boundary;ellipsis",
-     "asks whether a booking exists, which is a lookup and not a booking act"),
-    ("whats on my plate for the weekend",
-     "my_bookings", "en", "indirect;slang;question",
-     "idiom carrying no domain vocabulary; the exam's English rows read like this"),
-    ("i have two games this week i think, which ones",
-     "my_bookings", "en", "indirect;numeric;run_on",
-     "a count plus a request to enumerate the user's own bookings"),
-
-    # check_availability: the minimal-pair counterpart -- FREE slots, not mine.
-    ("whats still open on saturday",
-     "check_availability", "en", "boundary;short;question",
-     "same day as the my_bookings pair, but the object is a free slot"),
-    ("anything free at 7 or is it all gone",
-     "check_availability", "en", "boundary;numeric;run_on",
-     "same clock time as the my_bookings pair, but asks what is unbooked"),
-
-    # cancel_booking: the ACT of cancelling, with no cancel verb in the row.
-    # Recall 0.40, and it leaks into book_venue and my_bookings.
-    ("something came up, we cant make tonight",
-     "cancel_booking", "en", "indirect;negation",
-     "states an inability, which in context is the instruction to cancel"),
-    ("pull us out of the saturday game please",
-     "cancel_booking", "en", "indirect;imperative;politeness",
-     "withdrawal from a booked fixture, phrased without the verb cancel"),
-    ("we are a man short so drop tomorrows slot",
-     "cancel_booking", "en", "indirect;run_on",
-     "a reason welded to the instruction; drop is the cancelling verb here"),
-    ("the team bailed, get rid of the 9pm one",
-     "cancel_booking", "en", "indirect;slang;numeric",
-     "selects an existing booking by time and orders its removal"),
-    ("i wont be needing friday after all",
-     "cancel_booking", "en", "indirect;negation",
-     "negation over an existing booking, not a refusal of a Scout proposal"),
-    ("scrap it, we are not playing sunday",
-     "cancel_booking", "en", "indirect;negation;short",
-     "short and negated, but acts on a booking rather than answering Scout"),
-
-    # refund_policy: the minimal-pair counterpart -- the RULES of cancelling.
-    ("if we cant make tonight what do we lose",
-     "refund_policy", "en", "boundary;indirect;question",
-     "same premise as the cancel pair, but asks the rule and not for the act"),
-    ("whats the cutoff for pulling out without losing the deposit",
-     "refund_policy", "en", "boundary;question",
-     "same wording as the cancel pair, but the object is the cancellation window"),
+    # Empty on purpose. Every vetted batch (minimal pairs, the Roman-Urdu how-to fix,
+    # robustness rounds A-C, and the support batch) is already appended to
+    # authored_intents.csv. Stage the next batch here, run this gate, then append.
 )
 
 

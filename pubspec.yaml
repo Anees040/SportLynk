@@ -87,6 +87,11 @@ dependencies:
   # preview, flash and lens flip. Gallery multi-select still routes through the
   # existing attachment sheet.
   camera: ^0.11.0+2
+  # Device location for "nearest grounds first": the app passes the user's
+  # coordinates to /venues/recommended, which re-ranks the content recommender's
+  # picks by straight-line distance (utils/geoDistance). Permission is best-effort —
+  # a denied or unavailable location simply falls back to the relevance order.
+  geolocator: ^13.0.1
 
 dev_dependencies:
   flutter_test:

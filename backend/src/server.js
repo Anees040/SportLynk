@@ -64,6 +64,7 @@ const { startMatchExpiryJob } = require("./jobs/matchExpiryJob");
 const { startSentimentBackfillJob } = require("./jobs/sentimentBackfillJob");
 const { startTournamentJob } = require("./jobs/tournamentJob");
 const { startPushJob } = require("./jobs/pushJob");
+const { startSlotMaintenanceJob } = require("./jobs/slotMaintenanceJob");
 const { assertNotificationTypes } = require("./utils/notificationTypes");
 const settings = require("./utils/globalSettings");
 const escrow = require("./utils/escrow");
@@ -213,4 +214,8 @@ server.listen(PORT, () => {
   // This job is what turns those rows into a tray banner and an in-app badge, and it
   // announces its own Firebase state on the line below rather than failing to boot.
   startPushJob();
+  // Keeps every active venue's rolling slot window filled. Without it a venue is
+  // bookable only for the fixed window whichever route created it wrote once, and
+  // then shows "No slots available" forever — see the job's header.
+  startSlotMaintenanceJob();
 });

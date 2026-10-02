@@ -205,6 +205,26 @@ class _AssistantScreenState extends State<AssistantScreen> {
     _c!.sendChip(chip);
   }
 
+  /// Chip actions that answer ONE pending question and are spent the moment Scout
+  /// replies again. Everything else stays useful forever.
+  static const Set<String> _consentActions = {'confirm', 'cancel_confirm'};
+
+  /// A chip tapped on a message that is no longer the newest.
+  ///
+  /// The confirm card stays in the transcript after its one turn is spent, so without
+  /// this a second tap on it posts a confirmation for a decision that is already
+  /// closed — which is what produced "I am not holding anything to confirm" moments
+  /// after a booking had in fact gone through and taken the money. A consent chip up
+  /// there is answered locally, with the truth; every other chip is posted as normal,
+  /// because reaching back for "Find a ground" is a reasonable thing to do.
+  void _staleChip(ScoutChip chip) {
+    if (_consentActions.contains(chip.action)) {
+      _toast('That was already answered — check My Bookings for what went through.');
+      return;
+    }
+    _chip(chip);
+  }
+
   // Client moves
 
   /// Leave the chat for a screen named by the backend's `meta.screen`.
@@ -577,6 +597,14 @@ class _AssistantScreenState extends State<AssistantScreen> {
       onDirections: _directions,
       enabled: !c.busy,
     );
+    // The same affordances for an older message, with consent chips answered locally
+    // instead of posted — see _staleChip.
+    final staleActions = ScoutCardActions(
+      onChip: _staleChip,
+      onScreen: _goScreen,
+      onDirections: _directions,
+      enabled: !c.busy,
+    );
 
     final msgs = c.messages;
     // One leading slot for the "older messages" affordance, then a date separator
@@ -597,7 +625,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         final group = ScoutMessageGroup(
           key: ValueKey(msg.id),
           msg: msg,
-          actions: actions,
+          actions: i - 1 == msgs.length - 1 ? actions : staleActions,
           onRetry: c.retry,
           onVote: c.vote,
           onExplain: (m) => showScoutExplainSheet(context, m),

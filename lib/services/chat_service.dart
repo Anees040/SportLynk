@@ -116,6 +116,13 @@ class ChatService {
   Future<Map<String, dynamic>> deleteMessage(String token, String channelId, String messageId) =>
       _api.delete(ApiConstants.chatMessage(channelId, messageId), token: token);
 
+  /// "Delete for me": hide one message from my own history only. The row is
+  /// untouched and every other member still sees it, so this is not a delete —
+  /// nothing is broadcast and the sender is not told.
+  Future<Map<String, dynamic>> hideMessage(
+          String token, String channelId, String messageId) =>
+      _api.post(ApiConstants.chatMessageHide(channelId, messageId), const {}, token: token);
+
   /// Pin or unpin a message (admin only, enforced server-side). Returns the
   /// re-hydrated message so the caller can upsert its new pinned state.
   Future<Map<String, dynamic>> setPinned(

@@ -1,0 +1,38 @@
+-- ════════════════════════════════════════════════════════════════════════════
+-- 030_slot_price_source.sql   ·   provenance for a slot's price
+-- ════════════════════════════════════════════════════════════════════════════
+--
+-- Makes dynamic pricing visible to players without taking pricing away from
+-- owners. Until now every slot carried the venue's flat `price_per_hour`, so the
+-- trained price model (model #1) only ever ran as an owner-dashboard suggestion
+-- the owner had to apply by hand — and almost never did, so every slot on the
+-- player grid showed the same number and the model looked dead.
+--
+-- The plan is to price slots by the model at the point they are generated and keep
+-- that price rolling, while still letting an owner override any slot. That needs
+-- one fact the row does not record today: WHO set this price. Without it a repricing
+-- sweep cannot tell a model-set price (safe to recompute) from a price an owner
+-- deliberately chose (must never be overwritten).
+--
+--   'model'      the trained model set this price (ml-service was reachable)
+--   'heuristic'  the peak-hour rule set it (ml-service was down at the time)
+--   'owner'      an owner set it by hand — the sweep must leave it alone
+--   NULL         legacy: generated flat before this column existed, system-owned
+--
+-- NULL and 'model'/'heuristic' are all "system-owned" and may be repriced; only
+-- 'owner' is locked. Existing rows default to NULL on purpose: they were written
+-- flat, so there is no owner intent to protect, and the first reprice pass adopts
+-- them. A pre-existing owner-applied price cannot be told apart retroactively — an
+-- accepted limitation, since the feature is new and the apply route stamps 'owner'
+-- from here on.
+--
+-- Purely additive: one nullable column, no DROP/TRUNCATE/DELETE, no backfill that
+-- changes an existing price. Safe to run against the live database and safe to
+-- re-run (IF NOT EXISTS).
+
+ALTER TABLE slots ADD COLUMN IF NOT EXISTS price_source TEXT DEFAULT NULL;
+
+-- The repricing sweep's WHERE clause is "future slots this venue owns that the
+-- owner has not pinned", i.e. filtered by venue_id, price_source and slot_date.
+-- venue_id+slot_date is already indexed (idx_slots_venue_date); price_source is low
+-- cardinality and not worth its own index.

@@ -27,6 +27,7 @@ class ChatAudioService extends ChangeNotifier {
   bool _playing = false;
   bool _loading = false;
   String? _errorId;
+  String? _errorText;
   Duration _position = Duration.zero;
   Duration? _duration;
 
@@ -34,6 +35,11 @@ class ChatAudioService extends ChangeNotifier {
   bool get playing => _playing;
   bool get loading => _loading;
   String? get errorId => _errorId;
+
+  /// Why the current clip would not play, short enough for a bubble. Null unless
+  /// [errorId] is set. Surfaced rather than swallowed: a voice note that silently
+  /// refuses to start is indistinguishable from a broken player.
+  String? get errorText => _errorText;
   Duration get position => _position;
   Duration? get duration => _duration;
 
@@ -65,6 +71,35 @@ class ChatAudioService extends ChangeNotifier {
       }
       notifyListeners();
     }));
+    // Errors raised mid-playback (a dropped connection, a codec the device
+    // refuses) arrive here rather than from the setUrl future, so they need their
+    // own handler or they surface as an unhandled exception in the terminal.
+    _subs.add(_player.playbackEventStream.listen(
+      (_) {},
+      onError: (Object e) => _fail(_currentId, e),
+    ));
+  }
+
+  void _fail(String? id, Object error) {
+    _loading = false;
+    _playing = false;
+    _errorId = id;
+    _errorText = _describe(error);
+    _currentId = null;
+    notifyListeners();
+  }
+
+  /// A short, human reason. just_audio's exceptions carry platform detail that is
+  /// useful in a log and unreadable in a bubble, so the common cases are named and
+  /// anything else falls back to the type.
+  String _describe(Object e) {
+    if (e is TimeoutException) return 'Took too long to load';
+    if (e is PlayerException) {
+      final m = (e.message ?? '').trim();
+      return m.isEmpty ? 'Could not play this clip' : m;
+    }
+    if (e is PlayerInterruptedException) return 'Playback was interrupted';
+    return 'Could not play this clip';
   }
 
   /// Play [id]'s clip, or pause it when it is already the one playing. A tap on a
@@ -75,30 +110,31 @@ class ChatAudioService extends ChangeNotifier {
       if (_player.playing) {
         await _player.pause();
       } else {
-        await _player.play();
+        // Not awaited: play() completes only when the clip ENDS, so awaiting it
+        // would hold this call open for the whole clip.
+        _player.play();
       }
       return;
     }
 
     _currentId = id;
     _errorId = null;
+    _errorText = null;
     _loading = true;
     _position = Duration.zero;
     _duration = null;
     notifyListeners();
     try {
-      await _player.setUrl(url).timeout(const Duration(seconds: 20));
+      await _player.setUrl(url).timeout(const Duration(seconds: 25));
+      if (_currentId != id) return; // another clip was started while this loaded
       _loading = false;
       notifyListeners();
-      await _player.play();
-    } catch (_) {
-      // A clip that will not load or times out surfaces as an error on its own
-      // bubble (a retry tap), never a thrown exception under the thread.
-      _loading = false;
-      _errorId = id;
-      _currentId = null;
-      _playing = false;
-      notifyListeners();
+      _player.play();
+    } catch (e) {
+      // The clip would not load. Reported on its own bubble with a reason and a
+      // retry, never as a thrown exception under the thread.
+      debugPrint('[chat-audio] $id failed to load: $e');
+      _fail(id, e);
     }
   }
 
@@ -116,6 +152,8 @@ class ChatAudioService extends ChangeNotifier {
     if (_currentId == null && !_playing) return;
     _currentId = null;
     _playing = false;
+    _errorId = null;
+    _errorText = null;
     _position = Duration.zero;
     _duration = null;
     await _player.stop();

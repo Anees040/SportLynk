@@ -4,6 +4,7 @@ const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const checkRole = require('../middleware/roleMiddleware');
 const { recomputeTrust } = require('../utils/trustScore');
+const slotService = require('../services/slotService');
 
 // All admin routes require authentication + admin role
 router.use(auth, checkRole('admin'));
@@ -156,32 +157,20 @@ router.patch('/registrations/:id/approve', async (req, res, next) => {
     );
     const venueId = venueRes.rows[0].id;
 
-    // Generate slots for the next 14 days
-    const fromH = parseInt((op.operating_hours_from || '06:00').split(':')[0], 10);
-    const toH   = parseInt((op.operating_hours_to   || '22:00').split(':')[0], 10);
-
-    for (let d = 0; d < 14; d++) {
-      const slotDate = new Date();
-      slotDate.setDate(slotDate.getDate() + d);
-      const dateStr = slotDate.toISOString().split('T')[0];
-
-      for (let h = fromH; h < toH; h++) {
-        await client.query(
-          `INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status)
-           VALUES ($1, $2, $3, $4, $5, 'available')
-           ON CONFLICT DO NOTHING`,
-          [
-            venueId,
-            dateStr,
-            `${h.toString().padStart(2, '0')}:00:00`,
-            `${(h + 1).toString().padStart(2, '0')}:00:00`,
-            op.price_per_hour || 2000,
-          ]
-        );
-      }
-    }
+    // The venue's opening window is read back from the row just inserted rather
+    // than re-derived from `op`, so the hours it advertises and the hours it sells
+    // cannot disagree — this loop used to fall back to 22:00 while the INSERT
+    // above defaulted the column to 23:00, quietly withholding the last hour.
+    //
+    // This is only a head start. jobs/slotMaintenanceJob.js keeps the window
+    // rolling from here on, so approval no longer has to guess a horizon.
+    await slotService.ensureVenueSlots(client, { venueId });
 
     await client.query('COMMIT');
+    // Price the newly-approved venue's slots by the model in the background — after
+    // COMMIT and on the pool, never inside the approval txn (it makes network calls
+    // to ml-service). The venue is now active, so this is what the first player sees.
+    slotService.repriceVenueSlots(pool, { venueId }).catch(() => {});
     res.json({
       success: true,
       message: 'Owner approved and venue created successfully',

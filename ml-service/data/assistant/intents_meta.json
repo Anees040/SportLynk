@@ -1,6 +1,6 @@
 {
   "generated_by": "training/gen_intents.py",
-  "generated_at": "2026-09-17T00:32:44+00:00",
+  "generated_at": "2026-10-01T17:27:44+00:00",
   "wave": "S.6 Wave A",
   "model": "#4 SportLynk assistant -- intent classifier corpus",
   "seed": 20260824,
@@ -17,8 +17,8 @@
     },
     "authored": {
       "file": "authored_intents.csv",
-      "rows": 653,
-      "sha256": "f79e54a4a55c16dc24b8b8c72098409340e13109a42029b9bb5c8cec0367a2ca"
+      "rows": 860,
+      "sha256": "703c9634c5b243a8d846cf5c77776d9e3ddbdcca97276c0f7ff4fc26b2b07635"
     },
     "exam": {
       "file": "assistant_test.csv",
@@ -70,12 +70,12 @@
       "ru": 897
     },
     "sources": {
-      "authored": 653,
-      "template": 1923
+      "authored": 860,
+      "template": 1716
     },
     "splits": {
-      "train": 2041,
-      "val": 535
+      "train": 2050,
+      "val": 526
     },
     "intent_x_lang": {
       "affirm|en": 45,
@@ -149,20 +149,20 @@
       "wallet_balance|ru": 39
     },
     "phenomena": {
-      "question": 1185,
-      "code_switch": 603,
-      "imperative": 501,
-      "short": 489,
-      "plain": 444,
-      "multi_slot": 362,
-      "boundary": 290,
-      "numeric": 272,
-      "politeness": 240,
-      "run_on": 214,
-      "negation": 212,
-      "ellipsis": 173,
-      "indirect": 139,
-      "slang": 92,
+      "question": 1203,
+      "code_switch": 602,
+      "imperative": 494,
+      "short": 458,
+      "plain": 395,
+      "multi_slot": 338,
+      "boundary": 286,
+      "numeric": 276,
+      "run_on": 229,
+      "politeness": 221,
+      "negation": 214,
+      "indirect": 153,
+      "ellipsis": 152,
+      "slang": 95,
       "typo": 50,
       "sms_speak": 44,
       "emoji": 16,
@@ -170,13 +170,14 @@
     },
     "per_template": {
       "templates": 624,
-      "used": 622,
-      "unused": 2,
-      "max": 8,
+      "used": 621,
+      "unused": 3,
+      "max": 7,
       "min": 1,
-      "mean": 3.09,
+      "mean": 2.76,
       "cap": 12,
       "unused_ids": [
+        "greeting-en-39",
         "greeting-en-40",
         "greeting-en-41"
       ]
@@ -184,10 +185,10 @@
     "text_length": {
       "chars_min": 3,
       "chars_max": 96,
-      "chars_mean": 40.3,
+      "chars_mean": 40.1,
       "words_min": 1,
       "words_max": 19,
-      "words_mean": 7.87
+      "words_mean": 7.85
     }
   },
   "allocation": {
@@ -217,14 +218,14 @@
     },
     "app_help": {
       "authored": {
-        "en": 4,
-        "mix": 5,
-        "ru": 7
+        "en": 10,
+        "mix": 10,
+        "ru": 20
       },
       "template_rows": {
-        "en": 41,
-        "mix": 23,
-        "ru": 32
+        "en": 35,
+        "mix": 18,
+        "ru": 19
       },
       "effective_capacity": {
         "en": 84,
@@ -241,14 +242,14 @@
     },
     "book_venue": {
       "authored": {
-        "en": 24,
+        "en": 30,
         "mix": 19,
-        "ru": 26
+        "ru": 28
       },
       "template_rows": {
-        "en": 21,
+        "en": 15,
         "mix": 9,
-        "ru": 13
+        "ru": 11
       },
       "effective_capacity": {
         "en": 76,
@@ -265,14 +266,14 @@
     },
     "cancel_booking": {
       "authored": {
-        "en": 5,
+        "en": 15,
         "mix": 6,
-        "ru": 7
+        "ru": 11
       },
       "template_rows": {
-        "en": 40,
+        "en": 30,
         "mix": 22,
-        "ru": 32
+        "ru": 28
       },
       "effective_capacity": {
         "en": 64,
@@ -289,14 +290,14 @@
     },
     "check_availability": {
       "authored": {
-        "en": 22,
-        "mix": 18,
-        "ru": 26
+        "en": 25,
+        "mix": 19,
+        "ru": 28
       },
       "template_rows": {
-        "en": 23,
-        "mix": 10,
-        "ru": 13
+        "en": 20,
+        "mix": 9,
+        "ru": 11
       },
       "effective_capacity": {
         "en": 84,
@@ -313,14 +314,14 @@
     },
     "contact_owner": {
       "authored": {
-        "en": 4,
-        "mix": 5,
-        "ru": 6
+        "en": 6,
+        "mix": 6,
+        "ru": 9
       },
       "template_rows": {
-        "en": 41,
-        "mix": 23,
-        "ru": 33
+        "en": 39,
+        "mix": 22,
+        "ru": 30
       },
       "effective_capacity": {
         "en": 82,
@@ -337,14 +338,14 @@
     },
     "create_team_help": {
       "authored": {
-        "en": 4,
+        "en": 5,
         "mix": 5,
-        "ru": 6
+        "ru": 9
       },
       "template_rows": {
-        "en": 41,
+        "en": 40,
         "mix": 23,
-        "ru": 33
+        "ru": 30
       },
       "effective_capacity": {
         "en": 59,
@@ -361,14 +362,14 @@
     },
     "deny": {
       "authored": {
-        "en": 4,
+        "en": 9,
         "mix": 5,
-        "ru": 6
+        "ru": 7
       },
       "template_rows": {
-        "en": 41,
+        "en": 36,
         "mix": 23,
-        "ru": 33
+        "ru": 32
       },
       "effective_capacity": {
         "en": 84,
@@ -385,14 +386,14 @@
     },
     "elo_help": {
       "authored": {
-        "en": 4,
+        "en": 5,
         "mix": 5,
-        "ru": 6
+        "ru": 9
       },
       "template_rows": {
-        "en": 41,
+        "en": 40,
         "mix": 23,
-        "ru": 33
+        "ru": 30
       },
       "effective_capacity": {
         "en": 84,
@@ -409,12 +410,12 @@
     },
     "find_opponents": {
       "authored": {
-        "en": 23,
+        "en": 27,
         "mix": 22,
         "ru": 24
       },
       "template_rows": {
-        "en": 22,
+        "en": 18,
         "mix": 6,
         "ru": 15
       },
@@ -457,14 +458,14 @@
     },
     "find_teams": {
       "authored": {
-        "en": 4,
+        "en": 6,
         "mix": 5,
-        "ru": 6
+        "ru": 8
       },
       "template_rows": {
-        "en": 41,
+        "en": 39,
         "mix": 23,
-        "ru": 33
+        "ru": 31
       },
       "effective_capacity": {
         "en": 77,
@@ -481,12 +482,12 @@
     },
     "find_venue": {
       "authored": {
-        "en": 5,
+        "en": 8,
         "mix": 5,
         "ru": 6
       },
       "template_rows": {
-        "en": 40,
+        "en": 37,
         "mix": 23,
         "ru": 33
       },
@@ -505,14 +506,14 @@
     },
     "greeting": {
       "authored": {
-        "en": 6,
+        "en": 7,
         "mix": 6,
-        "ru": 7
+        "ru": 9
       },
       "template_rows": {
-        "en": 39,
+        "en": 38,
         "mix": 22,
-        "ru": 32
+        "ru": 30
       },
       "effective_capacity": {
         "en": 59,
@@ -529,14 +530,14 @@
     },
     "my_bookings": {
       "authored": {
-        "en": 5,
+        "en": 16,
         "mix": 5,
-        "ru": 7
+        "ru": 14
       },
       "template_rows": {
-        "en": 40,
+        "en": 29,
         "mix": 23,
-        "ru": 32
+        "ru": 25
       },
       "effective_capacity": {
         "en": 60,
@@ -553,14 +554,14 @@
     },
     "navigate": {
       "authored": {
-        "en": 4,
+        "en": 6,
         "mix": 5,
-        "ru": 6
+        "ru": 8
       },
       "template_rows": {
-        "en": 41,
+        "en": 39,
         "mix": 23,
-        "ru": 33
+        "ru": 31
       },
       "effective_capacity": {
         "en": 84,
@@ -577,14 +578,14 @@
     },
     "out_of_scope": {
       "authored": {
-        "en": 6,
-        "mix": 7,
-        "ru": 9
+        "en": 18,
+        "mix": 8,
+        "ru": 15
       },
       "template_rows": {
-        "en": 39,
-        "mix": 21,
-        "ru": 30
+        "en": 27,
+        "mix": 20,
+        "ru": 24
       },
       "effective_capacity": {
         "en": 60,
@@ -601,14 +602,14 @@
     },
     "refund_policy": {
       "authored": {
-        "en": 5,
+        "en": 9,
         "mix": 6,
-        "ru": 7
+        "ru": 10
       },
       "template_rows": {
-        "en": 40,
+        "en": 36,
         "mix": 22,
-        "ru": 32
+        "ru": 29
       },
       "effective_capacity": {
         "en": 69,
@@ -625,14 +626,14 @@
     },
     "team_stats": {
       "authored": {
-        "en": 4,
-        "mix": 5,
-        "ru": 6
+        "en": 10,
+        "mix": 6,
+        "ru": 8
       },
       "template_rows": {
-        "en": 41,
-        "mix": 23,
-        "ru": 33
+        "en": 35,
+        "mix": 22,
+        "ru": 31
       },
       "effective_capacity": {
         "en": 58,
@@ -649,14 +650,14 @@
     },
     "topup_help": {
       "authored": {
-        "en": 5,
-        "mix": 6,
-        "ru": 7
+        "en": 8,
+        "mix": 8,
+        "ru": 13
       },
       "template_rows": {
-        "en": 40,
-        "mix": 22,
-        "ru": 32
+        "en": 37,
+        "mix": 20,
+        "ru": 26
       },
       "effective_capacity": {
         "en": 60,
@@ -673,14 +674,14 @@
     },
     "tournament_list": {
       "authored": {
-        "en": 4,
+        "en": 12,
         "mix": 6,
-        "ru": 6
+        "ru": 10
       },
       "template_rows": {
-        "en": 41,
+        "en": 33,
         "mix": 22,
-        "ru": 33
+        "ru": 29
       },
       "effective_capacity": {
         "en": 64,
@@ -697,14 +698,14 @@
     },
     "venue_info": {
       "authored": {
-        "en": 5,
-        "mix": 6,
-        "ru": 7
+        "en": 17,
+        "mix": 7,
+        "ru": 17
       },
       "template_rows": {
-        "en": 40,
-        "mix": 22,
-        "ru": 32
+        "en": 28,
+        "mix": 21,
+        "ru": 22
       },
       "effective_capacity": {
         "en": 88,
@@ -721,14 +722,14 @@
     },
     "wallet_balance": {
       "authored": {
-        "en": 4,
-        "mix": 6,
-        "ru": 7
+        "en": 14,
+        "mix": 7,
+        "ru": 14
       },
       "template_rows": {
-        "en": 41,
-        "mix": 22,
-        "ru": 32
+        "en": 31,
+        "mix": 21,
+        "ru": 25
       },
       "effective_capacity": {
         "en": 60,
@@ -777,75 +778,75 @@
       },
       "app_help": {
         "rows": 112,
-        "val": 23,
-        "val_fraction": 0.2054,
-        "val_authored": 3,
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 8,
         "val_template_groups": 4,
         "train_template_groups": 15
       },
       "book_venue": {
         "rows": 112,
-        "val": 22,
-        "val_fraction": 0.1964,
-        "val_authored": 14,
-        "val_template_groups": 4,
-        "train_template_groups": 14
+        "val": 24,
+        "val_fraction": 0.2143,
+        "val_authored": 15,
+        "val_template_groups": 5,
+        "train_template_groups": 13
       },
       "cancel_booking": {
         "rows": 112,
-        "val": 27,
-        "val_fraction": 0.2411,
-        "val_authored": 4,
-        "val_template_groups": 4,
-        "train_template_groups": 12
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 6,
+        "val_template_groups": 3,
+        "train_template_groups": 13
       },
       "check_availability": {
         "rows": 112,
-        "val": 23,
-        "val_fraction": 0.2054,
-        "val_authored": 13,
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 14,
         "val_template_groups": 4,
         "train_template_groups": 14
       },
       "contact_owner": {
         "rows": 112,
-        "val": 24,
-        "val_fraction": 0.2143,
-        "val_authored": 3,
+        "val": 23,
+        "val_fraction": 0.2054,
+        "val_authored": 4,
         "val_template_groups": 4,
         "train_template_groups": 15
       },
       "create_team_help": {
         "rows": 112,
-        "val": 23,
-        "val_fraction": 0.2054,
-        "val_authored": 3,
-        "val_template_groups": 6,
-        "train_template_groups": 28
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 4,
+        "val_template_groups": 7,
+        "train_template_groups": 27
       },
       "deny": {
         "rows": 112,
-        "val": 22,
-        "val_fraction": 0.1964,
-        "val_authored": 3,
+        "val": 25,
+        "val_fraction": 0.2232,
+        "val_authored": 4,
         "val_template_groups": 4,
         "train_template_groups": 15
       },
       "elo_help": {
         "rows": 112,
-        "val": 22,
-        "val_fraction": 0.1964,
-        "val_authored": 3,
+        "val": 25,
+        "val_fraction": 0.2232,
+        "val_authored": 4,
         "val_template_groups": 4,
         "train_template_groups": 15
       },
       "find_opponents": {
         "rows": 112,
-        "val": 22,
-        "val_fraction": 0.1964,
-        "val_authored": 14,
-        "val_template_groups": 3,
-        "train_template_groups": 15
+        "val": 23,
+        "val_fraction": 0.2054,
+        "val_authored": 15,
+        "val_template_groups": 4,
+        "train_template_groups": 14
       },
       "find_players": {
         "rows": 112,
@@ -859,15 +860,15 @@
         "rows": 112,
         "val": 26,
         "val_fraction": 0.2321,
-        "val_authored": 3,
-        "val_template_groups": 5,
-        "train_template_groups": 14
+        "val_authored": 4,
+        "val_template_groups": 4,
+        "train_template_groups": 15
       },
       "find_venue": {
         "rows": 112,
-        "val": 23,
-        "val_fraction": 0.2054,
-        "val_authored": 3,
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 4,
         "val_template_groups": 5,
         "train_template_groups": 21
       },
@@ -876,14 +877,14 @@
         "val": 22,
         "val_fraction": 0.1964,
         "val_authored": 4,
-        "val_template_groups": 14,
-        "train_template_groups": 61
+        "val_template_groups": 17,
+        "train_template_groups": 57
       },
       "my_bookings": {
         "rows": 112,
-        "val": 23,
-        "val_fraction": 0.2054,
-        "val_authored": 3,
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 7,
         "val_template_groups": 5,
         "train_template_groups": 20
       },
@@ -891,7 +892,7 @@
         "rows": 112,
         "val": 22,
         "val_fraction": 0.1964,
-        "val_authored": 3,
+        "val_authored": 4,
         "val_template_groups": 4,
         "train_template_groups": 15
       },
@@ -899,57 +900,57 @@
         "rows": 112,
         "val": 22,
         "val_fraction": 0.1964,
-        "val_authored": 4,
+        "val_authored": 8,
         "val_template_groups": 10,
         "train_template_groups": 43
       },
       "refund_policy": {
         "rows": 112,
-        "val": 25,
-        "val_fraction": 0.2232,
-        "val_authored": 4,
+        "val": 23,
+        "val_fraction": 0.2054,
+        "val_authored": 5,
         "val_template_groups": 6,
         "train_template_groups": 29
       },
       "team_stats": {
         "rows": 112,
-        "val": 24,
-        "val_fraction": 0.2143,
-        "val_authored": 3,
-        "val_template_groups": 5,
-        "train_template_groups": 19
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 5,
+        "val_template_groups": 4,
+        "train_template_groups": 20
       },
       "topup_help": {
         "rows": 112,
-        "val": 24,
-        "val_fraction": 0.2143,
-        "val_authored": 4,
-        "val_template_groups": 8,
-        "train_template_groups": 33
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 6,
+        "val_template_groups": 9,
+        "train_template_groups": 32
       },
       "tournament_list": {
         "rows": 112,
-        "val": 23,
-        "val_fraction": 0.2054,
-        "val_authored": 3,
-        "val_template_groups": 6,
-        "train_template_groups": 24
+        "val": 22,
+        "val_fraction": 0.1964,
+        "val_authored": 6,
+        "val_template_groups": 8,
+        "train_template_groups": 22
       },
       "venue_info": {
         "rows": 112,
         "val": 24,
         "val_fraction": 0.2143,
-        "val_authored": 4,
-        "val_template_groups": 4,
-        "train_template_groups": 16
+        "val_authored": 8,
+        "val_template_groups": 5,
+        "train_template_groups": 15
       },
       "wallet_balance": {
         "rows": 112,
         "val": 22,
         "val_fraction": 0.1964,
-        "val_authored": 3,
-        "val_template_groups": 7,
-        "train_template_groups": 30
+        "val_authored": 7,
+        "val_template_groups": 8,
+        "train_template_groups": 29
       }
     }
   },
@@ -961,23 +962,23 @@
       "n": 2576
     },
     "source_x_intent": {
-      "cramers_v": 0.4598,
-      "chi2": 544.56,
+      "cramers_v": 0.392,
+      "chi2": 395.83,
       "dof": 22,
       "n": 2576
     },
     "split_x_intent": {
-      "cramers_v": 0.0292,
-      "chi2": 2.19,
+      "cramers_v": 0.0264,
+      "chi2": 1.79,
       "dof": 22,
       "n": 2576
     },
     "vocabulary": {
-      "train_types": 1335,
-      "val_types": 695,
-      "val_types_unseen": 142,
-      "val_rows_with_unseen_token": 182,
-      "val_rows": 535
+      "train_types": 1426,
+      "val_types": 771,
+      "val_types_unseen": 153,
+      "val_rows_with_unseen_token": 169,
+      "val_rows": 526
     }
   },
   "checks": [
@@ -1033,7 +1034,7 @@
       "name": "authored_ids",
       "ok": true,
       "severity": "gate",
-      "detail": "653 rows, ids unique and well formed"
+      "detail": "860 rows, ids unique and well formed"
     },
     {
       "name": "authored_contract",
@@ -1045,7 +1046,7 @@
       "name": "authored_text_clean",
       "ok": true,
       "severity": "gate",
-      "detail": "all 653 rows pass text_problems()"
+      "detail": "all 860 rows pass text_problems()"
     },
     {
       "name": "authored_distinct",
@@ -1099,7 +1100,7 @@
       "name": "authored_floor",
       "ok": true,
       "severity": "gate",
-      "detail": "653 hand-written rows, >= 8 for every intent"
+      "detail": "860 hand-written rows, >= 8 for every intent"
     },
     {
       "name": "rendered_clean",
@@ -1141,7 +1142,7 @@
       "name": "split_fraction",
       "ok": true,
       "severity": "gate",
-      "detail": "every intent's val share in [0.196,0.241]"
+      "detail": "every intent's val share in [0.196,0.232]"
     },
     {
       "name": "split_grouped",
@@ -1177,13 +1178,13 @@
       "name": "rows_per_template",
       "ok": true,
       "severity": "gate",
-      "detail": "max 8 rows from one template (cap 12), mean 3.1"
+      "detail": "max 7 rows from one template (cap 12), mean 2.8"
     },
     {
       "name": "templates_used",
       "ok": false,
       "severity": "warn",
-      "detail": "2 template(s) contributed no rows: ['greeting-en-40', 'greeting-en-41']"
+      "detail": "3 template(s) contributed no rows: ['greeting-en-39', 'greeting-en-40', 'greeting-en-41']"
     },
     {
       "name": "corpus_distinct",
@@ -1201,19 +1202,19 @@
       "name": "out_of_scope_topic_words",
       "ok": true,
       "severity": "warn",
-      "detail": "3 of 112 out_of_scope rows mention a sport or venue word -- deliberate: the fallback class must not be identifiable by the ABSENCE of domain vocabulary"
+      "detail": "5 of 112 out_of_scope rows mention a sport or venue word -- deliberate: the fallback class must not be identifiable by the ABSENCE of domain vocabulary"
     },
     {
       "name": "shortcut_association",
       "ok": true,
       "severity": "warn",
-      "detail": "strongest is source_x_intent V=0.4598 (warn at 0.50); split_x_intent V=0.0292 (stratification, want ~0)"
+      "detail": "strongest is source_x_intent V=0.392 (warn at 0.50); split_x_intent V=0.0264 (stratification, want ~0)"
     },
     {
       "name": "val_generalisation",
       "ok": true,
       "severity": "warn",
-      "detail": "182/535 val rows contain a token unseen in train (142 of 695 val types)"
+      "detail": "169/526 val rows contain a token unseen in train (153 of 771 val types)"
     },
     {
       "name": "determinism",
@@ -1223,7 +1224,7 @@
     }
   ],
   "all_passed": true,
-  "sha256": "cd07c68b969eefd547714a11346f4e5c58696e75735d69fbcee0b370f0eabfc1",
+  "sha256": "be602fb47d55ff483366452e485e06c5d52fd81306dc0405979894fbdec99510",
   "output": "data/assistant/intents.csv",
   "reproduce": "python training/gen_intents.py --seed 20260824 --per-intent 112"
 }

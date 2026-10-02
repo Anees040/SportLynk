@@ -96,6 +96,7 @@ const clampLimit = (v, dflt, max) => Math.max(1, Math.min(num(v, dflt) || dflt, 
 async function searchVenues(client, {
   sport = null, city = null, search = null, sort = null,
   minPrice = null, maxPrice = null, minRating = null,
+  sports = null,
   limit = VENUE_LIMIT, offset = 0,
 } = {}) {
   const runner = client || pool;
@@ -106,6 +107,17 @@ async function searchVenues(client, {
     params.push(...vals);
   };
   if (sport) add('LOWER(v.sport_type) = LOWER($#1)', String(sport));
+  // The platform's sport allowlist, as a positive filter on listing.
+  //
+  // Distinct from settings.isSportEnabled, which gates BOOKING and fails open on
+  // purpose (the cost of a wrongly-blocked booking is worse than a refund). Listing
+  // is the opposite case: a venue for a sport SportLynk does not carry must not be
+  // offered to a player at all, so an unknown sport is excluded here rather than
+  // admitted. Callers pass the enabled set; omitting it lists every sport, which is
+  // what Scout and the admin tools still want.
+  if (Array.isArray(sports) && sports.length) {
+    add('LOWER(v.sport_type) = ANY($#1::text[])', sports.map((s) => String(s).toLowerCase()));
+  }
   if (city) add('v.city ILIKE $#1', `%${city}%`);
   if (search) {
     const t = `%${search}%`;
@@ -399,8 +411,48 @@ async function discoverTeams(client, { userId, sport = null, q = '', limit = 60 
   return { ok: true, status: 200, code: 'ok', message: null, data: rows };
 }
 
+/**
+ * venueAvailability — the free-slot count per date, for the player's date rail.
+ *
+ * The rail shows a row of date chips, and tapping each one just to learn whether it
+ * has any free slots is exactly the per-tap latency this removes: one query returns
+ * every date's count at once, so a chip can read "3 left" or "full" before it is
+ * opened. The predicate is freeSlots' predicate — available, not on someone else's
+ * live hold, still ahead in PKT — so the count on the chip is the number of slots
+ * the grid will actually offer, not a raw row count.
+ *
+ * A date with no free slots is simply absent from the result; the caller reads a
+ * missing date as zero rather than this padding the series with empty rows.
+ */
+async function venueAvailability(client, { venueId, days = 14 } = {}) {
+  const runner = client || pool;
+  if (!access.isUuid(String(venueId || '').trim().toLowerCase())) {
+    return { ok: false, status: 400, code: 'bad_venue', message: 'Which ground did you mean?', data: null };
+  }
+  const n = Math.max(1, Math.min(60, Number(days) || 14));
+  const now = pktNow();
+  const { rows } = await runner.query(
+    `SELECT to_char(s.slot_date, 'YYYY-MM-DD') AS date, COUNT(*)::int AS free
+       FROM slots s
+      WHERE s.venue_id = $1
+        AND s.status = 'available'
+        AND NOT (${HOLD_IS_LIVE})
+        AND s.slot_date <= ($2::date + ($3::int - 1))
+        AND (s.slot_date > $2::date
+         OR (s.slot_date = $2::date AND s.start_time > $4::time))
+      GROUP BY s.slot_date
+      ORDER BY s.slot_date`,
+    [venueId, now.date, n, now.time],
+  );
+  return {
+    ok: true, status: 200, code: 'ok', message: null,
+    data: { venueId, days: n, byDate: rows },
+  };
+}
+
 module.exports = {
   PKT_OFFSET_MS, VENUE_LIMIT, VENUE_MAX, HOLD_IS_LIVE, slotColumns,
   pktNow, normDate,
   searchVenues, venueDetail, freeSlots, slotById, listTournaments, discoverTeams,
+  venueAvailability,
 };
