@@ -146,6 +146,41 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
     } catch (_) {}
   }
 
+  Future<void> _reportProblem() async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => const _ReportProblemDialog(),
+    );
+    if (reason == null || reason.trim().isEmpty || !mounted) return;
+    try {
+      final token = Provider.of<AuthProvider>(context, listen: false).token!;
+      final resp = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/bookings/${widget.bookingId}/dispute'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'reason': reason.trim()}),
+      );
+      final data = jsonDecode(resp.body);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          data['message']?.toString() ?? 'Could not submit. Try again.',
+          style: GoogleFonts.poppins(color: Colors.white),
+        ),
+        backgroundColor: data['success'] == true ? AppColors.accent : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Could not submit the report. Check your connection.',
+              style: GoogleFonts.poppins(color: Colors.white)),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -179,6 +214,11 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
         actions: [
+          IconButton(
+            tooltip: 'Report a problem',
+            icon: const Icon(Icons.report_problem_outlined, color: Colors.white, size: 20),
+            onPressed: _reportProblem,
+          ),
           if (canCancel)
             TextButton(
               onPressed: _cancelBooking,
@@ -487,4 +527,73 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
         'no_show' => '20% deposit forfeited, 80% refunded',
         _ => '',
       };
+}
+
+/// The reason prompt for reporting a problem with a booking.
+///
+/// A dedicated StatefulWidget so its TextEditingController is disposed with the dialog
+/// rather than by the caller the instant the route begins animating out — the pattern
+/// the rest of the app settled on after a controller-used-after-dispose crash.
+class _ReportProblemDialog extends StatefulWidget {
+  const _ReportProblemDialog();
+
+  @override
+  State<_ReportProblemDialog> createState() => _ReportProblemDialogState();
+}
+
+class _ReportProblemDialogState extends State<_ReportProblemDialog> {
+  final TextEditingController _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('Report a problem', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Tell us what went wrong. An admin reviews it, and if the dispute is upheld '
+            'your payment is refunded to your wallet.',
+            style: GoogleFonts.poppins(fontSize: 12.5, color: AppColors.textSecondary, height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ctrl,
+            maxLines: 3,
+            maxLength: 1000,
+            style: GoogleFonts.poppins(fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'e.g. the slot was double-booked, or the ground was closed',
+              hintStyle: GoogleFonts.poppins(fontSize: 12.5, color: AppColors.textSecondary),
+              filled: true,
+              fillColor: AppColors.inputFill,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppColors.border),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Back', style: GoogleFonts.poppins(color: AppColors.textSecondary)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _ctrl.text.trim()),
+          child: Text('Submit',
+              style: GoogleFonts.poppins(color: AppColors.accent, fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
+  }
 }
