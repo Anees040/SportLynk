@@ -4,9 +4,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shimmer/shimmer.dart';
 
 import '../../constants/colors.dart';
 import '../../models/chat_message.dart';
+import '../../utils/cloudinary_url.dart';
+import 'poll_bubble.dart';
 import 'tick_icon.dart';
 import 'voice_note_player.dart';
 
@@ -26,6 +29,15 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onCancel; // cancel a still-uploading image
   final VoidCallback? onQuoteTap; // jump to the message this one replies to
 
+  /// 0..1 while this message's own bytes are uploading, null otherwise. Drives a
+  /// determinate ring on the pending overlay instead of an indeterminate spinner.
+  final double? uploadProgress;
+
+  /// For a poll message: the viewer's id (to mark their choices) and the vote
+  /// callback. Null for non-poll bubbles.
+  final String? myUserId;
+  final void Function(int optionIndex)? onPollVote;
+
   const MessageBubble({
     required this.message,
     required this.isMine,
@@ -37,6 +49,9 @@ class MessageBubble extends StatelessWidget {
     this.onRetry,
     this.onCancel,
     this.onQuoteTap,
+    this.uploadProgress,
+    this.myUserId,
+    this.onPollVote,
     super.key,
   });
 
@@ -111,7 +126,30 @@ class MessageBubble extends StatelessWidget {
     if (message.isDeleted) return _deleted();
     if (message.isImage) return _image(context);
     if (message.isAudio) return _audio();
+    if (message.isPoll && message.poll != null) return _poll();
     return _text();
+  }
+
+  Widget _poll() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showSender && !isMine) _senderName(),
+          if (message.isReply) _quote(),
+          PollBubble(
+            poll: message.poll!,
+            myUserId: myUserId ?? '',
+            onVote: (i) => onPollVote?.call(i),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(padding: const EdgeInsets.only(top: 4), child: _footer()),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _audio() {
@@ -123,8 +161,10 @@ class MessageBubble extends StatelessWidget {
           if (showSender && !isMine) _senderName(),
           if (message.isReply) _quote(),
           VoiceNotePlayer(
+            messageId: message.id,
             url: message.mediaUrl,
             durationMs: message.durationMs.toInt(),
+            waveform: message.waveform,
             pending: message.pending,
           ),
           Align(
@@ -267,8 +307,9 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  /// The picked file while uploading (so the bubble is never empty), then the
-  /// hosted image once the send completes.
+  /// The picked file while uploading (so the bubble is never empty), then a
+  /// bubble-sized Cloudinary derivative once the send completes — the full image
+  /// is fetched only by the viewer, not every thumbnail in the scroll.
   Widget _imageContent() {
     if (message.mediaUrl == null && message.localPath != null) {
       final path = message.localPath!;
@@ -277,13 +318,30 @@ class MessageBubble extends StatelessWidget {
           : Image.file(File(path), fit: BoxFit.cover);
     }
     return CachedNetworkImage(
-      imageUrl: message.mediaUrl ?? '',
+      imageUrl: chatThumbUrl(message.mediaUrl ?? ''),
       fit: BoxFit.cover,
-      placeholder: (_, _) => Container(
-        color: AppColors.inputFill,
-        child: const Center(
-            child: SizedBox(
-                width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
+      memCacheWidth: 800,
+      fadeInDuration: const Duration(milliseconds: 150),
+      // A shimmer stands in while the derivative loads, with a real download ring
+      // over it once the byte total is known — the receive half of Issue 1f.
+      progressIndicatorBuilder: (_, _, p) => Stack(
+        fit: StackFit.expand,
+        children: [
+          Shimmer.fromColors(
+            baseColor: AppColors.inputFill,
+            highlightColor: AppColors.white,
+            child: Container(color: AppColors.inputFill),
+          ),
+          if (p.progress != null)
+            Center(
+              child: SizedBox(
+                width: 30,
+                height: 30,
+                child: CircularProgressIndicator(
+                    value: p.progress, strokeWidth: 2.5, color: Colors.white),
+              ),
+            ),
+        ],
       ),
       errorWidget: (_, _, _) => Container(
         color: AppColors.inputFill,
@@ -295,6 +353,10 @@ class MessageBubble extends StatelessWidget {
 
   Widget _image(BuildContext context) {
     final radius = BorderRadius.circular(11);
+    // Every photo bubble is the same width, so a run of images reads as a tidy
+    // column rather than a ragged mix of sizes; the height follows the photo's
+    // own ratio (already clamped by the model) so the image is never distorted.
+    final imgW = (MediaQuery.sizeOf(context).width * 0.62).clamp(200.0, 280.0);
     return Padding(
       padding: const EdgeInsets.all(3),
       child: Column(
@@ -304,73 +366,87 @@ class MessageBubble extends StatelessWidget {
             Padding(padding: const EdgeInsets.fromLTRB(6, 4, 6, 2), child: _senderName()),
           if (message.isReply)
             Padding(padding: const EdgeInsets.fromLTRB(3, 2, 3, 2), child: _quote()),
-          ClipRRect(
-            borderRadius: radius,
-            child: GestureDetector(
-              onTap: message.pending ? null : onImageTap,
-              child: Stack(
-                children: [
-                  AspectRatio(
-                    aspectRatio: message.aspectRatio,
-                    child: _imageContent(),
-                  ),
-                  if (message.pending)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.28),
-                        child: Center(
-                          child: onCancel == null
-                              ? const CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2.5)
-                              : Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    const SizedBox(
-                                      width: 46,
-                                      height: 46,
-                                      child: CircularProgressIndicator(
-                                          color: Colors.white, strokeWidth: 2.5),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.close,
-                                          color: Colors.white, size: 20),
-                                      tooltip: 'Cancel',
-                                      onPressed: onCancel,
-                                    ),
-                                  ],
-                                ),
+          SizedBox(
+            width: imgW,
+            child: ClipRRect(
+              borderRadius: radius,
+              child: GestureDetector(
+                onTap: message.pending ? null : onImageTap,
+                child: Stack(
+                  children: [
+                    AspectRatio(
+                      aspectRatio: message.aspectRatio,
+                      child: _imageContent(),
+                    ),
+                    if (message.pending)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.28),
+                          child: Center(
+                            child: onCancel == null
+                                ? SizedBox(
+                                    width: 34,
+                                    height: 34,
+                                    child: CircularProgressIndicator(
+                                        value: uploadProgress,
+                                        color: Colors.white,
+                                        strokeWidth: 2.5),
+                                  )
+                                : Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      SizedBox(
+                                        width: 46,
+                                        height: 46,
+                                        child: CircularProgressIndicator(
+                                            value: uploadProgress,
+                                            color: Colors.white,
+                                            strokeWidth: 2.5),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.close,
+                                            color: Colors.white, size: 20),
+                                        tooltip: 'Cancel',
+                                        onPressed: onCancel,
+                                      ),
+                                    ],
+                                  ),
+                          ),
                         ),
                       ),
-                    ),
-                  // Time/ticks float on a scrim when there is no caption to host them.
-                  if (!message.hasCaption)
-                    Positioned(
-                      right: 6,
-                      bottom: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          borderRadius: BorderRadius.circular(10),
+                    // Time/ticks float on a scrim when there is no caption to host them.
+                    if (!message.hasCaption)
+                      Positioned(
+                        right: 6,
+                        bottom: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: _footer(onDark: true),
                         ),
-                        child: _footer(onDark: true),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
           if (message.hasCaption)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 6, 6, 4),
-              child: Wrap(
-                alignment: WrapAlignment.end,
-                crossAxisAlignment: WrapCrossAlignment.end,
-                children: [
-                  _bodyText(message.body!, height: 1.3),
-                  const SizedBox(width: 8),
-                  _footer(),
-                ],
+            SizedBox(
+              width: imgW,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 6, 4),
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.end,
+                  children: [
+                    _bodyText(message.body!, height: 1.3),
+                    const SizedBox(width: 8),
+                    _footer(),
+                  ],
+                ),
               ),
             ),
         ],
