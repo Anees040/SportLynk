@@ -263,4 +263,80 @@ void main() {
       expect(find.byTooltip('Match centre'), findsNothing);
     });
   });
+
+  // Message alignment — the regression that opened this batch.
+  //
+  // A sent message is wrapped in a Dismissible for swipe-to-reply, and the
+  // Dismissible lays its child out in a Stack that passes loose width; without a
+  // width the row shrank to the bubble, the bubble's own end-alignment had no
+  // room to act, and a sent message drifted left and read as centred. A pending
+  // message skips the Dismissible, which is why it looked right while sending and
+  // jumped on confirmation. Mine must sit in the right half of the row, theirs in
+  // the left — WhatsApp's layout.
+  testWidgets('a sent message aligns right and a received one aligns left',
+      (tester) async {
+    api.ok(kMessages, [
+      {
+        'id': 'm-them',
+        'channel_id': 'c-1',
+        'sender_id': 'u-2',
+        'sender_name': 'Ali Raza',
+        'kind': 'text',
+        'body': 'Six works',
+        'created_at': '2026-09-13T10:00:00Z',
+        'reactions': <Map<String, dynamic>>[],
+      },
+      {
+        'id': 'm-mine',
+        'channel_id': 'c-1',
+        'sender_id': 'u-1',
+        'sender_name': 'Bilal Ahmed',
+        'kind': 'text',
+        'body': 'See you',
+        'created_at': '2026-09-13T10:01:00Z',
+        'reactions': <Map<String, dynamic>>[],
+      },
+    ]);
+    await pumpThread(tester, api);
+    await settleData(tester);
+
+    final width = tester.getSize(find.byType(Scaffold).first).width;
+    final mine = tester.getCenter(find.text('See you')).dx;
+    final theirs = tester.getCenter(find.text('Six works')).dx;
+    expect(mine, greaterThan(width / 2),
+        reason: 'a sent message hugs the right');
+    expect(theirs, lessThan(width / 2),
+        reason: 'a received message hugs the left');
+  });
+
+  // In-place selection (Issue 1h) — long-press turns the app bar into a
+  // contextual action bar; its close button returns to the normal header.
+  group('message selection', () {
+    testWidgets('a long press opens the contextual action bar', (tester) async {
+      await pumpThread(tester, api);
+      await settleData(tester);
+
+      await tester.longPress(find.text('Are we still on for six?'));
+      await tester.pump();
+
+      expect(find.text('1'), findsOneWidget, reason: 'the selected count');
+      expect(find.byIcon(Icons.forward_outlined), findsOneWidget);
+      expect(find.text('Green Turf Arena'), findsNothing,
+          reason: 'the normal header is replaced while selecting');
+    });
+
+    testWidgets('closing the action bar restores the header', (tester) async {
+      await pumpThread(tester, api);
+      await settleData(tester);
+
+      await tester.longPress(find.text('Are we still on for six?'));
+      await tester.pump();
+      await tester.tap(find.descendant(
+          of: find.byType(AppBar), matching: find.byIcon(Icons.close)));
+      await tester.pump();
+
+      expect(find.text('Green Turf Arena'), findsOneWidget);
+      expect(find.byIcon(Icons.forward_outlined), findsNothing);
+    });
+  });
 }
