@@ -72,6 +72,43 @@ class AdminService {
     );
   }
 
+  // Booking disputes (migration 032) — a separate queue from match disputes.
+
+  /// Public booking disputes for the admin queue. `status` is one of
+  /// `open` · `upheld` · `rejected` · `all`. Returned as plain maps: the screen
+  /// renders a handful of fields and does not need a typed model of its own.
+  Future<List<Map<String, dynamic>>> bookingDisputes(
+    String token, {
+    String status = 'open',
+  }) async {
+    final r = await _api.get(ApiConstants.adminBookingDisputes,
+        token: token, queryParams: {'status': status});
+    if (r['success'] != true || r['data'] is! Map) return const [];
+    final d = Map<String, dynamic>.from(r['data'] as Map);
+    return (d['disputes'] as List? ?? const [])
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
+  }
+
+  /// Uphold (refund if the escrow is still held) or reject a booking dispute.
+  /// Returns the raw envelope so the screen shows the server's own receipt, which
+  /// names the refund amount.
+  Future<Map<String, dynamic>> resolveBookingDispute(
+    String token,
+    String id, {
+    required bool uphold,
+    String? notes,
+  }) =>
+      _api.post(
+        ApiConstants.adminBookingDisputeResolve(id),
+        {
+          'uphold': uphold,
+          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        },
+        token: token,
+      );
+
   /// The case file: both submissions, both rosters, the booking evidence, the
   /// captain-channel archive and what the server says may be done about it.
   Future<DisputeCase?> disputeCase(String token, String id) async {
