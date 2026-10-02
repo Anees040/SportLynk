@@ -427,6 +427,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
             if (mounted) await _loadDisputes();
           }),
           const SizedBox(height: 8),
+          _quickAction(Icons.receipt_long_outlined, 'Booking Disputes',
+              'Players reporting a problem with a booking — uphold to refund',
+              () => Navigator.pushNamed(context, '/admin-booking-disputes')),
+          const SizedBox(height: 8),
           _quickAction(Icons.manage_accounts_outlined, 'Users',
               'Search, suspend and reinstate accounts',
               () => Navigator.pushNamed(context, '/admin-users')),
