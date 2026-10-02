@@ -62,6 +62,22 @@ class AssistantController extends ChangeNotifier {
   bool _nluOffline = false;
   bool _nluNoticeDismissed = false;
 
+  /// Whether the next turn must open a new thread rather than resume one.
+  ///
+  /// The server reads an absent `session_id` as "the newest chat, or a new one", which
+  /// is the right default for a client that does not track the id and the wrong answer
+  /// for a user who just tapped "new chat" — it appended the new conversation to the one
+  /// they had left, so every chat a user started collapsed into a single row of history
+  /// and the older ones appeared to have been dropped. This flag is the difference
+  /// between "start a chat" and "I do not know which chat this is", and only the second
+  /// may resume.
+  ///
+  /// It stays set until a thread id comes back, so a retry at the transport layer still
+  /// opens the chat it was meant to. Re-sending it is safe: the server recognises the
+  /// repeated `client_id` and returns the thread the first attempt created instead of
+  /// creating a second one.
+  bool _forceNewThread = false;
+
   /// Set the first time this conversation changes the user's bookings, and never
   /// unset. A cancellation counts: it moves the same row the Bookings tab renders.
   ///
@@ -140,6 +156,12 @@ class AssistantController extends ChangeNotifier {
         _notice = 'Could not load your earlier chats. You can still start a new one.';
       }
     }
+    // Nothing was resumed, so whatever the user says first begins a chat of its own.
+    // This covers all three ways of arriving blank: opening without a thread id (the
+    // default entry), having no chats yet, and a history read that failed — in the last
+    // case starting a new chat is the honest outcome, since appending to a thread that
+    // could not be read would be a guess.
+    _forceNewThread = _threadId == null;
     _booting = false;
     _emit();
     unawaited(_fetchCapabilities());
@@ -151,6 +173,8 @@ class AssistantController extends ChangeNotifier {
     _threadId = id;
     _title = page.title;
     _fsm = page.fsm;
+    // A resumed chat is the opposite of a new one, whatever the last tap asked for.
+    _forceNewThread = false;
     _messages
       ..clear()
       ..addAll(page.messages);
@@ -296,6 +320,7 @@ class AssistantController extends ChangeNotifier {
       action: action,
       args: args,
       threadId: _threadId,
+      newSession: _threadId == null && _forceNewThread,
       clientId: clientId,
     );
 
@@ -307,7 +332,11 @@ class AssistantController extends ChangeNotifier {
     }
 
     if (turn.ok) _inFlight.remove(clientId);
-    if (turn.threadId.isNotEmpty) _threadId = turn.threadId;
+    if (turn.threadId.isNotEmpty) {
+      _threadId = turn.threadId;
+      // The chat exists now, so later turns belong to it rather than opening another.
+      _forceNewThread = false;
+    }
     _fsm = turn.fsm;
 
     // Only a turn the classifier actually saw is evidence about the classifier. A
@@ -348,7 +377,9 @@ class AssistantController extends ChangeNotifier {
   ///
   /// Nothing is created server-side here. A thread row appears when the first message
   /// is sent, so tapping "new chat" and then changing course does not consume one of the
-  /// user's capped thread slots — and the empty state is a real empty state.
+  /// user's capped thread slots — and the empty state is a real empty state. What the
+  /// tap does record is [_forceNewThread], without which the first message would be
+  /// appended to the chat just left instead of opening one.
   void newChat() {
     if (_busy) return;
     _messages.clear();
@@ -358,6 +389,7 @@ class AssistantController extends ChangeNotifier {
     _hasMore = false;
     _cursor = null;
     _notice = null;
+    _forceNewThread = true;
     _inFlight.clear();
     _emit();
   }
