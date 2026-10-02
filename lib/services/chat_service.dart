@@ -78,6 +78,7 @@ class ChatService {
     required String mediaUrl,
     String? mediaMime,
     int? durationMs,
+    List<double>? waveform,
     required String clientId,
     String? replyToId,
   }) =>
@@ -86,6 +87,7 @@ class ChatService {
         'mediaUrl': mediaUrl,
         'mediaMime': ?mediaMime,
         'durationMs': ?durationMs,
+        if (waveform != null && waveform.isNotEmpty) 'waveform': waveform,
         'clientId': clientId,
         'replyToId': ?replyToId,
       }, token: token);
@@ -244,5 +246,31 @@ class ChatService {
   }) =>
       _api.post(ApiConstants.chatHide(channelId), {
         'hidden': hidden,
+      }, token: token);
+
+  /// Create a poll in the channel. Returns the persisted poll message in `data`.
+  Future<Map<String, dynamic>> createPoll(
+    String token,
+    String channelId, {
+    required String question,
+    required List<String> options,
+    bool allowMultiple = false,
+  }) =>
+      _api.post(ApiConstants.chatPolls(channelId), {
+        'question': question,
+        'options': options,
+        'allowMultiple': allowMultiple,
+      }, token: token);
+
+  /// Cast (or toggle off) a vote on a poll. Returns the re-hydrated poll message
+  /// so the caller can upsert the new tally.
+  Future<Map<String, dynamic>> votePoll(
+    String token,
+    String channelId,
+    String pollId, {
+    required int optionIndex,
+  }) =>
+      _api.post(ApiConstants.chatPollVote(channelId, pollId), {
+        'optionIndex': optionIndex,
       }, token: token);
 }
