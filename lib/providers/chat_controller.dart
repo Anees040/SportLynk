@@ -63,6 +63,18 @@ class ChatController extends ChangeNotifier {
   /// uploading; their upload result is dropped when it eventually returns.
   final Set<String> _canceled = {};
 
+  /// Live upload fraction (0..1) per optimistic clientId, shown as a determinate
+  /// ring on the bubble while its bytes are in flight and cleared once the upload
+  /// finishes. Absent means "not uploading" — the bubble shows no ring.
+  final Map<String, double> _uploadProgress = {};
+
+  /// Image uploads run a few at a time rather than strictly one after another, so
+  /// a batch of photos appears and climbs together instead of trickling in; the
+  /// cap keeps a phone's uplink from being split so thin that none makes progress.
+  static const int _maxConcurrentUploads = 3;
+  int _activeUploads = 0;
+  final List<Future<void> Function()> _uploadQueue = [];
+
   /// Sends composed while the socket was down, held in arrival order and drained
   /// by [_flushOutbox] on reconnect. Each carries the clientId the optimistic
   /// bubble already shows, so a flush reuses that idempotency key rather than
@@ -95,6 +107,20 @@ class ChatController extends ChangeNotifier {
   bool get loading => _loading;
   bool get hasMore => _hasMore;
   bool get connected => _connected;
+
+  /// Whether a message id is currently loaded in the timeline — used by the
+  /// quote-jump to decide whether it must page in older history before scrolling.
+  bool hasMessage(String id) => _byId.containsKey(id);
+
+  /// The loaded message with [id], or null — used by the selection bar to act on
+  /// the set of ids it holds without each row passing its whole message up.
+  ChatMessage? messageById(String id) => _byId[id];
+
+  /// The live upload fraction (0..1) for an optimistic message, or null when it
+  /// is not uploading — so the bubble shows a determinate ring only while bytes
+  /// are moving, and an indeterminate one for the brief server-send that follows.
+  double? uploadProgressFor(ChatMessage m) =>
+      m.clientId == null ? null : _uploadProgress[m.clientId];
 
   /// Whether to show the "Connecting…" bar: only once we have been offline past
   /// the grace, so a momentary reconnect stays silent.
@@ -203,7 +229,7 @@ class ChatController extends ChangeNotifier {
             m.mediaW.toInt(), m.mediaH.toInt(), m.body, m.replyToId));
       case MessageKind.audio when m.localPath != null:
         _enqueue(cid, () => _uploadAndSendAudio(
-            cid, m.localPath!, m.mediaMime, m.durationMs.toInt(), m.replyToId));
+            cid, m.localPath!, m.mediaMime, m.durationMs.toInt(), m.waveform, m.replyToId));
       default:
         _byId[m.id] = m.copyWith(pending: false, failed: true);
     }
@@ -429,12 +455,51 @@ class ChatController extends ChangeNotifier {
           () => _uploadAndSendImage(clientId, localPath, mediaMime, mediaW ?? 0, mediaH ?? 0, caption, replyToId));
       return;
     }
-    await _uploadAndSendImage(clientId, localPath, mediaMime, mediaW ?? 0, mediaH ?? 0, caption, replyToId);
+    // Online: schedule under the concurrency cap and return at once, so a batch of
+    // photos all become visible bubbles immediately and upload in parallel rather
+    // than one blocking the next.
+    _scheduleUpload(() =>
+        _uploadAndSendImage(clientId, localPath, mediaMime, mediaW ?? 0, mediaH ?? 0, caption, replyToId));
+  }
+
+  /// Run [task] under [_maxConcurrentUploads], queueing it in arrival order when
+  /// the cap is reached and starting the next as each one settles.
+  void _scheduleUpload(Future<void> Function() task) {
+    if (_activeUploads >= _maxConcurrentUploads) {
+      _uploadQueue.add(task);
+      return;
+    }
+    _activeUploads++;
+    () async {
+      try {
+        await task();
+      } finally {
+        _activeUploads--;
+        if (_uploadQueue.isNotEmpty) {
+          _scheduleUpload(_uploadQueue.removeAt(0));
+        }
+      }
+    }();
+  }
+
+  /// Record an upload's byte progress for its bubble's ring. Rebuilds only when
+  /// the visible 5% step changes, not on every frame the uploader reports.
+  void _onUploadProgress(String clientId, int sent, int total) {
+    if (total <= 0) return;
+    final frac = (sent / total).clamp(0.0, 1.0);
+    final prev = _uploadProgress[clientId] ?? -1;
+    _uploadProgress[clientId] = frac;
+    if ((frac * 20).floor() != (prev * 20).floor()) _rebuild();
   }
 
   Future<void> _uploadAndSendImage(String clientId, String localPath,
       String? mediaMime, int mediaW, int mediaH, String? caption, String? replyToId) async {
-    final url = await CloudinaryService().uploadImage(localPath, folder: 'chat');
+    final url = await CloudinaryService().uploadImage(
+      localPath,
+      folder: 'chat',
+      onProgress: (sent, total) => _onUploadProgress(clientId, sent, total),
+    );
+    _uploadProgress.remove(clientId);
     if (_canceled.remove(clientId)) return; // cancelled during upload
 
     if (url == null) {
@@ -469,6 +534,7 @@ class ChatController extends ChangeNotifier {
     required String localPath,
     String? mediaMime,
     int durationMs = 0,
+    List<double> waveform = const [],
     String? replyToId,
     ReplyPreview? replyPreview,
   }) async {
@@ -482,6 +548,7 @@ class ChatController extends ChangeNotifier {
       localPath: localPath,
       mediaMime: mediaMime,
       durationMs: durationMs,
+      waveform: waveform,
       replyToId: replyToId,
       replyPreview: replyPreview,
       createdAt: DateTime.now(),
@@ -492,14 +559,14 @@ class ChatController extends ChangeNotifier {
     // failing it red, mirroring the image path.
     if (!_connected) {
       _enqueue(clientId,
-          () => _uploadAndSendAudio(clientId, localPath, mediaMime, durationMs, replyToId));
+          () => _uploadAndSendAudio(clientId, localPath, mediaMime, durationMs, waveform, replyToId));
       return;
     }
-    await _uploadAndSendAudio(clientId, localPath, mediaMime, durationMs, replyToId);
+    await _uploadAndSendAudio(clientId, localPath, mediaMime, durationMs, waveform, replyToId);
   }
 
   Future<void> _uploadAndSendAudio(String clientId, String localPath,
-      String? mediaMime, int durationMs, String? replyToId) async {
+      String? mediaMime, int durationMs, List<double> waveform, String? replyToId) async {
     final url = await CloudinaryService().uploadAudio(localPath, folder: 'chat_audio');
     if (_canceled.remove(clientId)) return; // cancelled during upload
 
@@ -518,6 +585,7 @@ class ChatController extends ChangeNotifier {
       mediaUrl: url,
       mediaMime: mediaMime,
       durationMs: durationMs,
+      waveform: waveform,
       clientId: clientId,
       replyToId: replyToId,
     );
@@ -531,6 +599,7 @@ class ChatController extends ChangeNotifier {
     final cid = m.clientId;
     if (cid == null || !m.pending) return;
     _canceled.add(cid);
+    _uploadProgress.remove(cid);
     _byId.remove(m.id);
     _rebuild();
   }
@@ -592,6 +661,7 @@ class ChatController extends ChangeNotifier {
         localPath: failed.localPath!,
         mediaMime: failed.mediaMime,
         durationMs: failed.durationMs.toInt(),
+        waveform: failed.waveform,
         replyToId: failed.replyToId,
         replyPreview: failed.replyPreview,
       );
@@ -676,6 +746,62 @@ class ChatController extends ChangeNotifier {
       await _loadPinned();
     }
     return r;
+  }
+
+  /// Create a poll. The server posts the poll message and also pushes it over the
+  /// socket; the returned row is upserted at once so the creator sees it without
+  /// waiting for the echo.
+  Future<Map<String, dynamic>> createPoll({
+    required String question,
+    required List<String> options,
+    bool allowMultiple = false,
+  }) async {
+    final r = await _chat.createPoll(token, channelId,
+        question: question, options: options, allowMultiple: allowMultiple);
+    if (r['success'] == true && r['data'] is Map) {
+      final msg = ChatMessage.fromJson(Map<String, dynamic>.from(r['data'] as Map));
+      _byId[msg.id] = msg;
+      _rebuild();
+    }
+    return r;
+  }
+
+  /// Vote on (or un-vote) a poll option. Optimistic: the tally updates at once,
+  /// mirroring the server's single/multi rule, then reconciles with the
+  /// authoritative message the vote call returns (or reverts on failure).
+  Future<void> votePoll(ChatMessage m, int optionIndex) async {
+    final poll = m.poll;
+    if (poll == null || poll.closed) return;
+    final votes = [...poll.votes];
+    if (poll.didVote(myUserId, optionIndex)) {
+      votes.removeWhere((v) => v.userId == myUserId && v.optionIndex == optionIndex);
+    } else {
+      if (!poll.allowMultiple) votes.removeWhere((v) => v.userId == myUserId);
+      votes.add(PollVote(
+        optionIndex: optionIndex,
+        userId: myUserId,
+        userName: _members[myUserId]?.name ?? 'You',
+      ));
+    }
+    _byId[m.id] = m.copyWith(
+      poll: ChatPoll(
+        id: poll.id,
+        question: poll.question,
+        options: poll.options,
+        allowMultiple: poll.allowMultiple,
+        closed: poll.closed,
+        votes: votes,
+      ),
+    );
+    _rebuild();
+
+    final r = await _chat.votePoll(token, channelId, poll.id, optionIndex: optionIndex);
+    if (r['success'] == true && r['data'] is Map) {
+      _byId[m.id] = ChatMessage.fromJson(Map<String, dynamic>.from(r['data'] as Map));
+    } else {
+      _byId[m.id] = m; // revert the optimistic change
+    }
+    _rebuild();
   }
 
   // Live event handlers
