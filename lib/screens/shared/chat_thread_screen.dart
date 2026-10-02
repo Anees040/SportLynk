@@ -16,6 +16,7 @@ import '../../models/chat_message.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_controller.dart';
 import '../../services/chat_service.dart';
+import '../../services/chat_audio_service.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/chat/chat_background.dart';
 import '../../widgets/chat/chat_composer.dart';
@@ -211,6 +212,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   /// A message briefly tinted after a quote was tapped to jump to it, so the eye
   /// lands on the right line. Cleared by a timer.
   String? _highlightId;
+
+  /// The ids currently selected by the WhatsApp-style long-press selection. Empty
+  /// means normal mode; non-empty swaps the app bar for the contextual action bar
+  /// and makes a tap on any bubble toggle its selection.
+  final Set<String> _selected = {};
+  bool get _selecting => _selected.isNotEmpty;
 
   /// A stable key per rendered row, keyed by message id, so a tapped quote can
   /// scroll its parent into view. Every id in an album run maps to the run's key.
@@ -510,27 +517,60 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
 
   void _cancelReply() => setState(() => _replyTo = null);
 
-  /// Jump to the message a tapped quote points at. When it is loaded, its row is
-  /// scrolled into view and briefly tinted; when it is not (far up the history, or
-  /// never loaded), the reader is told rather than left with a dead tap.
+  /// Jump to the message a tapped quote points at — WhatsApp's behaviour: the
+  /// original is brought on screen and briefly pulsed wherever it is. It may be
+  /// loaded but unbuilt (a lazy list only builds visible rows) or not loaded at
+  /// all (far up the history), so this first pages older history in until the id
+  /// is loaded, then nudges the scroll toward it until its row mounts, then
+  /// centres and highlights it. Only a genuinely absent target falls back to a
+  /// message rather than a dead tap.
   Future<void> _scrollToMessage(String messageId) async {
-    final key = _rowKeys[messageId];
-    final ctx = key?.currentContext;
-    if (ctx == null) {
-      SnackbarUtil.showInfo(context, 'Scroll up to load the original message.');
-      return;
+    final c = _controller;
+    if (c == null) return;
+
+    // 1. Page in older history until the target is loaded (or there is no more).
+    var guard = 0;
+    while (!c.hasMessage(messageId) && c.hasMore && guard < 25) {
+      await c.loadMore();
+      guard++;
+      if (!mounted) return;
     }
-    await Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-      alignment: 0.3,
-    );
+
+    // 2. Bring it on screen. Its row may not be built yet, so nudge toward older
+    //    messages (a reversed list grows its offset into the past) until the key
+    //    resolves, then centre it.
+    for (var attempt = 0; attempt < 30; attempt++) {
+      if (!mounted) return;
+      final ctx = _rowKeys[messageId]?.currentContext;
+      if (ctx != null && ctx.mounted) {
+        await Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+          alignment: 0.3,
+        );
+        if (!mounted) return;
+        setState(() => _highlightId = messageId);
+        Future.delayed(const Duration(milliseconds: 1400), () {
+          if (mounted && _highlightId == messageId) {
+            setState(() => _highlightId = null);
+          }
+        });
+        return;
+      }
+      if (!_scroll.hasClients) break;
+      final pos = _scroll.position;
+      final next =
+          (pos.pixels + pos.viewportDimension * 0.8).clamp(0.0, pos.maxScrollExtent);
+      if (next <= pos.pixels) break; // already as far as the list goes
+      await _scroll.animateTo(next,
+          duration: const Duration(milliseconds: 180), curve: Curves.easeOut);
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      if (!mounted) return;
+    }
+
     if (!mounted) return;
-    setState(() => _highlightId = messageId);
-    Future.delayed(const Duration(milliseconds: 1400), () {
-      if (mounted && _highlightId == messageId) setState(() => _highlightId = null);
-    });
+    SnackbarUtil.showInfo(context, 'The original message is no longer available.');
   }
 
   /// The reply context to attach to the next send, consumed once: it clears the
@@ -650,6 +690,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Stop any voice note playing from this room so it does not carry into the
+    // screen behind it; the shared player outlives the thread.
+    ChatAudioService.instance.stop();
     _scroll.dispose();
     _input.removeListener(_onInputChanged);
     _input.dispose();
@@ -756,94 +799,269 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     _jumpToBottom();
   }
 
-  // Long-press actions
-  void _showActions(ChatMessage m) {
+  // WhatsApp-style selection: a long press selects a message (highlighting it and
+  // turning the app bar into a contextual action bar), and while selecting a tap
+  // on any bubble adds or removes it. The old bottom-sheet action menu is gone.
+  void _enterSelection(ChatMessage m) {
+    if (m.isSystem || m.isDeleted) return;
+    HapticFeedback.selectionClick();
+    setState(() => _selected.add(m.id));
+  }
+
+  void _toggleSelect(String id) {
+    setState(() {
+      if (!_selected.remove(id)) _selected.add(id);
+    });
+  }
+
+  void _clearSelection() {
+    if (_selected.isEmpty) return;
+    setState(_selected.clear);
+  }
+
+  List<ChatMessage> get _selectedMessages {
+    final c = _controller;
+    if (c == null) return const [];
+    return _selected.map(c.messageById).whereType<ChatMessage>().toList();
+  }
+
+  /// The contextual action bar shown while messages are selected: a count, the
+  /// actions that apply, and — when exactly one is selected — a reaction strip.
+  PreferredSizeWidget _selectionAppBar() {
+    final c = _controller;
+    final msgs = _selectedMessages;
+    final count = msgs.length;
+    final single = count == 1 ? msgs.first : null;
+    final canDeleteAll = c != null && msgs.isNotEmpty && msgs.every(c.canDelete);
+    final canForward = msgs.any((m) =>
+        !m.isDeleted && !m.pending && !m.failed && m.kind != MessageKind.system);
+    return AppBar(
+      backgroundColor: AppColors.primary,
+      foregroundColor: Colors.white,
+      leading: IconButton(
+        icon: const Icon(Icons.close),
+        tooltip: 'Clear selection',
+        onPressed: _clearSelection,
+      ),
+      title: Text('$count'),
+      actions: [
+        if (single != null &&
+            single.kind == MessageKind.text &&
+            (single.body ?? '').isNotEmpty)
+          IconButton(
+              icon: const Icon(Icons.copy_outlined),
+              tooltip: 'Copy',
+              onPressed: () => _copySelected(single)),
+        if (single != null && !single.isDeleted && !single.pending && !single.failed)
+          IconButton(
+              icon: const Icon(Icons.reply_outlined),
+              tooltip: 'Reply',
+              onPressed: () {
+                _startReply(single);
+                _clearSelection();
+              }),
+        if (canForward)
+          IconButton(
+              icon: const Icon(Icons.forward_outlined),
+              tooltip: 'Forward',
+              onPressed: _forwardSelected),
+        if (single != null && c != null && c.canPin(single))
+          IconButton(
+              icon: Icon(c.isPinned(single.id) ? Icons.push_pin : Icons.push_pin_outlined),
+              tooltip: c.isPinned(single.id) ? 'Unpin' : 'Pin',
+              onPressed: () => _pinSelected(single)),
+        if (canDeleteAll)
+          IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Delete',
+              onPressed: _deleteSelected),
+      ],
+      bottom: single != null && !single.isDeleted ? _reactionStrip(single) : null,
+    );
+  }
+
+  /// The emoji quick-react row under the selection bar, plus a "+" to the full
+  /// picker — the WhatsApp reaction affordance, applied to the one selected row.
+  PreferredSizeWidget _reactionStrip(ChatMessage m) {
+    final c = _controller;
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(46),
+      child: Container(
+        color: AppColors.primaryDark,
+        height: 46,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            ..._palette.map((e) {
+              final mine = m.myReaction(_myId) == e;
+              return GestureDetector(
+                onTap: () {
+                  c?.toggleReaction(m.id, e);
+                  _clearSelection();
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: mine ? Colors.white24 : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(e, style: const TextStyle(fontSize: 21)),
+                ),
+              );
+            }),
+            GestureDetector(
+              onTap: () => _openEmojiPicker(m),
+              child: const Padding(
+                padding: EdgeInsets.all(5),
+                child: Icon(Icons.add_circle_outline, color: Colors.white, size: 24),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _copySelected(ChatMessage m) {
+    Clipboard.setData(ClipboardData(text: m.body ?? ''));
+    _clearSelection();
+    SnackbarUtil.showSuccess(context, 'Copied');
+  }
+
+  Future<void> _pinSelected(ChatMessage m) async {
     final c = _controller;
     if (c == null) return;
+    final want = !c.isPinned(m.id);
+    _clearSelection();
+    final r = await c.togglePin(m, pinned: want);
+    if (mounted && r['success'] != true) {
+      SnackbarUtil.showError(
+          context, r['message']?.toString() ?? 'Could not update the pin.');
+    }
+  }
+
+  Future<void> _deleteSelected() async {
+    final c = _controller;
+    if (c == null) return;
+    final msgs = _selectedMessages.where(c.canDelete).toList();
+    if (msgs.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(msgs.length == 1
+            ? 'Delete message?'
+            : 'Delete ${msgs.length} messages?'),
+        content: const Text('This removes it for everyone in the chat.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete', style: TextStyle(color: AppColors.error))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    _clearSelection();
+    for (final m in msgs) {
+      final r = await c.deleteMessage(m.id);
+      if (!mounted) return;
+      if (r['success'] != true) {
+        SnackbarUtil.showError(
+            context, r['message']?.toString() ?? 'Could not delete.');
+        break;
+      }
+    }
+  }
+
+  void _openEmojiPicker(ChatMessage m) {
+    const emojis = [
+      '👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉',
+      '👏', '💯', '✅', '❌', '⚽', '🏏', '🏆', '😍',
+      '😎', '🤔', '😅', '😭', '🙌', '👌', '💪', '😡',
+      '🥳', '😴', '🤝', '👀', '💔', '😤', '🤷', '⏰',
+    ];
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: _palette.map((e) {
-                  final mine = m.myReaction(_myId) == e;
-                  return GestureDetector(
+        child: GridView.count(
+          crossAxisCount: 8,
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(14),
+          children: emojis
+              .map((e) => GestureDetector(
                     onTap: () {
                       Navigator.pop(context);
-                      c.toggleReaction(m.id, e);
+                      _controller?.toggleReaction(m.id, e);
+                      _clearSelection();
                     },
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: mine ? AppColors.accentLight : Colors.transparent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(e, style: const TextStyle(fontSize: 24)),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const Divider(height: 1),
-            if (!m.isDeleted && !m.pending && !m.failed)
-              ListTile(
-                leading: const Icon(Icons.reply_outlined),
-                title: const Text('Reply'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _startReply(m);
-                },
-              ),
-            if (c.canPin(m))
-              ListTile(
-                leading: Icon(c.isPinned(m.id) ? Icons.push_pin : Icons.push_pin_outlined,
-                    color: AppColors.primary),
-                title: Text(c.isPinned(m.id) ? 'Unpin' : 'Pin'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final want = !c.isPinned(m.id);
-                  final r = await c.togglePin(m, pinned: want);
-                  if (mounted && r['success'] != true) {
-                    SnackbarUtil.showError(
-                        context, r['message']?.toString() ?? 'Could not update the pin.');
-                  }
-                },
-              ),
-            if (m.kind == MessageKind.text && (m.body ?? '').isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.copy_outlined),
-                title: const Text('Copy'),
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: m.body ?? ''));
-                  Navigator.pop(context);
-                  SnackbarUtil.showSuccess(context, 'Copied');
-                },
-              ),
-            if (c.canDelete(m))
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: AppColors.error),
-                title: const Text('Delete for everyone',
-                    style: TextStyle(color: AppColors.error)),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final r = await c.deleteMessage(m.id);
-                  if (mounted && r['success'] != true) {
-                    SnackbarUtil.showError(
-                        context, r['message']?.toString() ?? 'Could not delete.');
-                  }
-                },
-              ),
-          ],
+                    child: Center(child: Text(e, style: const TextStyle(fontSize: 26))),
+                  ))
+              .toList(),
         ),
       ),
     );
+  }
+
+  /// Forward the selected messages to another chat: pick a room from the inbox,
+  /// then re-send each one's content there. Polls and tombstones are skipped.
+  Future<void> _forwardSelected() async {
+    final msgs = _selectedMessages
+        .where((m) =>
+            !m.isDeleted &&
+            !m.pending &&
+            !m.failed &&
+            m.kind != MessageKind.system &&
+            m.kind != MessageKind.poll)
+        .toList();
+    if (msgs.isEmpty) return;
+    final page = await ChatService().chats(_token, limit: 50);
+    if (!mounted) return;
+    final target = await showModalBottomSheet<ChatChannel>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _ForwardPicker(
+          channels: page.items.where((c) => c.id != _channelId).toList()),
+    );
+    if (target == null || !mounted) return;
+    _clearSelection();
+    var sent = 0;
+    for (final m in msgs) {
+      if (await _forwardOne(m, target.id)) sent++;
+    }
+    if (!mounted) return;
+    SnackbarUtil.showSuccess(
+        context, sent <= 1 ? 'Forwarded' : 'Forwarded $sent messages');
+  }
+
+  Future<bool> _forwardOne(ChatMessage m, String channelId) async {
+    final svc = ChatService();
+    final cid = 'fwd-${DateTime.now().microsecondsSinceEpoch}-${m.id.hashCode}';
+    Map<String, dynamic> r;
+    if (m.kind == MessageKind.image && m.mediaUrl != null) {
+      r = await svc.sendImage(_token, channelId,
+          mediaUrl: m.mediaUrl!,
+          mediaMime: m.mediaMime,
+          mediaW: m.mediaW.toInt(),
+          mediaH: m.mediaH.toInt(),
+          caption: m.body,
+          clientId: cid);
+    } else if (m.kind == MessageKind.audio && m.mediaUrl != null) {
+      r = await svc.sendAudio(_token, channelId,
+          mediaUrl: m.mediaUrl!,
+          mediaMime: m.mediaMime,
+          durationMs: m.durationMs.toInt(),
+          waveform: m.waveform,
+          clientId: cid);
+    } else if ((m.body ?? '').isNotEmpty) {
+      r = await svc.sendText(_token, channelId, body: m.body!, clientId: cid);
+    } else {
+      return false;
+    }
+    return r['success'] == true;
   }
 
   void _openImage(String? url) {
@@ -900,6 +1118,31 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     );
   }
 
+  Future<void> _createPoll() async {
+    final c = _controller;
+    if (c == null) return;
+    final draft = await showModalBottomSheet<_PollDraft>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => const _PollComposer(),
+    );
+    if (draft == null || !mounted) return;
+    final r = await c.createPoll(
+      question: draft.question,
+      options: draft.options,
+      allowMultiple: draft.allowMultiple,
+    );
+    if (!mounted) return;
+    if (r['success'] == true) {
+      _jumpToBottom();
+    } else {
+      SnackbarUtil.showError(
+          context, r['message']?.toString() ?? 'Could not create the poll.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_fatalError != null) {
@@ -923,9 +1166,16 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
       );
     }
 
-    return Scaffold(
+    return PopScope(
+      // While messages are selected, back clears the selection instead of leaving
+      // the room — the same escape the contextual bar's close button gives.
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _selecting) _clearSelection();
+      },
+      child: Scaffold(
       backgroundColor: _bg.ground,
-      appBar: _appBar(c),
+      appBar: _selecting ? _selectionAppBar() : _appBar(c),
       body: Column(
         children: [
           _connectionBar(c),
@@ -999,12 +1249,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
               _jumpToBottom();
             },
             onPickImage: _pickImage,
-            onSendAudio: (path, durationMs, mime) {
+            onSendAudio: (path, durationMs, mime, waveform) {
               final (replyToId, replyPreview) = _consumeReply();
               c.sendAudioLocal(
                 localPath: path,
                 mediaMime: mime,
                 durationMs: durationMs,
+                waveform: waveform,
                 replyToId: replyToId,
                 replyPreview: replyPreview,
               );
@@ -1013,6 +1264,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
             onTyping: c.sendTyping,
           ),
         ],
+      ),
       ),
     );
   }
@@ -1108,12 +1360,16 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
                 _suggestNow();
               case 'media':
                 _openMedia();
+              case 'poll':
+                _createPoll();
             }
           },
           itemBuilder: (_) => [
             if (isTeam)
               const PopupMenuItem(value: 'info', child: Text('Group info')),
             const PopupMenuItem(value: 'media', child: Text('Shared media')),
+            if (widget.type != ChatChannelType.unknown)
+              const PopupMenuItem(value: 'poll', child: Text('New poll')),
             if (_suggestsAtAll && !_suggestsAutomatically)
               const PopupMenuItem(value: 'suggest', child: Text('Suggest replies')),
             const PopupMenuItem(
@@ -1229,7 +1485,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
                 showSender: showSender,
                 tickState: c.tickFor(group.last),
                 onOpen: (idx) => _openAlbum(group, idx),
-                onLongPress: _showActions,
+                onLongPress: _enterSelection,
               ),
               replyTarget: group.first,
             ));
@@ -1245,7 +1501,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
               isMine: isMine,
               showSender: showSender,
               tickState: c.tickFor(m),
-              onLongPress: () => _showActions(m),
+              onLongPress: () => _enterSelection(m),
               onReactionTap: (e) => c.toggleReaction(m.id, e),
               onImageTap: () => _openImage(m.mediaUrl),
               onRetry: () => c.retry(m),
@@ -1254,6 +1510,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
               onQuoteTap: m.isReply
                   ? () => _scrollToMessage(m.replyToId ?? m.replyPreview!.id)
                   : null,
+              uploadProgress: c.uploadProgressFor(m),
+              myUserId: _myId,
+              onPollVote: (i) => c.votePoll(m, i),
             ),
             replyTarget: (m.isDeleted || m.pending || m.failed) ? null : m,
           ));
@@ -1277,12 +1536,33 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   /// icon while the release simply opens a reply — the standard chat idiom.
   Widget _rowWrap(String id, GlobalKey key, Widget child, {ChatMessage? replyTarget}) {
     final highlighted = _highlightId == id;
+    final selected = _selected.contains(id);
+    // Full width is load-bearing, not decoration. A swipeable row is wrapped in a
+    // Dismissible, whose background makes it lay the row out inside a Stack that
+    // passes loose width constraints; without a width the row shrink-wraps to the
+    // bubble and the bubble's own end/start alignment has no room to act, so a
+    // sent message drifts to the left and reads as centred. An unswiped row (a
+    // pending or failed message, replyTarget == null) is already full width from
+    // the list, which is why only confirmed messages mis-aligned.
     final tinted = AnimatedContainer(
       key: key,
+      width: double.infinity,
       duration: const Duration(milliseconds: 300),
-      color: highlighted ? AppColors.accentLight : Colors.transparent,
+      color: selected
+          ? AppColors.accentLight
+          : (highlighted ? AppColors.accentLight : Colors.transparent),
       child: child,
     );
+    // While selecting, a tap toggles this row and the bubble's own gestures are
+    // swallowed, so an image tap or a quote tap cannot fire mid-selection.
+    if (_selecting) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _toggleSelect(id),
+        onLongPress: () => _toggleSelect(id),
+        child: AbsorbPointer(child: tinted),
+      );
+    }
     if (replyTarget == null) return tinted;
     return Dismissible(
       key: ValueKey('swipe:$id'),
@@ -1358,6 +1638,196 @@ class _UnreadDivider extends StatelessWidget {
       child: const Text(
         'Unread messages',
         style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.primary),
+      ),
+    );
+  }
+}
+
+/// The "forward to" sheet: the caller's other chats, one of which is returned to
+/// forward the selected messages into. Shown by [_forwardSelected].
+class _ForwardPicker extends StatelessWidget {
+  final List<ChatChannel> channels;
+  const _ForwardPicker({required this.channels});
+
+  IconData _iconFor(ChatChannelType t) => switch (t) {
+        ChatChannelType.team => Icons.groups,
+        ChatChannelType.captain => Icons.shield_outlined,
+        ChatChannelType.booking => Icons.event_outlined,
+        _ => Icons.chat_bubble_outline,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('Forward to',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary)),
+          ),
+          if (channels.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: Text('No other chats to forward to.',
+                  style: TextStyle(color: AppColors.textSecondary)),
+            )
+          else
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: channels.length,
+                itemBuilder: (_, i) {
+                  final ch = channels[i];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.accentLight,
+                      child: Icon(_iconFor(ch.type),
+                          color: AppColors.primary, size: 20),
+                    ),
+                    title: Text(ch.title,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    onTap: () => Navigator.pop(context, ch),
+                  );
+                },
+              ),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+/// The result of the poll composer: a question, its options, and whether more
+/// than one answer may be chosen.
+class _PollDraft {
+  final String question;
+  final List<String> options;
+  final bool allowMultiple;
+  const _PollDraft(this.question, this.options, this.allowMultiple);
+}
+
+/// The "new poll" sheet: a question, two to twelve options, and a multiple-answer
+/// toggle. Pops a [_PollDraft] on create, or null when dismissed.
+class _PollComposer extends StatefulWidget {
+  const _PollComposer();
+
+  @override
+  State<_PollComposer> createState() => _PollComposerState();
+}
+
+class _PollComposerState extends State<_PollComposer> {
+  final _question = TextEditingController();
+  final _options = <TextEditingController>[TextEditingController(), TextEditingController()];
+  bool _allowMultiple = false;
+
+  @override
+  void dispose() {
+    _question.dispose();
+    for (final o in _options) {
+      o.dispose();
+    }
+    super.dispose();
+  }
+
+  bool get _valid =>
+      _question.text.trim().isNotEmpty &&
+      _options.where((o) => o.text.trim().isNotEmpty).length >= 2;
+
+  void _submit() {
+    final opts = _options
+        .map((o) => o.text.trim())
+        .where((o) => o.isNotEmpty)
+        .toList();
+    Navigator.pop(context, _PollDraft(_question.text.trim(), opts, _allowMultiple));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 16),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('New poll',
+                style: TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _question,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              maxLength: 300,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Question',
+                hintText: 'Ask the group…',
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text('Options',
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+            const SizedBox(height: 6),
+            for (var i = 0; i < _options.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _options[i],
+                        textCapitalization: TextCapitalization.sentences,
+                        maxLength: 100,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'Option ${i + 1}',
+                          counterText: '',
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    if (_options.length > 2)
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20, color: AppColors.textSecondary),
+                        tooltip: 'Remove option',
+                        onPressed: () => setState(() => _options.removeAt(i).dispose()),
+                      ),
+                  ],
+                ),
+              ),
+            if (_options.length < 12)
+              TextButton.icon(
+                onPressed: () => setState(() => _options.add(TextEditingController())),
+                icon: const Icon(Icons.add, size: 20),
+                label: const Text('Add option'),
+              ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _allowMultiple,
+              onChanged: (v) => setState(() => _allowMultiple = v),
+              title: const Text('Allow multiple answers', style: TextStyle(fontSize: 14)),
+              activeThumbColor: AppColors.accent,
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _valid ? _submit : null,
+                child: const Text('Create poll'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
