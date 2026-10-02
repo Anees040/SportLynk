@@ -12,6 +12,7 @@ import '../../services/review_service.dart';
 import '../../utils/num_util.dart';
 
 import '../../widgets/custom_loader.dart';
+import '../../widgets/network_error_view.dart';
 import '../../widgets/trust_widgets.dart';
 import 'confirm_booking_screen.dart';
 import 'venue_reviews_screen.dart';
@@ -27,6 +28,24 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   Map<String, dynamic>? _venue;
   List<Map<String, dynamic>> _slots = [];
   bool _loading = true;
+  /// Grid-only loading, shown while an uncached date is fetched. Distinct from
+  /// [_loading] (the first full-screen venue load) so switching dates never blanks
+  /// the gallery, the "about" block, or the date rail — only the slot grid waits.
+  bool _slotLoading = false;
+  /// Set when a load fails, so the screen can show an error with a retry instead
+  /// of the empty-slot view. Without it a failed request reads as "No slots
+  /// available" — a venue the backend is serving fine then looks unbookable, and
+  /// a first-load failure reads as "Venue not found". Cleared on every success.
+  String? _loadError;
+  /// Slots and any load error, cached per date (YYYY-MM-DD). Revisiting a date is
+  /// instant from here, so fast back-and-forth on the rail never re-waits on the
+  /// network; a background fetch still refreshes the cache behind the shown data.
+  final Map<String, List<Map<String, dynamic>>> _slotsByDate = {};
+  final Map<String, String?> _errorByDate = {};
+  /// Free-slot count per date (YYYY-MM-DD) for the rail chips, from one
+  /// `/availability` call — so a chip can read "3 left" or "Full" before it is
+  /// tapped. A date absent from the map is treated as unknown, not zero.
+  final Map<String, int> _freeByDate = {};
   DateTime _selectedDate = DateTime.now();
   String? _selectedSlotId;
   Map<String, dynamic>? _selectedSlot;
@@ -42,9 +61,6 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   /// where reading a provider off `context` is no longer safe.
   String? _token;
 
-  /// Slot id with a lock request in flight (one at a time).
-  String? _lockingSlotId;
-
   /// Reviews summary shown between "about this venue" and the booking flow.
   /// Loaded independently of the slot grid and its auto-refresh: a reviews
   /// failure must never blank the slots the player came here to book, so this
@@ -57,6 +73,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     super.initState();
     _token = Provider.of<AuthProvider>(context, listen: false).token;
     _load();
+    _loadAvailability();
     _loadReviews();
     _startAutoRefresh();
   }
@@ -82,41 +99,71 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   String _dateStr(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  /// Load the slots for [date] (or the selected date), keeping the page responsive.
+  ///
+  /// Three things make date switching feel instant rather than blanking the screen:
+  ///   - the full-screen loader shows only on the very first venue load; a date
+  ///     change keeps the gallery/about/rail and waits only in the grid;
+  ///   - a date whose slots are cached paints immediately, and the network fetch
+  ///     then refreshes that cache quietly;
+  ///   - a stale-response guard: a reply is applied to the grid only if its date is
+  ///     still the selected one, so fast back-and-forth can't let an older date's
+  ///     slots land on top of a newer selection.
   Future<void> _load([DateTime? date]) async {
-    final isDateChange =
-        date != null && _dateStr(date) != _dateStr(_selectedDate);
-    if (_venue == null || isDateChange) setState(() => _loading = true);
+    final d = date ?? _selectedDate;
+    final key = _dateStr(d);
+    final isFirstLoad = _venue == null;
+
+    setState(() {
+      if (isFirstLoad) {
+        _loading = true;
+      } else if (_slotsByDate.containsKey(key)) {
+        // Cached: show it now, refresh in the background without a spinner.
+        _slots = _slotsByDate[key]!;
+        _loadError = _errorByDate[key];
+        _slotLoading = false;
+      } else {
+        // Uncached date: wait in the grid only, not the whole screen. Clear the
+        // old date's slots so the loader shows rather than a stale grid.
+        _slotLoading = true;
+        _loadError = null;
+        _slots = [];
+      }
+    });
+
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final d = date ?? _selectedDate;
       final resp = await http.get(
         Uri.parse(
-          '${ApiConstants.baseUrl}/venues/${widget.venueId}?date=${_dateStr(d)}',
+          '${ApiConstants.baseUrl}/venues/${widget.venueId}?date=$key',
         ),
         headers: {'Authorization': 'Bearer $token'},
       );
       final data = jsonDecode(resp.body);
-      if (mounted && data['success'] == true) {
+      if (!mounted) return;
+
+      if (data['success'] == true) {
+        final slots =
+            List<Map<String, dynamic>>.from(data['data']['slots'] ?? []);
+        _slotsByDate[key] = slots;
+        _errorByDate[key] = null;
+        final stillSelected = _dateStr(_selectedDate) == key;
         final prevSelectedId = _selectedSlotId;
         var lostSelection = false;
         setState(() {
           _venue = data['data'];
-          _slots = List<Map<String, dynamic>>.from(data['data']['slots'] ?? []);
           _loading = false;
-          // Only clear selection when changing dates
-          if (isDateChange) {
-            _selectedSlotId = null;
-            _selectedSlot = null;
-          } else if (prevSelectedId != null) {
-            // Re-find the slot in refreshed data to keep selection alive
-            final found = _slots
-                .where((s) => s['id'] == prevSelectedId)
-                .toList();
+          if (!stillSelected) return; // cache updated; the shown date moved on
+          _slots = slots;
+          _loadError = null;
+          _slotLoading = false;
+          if (prevSelectedId != null) {
+            // Keep a live selection across an auto-refresh of the same date.
+            final found =
+                slots.where((s) => s['id'] == prevSelectedId).toList();
             if (found.isNotEmpty && _isSelectable(found.first)) {
               _selectedSlot = found.first;
             } else {
-              // Someone else booked it, or the hold expired and they took it.
-              // Drop the selection now rather than let checkout fail with a 409.
               _selectedSlotId = null;
               _selectedSlot = null;
               lostSelection = true;
@@ -124,16 +171,89 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           }
         });
         if (lostSelection) {
-          _snack(
-            'That slot was just taken by another player. Pick another one.',
-          );
+          _snack('That slot was just taken by another player. Pick another one.');
         }
       } else {
-        if (mounted) setState(() => _loading = false);
+        // A reached server that answered with something other than success. A real
+        // 404 means the venue is gone and a retry cannot help, so that alone keeps
+        // the "Venue not found" view; anything else is surfaced with a retry rather
+        // than swallowed into "No slots available".
+        final msg = resp.statusCode == 404
+            ? null
+            : (data['message'] ?? 'Could not load this venue. Please try again.')
+                .toString();
+        _errorByDate[key] = msg;
+        if (_dateStr(_selectedDate) == key) {
+          setState(() {
+            _loading = false;
+            _slotLoading = false;
+            _loadError = msg;
+            _slots = _slotsByDate[key] ?? [];
+          });
+        }
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      // The request never completed: no connection, a timeout, or a non-JSON body.
+      // On the phone this is most often adb reverse not being set up.
+      if (!mounted) return;
+      const msg = 'Could not reach the server. Check your connection and try again.';
+      _errorByDate[key] = msg;
+      if (_dateStr(_selectedDate) == key) {
+        setState(() {
+          _loading = false;
+          _slotLoading = false;
+          _loadError = msg;
+          _slots = _slotsByDate[key] ?? [];
+        });
+      }
     }
+  }
+
+  /// One call fills the rail chips with each date's free-slot count, so a player
+  /// sees which days are open without opening each. Silent on failure — the chips
+  /// simply omit the count and the grid remains the source of truth.
+  Future<void> _loadAvailability() async {
+    final token = _token;
+    if (token == null) return;
+    try {
+      final resp = await http.get(
+        Uri.parse('${ApiConstants.baseUrl}/venues/${widget.venueId}/availability?days=14'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      final data = jsonDecode(resp.body);
+      if (!mounted || data['success'] != true) return;
+      final list = List<Map<String, dynamic>>.from(data['data']['byDate'] ?? []);
+      setState(() {
+        _freeByDate.clear();
+        for (final row in list) {
+          _freeByDate[row['date'].toString()] = (row['free'] as num?)?.toInt() ?? 0;
+        }
+      });
+    } catch (_) {
+      // No chip counts; not worth surfacing.
+    }
+  }
+
+  /// Jump to any date in the booking window via the calendar, for days past the
+  /// 14-chip rail. Switching clears any hold the same way a rail tap does.
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 60)),
+    );
+    if (picked == null || !mounted) return;
+    if (_dateStr(picked) == _dateStr(_selectedDate)) return;
+    final held = _selectedSlotId;
+    setState(() {
+      _selectedDate = picked;
+      _selectedSlotId = null;
+      _selectedSlot = null;
+    });
+    if (held != null) _releaseLock(held);
+    _load(picked);
   }
 
   /// Venue-wide review aggregates + the first page (only the top 3 are previewed
@@ -174,21 +294,36 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
       _releaseLock(slotId);
       return;
     }
-    if (_lockingSlotId != null) return;
 
-    setState(() => _lockingSlotId = slotId);
-    final failure = await _lockSlot(slotId);
-    if (!mounted) return;
+    // Optimistic selection: the tap registers instantly and Book Now lights up at
+    // once, the way a real booking app feels. The 5-minute checkout hold is taken
+    // in the background rather than awaited — the hold is only a courtesy so two
+    // players don't fill the same form, and the booking itself re-checks the slot
+    // under a row lock, so a selection that loses the hold still fails safely at
+    // confirm time rather than letting the player pay twice.
+    final previous = _selectedSlotId;
     setState(() {
-      _lockingSlotId = null;
-      if (failure == null) {
-        _selectedSlotId = slotId;
-        _selectedSlot = slot;
-      }
+      _selectedSlotId = slotId;
+      _selectedSlot = slot;
     });
-    if (failure != null) {
+    if (previous != null && previous != slotId) _releaseLock(previous);
+    _acquireHoldInBackground(slotId);
+  }
+
+  /// Takes the checkout hold without blocking the tap. If the slot was already held
+  /// or booked by someone else, this reverts just that selection (and only while it
+  /// is still the selected one) and repaints so the Blue/Amber state shows — it
+  /// never blocks the player from tapping a different slot in the meantime.
+  Future<void> _acquireHoldInBackground(String slotId) async {
+    final failure = await _lockSlot(slotId);
+    if (!mounted || failure == null) return;
+    if (_selectedSlotId == slotId) {
+      setState(() {
+        _selectedSlotId = null;
+        _selectedSlot = null;
+      });
       _snack(failure);
-      _load(); // repaint so the Blue hold that blocked us is visible
+      _load();
     }
   }
 
@@ -287,16 +422,21 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     }
     if (_venue == null) {
       return Scaffold(
+        backgroundColor: AppColors.background,
         appBar: AppBar(
           backgroundColor: AppColors.primary,
           iconTheme: const IconThemeData(color: Colors.white),
         ),
-        body: Center(
-          child: Text(
-            'Venue not found',
-            style: GoogleFonts.poppins(color: AppColors.textSecondary),
-          ),
-        ),
+        // A failed first load is a reachability problem, not a missing venue, so
+        // it offers a retry instead of the dead end "Venue not found" was.
+        body: _loadError != null
+            ? NetworkErrorView(message: _loadError!, onRetry: () => _load())
+            : Center(
+                child: Text(
+                  'Venue not found',
+                  style: GoogleFonts.poppins(color: AppColors.textSecondary),
+                ),
+              ),
       );
     }
 
@@ -729,23 +869,42 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                           color: AppColors.textPrimary,
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentLight,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          _monthYear(_selectedDate),
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: AppColors.accent,
-                            fontWeight: FontWeight.bold,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentLight,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              _monthYear(_selectedDate),
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: AppColors.accent,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                        ),
+                          // A calendar jump for dates past the 14-day rail.
+                          IconButton(
+                            onPressed: _pickDate,
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            icon: const Icon(
+                              Icons.calendar_month_outlined,
+                              size: 20,
+                              color: AppColors.accent,
+                            ),
+                            tooltip: 'Pick a date',
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -762,9 +921,17 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                             _dateStr(date) == _dateStr(_selectedDate);
                         return GestureDetector(
                           onTap: () {
+                            if (_dateStr(date) == _dateStr(_selectedDate)) return;
+                            // Switching dates abandons any hold taken on the old
+                            // date's slot and clears the selection — a hold belongs
+                            // to the day it was taken on.
+                            final held = _selectedSlotId;
                             setState(() {
                               _selectedDate = date;
+                              _selectedSlotId = null;
+                              _selectedSlot = null;
                             });
+                            if (held != null) _releaseLock(held);
                             _load(date);
                           },
                           child: AnimatedContainer(
@@ -827,6 +994,8 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                                         : AppColors.textPrimary,
                                   ),
                                 ),
+                                const SizedBox(height: 2),
+                                _dateChipAvailability(_dateStr(date), selected),
                               ],
                             ),
                           ),
@@ -854,6 +1023,23 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                       color: AppColors.textPrimary,
                     ),
                   ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(Icons.auto_graph_rounded,
+                          size: 12, color: AppColors.textSecondary),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Prices vary by time — peak hours cost more',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 16,
@@ -871,7 +1057,16 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           ),
 
           // Slot GRID
-          if (_slots.isNotEmpty)
+          if (_slotLoading)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+              ),
+            )
+          else if (_slots.isNotEmpty)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
               sliver: SliverGrid(
@@ -885,15 +1080,14 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                           .toString();
                   final selectable = _isSelectable(slot);
                   final selected = _selectedSlotId == slot['id'];
-                  final locking = _lockingSlotId == slot['id'];
                   final time12 = _to12Hour(slot['start_time']);
                   final slotPrice = asNum(slot['price']);
                   final statusColor = _slotStatusColor(status);
 
                   return GestureDetector(
-                    onTap: (locking || !(selectable || selected))
-                        ? null
-                        : () => _onSlotTap(slot, selected),
+                    onTap: (selectable || selected)
+                        ? () => _onSlotTap(slot, selected)
+                        : null,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       decoration: BoxDecoration(
@@ -949,16 +1143,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          if (locking)
-                            const SizedBox(
-                              width: 10,
-                              height: 10,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 1.5,
-                                color: AppColors.accent,
-                              ),
-                            )
-                          else if (selectable)
+                          if (selectable)
                             Text(
                               'PKR ${slotPrice.toStringAsFixed(0)}',
                               style: GoogleFonts.poppins(
@@ -991,43 +1176,123 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
               ),
             ),
 
-          if (_slots.isEmpty)
+          if (!_slotLoading && _slots.isEmpty)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.event_busy_outlined,
-                        size: 48,
-                        color: AppColors.textSecondary.withValues(alpha: 0.5),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No slots available',
-                        style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
+                  // An empty grid has two causes that must not look the same: the
+                  // day is genuinely free of slots, or the load failed. The second
+                  // offers a retry; "Try a different date" would send the player
+                  // to re-run a request that never completed.
+                  child: _loadError != null
+                      ? _slotLoadError()
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.event_busy_outlined,
+                              size: 48,
+                              color: AppColors.textSecondary.withValues(
+                                alpha: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No slots available',
+                              style: GoogleFonts.poppins(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Try selecting a different date',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Try selecting a different date',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
         ],
       ),
+    );
+  }
+
+  /// The slot grid's error-with-retry state, used in place of the empty view when
+  /// a load failed. Compact and non-scrolling because it sits inside the venue
+  /// page's CustomScrollView; the full-screen [NetworkErrorView] covers the
+  /// first-load case where the whole screen is the error.
+  /// The tiny free-slot line under a date chip's number: "3 left", "Full", or an
+  /// even gap while the count is still unknown, so chips do not jump when the
+  /// counts arrive. Colour tracks the chip's selected state.
+  Widget _dateChipAvailability(String dateKey, bool selected) {
+    final free = _freeByDate[dateKey];
+    if (free == null) return const SizedBox(height: 11);
+    final full = free == 0;
+    return Text(
+      full ? 'Full' : '$free left',
+      style: GoogleFonts.poppins(
+        fontSize: 8,
+        fontWeight: FontWeight.w600,
+        color: selected
+            ? Colors.white70
+            : full
+                ? AppColors.textSecondary.withValues(alpha: 0.6)
+                : AppColors.accent,
+      ),
+    );
+  }
+
+  Widget _slotLoadError() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.cloud_off_outlined, size: 48, color: AppColors.disabled),
+        const SizedBox(height: 12),
+        Text(
+          'Could not load slots',
+          style: GoogleFonts.poppins(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _loadError ?? 'Please try again.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            height: 1.4,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: () => _load(),
+          icon: const Icon(Icons.refresh, size: 18, color: AppColors.accent),
+          label: Text(
+            'Retry',
+            style: GoogleFonts.poppins(
+              color: AppColors.accent,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            side: const BorderSide(color: AppColors.accent),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
