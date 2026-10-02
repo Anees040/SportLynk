@@ -4,6 +4,23 @@ import '../constants/api_constants.dart';
 import '../models/assistant.dart';
 import 'api_service.dart';
 
+/// Raised by [AssistantService.threads] when the chat list could not be read.
+///
+/// Every other method here answers a failure with a value, because every other method
+/// has a value that can carry one: a turn degrades to a renderable reply, a vote to
+/// false. A list has no such value — returning `[]` for "the request failed" is
+/// indistinguishable from "this account has no chats", which is how a server error came
+/// to be displayed as an empty history with no way to retry it. The distinction has to
+/// leave this method somehow, and an exception is the only channel a `List` return has.
+class ScoutUnavailable implements Exception {
+  final String message;
+
+  const ScoutUnavailable(this.message);
+
+  @override
+  String toString() => message;
+}
+
 /// Every call Scout's chat screen makes, and nothing else.
 ///
 /// One endpoint for two input modes
@@ -21,10 +38,10 @@ import 'api_service.dart';
 /// the same id when retrying, which is why generating it is [newClientId]'s job
 /// and not this method's.
 ///
-/// Like every other service here, nothing throws. [ApiClient] turns a socket
-/// failure into `{success: false, message}`, and a failed turn still yields a
-/// [ScoutTurn] with a renderable reply, so a dropped connection draws a bubble
-/// rather than an exception.
+/// [ApiClient] turns a socket failure into `{success: false, message}` and never
+/// throws, so a failed turn still yields a [ScoutTurn] with a renderable reply and a
+/// dropped connection draws a bubble rather than an exception. [threads] is the one
+/// exception to that, and [ScoutUnavailable] says why.
 class AssistantService {
   final ApiClient _api = ApiClient();
 
@@ -37,12 +54,18 @@ class AssistantService {
   }
 
   /// One turn. Give [text] for a typed message, or [action] (+[args]) for a chip.
+  ///
+  /// [newSession] marks the first turn of a chat the user deliberately started. It
+  /// exists because an absent `session_id` means "the newest chat, or a new one" on
+  /// the server: without the flag, a new conversation is appended to the thread the
+  /// user just left, and every chat they start collapses into one row of history.
   Future<ScoutTurn> send(
     String token, {
     String? text,
     String? action,
     Map<String, dynamic>? args,
     String? threadId,
+    bool newSession = false,
     required String clientId,
   }) async {
     final r = await _api.post(
@@ -52,6 +75,7 @@ class AssistantService {
         if (action != null && action.isNotEmpty) 'action': action,
         if (args != null && args.isNotEmpty) 'args': args,
         if (threadId != null && threadId.isNotEmpty) 'session_id': threadId,
+        if (newSession) 'new_session': true,
         'client_id': clientId,
       },
       token: token,
@@ -60,10 +84,17 @@ class AssistantService {
   }
 
   /// The chat drawer. Newest first, archived chats only when asked for.
+  ///
+  /// The default matches the server's own per-user thread cap (50), so a user sitting
+  /// at that cap sees every chat they have rather than the newest 30 of them.
+  ///
+  /// Throws [ScoutUnavailable] if the read failed, so the caller can tell an outage
+  /// from an account with no chats. A well-formed answer holding no threads is an
+  /// empty list, not an error.
   Future<List<ScoutThread>> threads(
     String token, {
     bool includeArchived = false,
-    int limit = 30,
+    int limit = 50,
   }) async {
     final r = await _api.get(
       ApiConstants.assistantThreads,
@@ -73,7 +104,15 @@ class AssistantService {
         'limit': '$limit',
       },
     );
-    if (r['success'] != true || r['data'] is! Map) return const [];
+    if (r['success'] != true) {
+      final said = r['message'];
+      throw ScoutUnavailable(
+        said is String && said.trim().isNotEmpty
+            ? said.trim()
+            : 'Could not load your chats.',
+      );
+    }
+    if (r['data'] is! Map) return const [];
     final data = Map<String, dynamic>.from(r['data'] as Map);
     final rows = data['threads'];
     if (rows is! List) return const [];
