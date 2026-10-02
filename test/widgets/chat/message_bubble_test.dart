@@ -43,6 +43,7 @@ ChatMessage msg({
   List<MessageReaction> reactions = const [],
   bool pending = false,
   bool failed = false,
+  ChatPoll? poll,
 }) =>
     ChatMessage(
       id: 'm1',
@@ -59,6 +60,7 @@ ChatMessage msg({
       reactions: reactions,
       pending: pending,
       failed: failed,
+      poll: poll,
     );
 
 /// The bubble's own box — the first decorated [Container] under the widget.
@@ -96,6 +98,8 @@ void main() {
     bool showSender = false,
     TickState tickState = TickState.sent,
     double textScale = 1.0,
+    String myUserId = 'me',
+    void Function(int optionIndex)? onPollVote,
   }) =>
       pumpApp(
         tester,
@@ -110,6 +114,8 @@ void main() {
             onRetry: () => retries++,
             onImageTap: () => imageTaps++,
             onReactionTap: reacted.add,
+            myUserId: myUserId,
+            onPollVote: onPollVote,
           ),
         ),
         textScale: textScale,
@@ -432,5 +438,34 @@ void main() {
         showSender: true, textScale: 2.0);
     expect(find.text('Bilal'), findsOneWidget);
     expectNoOverflow(tester);
+  });
+
+  group('a poll message', () {
+    ChatMessage pollMessage() => msg(
+          kind: MessageKind.poll,
+          body: 'Sunday 6pm?',
+          poll: const ChatPoll(
+            id: 'p1',
+            question: 'Sunday 6pm?',
+            options: ['Yes', 'No'],
+            votes: [PollVote(optionIndex: 0, userId: 'u9', userName: 'Ayaan')],
+          ),
+        );
+
+    testWidgets('draws the question and its options', (tester) async {
+      await pumpBubble(tester, pollMessage());
+      expect(find.text('Sunday 6pm?'), findsOneWidget);
+      expect(find.text('Yes'), findsOneWidget);
+      expect(find.text('No'), findsOneWidget);
+      expect(find.text('1 vote'), findsOneWidget);
+    });
+
+    testWidgets('tapping an option reports its index', (tester) async {
+      int? voted;
+      await pumpBubble(tester, pollMessage(), onPollVote: (i) => voted = i);
+      await tester.tap(find.text('No'));
+      await tester.pump();
+      expect(voted, 1);
+    });
   });
 }
