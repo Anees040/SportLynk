@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/assistant/scout_bits.dart';
 import '../../widgets/assistant/scout_bubble.dart';
 import '../../widgets/assistant/scout_chips.dart';
+import '../../widgets/assistant/scout_drawer.dart';
 import '../../widgets/assistant/scout_sheets.dart';
 import '../../widgets/assistant/scout_theme.dart';
 import '../../widgets/assistant/scout_typing.dart';
@@ -67,6 +68,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
   static const Map<String, String> _routeScreens = {
     'venues': '/find-venues',
     'tournaments': '/tournaments',
+    'help_support': '/help-support',
   };
 
   static const Map<String, String> _screenLabels = {
@@ -77,12 +79,18 @@ class _AssistantScreenState extends State<AssistantScreen> {
     'profile': 'Profile',
     'venues': 'Find Venues',
     'tournaments': 'Tournaments',
+    'help_support': 'Help & Support',
   };
 
   AssistantController? _c;
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
   final FocusNode _focus = FocusNode();
+
+  /// Opens the chat list and answers "is it open?" for the back gesture. The bar is
+  /// hand-built rather than an [AppBar], so nothing installs a drawer button for us.
+  final GlobalKey<ScaffoldState> _scaffold = GlobalKey<ScaffoldState>();
+
   String? _dismissedJump;
 
   /// Newest message id and busy flag at the last paint — the change detector for
@@ -279,14 +287,24 @@ class _AssistantScreenState extends State<AssistantScreen> {
       data: ScoutTheme.data(MediaQuery.platformBrightnessOf(context)),
       child: PopScope(
         // The gesture back has to carry the same result as the button, or a user who
-        // swipes out after booking would return to a stale bookings list.
+        // swipes out after booking would return to a stale bookings list. With the chat
+        // list open, back belongs to the drawer: closing it is what the user asked for,
+        // and leaving Scout entirely would be a surprising answer to the same gesture.
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) _leave();
+          if (didPop) return;
+          final scaffold = _scaffold.currentState;
+          if (scaffold != null && scaffold.isDrawerOpen) {
+            scaffold.closeDrawer();
+            return;
+          }
+          _leave();
         },
         child: Scaffold(
+          key: _scaffold,
           backgroundColor: _palette.canvas,
           resizeToAvoidBottomInset: true,
+          drawer: c == null ? null : ScoutDrawer(controller: c),
           body: SafeArea(
             child: c == null
                 ? _signedOut()
@@ -412,9 +430,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
             ),
           ),
           _barAction(
-            icon: Icons.history_rounded,
-            tooltip: 'Chats',
-            onTap: () => showScoutThreadsSheet(context, c),
+            icon: Icons.menu_rounded,
+            tooltip: 'Your chats',
+            onTap: () => _scaffold.currentState?.openDrawer(),
           ),
           _barAction(
             icon: Icons.add_comment_outlined,
