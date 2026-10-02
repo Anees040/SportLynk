@@ -15,6 +15,7 @@ import '../../utils/snackbar_util.dart';
 import '../../widgets/tournament_widgets.dart' show TeamRecordLine;
 import '../shared/chat_thread_screen.dart';
 import 'create_team_screen.dart';
+import 'discover_teams_screen.dart';
 import 'match_center_screen.dart';
 import 'team_rankings_screen.dart';
 
@@ -199,6 +200,12 @@ class _TeamsScreenState extends State<TeamsScreen>
         foregroundColor: Colors.white,
         automaticallyImplyLeading: false,
         actions: [
+          IconButton(
+            tooltip: 'Find a team to join',
+            icon: const Icon(Icons.group_add_outlined),
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const DiscoverTeamsScreen())),
+          ),
           IconButton(
             tooltip: 'Join with link',
             icon: const Icon(Icons.link),
