@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../constants/colors.dart';
 import '../../services/api_service.dart';
+import '../../services/location_service.dart';
 import '../../utils/num_util.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../widgets/network_error_view.dart';
@@ -18,6 +19,11 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
     with ReconnectRefresh<FindVenuesScreen> {
   final _api = ApiClient();
   final _searchCtrl = TextEditingController();
+  final _location = LocationService();
+  // The user's coordinates, fetched once best-effort. Null means location was off or
+  // declined, in which case the recommendation rail keeps its relevance order.
+  double? _lat;
+  double? _lng;
   List<Map<String, dynamic>> _venues = [];
   List<Map<String, dynamic>> _recommended = [];
   String _recommendationSource = 'heuristic';
@@ -103,12 +109,30 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
     if (_minRating > 0) params['min_rating'] = _minRating.toString();
     if (_sort != 'rating') params['sort'] = _sort;
 
+    // The user's location, taken once and best-effort: when it is known, the "For you"
+    // rail asks the server to re-rank its picks nearest-first and label each with a
+    // distance. A declined or unavailable location changes nothing — the rail stays in
+    // the recommender's relevance order.
+    if (_lat == null) {
+      final loc = await _location.current();
+      if (loc != null) {
+        _lat = loc.lat;
+        _lng = loc.lng;
+      }
+    }
+    final recoParams = <String, String>{'limit': '5'};
+    if (_lat != null && _lng != null) {
+      recoParams['lat'] = '$_lat';
+      recoParams['lng'] = '$_lng';
+      recoParams['sort'] = 'nearest';
+    }
+
     // The venue list is required; the recommendation rail is optional. Both are
     // requested together, but only the list's failure becomes the screen's error —
     // a list that renders without its "For you" rail is the correct degradation.
     final results = await Future.wait([
       _api.get('/venues', queryParams: params),
-      _api.get('/venues/recommended', queryParams: {'limit': '5'}),
+      _api.get('/venues/recommended', queryParams: recoParams),
     ]);
     final data = results[0];
     final recoData = results[1];
@@ -579,6 +603,18 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
                         ),
                       ],
                     ),
+                    if (v['distance_km'] != null) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          const Icon(Icons.near_me_rounded, color: Colors.white70, size: 12),
+                          const SizedBox(width: 4),
+                          Text('${v['distance_km']} km away',
+                            style: GoogleFonts.poppins(
+                                color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     if (reasons.isNotEmpty) ...[
                       Wrap(spacing: 5, runSpacing: 4, children: reasons.take(3).map((reason) => Container(
