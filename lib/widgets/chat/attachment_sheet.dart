@@ -62,9 +62,15 @@ class _AttachmentSheetState extends State<_AttachmentSheet> {
       });
       return;
     }
+    // Newest photos first. Without an explicit order the gallery follows the
+    // platform default, which surfaces the oldest shot first and makes a user
+    // scroll past years of photos to reach the one they just took.
     final albums = await PhotoManager.getAssetPathList(
       onlyAll: true,
       type: RequestType.image,
+      filterOption: FilterOptionGroup(
+        orders: const [OrderOption(type: OrderOptionType.createDate, asc: false)],
+      ),
     );
     if (!mounted) return;
     _album = albums.isNotEmpty ? albums.first : null;
