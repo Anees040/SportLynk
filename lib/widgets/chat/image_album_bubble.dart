@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../constants/colors.dart';
 import '../../models/chat_message.dart';
+import '../../utils/cloudinary_url.dart';
 import 'tick_icon.dart';
 
 /// A run of consecutive photos from one sender, drawn as a single WhatsApp-style
@@ -155,8 +156,10 @@ class ImageAlbumBubble extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             CachedNetworkImage(
-              imageUrl: url,
+              imageUrl: chatThumbUrl(url, width: 400),
               fit: BoxFit.cover,
+              memCacheWidth: 400,
+              fadeInDuration: const Duration(milliseconds: 150),
               placeholder: (_, _) => Container(color: AppColors.inputFill),
               errorWidget: (_, _, _) => Container(
                 color: AppColors.inputFill,
