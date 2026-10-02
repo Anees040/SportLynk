@@ -5,12 +5,14 @@
 // `ReviewService.venueReviews` (`_loadReviews`) — kept apart on purpose so a reviews
 // failure never blanks the slots the player came to book.
 //
-// Two properties shape the tests. First, `_load` leaves `_venue` null on a non-200
-// or a thrown request, and the build renders "Venue not found" for that — a genuine
-// reachable state, asserted below. Second, the slot grid re-reads itself on a
-// 30-second `Timer.periodic`, which never completes: `pumpAndSettle` would hang and
-// the timer is pending at teardown unless the screen is disposed. So every test here
-// drives time with explicit pumps and ends by unmounting the screen
+// Two properties shape the tests. First, `_load` distinguishes a reachable "this
+// venue is gone" (a 404, which still renders "Venue not found") from a load that
+// failed for any other reason — a 500, or a dropped connection — which renders the
+// mandated error-with-retry rather than being swallowed into "Venue not found" or
+// an empty grid. Both are asserted below. Second, the slot grid re-reads itself on
+// a 30-second `Timer.periodic`, which never completes: `pumpAndSettle` would hang
+// and the timer is pending at teardown unless the screen is disposed. So every test
+// here drives time with explicit pumps and ends by unmounting the screen
 // (`pumpWidget(SizedBox.shrink())`), which runs `dispose` and cancels the timer.
 //
 // Mount note: `_load` reads `AuthProvider.token` (banged) and `_loadReviews` reads
@@ -28,6 +30,12 @@ import '../screen_harness.dart';
 /// The venue GET, its reviews aggregate, and a slot's lock endpoint, path-keyed.
 const String kVenue = '/venues/v-1';
 const String kReviews = '/venues/v-1/reviews';
+const String kAvailability = '/venues/v-1/availability';
+const String kLock = '/slots/s-1/lock';
+
+/// The screen's own date key format (YYYY-MM-DD), for availability fixtures.
+String dateKey(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 /// One slot in the shape `_load` reads off `data.slots`. `status` drives the grid
 /// cell: 'available' is selectable and priced, anything else is struck through and
@@ -108,6 +116,10 @@ void main() {
     api.install();
     api.ok(kVenue, venue(slots: [slot()]));
     api.ok(kReviews, reviewsPage());
+    // The rail asks for per-date availability on open, and selecting a slot takes a
+    // background hold — stub both so neither 404s into the behaviour under test.
+    api.ok(kAvailability, const {'venueId': 'v-1', 'days': 14, 'byDate': []});
+    api.ok(kLock, const {'slotId': 's-1', 'expiresInSeconds': 300});
   });
 
   group('the venue as it loads', () {
@@ -160,14 +172,63 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('a failed venue load shows Venue not found', (tester) async {
-      // A real reachable state: `_load` leaves `_venue` null on failure and the
-      // build renders the not-found message rather than degrading to a default.
+    testWidgets('a failed venue load offers a retry, not a dead end', (
+      tester,
+    ) async {
+      // A 500 is a reachability failure, not a missing venue. Swallowing it into
+      // "Venue not found" (or an empty grid) tells the player a venue the backend
+      // is serving fine does not exist; the error-with-retry state is mandated for
+      // exactly this case.
       api.fail(kVenue, 'boom');
       await pumpVenue(tester, api);
       await settleData(tester);
 
+      expect(find.text('Venue not found'), findsNothing);
+      expect(find.text('Could not load'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a dropped connection also offers a retry', (tester) async {
+      api.offline(kVenue);
+      await pumpVenue(tester, api);
+      await settleData(tester);
+
+      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsOneWidget);
+      expect(find.text('Venue not found'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a genuine 404 still reads as the venue being gone', (
+      tester,
+    ) async {
+      // The one failure a retry cannot fix. It keeps the plain not-found view,
+      // with no retry, because re-asking for a venue that is gone is a dead end.
+      api.fail(kVenue, 'not found', status: 404);
+      await pumpVenue(tester, api);
+      await settleData(tester);
+
       expect(find.text('Venue not found'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('tapping retry re-runs the load and recovers', (tester) async {
+      api.fail(kVenue, 'boom');
+      await pumpVenue(tester, api);
+      await settleData(tester);
+      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsOneWidget);
+
+      // The second attempt succeeds: FakeApi.on replaces the fixture by path.
+      api.ok(kVenue, venue(slots: [slot()]));
+      await tapVisible(tester, find.widgetWithText(OutlinedButton, 'Retry'));
+      await settleData(tester);
+
+      expect(find.text('Green Turf Arena'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -209,6 +270,67 @@ void main() {
       await tester.pump();
       expect(find.text('No slots available'), findsOneWidget);
       expect(find.text('Try selecting a different date'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('selecting a slot is instant — Book Now lights up before the hold resolves', (
+      tester,
+    ) async {
+      api.ok(kVenue, venue(slots: [slot(id: 's-1', start: '18:00:00')]));
+      await pumpVenue(tester, api);
+      await settleData(tester);
+
+      await tester.ensureVisible(find.text('6:00 PM', skipOffstage: false));
+      await tester.pump();
+      await tester.tap(find.text('6:00 PM'));
+      // A single frame — no network settle. The optimistic selection must have
+      // enabled Book Now without waiting on the background lock round-trip.
+      await tester.pump();
+      final book = tester.widget<ElevatedButton>(
+        find.widgetWithText(ElevatedButton, 'Book Now'),
+      );
+      expect(book.onPressed, isNotNull);
+
+      await settleData(tester); // let the background hold complete
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  });
+
+  group('the date rail', () {
+    testWidgets('switching dates keeps the page, never blanking to a loader', (
+      tester,
+    ) async {
+      await pumpVenue(tester, api);
+      await settleData(tester);
+      expect(find.text('Green Turf Arena'), findsOneWidget);
+
+      // Tapping another date must not replace the whole screen with the first-load
+      // loader — the gallery, name and rail stay while only the grid refreshes.
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      await tester.tap(find.text('${tomorrow.day}').first);
+      await tester.pump(); // one frame, before the fetch could resolve
+      expect(find.text('Green Turf Arena'), findsOneWidget);
+
+      await settleData(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a date chip shows how many slots that day has free', (
+      tester,
+    ) async {
+      final today = DateTime.now();
+      api.ok(kAvailability, {
+        'venueId': 'v-1',
+        'days': 14,
+        'byDate': [
+          {'date': dateKey(today), 'free': 3},
+        ],
+      });
+      await pumpVenue(tester, api);
+      await settleData(tester);
+
+      expect(find.text('3 left'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
