@@ -109,6 +109,8 @@ class ApiConstants {
   static String chatMute(String channelId) => '/chat/$channelId/mute';
   static String chatHide(String channelId) => '/chat/$channelId/hide';
   static String chatQuickReplies(String channelId) => '/chat/$channelId/quick-replies';
+  static String chatPolls(String channelId) => '/chat/$channelId/polls';
+  static String chatPollVote(String channelId, String pollId) => '/chat/$channelId/polls/$pollId/vote';
 
   // Requests (matchmaking) — direct player-to-player play requests (module 8c)
   /// Discovery plus the request state machine. `discover?sport&limit` is the honest
@@ -226,6 +228,11 @@ class ApiConstants {
   /// `"<createdAt>~<id>"`. Building either client-side pages wrong.
   static const String adminDisputes = '/admin/disputes';
   static String adminDispute(String id) => '/admin/disputes/$id';
+  // Booking disputes are a separate queue from match disputes (migration 032): a
+  // player reports a problem with a booking, an admin upholds (refund) or rejects.
+  static const String adminBookingDisputes = '/admin/booking-disputes';
+  static String adminBookingDisputeResolve(String id) =>
+      '/admin/booking-disputes/$id/resolve';
   static const String adminUsers = '/admin/users';
   static String adminSuspendUser(String id) => '/admin/users/$id/suspend';
   static String adminReinstateUser(String id) => '/admin/users/$id/reinstate';
