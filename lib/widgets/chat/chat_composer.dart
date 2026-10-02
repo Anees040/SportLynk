@@ -30,9 +30,11 @@ class ChatComposer extends StatefulWidget {
   final VoidCallback onPickImage;
   final void Function(bool isTyping) onTyping;
 
-  /// Called with the clip's path, its length in milliseconds, and its mime once a
+  /// Called with the clip's path, its length in milliseconds, its mime, and the
+  /// amplitude samples captured while recording (0..1, for the waveform) once a
   /// voice note is released. Null disables voice notes entirely.
-  final void Function(String path, int durationMs, String mime)? onSendAudio;
+  final void Function(String path, int durationMs, String mime, List<double> waveform)?
+      onSendAudio;
 
   /// Optional external focus, so the screen can put the caret in the field when a
   /// reply is started. Null keeps the field's own default focus behaviour.
@@ -81,6 +83,11 @@ class _ChatComposerState extends State<ChatComposer> {
   bool _paused = false;
   Timer? _ticker;
 
+  // Amplitude samples captured while recording (0..1), downsampled to the
+  // waveform on release. The subscription is cancelled when recording ends.
+  final List<double> _amplitudes = [];
+  StreamSubscription<Amplitude>? _ampSub;
+
   // Elapsed time accumulates across pause/resume: [_elapsedBase] holds the time
   // banked by finished runs, and [_runStart] marks the current unpaused run.
   Duration _elapsedBase = Duration.zero;
@@ -106,6 +113,7 @@ class _ChatComposerState extends State<ChatComposer> {
     widget.controller.removeListener(_onChanged);
     _stopTimer?.cancel();
     _ticker?.cancel();
+    _ampSub?.cancel();
     _recorder?.dispose();
     _cuePlayer?.dispose();
     super.dispose();
@@ -228,6 +236,13 @@ class _ChatComposerState extends State<ChatComposer> {
 
     _elapsedBase = Duration.zero;
     _runStart = DateTime.now();
+    // Sample loudness for the waveform. dBFS runs from roughly -45 (silence) to 0
+    // (loudest); map that onto 0..1 and collect a sample every ~180 ms.
+    _amplitudes.clear();
+    _ampSub?.cancel();
+    _ampSub = rec
+        .onAmplitudeChanged(const Duration(milliseconds: 180))
+        .listen((amp) => _amplitudes.add(((amp.current + 45) / 45).clamp(0.0, 1.0)));
     _startTicker();
     setState(() => _recording = true);
     unawaited(_playRecStartCue());
@@ -312,9 +327,12 @@ class _ChatComposerState extends State<ChatComposer> {
   Future<void> _finishRecording({required bool cancel}) async {
     _ticker?.cancel();
     _ticker = null;
+    _ampSub?.cancel();
+    _ampSub = null;
     _accumulate();
     final rec = _recorder;
     final ms = _elapsedBase.inMilliseconds;
+    final waveform = _downsample(_amplitudes, 40);
     if (mounted) {
       setState(() {
         _recording = false;
@@ -354,20 +372,40 @@ class _ChatComposerState extends State<ChatComposer> {
       path = null;
     }
     if (path != null && path.isNotEmpty) {
-      widget.onSendAudio?.call(path, ms, 'audio/mp4');
+      widget.onSendAudio?.call(path, ms, 'audio/mp4', waveform);
     }
+  }
+
+  /// Average [src] down to at most [target] bars so the stored waveform is a
+  /// fixed, small shape regardless of how long the clip ran.
+  List<double> _downsample(List<double> src, int target) {
+    if (src.isEmpty) return const [];
+    if (src.length <= target) return List<double>.from(src);
+    final out = <double>[];
+    final bucket = src.length / target;
+    for (var i = 0; i < target; i++) {
+      final start = (i * bucket).floor();
+      final end = (((i + 1) * bucket).floor()).clamp(start + 1, src.length);
+      var sum = 0.0;
+      for (var j = start; j < end; j++) {
+        sum += src[j];
+      }
+      out.add(sum / (end - start));
+    }
+    return out;
   }
 
   @override
   Widget build(BuildContext context) {
+    // No opaque bar and no hard top divider: the composer floats over the chat
+    // background as a foreground element — the pill and the send control each
+    // carry their own elevation — rather than reading as a flat strip bolted to
+    // the bottom. The camera now sits inside the pill, WhatsApp-style, so the row
+    // outside it holds only the field and the single send/mic control.
     return SafeArea(
       top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
         child: _locked
             ? _lockedBar()
             : Column(
@@ -381,7 +419,6 @@ class _ChatComposerState extends State<ChatComposer> {
                       Expanded(
                           child:
                               _recording ? _recordingBar() : _inputField()),
-                      if (!_recording) _attachButton(),
                       const SizedBox(width: 6),
                       _rightButton(),
                     ],
@@ -391,6 +428,21 @@ class _ChatComposerState extends State<ChatComposer> {
       ),
     );
   }
+
+  // The shared pill: a rounded white surface with a soft shadow, used by the
+  // input field, the by-hand recording bar and the locked bar so all three read
+  // as one floating control rather than three differently-bordered boxes.
+  static final BoxDecoration _pillDecoration = BoxDecoration(
+    color: AppColors.white,
+    borderRadius: BorderRadius.circular(26),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.06),
+        blurRadius: 8,
+        offset: const Offset(0, 2),
+      ),
+    ],
+  );
 
   Widget _attachButton() {
     // A camera icon, not a paperclip: tapping it opens the live camera, from
@@ -405,11 +457,7 @@ class _ChatComposerState extends State<ChatComposer> {
 
   Widget _inputField() {
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
-      ),
+      decoration: _pillDecoration,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -433,7 +481,7 @@ class _ChatComposerState extends State<ChatComposer> {
               ),
             ),
           ),
-          const SizedBox(width: 4),
+          _attachButton(),
         ],
       ),
     );
@@ -480,11 +528,7 @@ class _ChatComposerState extends State<ChatComposer> {
     return Container(
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
-      ),
+      decoration: _pillDecoration,
       child: Row(
         children: [
           _pulseDot(on),
@@ -528,45 +572,50 @@ class _ChatComposerState extends State<ChatComposer> {
     final m = _elapsed.inMinutes;
     final s = (_elapsed.inSeconds % 60).toString().padLeft(2, '0');
     final on = _paused || (_elapsed.inMilliseconds ~/ 500) % 2 == 0;
-    return Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.delete_outline, color: AppColors.error),
-          tooltip: 'Discard recording',
-          onPressed: () => _finishRecording(cancel: true),
-        ),
-        _pulseDot(on),
-        const SizedBox(width: 10),
-        Text('$m:$s',
-            style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            _paused ? 'Paused' : 'Recording…',
-            style: const TextStyle(
-                fontSize: 12.5, color: AppColors.textSecondary),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: _pillDecoration,
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: AppColors.error),
+            tooltip: 'Discard recording',
+            onPressed: () => _finishRecording(cancel: true),
           ),
-        ),
-        IconButton(
-          icon: Icon(_paused ? Icons.play_arrow : Icons.pause,
-              color: AppColors.primary),
-          tooltip: _paused ? 'Resume recording' : 'Pause recording',
-          onPressed: _togglePause,
-        ),
-        const SizedBox(width: 4),
-        Material(
-          color: AppColors.accent,
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => _finishRecording(cancel: false),
-            child: const Padding(
-              padding: EdgeInsets.all(12),
-              child: Icon(Icons.send_rounded, color: Colors.white, size: 22),
+          _pulseDot(on),
+          const SizedBox(width: 10),
+          Text('$m:$s',
+              style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _paused ? 'Paused' : 'Recording…',
+              style: const TextStyle(
+                  fontSize: 12.5, color: AppColors.textSecondary),
             ),
           ),
-        ),
-      ],
+          IconButton(
+            icon: Icon(_paused ? Icons.play_arrow : Icons.pause,
+                color: AppColors.primary),
+            tooltip: _paused ? 'Resume recording' : 'Pause recording',
+            onPressed: _togglePause,
+          ),
+          const SizedBox(width: 4),
+          Material(
+            color: AppColors.accent,
+            elevation: 2,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => _finishRecording(cancel: false),
+              child: const Padding(
+                padding: EdgeInsets.all(12),
+                child: Icon(Icons.send_rounded, color: Colors.white, size: 22),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -591,6 +640,13 @@ class _ChatComposerState extends State<ChatComposer> {
             decoration: BoxDecoration(
               color: _recording ? AppColors.error : AppColors.accent,
               shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
             ),
             child: Icon(Icons.mic, color: Colors.white, size: size),
           ),
@@ -599,12 +655,13 @@ class _ChatComposerState extends State<ChatComposer> {
     }
 
     // The send button: a state, not a decoration — grey and inert until there is
-    // something to send.
+    // something to send. Only the armed button lifts off the surface.
     return AnimatedScale(
       scale: _hasText ? 1 : 0.9,
       duration: const Duration(milliseconds: 120),
       child: Material(
         color: _hasText ? AppColors.accent : AppColors.disabled,
+        elevation: _hasText ? 2 : 0,
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
