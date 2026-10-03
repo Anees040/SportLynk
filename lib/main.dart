@@ -6,6 +6,7 @@ import 'constants/app_theme.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/booking_provider.dart';
+import 'providers/connectivity_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/venue_provider.dart';
 import 'routes/app_routes.dart';
@@ -54,6 +55,11 @@ class SportLynkApp extends StatelessWidget {
         // The bell badge on all three home headers, the feed screen, and the
         // `notification:new` socket subscription that keeps them live.
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        // Whether the server is reachable, as one value every screen can read.
+        // App-level rather than per-screen because the offline strip has to agree
+        // with itself across tabs: two screens holding their own idea of the
+        // connection would disagree during a drop.
+        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
       ],
       child: ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),

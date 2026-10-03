@@ -42,15 +42,50 @@ const VENUE_COLUMNS = `id, name, city, sport_type, rating, price_per_hour, base_
                        operating_hours_from, operating_hours_to`;
 
 /**
+ * `venues.slot_duration_minutes` arrives with migration 034, and this service runs
+ * against a database where that migration may not be applied yet. Naming the
+ * column in a SELECT before it exists would throw `column does not exist` and take
+ * every slot generation path down with it — a venue create, the hourly sweep and
+ * the owner's generate button — so its presence is probed once and the column list
+ * is assembled from the answer. Until the migration runs, every venue is read as
+ * having no stated duration and `grid.durationOf` returns the 60-minute default,
+ * which is exactly the behaviour that shipped before.
+ *
+ * A positive answer is cached for the life of the process because a column cannot
+ * disappear. A negative answer is not cached, so applying the migration takes
+ * effect on the next call rather than requiring a restart.
+ */
+let durationColumnPresent = false;
+
+async function venueColumns(db) {
+  if (durationColumnPresent) return `${VENUE_COLUMNS}, slot_duration_minutes`;
+  try {
+    const { rows } = await db.query(
+      `SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'venues'
+          AND column_name = 'slot_duration_minutes'`,
+    );
+    durationColumnPresent = rows.length === 1;
+  } catch {
+    // An unreadable catalogue is not a reason to stop generating slots at the
+    // default duration; the next call probes again.
+    durationColumnPresent = false;
+  }
+  return durationColumnPresent ? `${VENUE_COLUMNS}, slot_duration_minutes` : VENUE_COLUMNS;
+}
+
+/**
  * Fill the gaps in one venue's rolling window.
  *
  * `runner` is a pool or a checked-out client, so a caller already inside a
  * transaction (admin owner-approval) keeps its atomicity and a caller that is not
  * (the sweep) pays for no transaction it does not need.
  *
- * Returns `{ created, skipped, expected, skippedVenue, reason, fromHour, toHour }`.
- * A venue is skipped rather than failed when it has no usable price or no forward
- * hour range, because neither is this service's business to invent.
+ * Returns `{ created, skipped, expected, skippedVenue, reason, window, durationMin,
+ * perDay, skippedCrossingMidnight }`.
+ * A venue is skipped rather than failed when it has no usable price or no usable
+ * hour window, because neither is this service's business to invent.
  */
 async function ensureVenueSlots(runner, {
   venueId,
@@ -58,6 +93,7 @@ async function ensureVenueSlots(runner, {
   days = grid.HORIZON_DAYS,
   fromHour = null,
   toHour = null,
+  durationMin = null,
   price = null,
   dryRun = false,
 } = {}) {
@@ -67,30 +103,37 @@ async function ensureVenueSlots(runner, {
 
   const refuse = (reason) => ({
     created: 0, skipped: 0, expected: 0, skippedVenue: true, reason,
-    fromHour: null, toHour: null,
+    window: null, durationMin: null, perDay: 0, skippedCrossingMidnight: 0,
   });
 
   // The venue's price and hours are read here only when the caller did not
   // already have the row, so a caller holding it does not pay for a second read.
   let row = venue;
   if (!row) {
-    const r = await db.query(`SELECT ${VENUE_COLUMNS} FROM venues WHERE id = $1`, [id]);
+    const r = await db.query(`SELECT ${await venueColumns(db)} FROM venues WHERE id = $1`, [id]);
     if (!r.rows.length) return refuse('venue not found');
     row = r.rows[0];
   }
 
-  const hours = grid.resolveHours(row, {
+  const win = grid.resolveWindow(row, {
     fromHour: fromHour == null ? undefined : fromHour,
     toHour: toHour == null ? undefined : toHour,
+    durationMin: durationMin == null ? undefined : durationMin,
   });
-  if (!hours.ok) return refuse(hours.reason);
+  if (!win.ok) return refuse(win.reason);
 
-  const rate = price != null && Number(price) > 0 ? Number(price) : grid.priceOf(row);
+  const rate = price != null && Number(price) > 0
+    ? Number(price)
+    : grid.priceOf(row, win.durationMin);
   if (!(rate > 0)) return refuse('no price set');
 
-  const horizon = grid.clampDays(days);
-  const expected = grid.gridSize(horizon, hours.fromHour, hours.toHour);
-  const params = [id, rate, horizon, hours.fromHour, hours.toHour];
+  const plan = grid.buildGrid({
+    days,
+    startMin: win.startMin,
+    spanMin: win.spanMin,
+    durationMin: win.durationMin,
+  });
+  const params = [id, rate, plan.offsets, plan.starts, plan.ends];
 
   let created = 0;
   if (dryRun) {
@@ -107,12 +150,110 @@ async function ensureVenueSlots(runner, {
 
   return {
     created,
-    skipped: Math.max(0, expected - created),
-    expected,
+    skipped: Math.max(0, plan.total - created),
+    expected: plan.total,
     skippedVenue: false,
     reason: null,
-    fromHour: hours.fromHour,
-    toHour: hours.toHour,
+    window: win.window,
+    durationMin: win.durationMin,
+    perDay: plan.perDay,
+    skippedCrossingMidnight: plan.skippedCrossingMidnight,
+  };
+}
+
+/**
+ * Re-cut one venue's future window after its hours or slot length changed.
+ *
+ * `ensureVenueSlots` only ever adds, which is what makes the hourly sweep safe.
+ * That is not enough when an owner edits their hours: a ground that moves from
+ * 08:00-23:00 to 16:00-23:00 would keep selling its mornings forever, because
+ * nothing retires a slot that is no longer inside the window. This function is the
+ * one place a slot is deleted, and it is deliberately narrow — see
+ * `grid.STALE_PREDICATE` for the five things it refuses to touch.
+ *
+ * What an owner is told rather than what is hidden from them: `removed` counts the
+ * unsold hours retired, and `keptOutside` counts the hours outside the new window
+ * that are booked, blocked or reserved for a fixture and therefore stand. A
+ * narrowed window does not cancel a booking — only a cancellation does that, and
+ * it moves money.
+ *
+ * Callers pass a transaction client when the hours change and the reshape must
+ * stand or fall together.
+ */
+async function reshapeVenueSlots(runner, {
+  venueId,
+  venue = null,
+  days = grid.HORIZON_DAYS,
+  dryRun = false,
+} = {}) {
+  const db = runner || pool;
+  const id = String(venueId == null ? '' : venueId).trim();
+  if (!id) throw new Error('reshapeVenueSlots requires a venueId');
+
+  let row = venue;
+  if (!row) {
+    const r = await db.query(`SELECT ${await venueColumns(db)} FROM venues WHERE id = $1`, [id]);
+    if (!r.rows.length) return { ok: false, created: 0, removed: 0, keptOutside: 0, reason: 'venue not found' };
+    row = r.rows[0];
+  }
+
+  const win = grid.resolveWindow(row);
+  if (!win.ok) return { ok: false, created: 0, removed: 0, keptOutside: 0, reason: win.reason };
+
+  const rate = grid.priceOf(row, win.durationMin);
+  if (!(rate > 0)) return { ok: false, created: 0, removed: 0, keptOutside: 0, reason: 'no price set' };
+
+  const plan = grid.buildGrid({
+    days,
+    startMin: win.startMin,
+    spanMin: win.spanMin,
+    durationMin: win.durationMin,
+  });
+  const shape = [id, plan.offsets, plan.starts];
+
+  const kept = await db.query(grid.KEPT_OUTSIDE_SQL, shape);
+  const keptOutside = kept.rows[0].c;
+
+  if (dryRun) {
+    const stale = await db.query(grid.STALE_COUNT_SQL, shape);
+    const toCreate = await db.query(
+      `SELECT COUNT(*)::int AS c FROM (${grid.GRID_SQL}) g`,
+      [id, rate, plan.offsets, plan.starts, plan.ends],
+    );
+    return {
+      ok: true,
+      dryRun: true,
+      created: toCreate.rows[0].c,
+      removed: stale.rows[0].c,
+      keptOutside,
+      window: win.window,
+      durationMin: win.durationMin,
+      perDay: plan.perDay,
+      skippedCrossingMidnight: plan.skippedCrossingMidnight,
+      reason: null,
+    };
+  }
+
+  // Retire first, then fill. The other order would insert the new grid and then
+  // have to exclude it from the delete, which is the same predicate carrying one
+  // more reason to be wrong.
+  const removed = await db.query(grid.STALE_SQL, shape);
+  const inserted = await db.query(
+    `INSERT INTO slots (venue_id, slot_date, start_time, end_time, price, status)
+     ${grid.GRID_SQL}`,
+    [id, rate, plan.offsets, plan.starts, plan.ends],
+  );
+
+  return {
+    ok: true,
+    created: inserted.rowCount,
+    removed: removed.rowCount,
+    keptOutside,
+    window: win.window,
+    durationMin: win.durationMin,
+    perDay: plan.perDay,
+    skippedCrossingMidnight: plan.skippedCrossingMidnight,
+    reason: null,
   };
 }
 
@@ -146,7 +287,7 @@ async function ensureActiveVenueSlots({
 } = {}) {
   const db = runner || pool;
   const venues = await db.query(
-    `SELECT ${VENUE_COLUMNS}
+    `SELECT ${await venueColumns(db)}
        FROM venues
       WHERE is_active = true
         ${venueId ? 'AND id = $1' : ''}
@@ -167,7 +308,7 @@ async function ensureActiveVenueSlots({
       results.push({
         id: v.id, name: v.name, created: 0, skipped: 0, expected: 0,
         skippedVenue: true, failed: true, reason: e.message,
-        fromHour: null, toHour: null,
+        window: null, durationMin: null, perDay: 0, skippedCrossingMidnight: 0,
       });
     }
   }
@@ -222,20 +363,25 @@ async function repriceVenueSlots(runner, { venueId, venue = null, dryRun = false
 
   let row = venue;
   if (!row) {
-    const r = await db.query(`SELECT ${VENUE_COLUMNS} FROM venues WHERE id = $1`, [id]);
+    const r = await db.query(`SELECT ${await venueColumns(db)} FROM venues WHERE id = $1`, [id]);
     if (!r.rows.length) return { ok: false, repriced: 0, reason: 'venue not found' };
     row = r.rows[0];
   }
 
-  const hours = grid.resolveHours(row);
-  if (!hours.ok) return { ok: false, repriced: 0, reason: hours.reason };
-  const basePrice = grid.priceOf(row);
+  const win = grid.resolveWindow(row);
+  if (!win.ok) return { ok: false, repriced: 0, reason: win.reason };
+  // The slot's own price, not the hourly rate: a 30-minute slot is quoted to the
+  // model at half the hourly figure, so the suggestion it returns is a price for
+  // the thing actually being sold.
+  const basePrice = grid.priceOf(row, win.durationMin);
   if (!(basePrice > 0)) return { ok: false, repriced: 0, reason: 'no price set' };
 
   const slotDate = pricingDate();
   const venueRating = Number(row.rating) > 0 ? Number(row.rating) : null;
-  const hourList = [];
-  for (let h = hours.fromHour; h < hours.toHour; h += 1) hourList.push(h);
+  // The hours a slot actually starts in, taken from the window rather than counted
+  // off from an opening hour. A window that runs past midnight covers 18..23 and
+  // 00..01, which no `for (h = from; h < to)` loop can express.
+  const hourList = win.hours;
 
   const plan = await Promise.all(
     hourList.map((h) => mlClient.suggestPrice({
@@ -276,7 +422,7 @@ async function repriceVenueSlots(runner, { venueId, venue = null, dryRun = false
 async function repriceActiveVenues({ venueId = null, dryRun = false, runner = null } = {}) {
   const db = runner || pool;
   const venues = await db.query(
-    `SELECT ${VENUE_COLUMNS}
+    `SELECT ${await venueColumns(db)}
        FROM venues
       WHERE is_active = true
         ${venueId ? 'AND id = $1' : ''}
@@ -306,6 +452,7 @@ async function repriceActiveVenues({ venueId = null, dryRun = false, runner = nu
 module.exports = {
   ensureVenueSlots,
   ensureActiveVenueSlots,
+  reshapeVenueSlots,
   repriceVenueSlots,
   repriceActiveVenues,
   countBookable,
@@ -314,6 +461,9 @@ module.exports = {
   PKT_TIMEZONE: grid.PKT_TIMEZONE,
   clampDays: grid.clampDays,
   describeWindow: grid.describeWindow,
+  resolveWindow: grid.resolveWindow,
+  ALLOWED_DURATIONS: grid.ALLOWED_DURATIONS,
+  DEFAULT_DURATION_MINUTES: grid.DEFAULT_DURATION_MINUTES,
   FALLBACK_FROM_HOUR: grid.FALLBACK_FROM_HOUR,
   FALLBACK_TO_HOUR: grid.FALLBACK_TO_HOUR,
 };

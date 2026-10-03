@@ -919,6 +919,23 @@ test('getOrCreate(): forceNew creates instead of resuming — the three-chats bu
   assert.ok(client.seen.some((q) => /^INSERT INTO chat_channels/i.test(q.sql)));
 });
 
+// Reported from the phone: a NEW chat answered "support" by naming the ground from the
+// PREVIOUS chat. That is only possible if the new thread started with that ground in
+// its slots, so this pins the opposite at the point the row is written — the INSERT
+// itself must carry an empty state. (The other half, that the ground cannot be invented
+// later, is resolveVenue: with no venueId and no name it returns no venue at all.)
+test('getOrCreate(): a forceNew thread is INSERTed with a genuinely empty state', async () => {
+  const client = stubClient({ newest: [{ id: 'old-id', session_state: null }] });
+  await threads.getOrCreate(client, { userId: 'u1', forceNew: true });
+  const insert = client.seen.find((q) => /^INSERT INTO chat_channels/i.test(q.sql));
+  assert.ok(insert, 'a new chat is a new row');
+  const state = JSON.parse(insert.args[2]);
+  assert.deepEqual(state.slots, {}, 'no ground, date or slot carried from the last chat');
+  assert.equal(state.intent, null, 'and no intent either');
+  assert.equal(state.pending, null);
+  assert.equal(state.confirm, null, 'least of all an armed confirmation');
+});
+
 test('getOrCreate(): an explicit thread id beats forceNew, because a resume is a resume', async () => {
   const row = { id: 'wanted-id', title: 'that one', session_state: null };
   const client = stubClient({ newest: [row] });

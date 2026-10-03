@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cloudinary_public/cloudinary_public.dart' show CloudinaryResourceType;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -68,6 +69,10 @@ class ChatController extends ChangeNotifier {
   /// finishes. Absent means "not uploading" — the bubble shows no ring.
   final Map<String, double> _uploadProgress = {};
 
+  /// Why a failed send failed, per optimistic clientId. Cleared on a retry, so a
+  /// bubble shows the reason for its latest attempt and nothing older.
+  final Map<String, String> _sendError = {};
+
   /// Image uploads run a few at a time rather than strictly one after another, so
   /// a batch of photos appears and climbs together instead of trickling in; the
   /// cap keeps a phone's uplink from being split so thin that none makes progress.
@@ -121,6 +126,11 @@ class ChatController extends ChangeNotifier {
   /// are moving, and an indeterminate one for the brief server-send that follows.
   double? uploadProgressFor(ChatMessage m) =>
       m.clientId == null ? null : _uploadProgress[m.clientId];
+
+  /// Why this message's send failed, or null. Shown on the bubble so a failure
+  /// names its cause ("Upload preset not found") instead of only "Not sent".
+  String? sendErrorFor(ChatMessage m) =>
+      m.clientId == null ? null : _sendError[m.clientId];
 
   /// Whether to show the "Connecting…" bar: only once we have been offline past
   /// the grace, so a momentary reconnect stays silent.
@@ -494,27 +504,24 @@ class ChatController extends ChangeNotifier {
 
   Future<void> _uploadAndSendImage(String clientId, String localPath,
       String? mediaMime, int mediaW, int mediaH, String? caption, String? replyToId) async {
-    final url = await CloudinaryService().uploadImage(
+    final up = await CloudinaryService().upload(
       localPath,
+      resourceType: CloudinaryResourceType.Image,
       folder: 'chat',
       onProgress: (sent, total) => _onUploadProgress(clientId, sent, total),
     );
     _uploadProgress.remove(clientId);
     if (_canceled.remove(clientId)) return; // cancelled during upload
 
-    if (url == null) {
-      final temp = _byId['local:$clientId'];
-      if (temp != null) {
-        _byId['local:$clientId'] = temp.copyWith(pending: false, failed: true);
-        _rebuild();
-      }
+    if (up.url == null) {
+      _fail(clientId, up.error ?? 'Upload failed');
       return;
     }
 
     final r = await _chat.sendImage(
       token,
       channelId,
-      mediaUrl: url,
+      mediaUrl: up.url!,
       mediaMime: mediaMime,
       mediaW: mediaW,
       mediaH: mediaH,
@@ -524,6 +531,17 @@ class ChatController extends ChangeNotifier {
     );
     if (_canceled.remove(clientId)) return; // cancelled during the server send
     _reconcile(clientId, r);
+  }
+
+  /// Mark an optimistic message failed and record why, so the bubble can name
+  /// the cause instead of showing a bare "Not sent" the user cannot act on.
+  void _fail(String clientId, String reason) {
+    _sendError[clientId] = reason;
+    final temp = _byId['local:$clientId'];
+    if (temp != null) {
+      _byId['local:$clientId'] = temp.copyWith(pending: false, failed: true);
+    }
+    _rebuild();
   }
 
   /// Send a just-recorded voice note. The bubble appears immediately with its
@@ -567,22 +585,28 @@ class ChatController extends ChangeNotifier {
 
   Future<void> _uploadAndSendAudio(String clientId, String localPath,
       String? mediaMime, int durationMs, List<double> waveform, String? replyToId) async {
-    final url = await CloudinaryService().uploadAudio(localPath, folder: 'chat_audio');
+    // Audio goes up under Cloudinary's Video resource type. An unsigned preset
+    // limited to images refuses it, and that refusal is the one message that
+    // explains why a voice note never arrives — so it is carried to the bubble
+    // rather than collapsed into a bare failure.
+    final up = await CloudinaryService().upload(
+      localPath,
+      resourceType: CloudinaryResourceType.Video,
+      folder: 'chat_audio',
+      onProgress: (sent, total) => _onUploadProgress(clientId, sent, total),
+    );
+    _uploadProgress.remove(clientId);
     if (_canceled.remove(clientId)) return; // cancelled during upload
 
-    if (url == null) {
-      final temp = _byId['local:$clientId'];
-      if (temp != null) {
-        _byId['local:$clientId'] = temp.copyWith(pending: false, failed: true);
-        _rebuild();
-      }
+    if (up.url == null) {
+      _fail(clientId, up.error ?? 'Upload failed');
       return;
     }
 
     final r = await _chat.sendAudio(
       token,
       channelId,
-      mediaUrl: url,
+      mediaUrl: up.url!,
       mediaMime: mediaMime,
       durationMs: durationMs,
       waveform: waveform,
@@ -600,6 +624,7 @@ class ChatController extends ChangeNotifier {
     if (cid == null || !m.pending) return;
     _canceled.add(cid);
     _uploadProgress.remove(cid);
+    _sendError.remove(cid);
     _byId.remove(m.id);
     _rebuild();
   }
@@ -627,6 +652,9 @@ class ChatController extends ChangeNotifier {
   Future<void> retry(ChatMessage failed) async {
     if (!failed.failed) return;
     _byId.remove(failed.id);
+    // The previous attempt's reason must not outlive it, or a retry that is
+    // still in flight would show the old failure under a live clock.
+    if (failed.clientId != null) _sendError.remove(failed.clientId);
     _rebuild();
     if (failed.kind == MessageKind.image) {
       // A failed image usually failed at the upload, so it still has only its

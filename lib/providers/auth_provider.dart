@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/offline_cache.dart';
 import '../services/realtime_service.dart';
 import '../services/push_service.dart';
 
@@ -34,6 +35,10 @@ class AuthProvider extends ChangeNotifier {
   /// even before a chat screen is opened). Safe to call with a null/empty token.
   void _bindSession() {
     ApiClient.authToken = _token;
+    // The offline cache is keyed by user, so the owner has to be bound before any
+    // screen reads or writes one. Binding it here rather than in each screen is
+    // what guarantees a cached list can never be read back under another account.
+    OfflineCache.userId = _currentUser?.id;
     if (_token != null && _token!.isNotEmpty) {
       RealtimeService().ensureConnected(_token!);
     }
@@ -248,6 +253,10 @@ class AuthProvider extends ChangeNotifier {
       _token = null;
       _currentUser = null;
       await _authService.clearToken();
+      // An expired token ends the session as surely as a logout, so the cached
+      // screens go with it rather than waiting for whoever logs in next.
+      await OfflineCache.clearForUser();
+      OfflineCache.userId = null;
       ApiClient.authToken = null;
       RealtimeService().disconnect();
     } else if (result.user != null) {
@@ -336,6 +345,12 @@ class AuthProvider extends ChangeNotifier {
     // bookkeeping detail.
     final leaving = _token;
     if (leaving != null && leaving.isNotEmpty) PushService().unregister(leaving);
+    // Drop this account's cached screens before the owner id is cleared.
+    // `clearForUser` captures the id synchronously, so the assignment below cannot
+    // race it. Fire and forget for the same reason the push revoke is: a logout
+    // must not wait on disk any more than it waits on the network.
+    unawaited(OfflineCache.clearForUser());
+    OfflineCache.userId = null;
     _currentUser = null;
     _token = null;
     _errorMessage = null;

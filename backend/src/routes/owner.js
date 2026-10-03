@@ -474,6 +474,11 @@ router.get("/venues", async (req, res, next) => {
               v.price_per_hour, v.rating, v.total_reviews,
               v.venue_photos, v.operating_hours_from, v.operating_hours_to,
               v.is_active, v.created_at,
+              -- Read through to_jsonb rather than named directly: the column arrives
+              -- with migration 034, and naming a column that does not exist yet
+              -- would 500 the owner's whole venue list. Absent reads as NULL, which
+              -- the management screen shows as the 60-minute default.
+              to_jsonb(v) ->> 'slot_duration_minutes' AS slot_duration_minutes,
               (SELECT COUNT(*) FROM bookings b WHERE b.venue_id = v.id AND b.status='pending') AS pending_bookings,
               (SELECT COUNT(*) FROM bookings b WHERE b.venue_id = v.id AND b.slot_date = CURRENT_DATE AND b.status IN ('confirmed','checked_in')) AS todays_bookings
        FROM venues v
@@ -549,15 +554,82 @@ router.post("/venues", async (req, res, next) => {
 });
 
 // PATCH /api/owner/venues/:id
+//
+// Operating hours and slot length are accepted here, and until now they were not:
+// the body was read for description, price and photos only, so a ground registered
+// with the wrong hours could never be corrected from the app and a ground that
+// wanted 30-minute slots had no way to ask. Both now reshape the venue's future
+// window in the same transaction as the write (see slotService.reshapeVenueSlots),
+// because hours that are saved while the grid still shows the old ones is the
+// version of this feature that looks like it works and does not.
+//
+// What is deliberately refused rather than guessed: a window the generator could
+// not use. The prospective values are run through the same resolveWindow the
+// generator uses, so the owner is told "a 90-minute slot does not fit in
+// 08:00-09:00" before anything is written, rather than saving successfully and
+// quietly producing no slots.
+const TIME_RE = /^([01]\d|2[0-4]):([0-5]\d)(:[0-5]\d)?$/;
+
 router.patch("/venues/:id", async (req, res, next) => {
+  const client = await pool.connect();
   try {
     const ownerId = req.user.id;
     const { id } = req.params;
-    const { description, price_per_hour, venue_photos } = req.body;
+    const {
+      description,
+      price_per_hour,
+      venue_photos,
+      operating_hours_from,
+      operating_hours_to,
+      slot_duration_minutes,
+    } = req.body;
 
-    const vCheck = await pool.query('SELECT id FROM venues WHERE id=$1 AND owner_id=$2', [id, ownerId]);
+    const vCheck = await client.query(
+      `SELECT id, operating_hours_from, operating_hours_to, price_per_hour, base_price
+         FROM venues WHERE id=$1 AND owner_id=$2`,
+      [id, ownerId],
+    );
     if (!vCheck.rows.length) {
       return res.status(404).json({ success: false, message: 'Venue not found or unauthorized' });
+    }
+    const current = vCheck.rows[0];
+
+    const reshapes = operating_hours_from !== undefined
+      || operating_hours_to !== undefined
+      || slot_duration_minutes !== undefined;
+
+    // Validate before opening the transaction, so a rejected edit costs no lock.
+    for (const [field, value] of [
+      ['operating_hours_from', operating_hours_from],
+      ['operating_hours_to', operating_hours_to],
+    ]) {
+      if (value !== undefined && !TIME_RE.test(String(value))) {
+        return res.status(400).json({
+          success: false,
+          message: `${field} must be a time of day such as 14:30.`,
+        });
+      }
+    }
+    if (slot_duration_minutes !== undefined
+      && !slotService.ALLOWED_DURATIONS.includes(Number(slot_duration_minutes))) {
+      return res.status(400).json({
+        success: false,
+        message: `Slot length must be one of ${slotService.ALLOWED_DURATIONS.join(', ')} minutes.`,
+      });
+    }
+
+    if (reshapes) {
+      const prospective = slotService.resolveWindow({
+        operating_hours_from: operating_hours_from !== undefined
+          ? operating_hours_from : current.operating_hours_from,
+        operating_hours_to: operating_hours_to !== undefined
+          ? operating_hours_to : current.operating_hours_to,
+        slot_duration_minutes: slot_duration_minutes !== undefined
+          ? Number(slot_duration_minutes) : undefined,
+      });
+      if (!prospective.ok) {
+        return res.status(400).json({ success: false, message: `Cannot save — ${prospective.reason}.` });
+      }
     }
 
     const updates = [];
@@ -581,18 +653,85 @@ router.patch("/venues/:id", async (req, res, next) => {
       updates.push(`venue_photos=$${i++}`);
       values.push(venue_photos);
     }
-
-    if (updates.length > 0) {
-      values.push(id);
-      await pool.query(
-        `UPDATE venues SET ${updates.join(', ')} WHERE id=$${i}`,
-        values
-      );
+    if (operating_hours_from !== undefined) {
+      updates.push(`operating_hours_from=$${i++}`);
+      values.push(operating_hours_from);
+    }
+    if (operating_hours_to !== undefined) {
+      updates.push(`operating_hours_to=$${i++}`);
+      values.push(operating_hours_to);
+    }
+    if (slot_duration_minutes !== undefined) {
+      updates.push(`slot_duration_minutes=$${i++}`);
+      values.push(Number(slot_duration_minutes));
     }
 
-    res.json({ success: true, message: 'Venue updated successfully' });
+    let shape = null;
+    await client.query('BEGIN');
+    try {
+      if (updates.length > 0) {
+        values.push(id);
+        await client.query(`UPDATE venues SET ${updates.join(', ')} WHERE id=$${i}`, values);
+      }
+      // Same transaction as the write: an owner whose hours saved but whose grid did
+      // not move would be selling the old window with no sign of it.
+      if (reshapes) shape = await slotService.reshapeVenueSlots(client, { venueId: id });
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      // The slot-length column arrives with migration 034. Until it is applied this
+      // is the one field that cannot be written, and saying which migration is
+      // missing beats a 500 that reads as a broken screen.
+      if (slot_duration_minutes !== undefined && /slot_duration_minutes/.test(e.message)) {
+        return res.status(409).json({
+          success: false,
+          message: 'Slot length cannot be saved yet — migration 034 has not been applied to this database.',
+        });
+      }
+      throw e;
+    }
+
+    if (reshapes) {
+      // Outside the transaction and never awaited: repricing calls ml-service, and a
+      // network round trip must not be held open across a DB client or made to block
+      // the owner's save.
+      slotService.repriceVenueSlots(pool, { venueId: id }).catch(() => {});
+    }
+
+    const parts = ['Venue updated successfully'];
+    if (shape && shape.ok) {
+      parts.push(`Hours are now ${shape.window} in ${shape.durationMin}-minute slots`
+        + ` (${shape.perDay} per day).`);
+      if (shape.created) parts.push(`${shape.created} slot(s) opened.`);
+      if (shape.removed) parts.push(`${shape.removed} unsold slot(s) outside the new hours were closed.`);
+      if (shape.keptOutside) {
+        parts.push(`${shape.keptOutside} slot(s) outside the new hours are booked, blocked`
+          + ' or reserved and were left in place.');
+      }
+      if (shape.skippedCrossingMidnight) {
+        parts.push(`${shape.skippedCrossingMidnight} slot(s) were skipped because they would`
+          + ' cross midnight.');
+      }
+    } else if (shape && !shape.ok) {
+      parts.push(`Slots were not regenerated — ${shape.reason}.`);
+    }
+
+    res.json({
+      success: true,
+      message: parts.join(' '),
+      data: shape ? {
+        window: shape.window,
+        durationMinutes: shape.durationMin,
+        slotsPerDay: shape.perDay,
+        created: shape.created,
+        removed: shape.removed,
+        keptOutside: shape.keptOutside,
+      } : null,
+    });
   } catch (e) {
     next(e);
+  } finally {
+    client.release();
   }
 });
 
@@ -739,9 +878,13 @@ router.post("/slots/generate", async (req, res, next) => {
       [venueId, req.user.id],
     );
     if (!check.rows.length) return res.status(404).json({ success: false, message: 'Venue not found' });
-    const venue = check.rows[0];
 
-    const r = await slotService.ensureVenueSlots(pool, { venueId, venue });
+    // The venue row read above is the ownership gate only; it is deliberately not
+    // handed to the generator. slotService assembles its own column list (the slot
+    // duration column exists only once migration 034 is applied), and passing this
+    // row would make the generator fall back to 60-minute slots on a venue whose
+    // owner chose 30.
+    const r = await slotService.ensureVenueSlots(pool, { venueId });
 
     // A venue with no price or a backwards hour range produces no slots, and the
     // owner is told which it is instead of being shown "Generated 0 new slots".
@@ -754,13 +897,13 @@ router.post("/slots/generate", async (req, res, next) => {
 
     // Price the window by the model in the background — the owner sees the slots
     // open immediately; their dynamic prices land a moment later.
-    slotService.repriceVenueSlots(pool, { venueId, venue }).catch(() => {});
+    slotService.repriceVenueSlots(pool, { venueId }).catch(() => {});
 
     res.json({
       success: true,
       message: r.created > 0
         ? `Opened ${r.created} new slot${r.created === 1 ? '' : 's'} `
-          + `(${slotService.describeWindow(r.fromHour, r.toHour)}, `
+          + `(${r.window}, ${r.durationMin}-minute slots, `
           + `next ${slotService.HORIZON_DAYS} days)`
         : `Already fully open for the next ${slotService.HORIZON_DAYS} days — nothing to add`,
       data: { created: r.created, alreadyPresent: r.skipped },

@@ -75,6 +75,14 @@ router.get('/recommended', authMiddleware, async (req, res, next) => {
     const allowed = Object.entries(enabled).filter(([, on]) => on).map(([k]) => k);
     const reco = await recoCache.getOrSet(String(req.user.id), () => recommendVenues(req.user.id, { limit }), { shouldCache: r => r && r.source === SOURCE_MODEL });
     let ranked = [];
+    // Which rule actually chose this rail, reported to the client so the header can
+    // name it. 'model' = the trained recommender ranked it; 'stated' = the fallback
+    // filtered to the sports the player follows; 'relaxed' = those sports have no
+    // venue yet, so every enabled sport is offered instead; 'none' = the player has
+    // stated no preference. Without this the relaxed case is indistinguishable from
+    // a recommender ignoring the player's interest, which is the complaint that
+    // produced the filter below.
+    let preferenceApplied = 'model';
     if (reco.source === SOURCE_MODEL && reco.items.length) {
       const ids = reco.items.map(x => x.venue_id);
       const rows = await pool.query(`SELECT v.*, COALESCE(v.venue_photos[1], null) AS cover_photo, u.name AS owner_name
@@ -104,7 +112,11 @@ router.get('/recommended', authMiddleware, async (req, res, next) => {
           ORDER BY v.rating DESC NULLS LAST, v.total_reviews DESC NULLS LAST
           LIMIT $2`, [sportList, limit]);
       let rows = await pick(wanted);
-      if (!rows.rows.length && stated.length) rows = await pick(allowed);
+      preferenceApplied = stated.length ? 'stated' : 'none';
+      if (!rows.rows.length && stated.length) {
+        rows = await pick(allowed);
+        preferenceApplied = 'relaxed';
+      }
       ranked = rows.rows.map(v => ({ ...v, score: null, match_pct: null, reasons: [] }));
     }
     // Proximity re-rank, applied after the model (see utils/geoDistance): when the
@@ -118,7 +130,7 @@ router.get('/recommended', authMiddleware, async (req, res, next) => {
       ranked = geo.annotateDistance(ranked, { lat, lng });
       if (String(req.query.sort || '') === 'nearest') ranked = geo.sortByNearest(ranked);
     }
-    res.json({ success: true, data: { venues: ranked, source: reco.source, label: reco.label || 'For you', modelVersion: reco.modelVersion || null } });
+    res.json({ success: true, data: { venues: ranked, source: reco.source, label: reco.label || 'For you', modelVersion: reco.modelVersion || null, preferenceApplied } });
   } catch (e) { next(e); }
 });
 

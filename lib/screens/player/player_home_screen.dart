@@ -1,23 +1,24 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
-import '../../constants/api_constants.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
 import 'player_profile_screen.dart';
 import 'bookings_screen.dart';
 import 'wallet_screen.dart';
 import 'teams_screen.dart';
+import '../../services/api_service.dart';
 import '../../services/chat_service.dart';
+import '../../services/offline_cache.dart';
 import '../../services/realtime_service.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../widgets/assistant/scout_fab.dart';
 import '../../widgets/header_actions.dart';
 import '../../widgets/notification_bell.dart';
+import '../../widgets/offline_banner.dart';
 import '../shared/chats_screen.dart';
 import 'assistant_screen.dart';
 
@@ -32,6 +33,15 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
   int _tab = 0;
   int _prevTab = 0;
   Map<String, dynamic>? _homeData;
+
+  /// When [_homeData] came from the cache rather than this session's network call,
+  /// so the strip can say how old the figures on screen are.
+  DateTime? _homeCachedAt;
+
+  /// The failure sentence for a dashboard that has never loaded. Only set while
+  /// [_homeData] is null — with a cached payload the stats stay on screen and the
+  /// offline strip is the whole explanation.
+  String? _homeError;
 
   /// Reaches into the live Bookings tab so a booking made in the chat can be pulled
   /// in immediately. The tab is inside an [IndexedStack] with `wantKeepAlive`, so its
@@ -50,7 +60,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
   @override
   void initState() {
     super.initState();
-    _load();
+    _hydrateThenLoad();
     _watchChat();
   }
 
@@ -113,23 +123,49 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
   }
 
   Future<void> _load() async {
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token;
-      if (token == null) return;
-      final resp = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/player/home'),
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 8));
-
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body);
-        if (mounted && data['success'] == true) {
-          setState(() => _homeData = data['data']);
-        }
-      }
-    } catch (e) {
-      debugPrint('Home load error: $e');
+    final res = await ApiClient().get('/player/home');
+    if (!mounted) return;
+    if (res['success'] == true && res['data'] is Map) {
+      final data = Map<String, dynamic>.from(res['data'] as Map);
+      setState(() {
+        _homeData = data;
+        _homeCachedAt = null;
+        _homeError = null;
+      });
+      context.read<ConnectivityProvider>().markReachable();
+      await OfflineCache.write(OfflineCache.playerHome, data);
+      return;
     }
+    // Previously this whole branch was `debugPrint` and nothing else: the dashboard
+    // rendered half-empty and the user was never told why. There is still no error
+    // view here on purpose — the header, the quick actions and Scout work without
+    // the payload, so blanking the screen for a failed read would remove more than
+    // it explains. The offline strip carries the message instead, and a cached
+    // payload keeps the stats on screen.
+    if (res['statusCode'] == 0) {
+      context.read<ConnectivityProvider>().markUnreachable();
+    }
+    if (_homeData == null) {
+      setState(() => _homeError = res['message'] as String? ??
+          'Could not load your dashboard.');
+    }
+  }
+
+  /// Draw the last good dashboard before the network is consulted, so a reopen or
+  /// an offline start shows the user's real stats instead of the zero-state
+  /// defaults the null payload falls back to.
+  Future<void> _hydrateThenLoad() async {
+    final cached = await OfflineCache.read(OfflineCache.playerHome);
+    if (cached != null && mounted) {
+      final map = cached.asMap();
+      if (map != null) {
+        setState(() {
+          _homeData = map;
+          _homeCachedAt = cached.at;
+        });
+      }
+    }
+    await _load();
   }
 
   void _onTabChanged(int index) {
@@ -266,8 +302,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
   // sliver in it: a sliver header scrolls away with the list, and under
   // [BouncingScrollPhysics] an overscroll opens a band of background above it.
   // Lifted out, the header cannot move and the status bar keeps its green backdrop.
-  Widget _buildHome(AuthProvider auth) {
-    final firstName = (auth.currentUser?.name ?? 'Player').split(' ').first;
+  Widget _buildHome(AuthProvider auth) {    final firstName = (auth.currentUser?.name ?? 'Player').split(' ').first;
     final profile = _homeData?['profile'] as Map<String, dynamic>?;
     final upcoming = (_homeData?['upcomingBookings'] as List?) ?? [];
     final trustScore = _parseNum(profile?['trust_score'], 100).round();
@@ -280,6 +315,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
       ),
       child: Column(children: [
         _fixedHeader(),
+        OfflineBanner(cachedAt: _homeCachedAt),
         Expanded(
           child: RefreshIndicator(
             color: AppColors.accent,
@@ -289,6 +325,13 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
                   parent: BouncingScrollPhysics()),
               slivers: [
                 SliverToBoxAdapter(child: _greetingBlock(firstName)),
+                // A dashboard that has never loaded says so, once, above the
+                // zero-state figures it would otherwise present as real. The rest
+                // of the tab stays usable: the quick actions and Scout do not need
+                // this payload, so replacing the whole screen with an error would
+                // take away more than it explains.
+                if (_homeData == null && _homeError != null)
+                  SliverToBoxAdapter(child: _dashboardUnavailable(_homeError!)),
                 SliverToBoxAdapter(child: _statsRow(upcoming.length, trustScore)),
                 SliverToBoxAdapter(
                   child: Padding(
@@ -396,6 +439,49 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
       ]),
     );
   }
+
+  /// The one-line notice shown when the dashboard payload has never arrived.
+  ///
+  /// Deliberately a card rather than a full-screen takeover: the figures below it
+  /// are the null-payload defaults, so the user is told they are not real, while
+  /// everything on the tab that works without the payload stays reachable.
+  Widget _dashboardUnavailable(String message) => Container(
+        margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(children: [
+          const Icon(Icons.cloud_off_outlined, size: 20, color: AppColors.textSecondary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Your dashboard could not load',
+                    style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
+                const SizedBox(height: 2),
+                Text(message,
+                    style: GoogleFonts.poppins(
+                        fontSize: 12, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: _load,
+            child: Text('Retry',
+                style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.accent)),
+          ),
+        ]),
+      );
 
   /// Upcoming bookings and trust score — the two header stats that survived the
   /// wallet figure's removal — as cards on the canvas. The bookings card is

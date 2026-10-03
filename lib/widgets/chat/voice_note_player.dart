@@ -44,6 +44,11 @@ class VoiceNotePlayer extends StatelessWidget {
   /// recording again.
   final bool failedToSend;
 
+  /// Why the send failed, when the caller knows — Cloudinary's own refusal, for
+  /// instance. Shown in place of the duration so the cause is visible on the
+  /// bubble rather than only in a log.
+  final String? sendError;
+
   /// Re-send a voice note whose upload or send failed.
   final VoidCallback? onRetrySend;
 
@@ -54,6 +59,7 @@ class VoiceNotePlayer extends StatelessWidget {
     this.waveform = const [],
     this.pending = false,
     this.failedToSend = false,
+    this.sendError,
     this.onRetrySend,
     super.key,
   });
@@ -82,7 +88,9 @@ class VoiceNotePlayer extends StatelessWidget {
 
         final String label;
         if (sendFailed) {
-          label = 'Not sent · tap to send again';
+          label = sendError == null
+              ? 'Not sent · tap to send again'
+              : 'Not sent · $sendError';
         } else if (playFailed) {
           label = audio.errorText ?? 'Could not play';
         } else if (pending) {

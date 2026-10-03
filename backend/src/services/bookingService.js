@@ -71,6 +71,7 @@ const {
 const { notify } = require('../utils/notify');
 const settings = require('../utils/globalSettings');
 const chat = require('../utils/chatCore');
+const group = require('../utils/slotGroup');
 
 /** Uniform failure. `code` is for machines, `message` is for humans. */
 function fail(status, code, message) {
@@ -86,6 +87,36 @@ function localDateStr(value) {
   return value instanceof Date ? value.toLocaleDateString('en-CA') : value;
 }
 
+/**
+ * `bookings.booking_group_id` and `.discount_percent` arrive with migration 035,
+ * and this service runs against a database where that migration may not be applied
+ * yet. Naming either column in the INSERT unconditionally would break every
+ * booking on the platform until it is.
+ *
+ * So a single booking never mentions them at all — the column defaults (NULL and
+ * 0) are exactly what a single booking means, so omitting them is byte-identical
+ * to the behaviour that shipped before. Only the group path needs them, and only
+ * the group path pays for the probe; a group without a group id is not a group, so
+ * it refuses with a message naming the migration rather than silently writing N
+ * unrelated bookings.
+ *
+ * A positive answer is cached for the life of the process because a column cannot
+ * disappear. A negative answer is not cached, so applying the migration takes
+ * effect without a restart.
+ */
+let groupColumnsPresent = false;
+
+async function hasGroupColumns(client) {
+  if (groupColumnsPresent) return true;
+  const { rows } = await client.query(
+    `SELECT COUNT(*)::int AS c FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'bookings'
+        AND column_name IN ('booking_group_id', 'discount_percent')`,
+  );
+  groupColumnsPresent = rows[0].c === 2;
+  return groupColumnsPresent;
+}
+
 // CREATE
 
 /**
@@ -93,13 +124,27 @@ function localDateStr(value) {
  * (P = slot price). The 20% at-risk deposit is recorded on the booking but
  * nothing is forfeited yet.
  *
+ * `discountPercent` and `groupId` are for a multi-slot group and default to the
+ * single-booking case. When both are absent the SQL below does not mention the
+ * two columns migration 035 adds, so this path is unchanged on a database where
+ * that migration has not run.
+ *
  * Caller must already be inside a transaction. On `ok:false` the caller must
  * ROLLBACK — nothing here has been undone, because the row lock taken on the
  * slot is the transaction's to release.
  */
-async function createBooking(client, { userId, slotId, venueId, notes = null }) {
+async function createBooking(client, {
+  userId, slotId, venueId, notes = null, discountPercent = 0, groupId = null,
+}) {
   if (!slotId || !venueId) {
     return fail(400, 'missing_args', 'slotId and venueId required');
+  }
+
+  const pct = group.clampDiscount(discountPercent);
+  const grouped = groupId != null || pct > 0;
+  if (grouped && !(await hasGroupColumns(client))) {
+    return fail(409, 'migration_pending',
+      'Multi-slot bookings are not available yet — migration 035 has not been applied to this database.');
   }
 
   // 1. Lock the slot row atomically — the row lock is what settles
@@ -150,11 +195,21 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
   // a deal a player already agreed to.
   const depositPct = await settings.deposit({ client });
   setDepositPercent(depositPct, 'booking');
-  const basePrice = round2(slot.price);
+  // The discount is applied to the slot price BEFORE escrow and deposit are
+  // derived, so every downstream figure — what is frozen, what is at risk, what a
+  // late cancellation forfeits — is a percentage of what the player actually
+  // agreed to pay, not of a list price they were never charged.
+  const basePrice = pct > 0 ? group.discountedPrice(slot.price, pct) : round2(slot.price);
   const escrowAmount = basePrice;
   const depositAmount = depositFor(basePrice, depositPct);
 
   // 2. Lock + check player wallet
+  //
+  // In a group this runs once per slot inside one transaction. The wallet row
+  // lock is already held after the first slot, and `applyWallet` has already
+  // decremented the balance for the slots booked so far — so this read sees the
+  // running balance and the Nth slot is correctly refused when the player can
+  // afford N-1. The whole group then rolls back together.
   const playerWallet = await lockWallet(client, userId);
   if (!playerWallet || asNum(playerWallet.balance) < escrowAmount) {
     return fail(400, 'insufficient_funds', 'Insufficient wallet balance');
@@ -164,27 +219,32 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
   const qrData = crypto.randomUUID();
 
   // 4. Create booking
+  const extraCols = grouped ? ', booking_group_id, discount_percent' : '';
+  const extraVals = grouped ? ', $14, $15' : '';
+  const params = [
+    userId,
+    venueId,
+    slotId,
+    localDateStr(slot.slot_date),
+    slot.start_time,
+    slot.end_time,
+    basePrice,
+    escrowAmount,
+    depositAmount,
+    escrowAmount,
+    qrData,
+    notes || null,
+    slot.owner_id || null,
+  ];
+  if (grouped) params.push(groupId, pct);
+
   const booking = await client.query(
     `INSERT INTO bookings (player_id, venue_id, slot_id, slot_date, start_time,
        end_time, base_price, security_deposit, deposit_amount, total_amount,
-       status, qr_code, notes, owner_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12,$13)
+       status, qr_code, notes, owner_id${extraCols})
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12,$13${extraVals})
      RETURNING *`,
-    [
-      userId,
-      venueId,
-      slotId,
-      localDateStr(slot.slot_date),
-      slot.start_time,
-      slot.end_time,
-      basePrice,
-      escrowAmount,
-      depositAmount,
-      escrowAmount,
-      qrData,
-      notes || null,
-      slot.owner_id || null,
-    ],
+    params,
   );
 
   // 5. Mark slot as booked and drop the checkout hold
@@ -216,8 +276,159 @@ async function createBooking(client, { userId, slotId, venueId, notes = null }) 
   return done(201, { ...booking.rows[0], venue_name: slot.venue_name });
 }
 
-// Cancel — preview, then execute
+// Multi-slot groups
 
+/**
+ * The owner's discount ladder for one venue, or [] when there is none.
+ *
+ * Reads through discountService so the table's absence before migration 035 is
+ * handled in one place rather than at every caller.
+ */
+async function tiersFor(runner, venueId) {
+  return discounts.tiersFor(runner, venueId);
+}
+
+/**
+ * Quote a group of consecutive slots without booking any of them. New, and new
+ * for the same reason previewCancellation is: the player has to be shown what N
+ * hours will cost — and what the discount saved — before agreeing to it.
+ *
+ * Deliberately a plain read with no FOR UPDATE. A quote must not hold row locks
+ * while a human decides. Availability is therefore advisory here and authoritative
+ * only inside createBookingGroup, which re-reads every slot under a lock; a slot
+ * taken between the quote and the confirmation is answered there with `slot_taken`
+ * rather than pretended away here.
+ */
+async function previewGroup(client, { userId, venueId, slotIds }) {
+  const runner = client || pool;
+  const request = group.validateGroupRequest(slotIds);
+  if (!request.ok) return fail(400, request.code, request.message);
+
+  const { rows } = await runner.query(
+    `SELECT s.id, s.slot_date, s.start_time, s.end_time, s.price, s.status,
+            (s.locked_until IS NOT NULL AND s.locked_until > NOW()
+             AND (s.locked_by IS NULL OR s.locked_by <> $3)) AS held_by_other
+       FROM slots s
+      WHERE s.id = ANY($1::uuid[]) AND s.venue_id = $2
+      ORDER BY s.slot_date, s.start_time`,
+    [request.ids, venueId, userId],
+  );
+  if (rows.length !== request.ids.length) {
+    return fail(404, 'slot_not_found', 'One of those slots is not at this venue.');
+  }
+
+  const unavailable = rows.filter((r) => r.status !== 'available' || r.held_by_other);
+  if (unavailable.length) {
+    return fail(409, 'slot_taken',
+      `${unavailable.length} of those slots ${unavailable.length === 1 ? 'is' : 'are'} no longer free.`);
+  }
+
+  const run = group.checkConsecutive(rows.map(group.normaliseSlot));
+  if (!run.ok) {
+    return fail(400, 'not_consecutive', `Those slots are not back to back — ${run.reason}.`);
+  }
+
+  const quote = group.quoteGroup(rows, await tiersFor(runner, venueId));
+  return done(200, quote);
+}
+
+/**
+ * Book a run of consecutive slots as one group.
+ *
+ * Each slot becomes its own `bookings` row through createBooking above — the same
+ * escrow, the same deposit, the same ledger entries, the same QR — and the rows
+ * share a `booking_group_id` so the player's screens can render them as one card.
+ * No money primitive is written here; this function decides which slots and at
+ * what discount, and createBooking moves everything (FR8.15).
+ *
+ * Lock order is chronological, always. Two players selecting overlapping runs in
+ * opposite directions would otherwise take the same two row locks in opposite
+ * orders and deadlock; sorting first means the second transaction blocks on the
+ * first slot and then fails cleanly with `slot_taken`.
+ *
+ * The first failing slot aborts the group. A partially booked run is worse than
+ * none: the player asked for two hours of play, and one hour plus a refund is not
+ * a smaller version of that.
+ *
+ * Caller must already be inside a transaction.
+ */
+async function createBookingGroup(client, { userId, venueId, slotIds, notes = null }) {
+  if (!venueId) return fail(400, 'missing_args', 'venueId required');
+
+  const request = group.validateGroupRequest(slotIds);
+  if (!request.ok) return fail(400, request.code, request.message);
+
+  if (!(await hasGroupColumns(client))) {
+    return fail(409, 'migration_pending',
+      'Multi-slot bookings are not available yet — migration 035 has not been applied to this database.');
+  }
+
+  // Read the shape of the run before locking anything, so an invalid selection
+  // costs no lock. Availability read here is advisory; createBooking re-reads
+  // every one of these rows under FOR UPDATE and is the only authority on it.
+  const shape = await client.query(
+    `SELECT s.id, s.slot_date, s.start_time, s.end_time, s.price, s.status
+       FROM slots s
+      WHERE s.id = ANY($1::uuid[]) AND s.venue_id = $2
+      ORDER BY s.slot_date, s.start_time`,
+    [request.ids, venueId],
+  );
+  if (shape.rows.length !== request.ids.length) {
+    return fail(404, 'slot_not_found', 'One of those slots is not at this venue.');
+  }
+
+  const ordered = group.sortSlots(shape.rows.map(group.normaliseSlot));
+  const run = group.checkConsecutive(ordered);
+  if (!run.ok) {
+    return fail(400, 'not_consecutive', `Those slots are not back to back — ${run.reason}.`);
+  }
+
+  const tiers = await tiersFor(client, venueId);
+  const percent = group.pickDiscountPercent(tiers, ordered.length);
+  const groupId = crypto.randomUUID();
+
+  const created = [];
+  for (const slot of ordered) {
+    const one = await createBooking(client, {
+      userId,
+      venueId,
+      slotId: slot.id,
+      notes,
+      discountPercent: percent,
+      groupId,
+    });
+    // The first refusal is the group's refusal, and its own code and message are
+    // carried out unchanged so the player is told which rule stopped it —
+    // `slot_taken`, `insufficient_funds`, `sport_disabled` — rather than a generic
+    // "could not book".
+    if (!one.ok) return one;
+    created.push(one.data);
+  }
+
+  const total = round2(created.reduce((sum, b) => sum + asNum(b.total_amount), 0));
+  const listTotal = round2(created.reduce((sum, b) => sum + asNum(b.base_price), 0)
+    * (percent > 0 ? 100 / (100 - percent) : 1));
+
+  return done(201, {
+    groupId,
+    bookings: created,
+    count: created.length,
+    discountPercent: percent,
+    total,
+    // What the same run would have cost at list price, derived from the discount
+    // actually applied rather than re-read from `slots` — the slot rows are now
+    // 'booked' and their price is no longer the quote the player accepted.
+    saved: percent > 0 ? round2(listTotal - total) : 0,
+    venueName: created[0].venue_name,
+    slotDate: localDateStr(created[0].slot_date),
+    from: created[0].start_time,
+    to: created[created.length - 1].end_time,
+  }, percent > 0
+    ? `${created.length} slots booked — ${percent}% multi-slot discount applied.`
+    : `${created.length} slots booked.`);
+}
+
+// Cancel — preview, then execute
 /**
  * The refund arithmetic for one booking, without cancelling it. New.
  *

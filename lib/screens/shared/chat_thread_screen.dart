@@ -1637,6 +1637,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
               uploadProgress: c.uploadProgressFor(m),
               myUserId: _myId,
               onPollVote: (i) => c.votePoll(m, i),
+              failureReason: c.sendErrorFor(m),
             ),
             replyTarget: (m.isDeleted || m.pending || m.failed) ? null : m,
           ));

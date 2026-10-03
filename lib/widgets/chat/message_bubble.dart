@@ -38,6 +38,10 @@ class MessageBubble extends StatelessWidget {
   final String? myUserId;
   final void Function(int optionIndex)? onPollVote;
 
+  /// Why this message's send failed, when it did. Shown beside "Not sent" so a
+  /// failure names its cause rather than leaving the user to guess.
+  final String? failureReason;
+
   const MessageBubble({
     required this.message,
     required this.isMine,
@@ -52,6 +56,7 @@ class MessageBubble extends StatelessWidget {
     this.uploadProgress,
     this.myUserId,
     this.onPollVote,
+    this.failureReason,
     super.key,
   });
 
@@ -117,8 +122,13 @@ class MessageBubble extends StatelessWidget {
                   children: [
                     const Icon(Icons.error_outline, size: 12, color: AppColors.error),
                     const SizedBox(width: 3),
-                    const Text('Not sent',
-                        style: TextStyle(fontSize: 10.5, color: AppColors.error)),
+                    Flexible(
+                      child: Text(
+                        failureReason == null ? 'Not sent' : 'Not sent · $failureReason',
+                        maxLines: 2,
+                        style: const TextStyle(fontSize: 10.5, color: AppColors.error),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -173,6 +183,7 @@ class MessageBubble extends StatelessWidget {
             waveform: message.waveform,
             pending: message.pending,
             failedToSend: message.failed,
+            sendError: failureReason,
             onRetrySend: onRetry,
           ),
           Align(

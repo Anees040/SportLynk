@@ -1,15 +1,17 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
-import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
+import '../../services/api_service.dart';
+import '../../services/offline_cache.dart';
 import '../../utils/num_util.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/network_error_view.dart';
+import '../../widgets/offline_banner.dart';
 
 class BookingsScreen extends StatefulWidget {
   const BookingsScreen({super.key});
@@ -24,6 +26,18 @@ class BookingsScreenState extends State<BookingsScreen>
   bool _loading = true;
   DateTime? _lastLoadTime;
 
+  /// When the rows on screen were fetched, when they came from the cache rather
+  /// than from this session's network call. Drives the banner's "saved 10 min ago"
+  /// so a cached booking is never mistaken for a current one.
+  DateTime? _cachedAt;
+
+  /// The failure sentence for a load that had nothing cached to fall back on.
+  ///
+  /// Only this case earns a full error view. With a cache present the rows stay on
+  /// screen under the offline strip, which is the whole point of the change: a
+  /// first-ever load with no connection has nothing to show, every later one does.
+  String? _error;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -32,7 +46,7 @@ class BookingsScreenState extends State<BookingsScreen>
     super.initState();
     _tab = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addObserver(this);
-    _load();
+    _hydrateThenLoad();
   }
 
   @override
@@ -71,35 +85,98 @@ class BookingsScreenState extends State<BookingsScreen>
     }
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    _lastLoadTime = DateTime.now();
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final resp = await http.get(Uri.parse('${ApiConstants.baseUrl}/bookings/my'),
-        headers: {'Authorization': 'Bearer $token'});
-      final data = jsonDecode(resp.body);
-      if (mounted && data['success'] == true) {
-        final all = List<Map<String,dynamic>>.from(data['data']);
-        final now = DateTime.now();
+  /// Draw the last good rows before the network is consulted.
+  ///
+  /// The fetch still runs either way: a cache hit changes what the user waits in
+  /// front of, not whether the list is refreshed. This is the whole behavioural
+  /// change — the tab opens populated, offline or on a cold start, instead of
+  /// showing a spinner and then claiming the account has no bookings.
+  Future<void> _hydrateThenLoad() async {
+    final cached = await OfflineCache.read(OfflineCache.myBookings);
+    if (cached != null && mounted) {
+      final rows = cached.asRows();
+      if (rows.isNotEmpty) {
         setState(() {
-          _upcoming = all.where((b) {
-            final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
-            return d != null && !d.isBefore(DateTime(now.year, now.month, now.day))
-              && ['confirmed','pending'].contains(b['status']);
-          }).toList();
-          _past = all.where((b) {
-            final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
-            return d == null || d.isBefore(DateTime(now.year, now.month, now.day))
-              || ['cancelled','rejected','no_show','checked_in','completed','refunded'].contains(b['status']);
-          }).toList();
+          _applyRows(rows);
+          _cachedAt = cached.at;
           _loading = false;
         });
-      } else if (mounted) { setState(() => _loading = false); }
-    } catch (_) { if (mounted) { setState(() => _loading = false); } }
+      }
+    }
+    await _load();
+  }
+
+  /// Partition the server's rows across the two tabs.
+  ///
+  /// Plain field assignment with no setState of its own, so the same partition
+  /// serves both sources — the cache on hydrate and the response on load — and the
+  /// two can never drift into disagreeing about what counts as upcoming.
+  void _applyRows(List<Map<String, dynamic>> all) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    _upcoming = all.where((b) {
+      final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
+      return d != null && !d.isBefore(today)
+        && ['confirmed','pending'].contains(b['status']);
+    }).toList();
+    _past = all.where((b) {
+      final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
+      return d == null || d.isBefore(today)
+        || ['cancelled','rejected','no_show','checked_in','completed','refunded'].contains(b['status']);
+    }).toList();
+  }
+
+  Future<void> _load() async {
+    // The spinner is only for a screen with nothing to show. With cached rows
+    // already drawn, a refresh happens underneath them — replacing a populated
+    // list with a spinner on every resume is the flicker this avoids.
+    final hadRows = _upcoming.isNotEmpty || _past.isNotEmpty;
+    if (!hadRows && mounted) setState(() => _loading = true);
+    _lastLoadTime = DateTime.now();
+
+    final res = await ApiClient().get(ApiConstants.myBookings);
+    if (!mounted) return;
+
+    if (res['success'] == true) {
+      final raw = res['data'];
+      final rows = raw is List
+          ? raw.whereType<Map>().map(Map<String, dynamic>.from).toList()
+          : <Map<String, dynamic>>[];
+      setState(() {
+        _applyRows(rows);
+        _cachedAt = null;   // on screen is now this session's data, not a saved copy
+        _error = null;
+        _loading = false;
+      });
+      context.read<ConnectivityProvider>().markReachable();
+      await OfflineCache.write(OfflineCache.myBookings, rows);
+      return;
+    }
+
+    // `statusCode == 0` is ApiClient's transport failure — no answer reached us, so
+    // this is the offline case and the rows on screen stay where they are. Any real
+    // status means the server replied, which is a fault worth a sentence rather
+    // than a connection the user might go and re-check.
+    if (res['statusCode'] == 0) {
+      context.read<ConnectivityProvider>().markUnreachable();
+    }
+    setState(() {
+      _loading = false;
+      // An error view only when there is genuinely nothing to look at. Otherwise
+      // the cached list stays and the offline strip carries the explanation.
+      _error = hadRows
+          ? null
+          : (res['message'] as String? ?? 'Could not load your bookings.');
+    });
   }
 
   Future<void> _cancel(String bookingId) async {
+    // Refused up front rather than queued. A cancellation moves money through
+    // escrow and its refund split depends on how far the slot is away at the
+    // moment it lands, so holding one until the network returns would compute a
+    // different refund than the dialog just promised.
+    if (!await OfflineActionNotice.guard(context, 'Cancelling a booking')) return;
+    if (!mounted) return;
     final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text('Cancel Booking?', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
@@ -115,20 +192,17 @@ class BookingsScreenState extends State<BookingsScreen>
     ));
     if (ok != true) return;
     if (!mounted) return;
-    try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final resp = await http.patch(Uri.parse('${ApiConstants.baseUrl}/bookings/$bookingId/cancel'),
-        headers: {'Authorization': 'Bearer $token'});
-      final data = jsonDecode(resp.body);
-      if (mounted) {
-        if (data['success'] == true) {
-          SnackbarUtil.showSuccess(context, 'Booking cancelled. Refund added to wallet.');
-          _load();
-        } else {
-          SnackbarUtil.showError(context, data['message'] ?? 'Failed');
-        }
-      }
-    } catch (_) {}
+    final res = await ApiClient().patch('/bookings/$bookingId/cancel', const {});
+    if (!mounted) return;
+    if (res['success'] == true) {
+      SnackbarUtil.showSuccess(context, 'Booking cancelled. Refund added to wallet.');
+      _load();
+    } else {
+      // Previously an empty catch: a cancellation that failed told the user
+      // nothing at all, and the booking simply stayed where it was.
+      SnackbarUtil.showError(
+          context, res['message'] as String? ?? 'Could not cancel the booking.');
+    }
   }
 
   @override
@@ -149,16 +223,34 @@ class BookingsScreenState extends State<BookingsScreen>
           labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
           tabs: const [Tab(text: 'Upcoming'), Tab(text: 'Past')]),
       ),
-      body: _loading
-        ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-        : TabBarView(controller: _tab, children: [
-            _buildList(_upcoming, upcoming: true),
-            _buildList(_past, upcoming: false),
-          ]),
+      body: Column(children: [
+        // Directly under the app bar, so the explanation sits with the content it
+        // applies to rather than floating over it.
+        OfflineBanner(cachedAt: _cachedAt),
+        Expanded(
+          child: _loading
+            ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+            : _error != null
+              ? NetworkErrorView(
+                  message: _error!,
+                  onRetry: _load,
+                  title: 'Could not load bookings',
+                )
+              : TabBarView(controller: _tab, children: [
+                  _buildList(_upcoming, upcoming: true),
+                  _buildList(_past, upcoming: false),
+                ]),
+        ),
+      ]),
     );
   }
 
   Widget _buildList(List<Map<String, dynamic>> items, {required bool upcoming}) {
+    // Reached only after a load that actually succeeded and returned nothing, or a
+    // cache that held nothing: a failed request now resolves to [_error] and the
+    // error view above. Before that split this same empty state was shown for a
+    // failure too, which told the user they owned no bookings when the request had
+    // simply not completed.
     if (items.isEmpty) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Icon(Icons.event_busy, size: 64, color: AppColors.disabled),

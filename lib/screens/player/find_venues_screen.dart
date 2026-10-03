@@ -28,6 +28,11 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
   List<Map<String, dynamic>> _recommended = [];
   String _recommendationSource = 'heuristic';
   String _recommendationLabel = 'For you';
+  // Which rule chose the rail, as reported by GET /venues/recommended:
+  // model · stated · relaxed · none. Only 'relaxed' is surfaced, because that is
+  // the one case where the rail deliberately ignores the player's stated sports
+  // and would otherwise look like a recommender that does not listen.
+  String _recommendationPreference = 'model';
   bool _loading = true;
   // The sentence to show when the venue list itself could not be fetched, so a
   // failed request is reported as a failure with a retry rather than as an empty
@@ -208,6 +213,7 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
             ? List<Map<String, dynamic>>.from(payload['venues']) : [];
         _recommendationSource = payload is Map ? (payload['source'] ?? 'heuristic').toString() : 'heuristic';
         _recommendationLabel = payload is Map ? (payload['label'] ?? 'For you').toString() : 'For you';
+        _recommendationPreference = payload is Map ? (payload['preferenceApplied'] ?? 'model').toString() : 'model';
       } else {
         // The request failed. Surface the reason `ApiClient` translated (a 500, a
         // dropped connection, a cold-start timeout) instead of an empty list that
@@ -560,14 +566,35 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (_recommendationSource == 'model') ...[
-                                  const Icon(Icons.auto_awesome, color: AppColors.accent, size: 20),
-                                  const SizedBox(width: 8),
-                                ],
-                                Text(_recommendationLabel,
-                                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                                Row(
+                                  children: [
+                                    if (_recommendationSource == 'model') ...[
+                                      const Icon(Icons.auto_awesome, color: AppColors.accent, size: 20),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    // Expanded, not bare: the label is server-supplied and
+                                    // wraps instead of overflowing when the system text
+                                    // scale is large.
+                                    Expanded(
+                                      child: Text(_recommendationLabel,
+                                        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                                    ),
+                                  ],
+                                ),
+                                // Said out loud rather than left to look like a bug: the
+                                // player follows a sport that has no venue on the platform
+                                // yet, so the rail is showing everything instead of nothing.
+                                if (_recommendationPreference == 'relaxed')
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      'No venues for the sports you follow yet — showing all sports.',
+                                      style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),

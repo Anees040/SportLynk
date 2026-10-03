@@ -69,9 +69,8 @@ async function main() {
       console.log(`  ${name} skipped — ${v.reason}`);
       continue;
     }
-    const window = slotService.describeWindow(v.fromHour, v.toHour);
     console.log(`  ${name} ${String(v.created).padStart(4)} ${DRY ? 'would be created' : 'created'}, `
-      + `${String(v.skipped).padStart(4)} already there  (${window})`);
+      + `${String(v.skipped).padStart(4)} already there  (${v.window}, ${v.durationMin} min)`);
   }
 
   console.log('');
