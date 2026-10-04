@@ -6,7 +6,11 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
+import '../../services/offline_cache.dart';
 import '../../utils/reconnect_refresh.dart';
+import '../../widgets/network_error_view.dart';
+import '../../widgets/offline_banner.dart';
 import '../shared/chat_thread_screen.dart';
 
 class OwnerBookingRequestsScreen extends StatefulWidget {
@@ -27,11 +31,30 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
   bool _loading = true;
   static String get _base => ApiConstants.baseUrl;
 
+  /// When the rows on screen were fetched, when they came from the cache. One
+  /// timestamp covers all three tabs, which is why [_loadAll] commits them
+  /// together rather than one at a time.
+  DateTime? _cachedAt;
+
+  /// The failure sentence for a load that had nothing cached to fall back on.
+  ///
+  /// Only that case earns a full error view. Before this existed a failed request
+  /// left all three lists empty and each tab rendered "No pending bookings" — a
+  /// request that never arrived, presented to the owner as an empty inbox.
+  String? _error;
+
+  /// Set once a fetch has returned rows, so a slow cache read cannot overwrite
+  /// fresher ones and re-label them stale.
+  bool _networkAnswered = false;
+
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
+    // Concurrent, not chained: awaiting the disk before the request would add
+    // offline latency to every online load.
     _loadAll();
+    _hydrateFromCache();
   }
 
   // Requests that arrived while offline surface the moment the socket returns.
@@ -44,27 +67,94 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
     super.dispose();
   }
 
+  /// Draw the last good rows for all three tabs if they arrive before the network.
+  Future<void> _hydrateFromCache() async {
+    final cached = await OfflineCache.read(OfflineCache.ownerBookingRequests);
+    if (!mounted || cached == null || _networkAnswered) return;
+    final saved = cached.asMap();
+    if (saved == null) return;
+    var any = false;
+    for (final status in _tabs) {
+      final raw = saved[status];
+      if (raw is! List) continue;
+      final rows = raw.whereType<Map>().map(Map<String, dynamic>.from).toList();
+      _lists[status] = rows;
+      if (rows.isNotEmpty) any = true;
+    }
+    // Three empty lists are indistinguishable from a cache miss, and labelling an
+    // empty inbox "saved 10 min ago" would be noise.
+    if (!any) return;
+    setState(() {
+      _cachedAt = cached.at;
+      _error = null;
+      _loading = false;
+    });
+  }
+
   Future<void> _loadAll() async {
-    if (mounted) setState(() => _loading = true);
+    final hadRows = _tabs.any((s) => (_lists[s] ?? const []).isNotEmpty);
+    if (!hadRows && mounted) setState(() => _loading = true);
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
+      // Collected locally and committed in one setState rather than tab by tab.
+      // The banner carries a single timestamp for the whole screen, so three tabs
+      // that each landed at a different moment would make that one claim wrong for
+      // two of them; a run that cannot finish leaves all three as they were.
+      final fetched = <String, List<Map<String, dynamic>>>{};
       for (final status in _tabs) {
         final resp = await http.get(
           Uri.parse('$_base/owner/bookings?status=$status'),
           headers: {'Authorization': 'Bearer $token'},
-        );
+        ).timeout(const Duration(seconds: 10));
         final data = jsonDecode(resp.body);
-        if (mounted && data['success'] == true) {
-          _lists[status] = List<Map<String, dynamic>>.from(data['data']);
+        if (data['success'] != true) {
+          // The server answered and refused. Connectivity is left alone: a rejected
+          // request is a fault to name, not a network to go and re-check.
+          if (!mounted) return;
+          setState(() {
+            _loading = false;
+            _error = hadRows
+                ? null
+                : (data['message'] as String? ?? 'Could not load booking requests.');
+          });
+          return;
         }
+        final raw = data['data'];
+        fetched[status] = raw is List
+            ? raw.whereType<Map>().map(Map<String, dynamic>.from).toList()
+            : <Map<String, dynamic>>[];
       }
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      _networkAnswered = true;
+      setState(() {
+        _lists.addAll(fetched);
+        _cachedAt = null;  // on screen is now this session's data, not a saved copy
+        _error = null;
+        _loading = false;
+      });
+      context.read<ConnectivityProvider>().markReachable();
+      await OfflineCache.write(OfflineCache.ownerBookingRequests, fetched);
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      // Nothing came back. The rows already on screen stay, under the offline
+      // strip; only a load with no cache behind it earns the error view.
+      if (!mounted) return;
+      context.read<ConnectivityProvider>().markUnreachable();
+      setState(() {
+        _loading = false;
+        _error = hadRows
+            ? null
+            : 'Could not reach the server. Check your connection and try again.';
+      });
     }
   }
 
   Future<void> _approve(String bookingId) async {
+    // Approving moves the booking out of escrow and notifies the player. Replayed
+    // from a queue an hour later it could land on a slot the player has already
+    // been refunded for, so it is refused up front rather than optimistically
+    // accepted.
+    if (!await OfflineActionNotice.guard(context, 'Approving a booking')) return;
+    if (!mounted) return;
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       final resp = await http.patch(
@@ -86,6 +176,11 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
   }
 
   Future<void> _reject(String bookingId) async {
+    // Guarded before the confirmation, not after: asking the owner to confirm a
+    // refund and only then admitting the app cannot send it is two dialogs for one
+    // refusal.
+    if (!await OfflineActionNotice.guard(context, 'Rejecting a booking')) return;
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -164,16 +259,27 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
           ],
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-          : TabBarView(
-              controller: _tab,
-              children: [
-                _buildList('pending'),
-                _buildList('confirmed'),
-                _buildList('rejected'),
-              ],
-            ),
+      body: Column(
+        children: [
+          OfflineBanner(cachedAt: _cachedAt),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+                // The error view replaces the tabs only when there was no cache to
+                // fall back on; with saved rows the tabs stay and the strip explains.
+                : _error != null
+                    ? NetworkErrorView(message: _error!, onRetry: _loadAll)
+                    : TabBarView(
+                        controller: _tab,
+                        children: [
+                          _buildList('pending'),
+                          _buildList('confirmed'),
+                          _buildList('rejected'),
+                        ],
+                      ),
+          ),
+        ],
+      ),
     );
   }
 
