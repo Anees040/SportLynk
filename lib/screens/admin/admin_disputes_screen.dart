@@ -7,6 +7,7 @@ import '../../models/admin.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/admin_service.dart';
 import '../../widgets/match_widgets.dart';
+import '../../widgets/network_error_view.dart';
 import 'admin_dispute_detail_screen.dart';
 
 /// The dispute queue (FR10.6). Every match whose two captains filed different
@@ -45,6 +46,13 @@ class _AdminDisputesScreenState extends State<AdminDisputesScreen> {
   bool _loadingMore = false;
   bool _hasMore = false;
 
+  /// Set when a load failed, as distinct from succeeding with no disputes. The
+  /// service returns an empty page either way; without this the queue would show
+  /// "No open disputes. Every result the captains disagreed on has been ruled" —
+  /// telling the admin every contested result is settled when the read in fact
+  /// failed.
+  String? _error;
+
   @override
   void initState() {
     super.initState();
@@ -59,15 +67,26 @@ class _AdminDisputesScreenState extends State<AdminDisputesScreen> {
       setState(() => _loading = false);
       return;
     }
-    setState(() => _loading = true);
+    // Spinner only when there is nothing on screen; a refresh over existing rows
+    // happens underneath them.
+    if (_rows.isEmpty && mounted) setState(() => _loading = true);
     final page = await _service.disputes(token, status: _status);
     if (!mounted) return;
     setState(() {
-      _rows
-        ..clear()
-        ..addAll(page.items);
-      _cursor = page.nextCursor;
-      _hasMore = page.hasMore;
+      if (page.ok) {
+        _rows
+          ..clear()
+          ..addAll(page.items);
+        _cursor = page.nextCursor;
+        _hasMore = page.hasMore;
+        _error = null;
+      } else {
+        // Keep whatever is already shown; only a load with nothing behind it
+        // becomes the error view.
+        _error = _rows.isEmpty
+            ? 'Could not load the dispute queue. Check your connection and try again.'
+            : null;
+      }
       _loading = false;
     });
   }
@@ -128,7 +147,9 @@ class _AdminDisputesScreenState extends State<AdminDisputesScreen> {
                   child: RefreshIndicator(
                     color: AppColors.accent,
                     onRefresh: _load,
-                    child: _rows.isEmpty
+                    child: _error != null && _rows.isEmpty
+                        ? NetworkErrorView(message: _error!, onRetry: _load)
+                        : _rows.isEmpty
                         ? MatchEmptyState(
                             icon: Icons.gavel_outlined,
                             text: _status == 'open'
