@@ -177,7 +177,12 @@ class ChatService {
     if (cursor != null) params['cursor'] = cursor;
     if (type != null && type != ChatChannelType.unknown) params['type'] = type.wire;
     final r = await _api.get(ApiConstants.chats, token: token, queryParams: params);
-    if (r['success'] != true || r['data'] is! Map) return const ChatInboxPage();
+    // `ok: false` rather than a bare empty page: the caller has to be able to tell
+    // a failed request from an account with no rooms, or it has no choice but to
+    // present one as the other.
+    if (r['success'] != true || r['data'] is! Map) {
+      return const ChatInboxPage(ok: false);
+    }
     return ChatInboxPage.fromJson(Map<String, dynamic>.from(r['data'] as Map));
   }
 
