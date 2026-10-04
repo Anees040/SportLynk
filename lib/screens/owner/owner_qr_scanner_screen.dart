@@ -206,7 +206,20 @@ class _OwnerQrScannerScreenState extends State<OwnerQrScannerScreen> {
           behavior: SnackBarBehavior.floating,
         ));
       }
-    } catch (_) {}
+    } catch (_) {
+      // A no-show forfeits the player's deposit — money moving on the owner's tap.
+      // A silent failure here (the previous `catch (_) {}`) left the owner believing
+      // it was done when nothing happened, the same defect the booking-cancel path
+      // had. The failure is surfaced so the owner knows to try again.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Could not mark the no-show. Check your connection and try again.',
+              style: GoogleFonts.poppins(color: Colors.white)),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
   }
 
   @override
