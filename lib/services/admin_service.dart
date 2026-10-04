@@ -14,10 +14,18 @@ class AdminPage<T> {
   final bool hasMore;
   final String? nextCursor;
 
+  /// False when the fetch failed, as opposed to succeeding with no rows. The read
+  /// still resolves to a safe empty page, but a screen can tell "nothing is open"
+  /// from "the queue could not be read" and show an error with a retry rather than
+  /// a reassuring "all resolved". Follows the `ok` convention already used by the
+  /// chat and report services.
+  final bool ok;
+
   const AdminPage({
     required this.items,
     this.hasMore = false,
     this.nextCursor,
+    this.ok = true,
   });
 
   bool get isEmpty => items.isEmpty;
@@ -32,7 +40,9 @@ class AdminPage<T> {
 /// suspended. An admin screen that disagrees with the backend about what is
 /// allowed offers a button that fails on submit, which is worse than no button.
 ///
-/// Reads return a safe empty value on failure. Writes return the raw envelope —
+/// Reads return a safe empty value on failure, flagged `ok: false` so a screen can
+/// distinguish a failed read from a genuinely empty one. Writes return the raw
+/// envelope —
 /// `{success, message, data}` — because an admin action that fails must show the
 /// server's own message (a 409 `sport_has_bookings`, a refused self-suspension, a
 /// ruling blocked by `elo_applied`), and swallowing it into `null` would leave the
@@ -55,7 +65,7 @@ class AdminService {
     final r = await _api.get(ApiConstants.adminDisputes,
         token: token, queryParams: params);
     if (r['success'] != true || r['data'] is! Map) {
-      return const AdminPage<DisputeRow>(items: []);
+      return const AdminPage<DisputeRow>(items: [], ok: false);
     }
     final d = Map<String, dynamic>.from(r['data'] as Map);
     final items = (d['items'] as List? ?? const [])
@@ -163,7 +173,7 @@ class AdminService {
     final r = await _api.get(ApiConstants.adminUsers,
         token: token, queryParams: params);
     if (r['success'] != true || r['data'] is! Map) {
-      return const AdminPage<AdminUserRow>(items: []);
+      return const AdminPage<AdminUserRow>(items: [], ok: false);
     }
     final d = Map<String, dynamic>.from(r['data'] as Map);
     return AdminPage<AdminUserRow>(
