@@ -7,6 +7,7 @@ import 'dart:io';
 import '../../services/cloudinary_service.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/offline_banner.dart';
 import '../../widgets/sport_text_field.dart';
 import '../../widgets/custom_button.dart';
 import '../../utils/snackbar_util.dart';
@@ -246,6 +247,13 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
       _snack('Add at least 3 ground photos');
       return;
     }
+
+    // Guarded before the photo uploads begin, not after. Submission uploads every
+    // image to Cloudinary and then inserts the venue; offline it would fail
+    // partway, leaving the owner to watch a progress spinner end in a raw error.
+    // A write like this cannot be queued either, so it is refused up front.
+    if (!await OfflineActionNotice.guard(context, 'Submitting a venue')) return;
+    if (!mounted) return;
 
     setState(() => _isSubmitting = true);
 
