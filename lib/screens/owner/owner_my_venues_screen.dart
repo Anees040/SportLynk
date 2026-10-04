@@ -6,7 +6,11 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
+import '../../services/offline_cache.dart';
 import '../../utils/reconnect_refresh.dart';
+import '../../widgets/network_error_view.dart';
+import '../../widgets/offline_banner.dart';
 
 import 'owner_add_venue_screen.dart';
 import 'owner_venue_management_screen.dart';
@@ -22,34 +26,98 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen>
   List<Map<String, dynamic>> _venues = [];
   bool _loading = true;
 
+  /// When the rows on screen were fetched, when they came from the cache. Drives
+  /// the banner's "saved 10 min ago", so the pending and today's-bookings counts on
+  /// each card are never mistaken for current ones.
+  DateTime? _cachedAt;
+
+  /// The failure sentence for a load that had nothing cached to fall back on.
+  ///
+  /// Only that case earns a full error view. Before this existed a failed request
+  /// was swallowed into a `debugPrint` and the screen rendered "No venues yet —
+  /// your approved venues will appear here", which tells an owner with three
+  /// venues that they have none and offers to register a fourth.
+  String? _error;
+
+  /// Set once a fetch has returned rows, so a slow cache read cannot overwrite
+  /// fresher ones and re-label them stale.
+  bool _networkAnswered = false;
+
   @override
   void initState() {
     super.initState();
+    // Concurrent, not chained: awaiting the disk before the request would add
+    // offline latency to every online load.
     _load();
+    _hydrateFromCache();
   }
 
   // A venue list opened offline fills itself in once the socket reconnects.
   @override
   void onReconnect() => _load();
 
+  /// Draw the last good rows if they arrive before the network does.
+  Future<void> _hydrateFromCache() async {
+    final cached = await OfflineCache.read(OfflineCache.ownerVenues);
+    if (!mounted || cached == null || _networkAnswered) return;
+    final rows = cached.asRows();
+    if (rows.isEmpty) return;
+    setState(() {
+      _venues = rows;
+      _cachedAt = cached.at;
+      _error = null;
+      _loading = false;
+    });
+  }
+
   Future<void> _load() async {
-    setState(() => _loading = true);
+    // A refresh over rows that are already drawn happens underneath them; only a
+    // screen with nothing to show gets the spinner.
+    final hadRows = _venues.isNotEmpty;
+    if (!hadRows && mounted) setState(() => _loading = true);
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       final resp = await http.get(
         Uri.parse('${ApiConstants.baseUrl}/owner/venues'),
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 10));
-      if (mounted && resp.statusCode == 200) {
-        final data = jsonDecode(resp.body);
-        if (data['success'] == true) {
-          setState(() => _venues = List<Map<String, dynamic>>.from(data['data']));
-        }
+      if (!mounted) return;
+      final data = jsonDecode(resp.body);
+      if (resp.statusCode == 200 && data['success'] == true) {
+        final raw = data['data'];
+        final rows = raw is List
+            ? raw.whereType<Map>().map(Map<String, dynamic>.from).toList()
+            : <Map<String, dynamic>>[];
+        _networkAnswered = true;
+        setState(() {
+          _venues = rows;
+          _cachedAt = null;  // on screen is now this session's data, not a saved copy
+          _error = null;
+          _loading = false;
+        });
+        context.read<ConnectivityProvider>().markReachable();
+        await OfflineCache.write(OfflineCache.ownerVenues, rows);
+        return;
       }
-    } catch (e) {
-      debugPrint('Venues load error: $e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      // The server answered and refused. Connectivity is left alone: a rejected
+      // request is a fault to name, not a network the owner should go and check.
+      setState(() {
+        _loading = false;
+        _error = hadRows
+            ? null
+            : (data['message'] as String? ?? 'Could not load your venues.');
+      });
+    } catch (_) {
+      // Nothing came back. The rows already on screen stay, under the offline
+      // strip; only a load with no cache behind it earns the error view.
+      if (!mounted) return;
+      context.read<ConnectivityProvider>().markUnreachable();
+      setState(() {
+        _loading = false;
+        _error = hadRows
+            ? null
+            : 'Could not reach the server. Check your connection and try again.';
+      });
     }
   }
 
@@ -86,13 +154,24 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen>
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-          : RefreshIndicator(
-              color: AppColors.accent,
-              onRefresh: _load,
-              child: _venues.isEmpty ? _buildEmpty() : _buildList(),
-            ),
+      body: Column(
+        children: [
+          OfflineBanner(cachedAt: _cachedAt),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+                // The error view replaces the list only when there was no cache to
+                // fall back on, so an outage with saved rows keeps showing them.
+                : _error != null
+                    ? NetworkErrorView(message: _error!, onRetry: _load)
+                    : RefreshIndicator(
+                        color: AppColors.accent,
+                        onRefresh: _load,
+                        child: _venues.isEmpty ? _buildEmpty() : _buildList(),
+                      ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addVenue,
         backgroundColor: AppColors.accent,
