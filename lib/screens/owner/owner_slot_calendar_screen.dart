@@ -6,7 +6,9 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
 import '../../utils/reconnect_refresh.dart';
+import '../../widgets/network_error_view.dart';
 
 class OwnerSlotCalendarScreen extends StatefulWidget {
   const OwnerSlotCalendarScreen({super.key});
@@ -21,6 +23,15 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
   List<Map<String, dynamic>> _venues = [];
   String? _selectedVenueId;
   bool _loading = false;
+
+  /// The failure sentence for a slot load that could not reach the server.
+  ///
+  /// Kept distinct from an empty result because the two call for opposite actions:
+  /// a date with genuinely no slots invites the owner to generate them, while a
+  /// failed load must not — generating over slots that already exist but could not
+  /// be read would double-book the grid. "No slots for this date" is now shown only
+  /// when the server actually answered with none.
+  String? _error;
   static String get _base => ApiConstants.baseUrl;
 
   @override
@@ -64,20 +75,42 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       String url = '$_base/owner/slots?date=${_dateStr(_selectedDate)}';
       if (_selectedVenueId != null) url += '&venueId=$_selectedVenueId';
-      
+
       final resp = await http.get(
         Uri.parse(url),
         headers: {'Authorization': 'Bearer $token'},
-      );
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
       final data = jsonDecode(resp.body);
-      if (mounted) {
+      if (data['success'] == true) {
+        final raw = data['data'];
         setState(() {
-          _slots = data['success'] == true ? List<Map<String, dynamic>>.from(data['data']) : [];
+          _slots = raw is List
+              ? raw.whereType<Map>().map(Map<String, dynamic>.from).toList()
+              : <Map<String, dynamic>>[];
+          _error = null;
           _loading = false;
+        });
+        context.read<ConnectivityProvider>().markReachable();
+      } else {
+        // The server answered and refused. Its message is shown rather than an
+        // empty grid, so the owner does not read a failure as "regenerate these".
+        setState(() {
+          _slots = [];
+          _loading = false;
+          _error = data['message'] as String? ?? 'Could not load the schedule.';
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      // Nothing came back. The empty grid would read as "no slots"; the error view
+      // reads as what it is, with a retry.
+      if (!mounted) return;
+      context.read<ConnectivityProvider>().markUnreachable();
+      setState(() {
+        _slots = [];
+        _loading = false;
+        _error = 'Could not reach the server. Check your connection and try again.';
+      });
     }
   }
 
@@ -259,7 +292,9 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-              : _slots.isEmpty
+              : _error != null
+                  ? NetworkErrorView(message: _error!, onRetry: _loadSlots)
+                  : _slots.isEmpty
                   ? Center(
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
                         const Icon(Icons.event_note_outlined, size: 48, color: AppColors.disabled),
