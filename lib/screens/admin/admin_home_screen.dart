@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/network_error_view.dart';
 import '../../widgets/notification_bell.dart';
 import '../../services/review_service.dart';
 import '../../utils/reconnect_refresh.dart';
@@ -29,6 +30,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
   List<Map<String, dynamic>> _pendingVenues = [];
   bool _loadingStats = true;
   bool _loadingList = true;
+
+  /// The failure sentence for a dashboard-stats load with no prior figures to
+  /// keep. Reserved for that case: with stats already on screen a transient
+  /// failure leaves them rather than blanking the control center.
+  String? _statsError;
   int _openFlags = 0; // reviews awaiting moderation (not yet hidden)
   // Open disputes, for the desk tile. There is no cheap count for this: the queue
   // is a keyset page sorted by what is at stake, so one page is read and the tile
@@ -85,27 +91,43 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
       Provider.of<AuthProvider>(context, listen: false).token ?? '';
 
   Future<void> _loadStats() async {
+    // Spinner only when there is nothing on screen yet; a reconnect refresh over
+    // existing figures happens underneath them rather than blanking the dashboard.
+    if (_stats == null && mounted) setState(() => _loadingStats = true);
     try {
       final r = await http.get(
         Uri.parse('$_base/admin/stats'),
         headers: {'Authorization': 'Bearer $_token'},
-      );
+      ).timeout(const Duration(seconds: 10));
       final d = jsonDecode(r.body);
       if (mounted && d['success'] == true) {
         setState(() {
-          _stats = d['data'];
+          _stats = d['data'] is Map ? Map<String, dynamic>.from(d['data'] as Map) : null;
+          _statsError = null;
           _loadingStats = false;
         });
       } else {
         if (mounted) {
-          _snack('Failed to load stats: ${d['message'] ?? 'Unknown error'}');
-          setState(() => _loadingStats = false);
+          setState(() {
+            _loadingStats = false;
+            // Only an outright error view when there is no prior stats to keep on
+            // screen. Before this, a failed load left [_stats] null and the hero
+            // badges rendered "0 / 0 / 0" — an empty approval queue presented to the
+            // admin as fact, with only a disappearing snackbar to the contrary.
+            _statsError = _stats != null
+                ? null
+                : (d['message'] as String? ?? 'Could not load the dashboard.');
+          });
         }
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        _snack('Error loading stats: $e');
-        setState(() => _loadingStats = false);
+        setState(() {
+          _loadingStats = false;
+          _statsError = _stats != null
+              ? null
+              : 'Could not reach the server. Check your connection and try again.';
+        });
       }
     }
   }
@@ -327,6 +349,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
   Widget _buildDashboard() {
     if (_loadingStats) {
       return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+    }
+    // A failed first load is an error with a retry, not a control center reading
+    // zero across the board — an admin acting on "0 pending" would conclude there
+    // is nothing to approve.
+    if (_statsError != null && _stats == null) {
+      return NetworkErrorView(message: _statsError!, onRetry: _loadStats);
     }
     final s = _stats ?? {};
     return RefreshIndicator(
