@@ -100,6 +100,26 @@ class ChatChannelContext {
         sport: j['sport'] as String?,
         memberCount: j['memberCount'] == null ? null : asNum(j['memberCount']).toInt(),
       );
+
+  /// Mirror of [ChatChannelContext.fromJson] for the inbox cache. Nulls are kept
+  /// rather than stripped so a round trip is value-identical and an absent field
+  /// cannot be mistaken for one that was never sent.
+  Map<String, dynamic> toJson() => {
+        'kind': kind,
+        'status': status,
+        'title': title,
+        'subtitle': subtitle,
+        'imageUrl': imageUrl,
+        'venueName': venueName,
+        'city': city,
+        'slotLabel': slotLabel,
+        'opponentName': opponentName,
+        'isTournament': isTournament,
+        'myTeamId': myTeamId,
+        'myTeamName': myTeamName,
+        'sport': sport,
+        'memberCount': memberCount,
+      };
 }
 
 /// One inbox row.
@@ -186,6 +206,30 @@ class ChatChannel {
             : null,
       );
 
+  /// The inverse of [ChatChannel.fromJson], for the inbox's offline cache.
+  ///
+  /// Written to mirror the wire field names exactly, so a cached row decodes
+  /// through the same `fromJson` as a fresh response and the two cannot drift into
+  /// parsing differently. Dates go out as ISO 8601, which is what `_date` reads.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type.wire,
+        'refId': refId,
+        'title': title,
+        'imageUrl': imageUrl,
+        'lastMessageAt': lastMessageAt?.toIso8601String(),
+        'lastMessagePreview': lastMessagePreview,
+        'lastMessageSenderId': lastMessageSenderId,
+        'lastMessageSenderName': lastMessageSenderName,
+        'messageCount': messageCount,
+        'unread': unread,
+        'muted': muted,
+        'mutedUntil': mutedUntil?.toIso8601String(),
+        'role': role,
+        'sortAt': sortAt?.toIso8601String(),
+        'context': context?.toJson(),
+      };
+
   ChatChannel copyWith({
     int? unread,
     bool? muted,
@@ -225,7 +269,22 @@ class ChatInboxPage {
   final List<ChatChannel> items;
   final String? nextCursor;
 
-  const ChatInboxPage({this.items = const [], this.nextCursor});
+  /// Whether the request that produced this page actually succeeded.
+  ///
+  /// Exists because an empty page used to mean two different things — "you are in
+  /// no rooms" and "the request did not land" — and the inbox could not tell them
+  /// apart, so it was reduced to wording its empty state around the ambiguity.
+  /// With this flag a failure can keep the cached rooms on screen instead.
+  ///
+  /// Defaults to true so a page decoded from a real response needs no extra
+  /// argument; only the service's failure branch sets it false.
+  final bool ok;
+
+  const ChatInboxPage({
+    this.items = const [],
+    this.nextCursor,
+    this.ok = true,
+  });
 
   bool get hasMore => nextCursor != null;
 
