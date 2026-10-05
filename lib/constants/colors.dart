@@ -56,6 +56,7 @@ class AppColors {
   static const Color chatBgDusk = Color(0xFFE8E6F2);
   static const Color chatBgRose = Color(0xFFF6E9EA);
   static const Color chatBgTeal = Color(0xFFDEEDEC);
+  static const Color chatBgGold = Color(0xFFF6EEDC);
   static const Color chatPatternStrong = Color(0x1A0E3621);
 
   /// The wash over a selected chat row. Translucent, so it reads over the pale
