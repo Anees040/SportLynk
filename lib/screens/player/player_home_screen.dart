@@ -60,7 +60,9 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
   @override
   void initState() {
     super.initState();
-    _hydrateThenLoad();
+    // Concurrent, not chained — see [_hydrateFromCache].
+    _load();
+    _hydrateFromCache();
     _watchChat();
   }
 
@@ -151,21 +153,23 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
     }
   }
 
-  /// Draw the last good dashboard before the network is consulted, so a reopen or
-  /// an offline start shows the user's real stats instead of the zero-state
-  /// defaults the null payload falls back to.
-  Future<void> _hydrateThenLoad() async {
+  /// Draw the last good dashboard if it arrives before the network does, so a
+  /// reopen or an offline start shows the user's real stats instead of the
+  /// zero-state defaults the null payload falls back to.
+  ///
+  /// Started alongside the fetch, never before it: awaiting disk first would add
+  /// the cache's latency to every online load. The `_homeData == null` guard is
+  /// what makes losing the race harmless — a response that already landed is never
+  /// replaced by a saved copy.
+  Future<void> _hydrateFromCache() async {
     final cached = await OfflineCache.read(OfflineCache.playerHome);
-    if (cached != null && mounted) {
-      final map = cached.asMap();
-      if (map != null) {
-        setState(() {
-          _homeData = map;
-          _homeCachedAt = cached.at;
-        });
-      }
-    }
-    await _load();
+    if (!mounted || cached == null || _homeData != null) return;
+    final map = cached.asMap();
+    if (map == null) return;
+    setState(() {
+      _homeData = map;
+      _homeCachedAt = cached.at;
+    });
   }
 
   void _onTabChanged(int index) {

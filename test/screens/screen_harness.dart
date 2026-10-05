@@ -56,6 +56,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sportlynk/constants/app_theme.dart';
 import 'package:sportlynk/models/user.dart';
 import 'package:sportlynk/providers/auth_provider.dart';
+import 'package:sportlynk/providers/connectivity_provider.dart';
 import 'package:sportlynk/providers/notification_provider.dart';
 import 'package:sportlynk/services/api_service.dart';
 import 'package:sportlynk/services/realtime_service.dart';
@@ -650,6 +651,17 @@ Future<RouteLog> pumpScreen(
       providers: [
         ChangeNotifierProvider<AuthProvider>.value(value: auth ?? FakeAuth()),
         ChangeNotifierProvider<NotificationProvider>(create: (_) => NotificationProvider()),
+        // Seeded ONLINE rather than left at its natural default.
+        //
+        // `ConnectivityProvider` reads the socket, and no socket connects under
+        // `flutter_test` — so the honest default here is "offline", which would put
+        // the offline strip over every screen in the suite and make each test
+        // assert a state it did not choose. A test that wants the offline path
+        // passes its own instance through [providers]; because MultiProvider nests
+        // in order, a later entry of the same type shadows this one.
+        ChangeNotifierProvider<ConnectivityProvider>(
+          create: (_) => ConnectivityProvider()..markReachable(),
+        ),
         ...providers,
       ],
       child: MaterialApp(

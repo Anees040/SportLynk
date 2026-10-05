@@ -47,8 +47,29 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   /// tapped. A date absent from the map is treated as unknown, not zero.
   final Map<String, int> _freeByDate = {};
   DateTime _selectedDate = DateTime.now();
-  String? _selectedSlotId;
-  Map<String, dynamic>? _selectedSlot;
+
+  /// The slots the player has selected, first to last.
+  ///
+  /// A list rather than a single slot because consecutive hours can be booked
+  /// together. It is kept chronologically sorted and always contiguous — every
+  /// path that adds or removes an entry preserves both, so no code downstream has
+  /// to re-check it. Empty means nothing is selected; one entry is the ordinary
+  /// single booking.
+  final List<Map<String, dynamic>> _selected = [];
+
+  /// The server's price for the current run: total, discount percent and saving.
+  ///
+  /// Only fetched for two slots or more, and only ever displayed — never computed
+  /// here. The discount ladder belongs to the owner and lives on the server, so a
+  /// second copy in Dart would be a price the booking contradicts. Null while a
+  /// request is in flight or when the run is a single slot.
+  Map<String, dynamic>? _groupQuote;
+  bool _quoteLoading = false;
+
+  /// Guards against an out-of-order quote reply overwriting a newer one: a reply
+  /// is applied only if its token is still the latest request.
+  int _quoteToken = 0;
+
   int _galleryPage = 0;
   final PageController _galleryCtrl = PageController();
 
@@ -68,6 +89,75 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   final ReviewService _reviewService = ReviewService();
   VenueReviews _reviews = VenueReviews.empty;
 
+  /// The slots selected, as ids, in the order they will be booked in.
+  List<String> get _selectedIds =>
+      _selected.map((s) => s['id'].toString()).toList(growable: false);
+
+  bool _isSelected(Map<String, dynamic> slot) =>
+      _selected.any((s) => s['id'] == slot['id']);
+
+  /// A TIME value as 'HH:MM:SS', so two of them can be compared as strings.
+  /// Mirrors `timeStr` in backend/src/utils/slotGroup.js.
+  String _timeKey(dynamic raw) {
+    final s = raw == null ? '' : raw.toString().trim();
+    final m = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?$').firstMatch(s);
+    if (m == null) return s;
+    return '${m.group(1)!.padLeft(2, '0')}:${m.group(2)}:${m.group(3) ?? '00'}';
+  }
+
+  /// The most slots one booking group may cover. Mirrors `MAX_GROUP_SLOTS` in
+  /// backend/src/utils/slotGroup.js; the server refuses anything larger, so this
+  /// only exists to stop the player reaching that refusal.
+  static const int _maxGroupSlots = 8;
+
+  /// Hands back every hold the run is holding. Used wherever the selection is
+  /// abandoned wholesale — a date change, leaving the screen, or Clear.
+  void _releaseAllHolds() {
+    for (final id in _selectedIds) {
+      _releaseLock(id);
+    }
+  }
+
+  void _clearSelection({bool releaseHolds = true}) {
+    if (releaseHolds) _releaseAllHolds();
+    _selected.clear();
+    _groupQuote = null;
+    _quoteLoading = false;
+    _quoteToken += 1;
+  }
+
+  /// Drops `slot` and every slot after it, which is what keeps the run contiguous
+  /// without needing a second pass to prove it. Holds on the dropped slots are
+  /// handed straight back.
+  void _truncateFrom(String slotId) {
+    final at = _selected.indexWhere((s) => s['id'].toString() == slotId);
+    if (at < 0) return;
+    for (final s in _selected.sublist(at)) {
+      _releaseLock(s['id'].toString());
+    }
+    _selected.removeRange(at, _selected.length);
+  }
+
+  /// Would adding `slot` leave the run contiguous? True when it sits immediately
+  /// before the first selected slot or immediately after the last.
+  ///
+  /// Only same-date adjacency is offered, because the grid shows one date at a
+  /// time: the midnight seam of a venue open past midnight falls between two
+  /// dates, so the two halves are never on screen together. The server accepts
+  /// that seam; this screen simply cannot present it.
+  bool _extendsRun(Map<String, dynamic> slot) {
+    if (_selected.isEmpty) return true;
+    final first = _selected.first;
+    final last = _selected.last;
+    return _timeKey(slot['end_time']) == _timeKey(first['start_time'])
+        || _timeKey(slot['start_time']) == _timeKey(last['end_time']);
+  }
+
+  void _sortSelection() {
+    _selected.sort((a, b) =>
+        _timeKey(a['start_time']).compareTo(_timeKey(b['start_time'])));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -81,10 +171,9 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    // Leaving checkout hands the slot straight back instead of making the next
+    // Leaving checkout hands the slots straight back instead of making the next
     // player wait out the 5-minute expiry.
-    final held = _selectedSlotId;
-    if (held != null) _releaseLock(held);
+    _releaseAllHolds();
     _galleryCtrl.dispose();
     super.dispose();
   }
@@ -148,7 +237,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
         _slotsByDate[key] = slots;
         _errorByDate[key] = null;
         final stillSelected = _dateStr(_selectedDate) == key;
-        final prevSelectedId = _selectedSlotId;
+        final prevSelectedIds = _selectedIds;
         var lostSelection = false;
         setState(() {
           _venue = data['data'];
@@ -157,22 +246,41 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           _slots = slots;
           _loadError = null;
           _slotLoading = false;
-          if (prevSelectedId != null) {
-            // Keep a live selection across an auto-refresh of the same date.
-            final found =
-                slots.where((s) => s['id'] == prevSelectedId).toList();
-            if (found.isNotEmpty && _isSelectable(found.first)) {
-              _selectedSlot = found.first;
-            } else {
-              _selectedSlotId = null;
-              _selectedSlot = null;
-              lostSelection = true;
+          if (prevSelectedIds.isNotEmpty) {
+            // Keep a live selection across an auto-refresh of the same date, and
+            // re-point it at the fresh rows so a repriced slot shows its new price.
+            // The run is walked in order and truncated at the first slot that is
+            // gone, which keeps it contiguous: dropping a slot out of the middle
+            // would leave a selection the server would then refuse.
+            final kept = <Map<String, dynamic>>[];
+            for (final id in prevSelectedIds) {
+              final found = slots.where((s) => s['id'].toString() == id).toList();
+              if (found.isNotEmpty && _isSelectable(found.first)) {
+                kept.add(found.first);
+              } else {
+                lostSelection = true;
+                break;
+              }
             }
+            if (lostSelection) {
+              for (final id in prevSelectedIds.skip(kept.length)) {
+                _releaseLock(id);
+              }
+            }
+            _selected
+              ..clear()
+              ..addAll(kept);
+            _sortSelection();
           }
         });
         if (lostSelection) {
-          _snack('That slot was just taken by another player. Pick another one.');
+          _snack(_selected.isEmpty
+              ? 'That slot was just taken by another player. Pick another one.'
+              : 'Part of your selection was just taken. The rest is still held.');
         }
+        // Prices may have moved with the refresh, so the quote is re-read rather
+        // than left showing a total derived from slots that have since changed.
+        _refreshQuote();
       } else {
         // A reached server that answered with something other than success. A real
         // 404 means the venue is gone and a retry cannot help, so that alone keeps
@@ -246,13 +354,10 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     );
     if (picked == null || !mounted) return;
     if (_dateStr(picked) == _dateStr(_selectedDate)) return;
-    final held = _selectedSlotId;
     setState(() {
       _selectedDate = picked;
-      _selectedSlotId = null;
-      _selectedSlot = null;
+      _clearSelection();
     });
-    if (held != null) _releaseLock(held);
     _load(picked);
   }
 
@@ -279,51 +384,116 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     return status == 'available' || slot['locked_by_me'] == true;
   }
 
+  /// Tap behaviour, in one place because the rule has to be describable to the
+  /// player in a single line: tap consecutive slots to add hours, tap a selected
+  /// slot to drop it and anything after it.
+  ///
+  /// A tap on a slot that does not touch either end of the run replaces the
+  /// selection with that slot alone. That is a deliberate choice over showing an
+  /// error: a player tapping a distant hour means "that one instead", and a
+  /// selection the server would refuse should never be reachable.
   Future<void> _onSlotTap(
     Map<String, dynamic> slot,
     bool isCurrentlySelected,
   ) async {
     final slotId = slot['id'].toString();
 
-    // Tapping the selected slot again clears it and hands the hold back.
+    // Tapping a selected slot drops it and every slot after it, so the run is
+    // always contiguous and the gesture stays reversible.
     if (isCurrentlySelected) {
-      setState(() {
-        _selectedSlotId = null;
-        _selectedSlot = null;
-      });
-      _releaseLock(slotId);
+      setState(() => _truncateFrom(slotId));
+      _refreshQuote();
+      return;
+    }
+
+    if (_selected.length >= _maxGroupSlots && _extendsRun(slot)) {
+      _snack('A single booking can cover at most $_maxGroupSlots slots.');
       return;
     }
 
     // Optimistic selection: the tap registers instantly and Book Now lights up at
     // once, the way a real booking app feels. The 5-minute checkout hold is taken
     // in the background rather than awaited — the hold is only a courtesy so two
-    // players don't fill the same form, and the booking itself re-checks the slot
-    // under a row lock, so a selection that loses the hold still fails safely at
-    // confirm time rather than letting the player pay twice.
-    final previous = _selectedSlotId;
+    // players don't fill the same form, and the booking itself re-checks every
+    // slot under a row lock, so a selection that loses a hold still fails safely
+    // at confirm time rather than letting the player pay twice.
+    final extends_ = _extendsRun(slot);
     setState(() {
-      _selectedSlotId = slotId;
-      _selectedSlot = slot;
+      if (!extends_) _clearSelection();
+      _selected.add(slot);
+      _sortSelection();
     });
-    if (previous != null && previous != slotId) _releaseLock(previous);
     _acquireHoldInBackground(slotId);
+    _refreshQuote();
   }
 
   /// Takes the checkout hold without blocking the tap. If the slot was already held
-  /// or booked by someone else, this reverts just that selection (and only while it
-  /// is still the selected one) and repaints so the Blue/Amber state shows — it
-  /// never blocks the player from tapping a different slot in the meantime.
+  /// or booked by someone else, this drops it from the run — along with anything
+  /// after it, so what remains is still contiguous — and repaints so the Blue/Amber
+  /// state shows. It never blocks the player from tapping a different slot in the
+  /// meantime.
   Future<void> _acquireHoldInBackground(String slotId) async {
     final failure = await _lockSlot(slotId);
     if (!mounted || failure == null) return;
-    if (_selectedSlotId == slotId) {
-      setState(() {
-        _selectedSlotId = null;
-        _selectedSlot = null;
-      });
+    if (_selected.any((s) => s['id'].toString() == slotId)) {
+      setState(() => _truncateFrom(slotId));
       _snack(failure);
+      _refreshQuote();
       _load();
+    }
+  }
+
+  /// Prices the current run on the server, or clears the quote when there is
+  /// nothing multi-slot to price.
+  ///
+  /// The quote is advisory: it takes no locks, and the booking re-reads every slot
+  /// before any money moves. What it buys is that the discount the player is shown
+  /// is the owner's real ladder applied by the same code the booking will use.
+  Future<void> _refreshQuote() async {
+    final token = _token;
+    final ids = _selectedIds;
+    final venueId = widget.venueId;
+    _quoteToken += 1;
+    final token_ = _quoteToken;
+
+    if (ids.length < 2 || token == null) {
+      if (_groupQuote != null || _quoteLoading) {
+        setState(() {
+          _groupQuote = null;
+          _quoteLoading = false;
+        });
+      }
+      return;
+    }
+
+    setState(() => _quoteLoading = true);
+    try {
+      final resp = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/bookings/group/quote'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'venueId': venueId, 'slotIds': ids}),
+      );
+      final data = jsonDecode(resp.body);
+      // A reply for a selection the player has since changed is discarded rather
+      // than painted over the current one.
+      if (!mounted || token_ != _quoteToken) return;
+      setState(() {
+        _quoteLoading = false;
+        _groupQuote = data['success'] == true
+            ? Map<String, dynamic>.from(data['data'] as Map)
+            : null;
+      });
+    } catch (_) {
+      if (!mounted || token_ != _quoteToken) return;
+      // The bottom bar falls back to the sum of the slots' own prices, which is
+      // the undiscounted truth rather than an invented discount.
+      setState(() {
+        _quoteLoading = false;
+        _groupQuote = null;
+      });
     }
   }
 
@@ -923,15 +1093,12 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                           onTap: () {
                             if (_dateStr(date) == _dateStr(_selectedDate)) return;
                             // Switching dates abandons any hold taken on the old
-                            // date's slot and clears the selection — a hold belongs
+                            // date's slots and clears the selection — a hold belongs
                             // to the day it was taken on.
-                            final held = _selectedSlotId;
                             setState(() {
                               _selectedDate = date;
-                              _selectedSlotId = null;
-                              _selectedSlot = null;
+                              _clearSelection();
                             });
-                            if (held != null) _releaseLock(held);
                             _load(date);
                           },
                           child: AnimatedContainer(
@@ -1040,6 +1207,56 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                       ),
                     ],
                   ),
+                  // The tap rule, stated once. A player who does not read it loses
+                  // nothing: a single tap still books one slot exactly as before.
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(Icons.touch_app_outlined,
+                          size: 12, color: AppColors.textSecondary),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Tap back-to-back slots to book more than one at a time',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // The owner's multi-slot ladder, composed by the server
+                  // (discountService.describeTiers) so the app and Scout cannot
+                  // describe the same ladder differently. Absent when the venue has
+                  // no ladder, which renders as nothing at all.
+                  if (_discountSummary != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentLight,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.local_offer_outlined,
+                              size: 14, color: AppColors.accent),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _discountSummary!,
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 16,
@@ -1079,7 +1296,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                               'available')
                           .toString();
                   final selectable = _isSelectable(slot);
-                  final selected = _selectedSlotId == slot['id'];
+                  final selected = _isSelected(slot);
                   final time12 = _to12Hour(slot['start_time']);
                   final slotPrice = asNum(slot['price']);
                   final statusColor = _slotStatusColor(status);
@@ -1520,10 +1737,41 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     );
   }
 
+  /// The venue's discount ladder as the server phrased it, or null when it has
+  /// none. Read off the venue payload rather than fetched separately.
+  String? get _discountSummary {
+    final raw = _venue == null ? null : _venue!['discount_summary'];
+    final s = raw?.toString().trim();
+    return (s == null || s.isEmpty) ? null : s;
+  }
+
+  /// What the run costs at the slots' own prices, with no discount applied.
+  double get _listTotal =>
+      _selected.fold<double>(0, (sum, s) => sum + asNum(s['price']));
+
+  /// What the player will pay: the server's quote when there is one, the list
+  /// total otherwise. Never a discount computed here — the ladder belongs to the
+  /// server, and a local copy would be a number the booking contradicts.
+  double get _payableTotal {
+    final q = _groupQuote;
+    if (q != null && q['total'] != null) return asNum(q['total']);
+    return _listTotal;
+  }
+
+  double get _quotedSaving => _groupQuote == null ? 0 : asNum(_groupQuote!['saved']);
+
+  double get _quotedPercent =>
+      _groupQuote == null ? 0 : asNum(_groupQuote!['discountPercent']);
+
   Widget _bottomBar() {
-    final slotPrice = _selectedSlot != null
-        ? asNum(_selectedSlot!['price'])
-        : 0.0;
+    final count = _selected.length;
+    final hasSelection = count > 0;
+    // The selected range, for a bar that would otherwise say "3 slots" without
+    // saying which three.
+    final range = hasSelection
+        ? '${_to12Hour(_selected.first['start_time'])} – '
+            '${_to12Hour(_selected.last['end_time'])}'
+        : null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
@@ -1541,7 +1789,61 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
         top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // The saving line, above the total and only when the server actually
+            // quoted one. A Clear affordance rides with it, because a run of slots
+            // is more work to undo one tap at a time.
+            if (count > 1) ...[
+              Row(
+                children: [
+                  if (_quotedPercent > 0) ...[
+                    const Icon(Icons.local_offer_outlined,
+                        size: 13, color: AppColors.accent),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '${_quotedPercent.toStringAsFixed(0)}% off — you save '
+                        'PKR ${_quotedSaving.toStringAsFixed(0)}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                    ),
+                  ] else
+                    Expanded(
+                      child: Text(
+                        _quoteLoading ? 'Checking for a discount…' : '$count slots selected',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  TextButton(
+                    onPressed: () {
+                      setState(_clearSelection);
+                      _refreshQuote();
+                    },
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 36),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: Text(
+                      'Clear',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+            ],
             Row(
               children: [
                 Column(
@@ -1557,23 +1859,31 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                       ),
                     ),
                     Text(
-                      _selectedSlot != null
-                          ? 'PKR ${slotPrice.toStringAsFixed(0)}'
+                      hasSelection
+                          ? 'PKR ${_payableTotal.toStringAsFixed(0)}'
                           : 'Select a slot',
                       style: GoogleFonts.poppins(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: _selectedSlot != null
+                        color: hasSelection
                             ? AppColors.textPrimary
                             : AppColors.textSecondary,
                       ),
                     ),
+                    if (range != null)
+                      Text(
+                        count > 1 ? '$range  ·  $count slots' : range,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _selectedSlot == null ? null : _goToConfirm,
+                    onPressed: !hasSelection ? null : _goToConfirm,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
                       disabledBackgroundColor: AppColors.disabled,
@@ -1581,7 +1891,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                         borderRadius: BorderRadius.circular(28),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      elevation: _selectedSlot != null ? 4 : 0,
+                      elevation: hasSelection ? 4 : 0,
                       shadowColor: AppColors.accent.withValues(alpha: 0.4),
                     ),
                     child: Text(
@@ -1603,7 +1913,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   }
 
   Future<void> _goToConfirm() async {
-    if (_selectedSlot == null || _venue == null) return;
+    if (_selected.isEmpty || _venue == null) return;
     // Hold the refresh while checkout is on top — nothing there reacts to a
     // repaint, and a snackbar would land over the confirm screen.
     _refreshTimer?.cancel();
@@ -1612,7 +1922,10 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
       MaterialPageRoute(
         builder: (_) => ConfirmBookingScreen(
           venue: _venue!,
-          slot: _selectedSlot!,
+          // `slot` stays the first of the run so the single-slot path is untouched;
+          // `slots` carries the whole run and is what makes it a group.
+          slot: _selected.first,
+          slots: List<Map<String, dynamic>>.of(_selected),
           selectedDate: _selectedDate,
         ),
       ),

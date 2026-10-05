@@ -8,9 +8,12 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../models/chat_channel.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
 import '../../services/chat_service.dart';
+import '../../services/offline_cache.dart';
 import '../../services/realtime_service.dart';
 import '../../services/team_service.dart';
+import '../../widgets/offline_banner.dart';
 import 'chat_thread_screen.dart';
 
 /// The inbox — every room this person is in, newest first, grouped in sections.
@@ -54,7 +57,19 @@ class _ChatsScreenState extends State<ChatsScreen> {
   bool _loading = true;
   bool _loadingMore = false;
 
+  /// Set while the rows on screen were restored from disk.
+  DateTime? _cachedAt;
+
   StreamSubscription<Map<String, dynamic>>? _msgSub;
+  StreamSubscription<Map<String, dynamic>>? _receiptSub;
+
+  /// The room whose thread is open on top of this list, or null.
+  ///
+  /// This screen stays mounted underneath the thread and keeps receiving the
+  /// socket's messages, so without this it counted every line the user was
+  /// reading at that moment as unread and the badge came back the instant they
+  /// returned.
+  String? _openChannelId;
 
   @override
   void initState() {
@@ -69,12 +84,41 @@ class _ChatsScreenState extends State<ChatsScreen> {
     // is the only chat screen on the stack.
     RealtimeService().ensureConnected(_token);
     _msgSub = RealtimeService().messages.listen(_onLiveMessage);
+    // My own read marks arrive here too (the server sends a receipt to the
+    // reader's own devices as well as to the room), and they are what clears a
+    // badge without waiting for a refetch to agree.
+    _receiptSub = RealtimeService().receipts.listen(_onReceipt);
+    // Concurrent, not chained — see [_hydrateFromCache].
     _load();
+    _hydrateFromCache();
+  }
+
+  /// Draw the last known inbox if it arrives before the network does.
+  ///
+  /// This is the piece that makes the chat feature behave offline the way the
+  /// threads already do: `ChatController` caches a page of messages per room, so
+  /// with the room list cached too, a phone with no connection can open the inbox,
+  /// pick a conversation and read it. Without this the list was empty and the
+  /// cached messages were unreachable.
+  ///
+  /// The `_items.isEmpty` guard keeps a slow disk read from replacing rooms the
+  /// response already delivered.
+  Future<void> _hydrateFromCache() async {
+    final cached = await OfflineCache.read(OfflineCache.chatInbox);
+    if (!mounted || cached == null || _items.isNotEmpty) return;
+    final rows = cached.asRows();
+    if (rows.isEmpty) return;
+    setState(() {
+      _items.addAll(rows.map(ChatChannel.fromJson));
+      _cachedAt = cached.at;
+      _loading = false;
+    });
   }
 
   @override
   void dispose() {
     _msgSub?.cancel();
+    _receiptSub?.cancel();
     _scroll.dispose();
     super.dispose();
   }
@@ -88,14 +132,27 @@ class _ChatsScreenState extends State<ChatsScreen> {
   Future<void> _load() async {
     final page = await _chat.chats(_token, limit: 30);
     if (!mounted) return;
+    // A failed fetch leaves whatever is on screen alone. Clearing the list on
+    // failure is what used to turn a dropped connection into an inbox that looked
+    // like an account with no conversations — and it also threw away the only
+    // route to the message caches the threads keep.
+    if (!page.ok) {
+      setState(() => _loading = false);
+      context.read<ConnectivityProvider>().markUnreachable();
+      return;
+    }
     setState(() {
       _items
         ..clear()
         ..addAll(page.items);
       _cursor = page.nextCursor;
       _hasMore = page.hasMore;
+      _cachedAt = null;
       _loading = false;
     });
+    context.read<ConnectivityProvider>().markReachable();
+    await OfflineCache.write(
+        OfflineCache.chatInbox, page.items.map((c) => c.toJson()).toList());
   }
 
   Future<void> _loadMore() async {
@@ -149,6 +206,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
     };
     final at = DateTime.tryParse('${m['created_at'] ?? ''}')?.toLocal();
     final mine = senderId != null && senderId == _myId;
+    // A message landing in the room the user is reading right now is not unread.
+    // The thread marks it read a moment later and the server's receipt confirms
+    // it, but counting it first and uncounting it after is a badge that blinks.
+    final reading = channelId == _openChannelId;
     setState(() {
       _items[i] = _items[i].copyWith(
         lastMessageAt: at,
@@ -157,22 +218,54 @@ class _ChatsScreenState extends State<ChatsScreen> {
         lastMessageSenderName: m['sender_name'] == null ? null : '${m['sender_name']}',
         // My own message never counts as unread to me, and a delete is an edit of
         // a message that was already counted — neither moves the badge.
-        unread: (mine || deleted) ? _items[i].unread : _items[i].unread + 1,
+        unread: (mine || deleted || reading) ? _items[i].unread : _items[i].unread + 1,
       );
     });
   }
 
+  /// One of my read watermarks moved: drop that room's badge.
+  ///
+  /// The server emits a receipt to the reader's own user room precisely so this
+  /// screen can learn it. Before that, a read performed inside the thread was
+  /// invisible here and the only correction was the refetch on return — which
+  /// races the read it is trying to observe, because the read-mark is sent
+  /// without waiting for an answer. The result was a room the user had just
+  /// finished reading still wearing its count.
+  ///
+  /// Receipts from other people are ignored: their ticks are the thread's
+  /// business, and an inbox row says nothing about them.
+  void _onReceipt(Map<String, dynamic> data) {
+    if ('${data['userId']}' != _myId) return;
+    if (data['readAt'] == null) return; // delivered-only: nothing was read
+    final channelId = '${data['channelId'] ?? ''}';
+    if (channelId.isEmpty) return;
+    final i = _items.indexWhere((c) => c.id == channelId);
+    if (i < 0 || _items[i].unread == 0) return;
+    setState(() => _items[i] = _items[i].copyWith(unread: 0));
+  }
+
   Future<void> _open(ChatChannel c) async {
     // Optimistically clear the badge: opening the thread is what moves
-    // `last_read_at` server-side, and the refresh on return confirms it.
+    // `last_read_at` server-side, the live receipt confirms it, and the refresh
+    // on return is the backstop for a socket that was down throughout.
     final i = _items.indexOf(c);
     if (i >= 0 && c.unread > 0) {
       setState(() => _items[i] = c.copyWith(unread: 0));
     }
+    _openChannelId = c.id;
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ChatThreadScreen.fromChannel(c)),
     );
+    _openChannelId = null;
+    if (!mounted) return;
+    // Confirm the read from here before re-reading the counts. The thread's own
+    // read-marks are fire-and-forget (a socket emit, or an un-awaited POST when
+    // the socket is down), so a refresh issued the instant the thread closes can
+    // observe the room as still unread and put the badge straight back. This POST
+    // is idempotent — the watermark only moves forwards — and it costs one
+    // request per visit to make the clear deterministic rather than likely.
+    await _chat.markRead(_token, c.id);
     if (mounted) await _load();
   }
 
@@ -499,42 +592,47 @@ class _ChatsScreenState extends State<ChatsScreen> {
         ),
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
-      body: RefreshIndicator(
-        color: AppColors.accent,
-        onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-            : flat.isEmpty
-                ? _empty()
-                : ListView.builder(
-                    controller: _scroll,
-                    padding: const EdgeInsets.only(bottom: 24),
-                    itemCount: flat.length + (_loadingMore ? 1 : 0),
-                    itemBuilder: (context, i) {
-                      if (i >= flat.length) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 18),
-                          child: Center(
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: AppColors.accent),
-                            ),
-                          ),
-                        );
-                      }
-                      final row = flat[i];
-                      if (row is _SectionHead) return _sectionHeader(row);
-                      return _ChatRow(
-                        channel: row as ChatChannel,
-                        myUserId: _myId,
-                        onTap: () => _open(row),
-                        onLongPress: () => _showActions(row),
-                      );
-                    },
-                  ),
-      ),
+      body: Column(children: [
+        OfflineBanner(cachedAt: _cachedAt),
+        Expanded(
+          child: RefreshIndicator(
+            color: AppColors.accent,
+            onRefresh: _load,
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+                : flat.isEmpty
+                    ? _empty()
+                    : ListView.builder(
+                        controller: _scroll,
+                        padding: const EdgeInsets.only(bottom: 24),
+                        itemCount: flat.length + (_loadingMore ? 1 : 0),
+                        itemBuilder: (context, i) {
+                          if (i >= flat.length) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 18),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: AppColors.accent),
+                                ),
+                              ),
+                            );
+                          }
+                          final row = flat[i];
+                          if (row is _SectionHead) return _sectionHeader(row);
+                          return _ChatRow(
+                            channel: row as ChatChannel,
+                            myUserId: _myId,
+                            onTap: () => _open(row),
+                            onLongPress: () => _showActions(row),
+                          );
+                        },
+                      ),
+          ),
+        ),
+      ]),
     );
   }
 

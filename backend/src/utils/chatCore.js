@@ -63,13 +63,35 @@ async function ensureTeamChannel(client, team) {
   return rows[0].id;
 }
 
+/**
+ * Put a team member in the team's channel, or correct the role of one already
+ * there.
+ *
+ * `history_from` is stamped on the INSERT and never afterwards: it is the
+ * earliest message this member may read (migration 036). For a channel created in
+ * the same transaction — a brand-new team — now() precedes the first message, so
+ * the founders see all of it; for somebody added to a team that has been talking
+ * for months it is the join, and the backlog stays private. A member who had LEFT
+ * gets a fresh window, because the conversation that happened while they were out
+ * is not theirs.
+ *
+ * `joined_at` is deliberately left alone on the conflict path. This statement is
+ * also what a ROLE CHANGE goes through (routes/teams.js), and the old clause
+ * rewrote the join date on every promotion — which is why history could not be
+ * keyed on that column in the first place.
+ */
 async function syncTeamMember(client, channelId, userId, teamRole) {
   const role = teamRole === 'captain' || teamRole === 'vice_captain' ? 'admin' : 'member';
   await client.query(
-    `INSERT INTO chat_channel_members (channel_id, user_id, role)
-     VALUES ($1, $2, $3)
+    `INSERT INTO chat_channel_members (channel_id, user_id, role, history_from)
+     VALUES ($1, $2, $3, now())
      ON CONFLICT (channel_id, user_id) DO UPDATE
-       SET role = EXCLUDED.role, left_at = NULL, joined_at = now()`,
+       SET role = EXCLUDED.role,
+           left_at = NULL,
+           joined_at = CASE WHEN chat_channel_members.left_at IS NOT NULL
+                            THEN now() ELSE chat_channel_members.joined_at END,
+           history_from = CASE WHEN chat_channel_members.left_at IS NOT NULL
+                               THEN now() ELSE chat_channel_members.history_from END`,
     [channelId, userId, role],
   );
 }
@@ -296,7 +318,7 @@ async function votePoll(client, { channelId, pollId, userId, optionIndex }) {
  * history rows are (sender, reply preview, reactions) so the banner and a tap
  * into it render with no special case. Served by idx_chat_messages_pinned.
  */
-async function listPinned(clientOrPool, channelId, limit = 20) {
+async function listPinned(clientOrPool, channelId, limit = 20, since = null) {
   const { rows } = await (clientOrPool || pool).query(
     `SELECT m.*, u.name AS sender_name, u.avatar_url AS sender_avatar,
        ${REPLY_PREVIEW_SQL} AS reply_preview,
@@ -306,10 +328,14 @@ async function listPinned(clientOrPool, channelId, limit = 20) {
        LEFT JOIN users u ON u.id = m.sender_id
        LEFT JOIN chat_reactions r ON r.message_id = m.id
       WHERE m.channel_id = $1 AND m.pinned_at IS NOT NULL AND m.deleted_at IS NULL
+        -- The reader's history window (036). A pinned announcement from before
+        -- somebody joined is still a message they may not read, and the banner
+        -- would otherwise hand them its full text on open.
+        AND ($3::timestamptz IS NULL OR m.created_at >= $3)
       GROUP BY m.id, u.name, u.avatar_url
       ORDER BY m.pinned_at DESC
       LIMIT $2`,
-    [channelId, limit],
+    [channelId, limit, since],
   );
   return rows;
 }
@@ -319,8 +345,11 @@ async function listPinned(clientOrPool, channelId, limit = 20) {
  * created_at cursor `before`. Images only — the "all photos in this chat" view —
  * and served by idx_chat_messages_media from migration 015. No reactions or reply
  * preview: a gallery tile is a thumbnail that opens the full image, nothing more.
+ *
+ * `since` is the reader's history window (036): the gallery is the second door
+ * into a room's backlog and has to honour the same boundary the timeline does.
  */
-async function listMedia(clientOrPool, { channelId, before = null, limit = 60 }) {
+async function listMedia(clientOrPool, { channelId, before = null, limit = 60, since = null }) {
   const { rows } = await (clientOrPool || pool).query(
     `SELECT m.id, m.channel_id, m.sender_id, u.name AS sender_name,
             m.kind, m.media_url, m.media_mime, m.media_w, m.media_h,
@@ -330,9 +359,10 @@ async function listMedia(clientOrPool, { channelId, before = null, limit = 60 })
       WHERE m.channel_id = $1 AND m.kind = 'image'
         AND m.deleted_at IS NULL AND m.media_url IS NOT NULL
         AND m.created_at < $2
+        AND ($4::timestamptz IS NULL OR m.created_at >= $4)
       ORDER BY m.created_at DESC
       LIMIT $3`,
-    [channelId, before || '9999-12-31', limit],
+    [channelId, before || '9999-12-31', limit, since],
   );
   return rows;
 }
@@ -358,14 +388,25 @@ async function listMedia(clientOrPool, { channelId, before = null, limit = 60 })
 // are. A player in their own booking room is a 'member' — they can delete their
 // own messages and nothing else.
 
-/** Upsert one member without disturbing a role somebody already has. */
+/**
+ * Upsert one member without disturbing a role somebody already has.
+ *
+ * Same `history_from` rule as syncTeamMember: stamped once, on creation, and
+ * refreshed only for somebody who had left and is being re-added. Booking,
+ * coordination and direct rooms get their members at creation time, so the stamp
+ * always precedes their first message and nobody loses anything — the column only
+ * bites where it is meant to, on a late addition to a room with a backlog.
+ */
 async function addMember(client, channelId, userId, role = 'member') {
   if (!channelId || !userId) return;
   await client.query(
-    `INSERT INTO chat_channel_members (channel_id, user_id, role)
-     VALUES ($1, $2, $3)
+    `INSERT INTO chat_channel_members (channel_id, user_id, role, history_from)
+     VALUES ($1, $2, $3, now())
      ON CONFLICT (channel_id, user_id) DO UPDATE
-       SET role = EXCLUDED.role, left_at = NULL`,
+       SET role = EXCLUDED.role,
+           left_at = NULL,
+           history_from = CASE WHEN chat_channel_members.left_at IS NOT NULL
+                               THEN now() ELSE chat_channel_members.history_from END`,
     [channelId, userId, role],
   );
 }

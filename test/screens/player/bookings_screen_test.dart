@@ -11,12 +11,17 @@
 // change to either predicate cannot quietly move a paid booking out of the tab the
 // player looks at.
 //
-// The four mandated states are three again. `_load` (:91) sets `_loading = false` and
-// leaves both lists untouched when the envelope reports failure, and `catch (_)` (:92)
-// does the same for every thrown error. Because both lists start empty, a 500 and a
-// dropped connection both render "No upcoming bookings" with a "Find Venues" button —
-// the app inviting the player to make another booking while it is unable to read the
-// ones they have. Three tests pin that as behaviour, each naming the line and the fix.
+// The four mandated states are all four. `_load` sets `_error` and renders a
+// `NetworkErrorView` with a Retry when a fetch fails with nothing cached to fall
+// back on, so a 500 and a dropped connection no longer borrow the empty state an
+// account with no bookings shows — which they used to, leaving the app inviting the
+// player to make another booking while unable to read the ones they have. Where a
+// cache IS present the rows stay on screen under the offline strip instead.
+//
+// Those states are reached through the `FakeApi` fixture, not through the cache: the
+// harness mocks `shared_preferences` to an empty store, so `OfflineCache` reads a
+// miss in every test here and the cache path is exercised by its own unit tests
+// rather than smuggled into these.
 //
 // The cancel path is asserted through the confirmation dialog rather than around it. A
 // cancel that skipped the dialog, or that fired the PATCH on "Keep", would be a real
@@ -289,65 +294,84 @@ void main() {
   });
 
   group('when the request fails', () {
-    // Pinned as it behaves, not as it should. `_load`
-    // (lib/screens/player/bookings_screen.dart:91) clears the spinner and leaves both
-    // lists at their initial empty value when the envelope reports failure, and there
-    // is no `_error` field to render — so a 500 reaches the same empty state an
-    // account with no bookings does. The fix is an `_error` field, an error branch
-    // above the `items.isEmpty` one in `_buildList`, and a Retry that calls `_load`.
-    testWidgets('a server error is reported as having no bookings', (tester) async {
+    // These four used to pin the defect rather than the fix, and said so: `_load`
+    // cleared the spinner, left both lists at their initial empty value and had no
+    // `_error` field, so a 500 and a dropped connection both reached the same empty
+    // state an account with no bookings does — the app inviting the player to make
+    // another booking while unable to read the ones they have. The named fix (an
+    // `_error` field, an error branch above the `items.isEmpty` one, and a Retry
+    // that calls `_load`) has landed, so they now pin the fix.
+    //
+    // The empty state is still correct for a SUCCESSFUL empty response, and the
+    // group above covers that; what changed is that a failure no longer borrows it.
+    testWidgets('a server error is reported as a failure, not as no bookings',
+        (tester) async {
       api.fail('/bookings/my', 'Could not read your bookings');
 
       await pumpScreen(tester, const BookingsScreen());
       await settleData(tester);
 
-      expect(find.text('No upcoming bookings'), findsOneWidget);
-      expect(find.text('Could not read your bookings'), findsNothing,
-          reason: 'the message the API sent never reaches the screen');
-      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsNothing);
-      expect(find.widgetWithText(TextButton, 'Retry'), findsNothing);
+      expect(find.text('No upcoming bookings'), findsNothing,
+          reason: 'a failed read must not be dressed up as an empty schedule');
+      expect(find.text('Could not read your bookings'), findsOneWidget,
+          reason: 'the message the API sent reaches the screen');
+      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsOneWidget);
     });
 
-    // Pinned as it behaves, not as it should. Same cause, different path: a dropped
-    // connection throws and `catch (_)`
-    // (lib/screens/player/bookings_screen.dart:92) discards it. This is the exact
-    // symptom of a missing `adb reverse`, and the screen answers it by inviting the
-    // player to book something else.
-    testWidgets('a dropped connection is reported as having no bookings',
-        (tester) async {
+    testWidgets('a dropped connection is reported as a failure', (tester) async {
+      // The exact symptom of a sleeping Render instance or a missing `adb reverse`.
       api.offline('/bookings/my');
 
       await pumpScreen(tester, const BookingsScreen());
       await settleData(tester);
 
-      expect(find.text('No upcoming bookings'), findsOneWidget);
+      expect(find.text('No upcoming bookings'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing,
           reason: 'a spinner that never resolves would be the worse bug');
     });
 
-    // Pinned as it behaves, not as it should. Same cause: `jsonDecode` throws on a
-    // body that is not JSON — an HTML error page from a proxy — and the same bare
-    // catch swallows it.
-    testWidgets('an unparseable body is reported as having no bookings',
-        (tester) async {
+    testWidgets('an unparseable body is reported as a failure', (tester) async {
+      // An HTML error page from a proxy. `ApiClient` cannot decode it and
+      // substitutes its own sentence for the status rather than throwing.
       api.on('/bookings/my', const FakeResponse(502, '<html>Bad Gateway</html>'));
 
       await pumpScreen(tester, const BookingsScreen());
       await settleData(tester);
 
-      expect(find.text('No upcoming bookings'), findsOneWidget);
+      expect(find.text('No upcoming bookings'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsOneWidget);
     });
 
-    testWidgets('a failure still offers the way out of the empty state',
+    testWidgets('a failure offers a retry rather than a new booking',
         (tester) async {
-      // The consequence worth stating plainly: the one button on screen after a
-      // failed read starts a new booking rather than retrying the read.
+      // The consequence that made this worth fixing: the one button on screen
+      // after a failed read used to start a NEW booking instead of retrying the
+      // read.
       api.fail('/bookings/my', 'server down');
 
       await pumpScreen(tester, const BookingsScreen());
       await settleData(tester);
 
-      expect(find.widgetWithText(ElevatedButton, 'Find Venues'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Find Venues'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsOneWidget);
+    });
+
+    testWidgets('the retry refetches and renders the rows on success',
+        (tester) async {
+      // The error state has to be escapable without leaving the screen, which is
+      // the whole reason a Retry is required rather than just a message.
+      api.fail('/bookings/my', 'server down');
+
+      await pumpScreen(tester, const BookingsScreen());
+      await settleData(tester);
+
+      api.ok('/bookings/my', [booking(venue: 'Recovered Arena', date: slotDate(2))]);
+      await tapVisible(tester, find.widgetWithText(OutlinedButton, 'Retry'));
+      await settleData(tester);
+
+      expect(find.text('Recovered Arena'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Retry'), findsNothing);
     });
   });
 
@@ -557,8 +581,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.text('Cancel Booking?'), findsOneWidget);
-      expect(find.text('You will receive a full refund to your wallet.'),
-          findsOneWidget);
+      // The dialog used to promise "a full refund" unconditionally, which is only
+      // true at least 24 hours before the slot — inside that window the policy
+      // keeps the 20% deposit for the venue. What is asserted now is that both
+      // halves of the rule are stated before the player commits.
+      expect(
+        find.textContaining('At least 24 hours before the slot this is a full refund'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('the venue keeps the 20% deposit'),
+        findsOneWidget,
+      );
       expect(api.countTo('/cancel'), 0,
           reason: 'nothing may leave until the destructive button is pressed');
     });
@@ -671,13 +705,11 @@ void main() {
           reason: 'a failed cancel must not refetch and imply it worked');
     });
 
-    // Pinned as it behaves, not as it should. `_cancel`
-    // (lib/screens/player/bookings_screen.dart:124) ends in a bare `catch (_) {}`, so
-    // a dropped connection during a cancel produces no snackbar and no state change:
-    // the player taps the destructive button, confirms it, and nothing at all
-    // happens. The fix is to show an error snackbar in that catch.
-    testWidgets('a dropped connection during a cancel says nothing at all',
-        (tester) async {
+    // A dropped connection during a cancel used to produce no snackbar and no state
+    // change — the player tapped the destructive button, confirmed it, and nothing
+    // at all happened, because `_cancel` ended in a bare `catch (_) {}`. The named
+    // fix (surface the error) has landed.
+    testWidgets('a dropped connection during a cancel is reported', (tester) async {
       api.ok('/bookings/my', [
         booking(
             id: 'bk-77',
@@ -696,8 +728,10 @@ void main() {
       await tester.tap(find.text('Cancel Booking'));
       await settleData(tester);
 
-      expect(find.byType(SnackBar), findsNothing);
-      expect(find.text('Karachi Sports Arena'), findsOneWidget);
+      expect(find.byType(SnackBar), findsOneWidget,
+          reason: 'a destructive tap that did nothing must say why');
+      expect(find.text('Karachi Sports Arena'), findsOneWidget,
+          reason: 'and the booking stays, since nothing was cancelled');
     });
 
     testWidgets('the cancel button is a large enough target', (tester) async {

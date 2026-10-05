@@ -200,5 +200,26 @@ void main() {
       expect(m.lastReadAt.millisecondsSinceEpoch, 0);
       expect(m.lastDeliveredAt.millisecondsSinceEpoch, 0);
     });
+
+    test('no history bound means every message is visible to them', () {
+      // Every membership that predates migration 036 carries a null, and it has
+      // to read as "full history" rather than as "nothing".
+      final m = ChatMember.fromJson({'user_id': 'u1'});
+      expect(m.historyFrom, isNull);
+      expect(m.canSee(DateTime.utc(2020)), isTrue);
+      expect(m.canSee(DateTime.utc(2030)), isTrue);
+    });
+
+    test('a history bound hides what was said before they joined', () {
+      final m = ChatMember.fromJson({
+        'user_id': 'u1',
+        'history_from': '2026-10-04T10:00:00Z',
+      });
+      expect(m.canSee(DateTime.utc(2026, 10, 4, 9, 59)), isFalse);
+      // The boundary itself is inclusive: the "X joined" pill is stamped with it
+      // and is the first thing a new member must see.
+      expect(m.canSee(DateTime.utc(2026, 10, 4, 10)), isTrue);
+      expect(m.canSee(DateTime.utc(2026, 10, 4, 10, 1)), isTrue);
+    });
   });
 }

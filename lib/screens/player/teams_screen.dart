@@ -12,6 +12,7 @@ import '../../services/realtime_service.dart';
 import '../../services/team_service.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/network_error_view.dart';
 import '../../widgets/tournament_widgets.dart' show TeamRecordLine;
 import '../shared/chat_thread_screen.dart';
 import 'create_team_screen.dart';
@@ -238,7 +239,16 @@ class _TeamsScreenState extends State<TeamsScreen>
             if (s.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
-            if (s.hasError) return _empty('Could not load your teams', Icons.cloud_off);
+            // A failed load used to borrow the empty-state layout — a muted icon
+            // and a sentence, with no way back other than a pull the user had no
+            // reason to try. The error state now carries its own Retry, which is
+            // the one action that can fix it.
+            if (s.hasError) {
+              return NetworkErrorView(
+                message: 'Could not load your teams. Check your connection and try again.',
+                onRetry: _reload,
+              );
+            }
             final teams = s.data ?? [];
             if (teams.isEmpty) {
               return _empty(

@@ -38,6 +38,14 @@ class BookingsScreenState extends State<BookingsScreen>
   /// first-ever load with no connection has nothing to show, every later one does.
   String? _error;
 
+  /// Set once a fetch has returned real rows.
+  ///
+  /// Guards the cache hydration against a race it would otherwise lose silently:
+  /// the two run concurrently, and a slow disk read landing after a fast response
+  /// would replace this session's bookings with saved ones and re-label them
+  /// stale.
+  bool _networkAnswered = false;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -46,7 +54,13 @@ class BookingsScreenState extends State<BookingsScreen>
     super.initState();
     _tab = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addObserver(this);
-    _hydrateThenLoad();
+    // Both started together, deliberately NOT chained. Reading the cache is disk
+    // I/O, and awaiting it before the request would delay every online load by
+    // however long shared_preferences takes to answer — paying an offline cost on
+    // a connection that is fine. Whichever resolves first paints; [_hydrateFromCache]
+    // stands down if the network already answered.
+    _load();
+    _hydrateFromCache();
   }
 
   @override
@@ -85,25 +99,22 @@ class BookingsScreenState extends State<BookingsScreen>
     }
   }
 
-  /// Draw the last good rows before the network is consulted.
+  /// Draw the last good rows if they arrive before the network does.
   ///
-  /// The fetch still runs either way: a cache hit changes what the user waits in
-  /// front of, not whether the list is refreshed. This is the whole behavioural
-  /// change — the tab opens populated, offline or on a cold start, instead of
-  /// showing a spinner and then claiming the account has no bookings.
-  Future<void> _hydrateThenLoad() async {
+  /// The whole behavioural change is here — the tab opens populated, offline or on
+  /// a cold start, instead of showing a spinner and then claiming the account has
+  /// no bookings. It runs alongside the fetch rather than before it, so a cache
+  /// that resolves second is discarded rather than overwriting fresher rows.
+  Future<void> _hydrateFromCache() async {
     final cached = await OfflineCache.read(OfflineCache.myBookings);
-    if (cached != null && mounted) {
-      final rows = cached.asRows();
-      if (rows.isNotEmpty) {
-        setState(() {
-          _applyRows(rows);
-          _cachedAt = cached.at;
-          _loading = false;
-        });
-      }
-    }
-    await _load();
+    if (!mounted || cached == null || _networkAnswered) return;
+    final rows = cached.asRows();
+    if (rows.isEmpty) return;
+    setState(() {
+      _applyRows(rows);
+      _cachedAt = cached.at;
+      _loading = false;
+    });
   }
 
   /// Partition the server's rows across the two tabs.
@@ -114,16 +125,103 @@ class BookingsScreenState extends State<BookingsScreen>
   void _applyRows(List<Map<String, dynamic>> all) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    _upcoming = all.where((b) {
+    _upcoming = _collapseGroups(all.where((b) {
       final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
       return d != null && !d.isBefore(today)
         && ['confirmed','pending'].contains(b['status']);
-    }).toList();
-    _past = all.where((b) {
+    }).toList());
+    _past = _collapseGroups(all.where((b) {
       final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
       return d == null || d.isBefore(today)
         || ['cancelled','rejected','no_show','checked_in','completed','refunded'].contains(b['status']);
-    }).toList();
+    }).toList());
+  }
+
+  /// A TIME value as 'HH:MM:SS', so two of them can be compared as strings.
+  String _timeKey(dynamic raw) {
+    final s = raw == null ? '' : raw.toString().trim();
+    final m = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?$').firstMatch(s);
+    if (m == null) return s;
+    return '${m.group(1)!.padLeft(2, '0')}:${m.group(2)}:${m.group(3) ?? '00'}';
+  }
+
+  /// Fold the bookings that were made together into one row each.
+  ///
+  /// A multi-slot booking is N rows sharing a `booking_group_id` — each with its
+  /// own escrow, refund window and QR code — because that is what leaves the money
+  /// paths untouched. The player asked for two hours of play, though, so the list
+  /// shows one card.
+  ///
+  /// Grouped by id AND status, deliberately. Once one hour of a run is cancelled
+  /// the remaining hours are a different thing from the cancelled one, and a single
+  /// card would have to invent a combined status to describe them. Splitting by
+  /// status instead means every card has a status that is simply true.
+  ///
+  /// Rows carrying no group id — every booking made before migration 035, and every
+  /// single-slot booking after it — pass through untouched.
+  List<Map<String, dynamic>> _collapseGroups(List<Map<String, dynamic>> rows) {
+    final order = <String>[];
+    final buckets = <String, List<Map<String, dynamic>>>{};
+
+    for (final b in rows) {
+      final gid = b['booking_group_id']?.toString();
+      final key = (gid == null || gid.isEmpty)
+          ? 'single:${b['id']}'
+          : 'group:$gid:${b['status']}';
+      final bucket = buckets[key];
+      if (bucket == null) {
+        buckets[key] = [b];
+        order.add(key);
+      } else {
+        bucket.add(b);
+      }
+    }
+
+    final out = <Map<String, dynamic>>[];
+    for (final key in order) {
+      final members = buckets[key]!;
+      if (members.length == 1) {
+        out.add(members.first);
+        continue;
+      }
+      members.sort((a, b) {
+        final byDate = (a['slot_date'] ?? '').toString()
+            .compareTo((b['slot_date'] ?? '').toString());
+        return byDate != 0
+            ? byDate
+            : _timeKey(a['start_time']).compareTo(_timeKey(b['start_time']));
+      });
+
+      // Whether what is left of the run is still back to back. It may not be: one
+      // hour out of the middle can be cancelled on its own, and printing
+      // "18:00 – 21:00 · 2 slots" for 18:00 and 20:00 would claim an hour the
+      // player no longer has.
+      var contiguous = true;
+      for (var i = 1; i < members.length; i += 1) {
+        final prevEnd = _timeKey(members[i - 1]['end_time']);
+        final nextStart = _timeKey(members[i]['start_time']);
+        final sameDay = (members[i - 1]['slot_date'] ?? '').toString()
+            == (members[i]['slot_date'] ?? '').toString();
+        final seam = !sameDay && prevEnd == '24:00:00' && nextStart == '00:00:00';
+        if (!(sameDay && prevEnd == nextStart) && !seam) {
+          contiguous = false;
+          break;
+        }
+      }
+
+      out.add({
+        // The first member carries the card: its id is what a tap opens, and the
+        // detail screen is per booking because the QR code is.
+        ...members.first,
+        'total_amount': members.fold<double>(0, (s, m) => s + asNum(m['total_amount'])),
+        '_groupCount': members.length,
+        '_groupContiguous': contiguous,
+        '_groupEnd': members.last['end_time'],
+        '_groupStarts': members.map((m) => m['start_time']).toList(),
+        '_groupIds': members.map((m) => m['id'].toString()).toList(),
+      });
+    }
+    return out;
   }
 
   Future<void> _load() async {
@@ -142,6 +240,7 @@ class BookingsScreenState extends State<BookingsScreen>
       final rows = raw is List
           ? raw.whereType<Map>().map(Map<String, dynamic>.from).toList()
           : <Map<String, dynamic>>[];
+      _networkAnswered = true;
       setState(() {
         _applyRows(rows);
         _cachedAt = null;   // on screen is now this session's data, not a saved copy
@@ -170,39 +269,85 @@ class BookingsScreenState extends State<BookingsScreen>
     });
   }
 
-  Future<void> _cancel(String bookingId) async {
+  Future<void> _cancel(List<String> bookingIds) async {
     // Refused up front rather than queued. A cancellation moves money through
     // escrow and its refund split depends on how far the slot is away at the
     // moment it lands, so holding one until the network returns would compute a
     // different refund than the dialog just promised.
     if (!await OfflineActionNotice.guard(context, 'Cancelling a booking')) return;
     if (!mounted) return;
+    if (bookingIds.isEmpty) return;
+    final many = bookingIds.length > 1;
     final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text('Cancel Booking?', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-      content: Text('You will receive a full refund to your wallet.',
+      title: Text(many ? 'Cancel ${bookingIds.length} slots?' : 'Cancel Booking?',
+        style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+      // Previously this promised "a full refund" unconditionally, which is only
+      // true at least 24 hours before the slot: inside that window the policy
+      // keeps 20% for the venue. The amount is stated by the server once the
+      // cancellation has actually been performed.
+      content: Text(
+        many
+            ? 'All ${bookingIds.length} slots will be cancelled. Each one is '
+              'refunded by its own cancellation window — at least 24 hours before '
+              'the slot is a full refund; inside that window the venue keeps the '
+              '20% deposit.'
+            : 'At least 24 hours before the slot this is a full refund. Inside '
+              'that window the venue keeps the 20% deposit.',
         style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false),
           child: Text('Keep', style: GoogleFonts.poppins(color: AppColors.textSecondary))),
         TextButton(onPressed: () => Navigator.pop(context, true),
-          child: Text('Cancel Booking',
+          child: Text(many ? 'Cancel all' : 'Cancel Booking',
             style: GoogleFonts.poppins(color: AppColors.error, fontWeight: FontWeight.w600))),
       ],
     ));
     if (ok != true) return;
     if (!mounted) return;
-    final res = await ApiClient().patch('/bookings/$bookingId/cancel', const {});
+
+    // One request per booking, because that is what the server offers and each
+    // slot's refund is genuinely its own calculation. A failure part-way is
+    // reported with the count that did go through rather than hidden behind the
+    // last error — a player whose two of three slots were cancelled needs to know
+    // which state they are in.
+    var cancelled = 0;
+    var refunded = 0.0;
+    String? failure;
+    for (final id in bookingIds) {
+      final res = await ApiClient().patch('/bookings/$id/cancel', const {});
+      if (res['success'] == true) {
+        cancelled += 1;
+        final data = res['data'];
+        if (data is Map && data['refund'] != null) refunded += asNum(data['refund']);
+      } else {
+        failure = res['message'] as String? ?? 'Could not cancel the booking.';
+        break;
+      }
+    }
     if (!mounted) return;
-    if (res['success'] == true) {
-      SnackbarUtil.showSuccess(context, 'Booking cancelled. Refund added to wallet.');
-      _load();
+
+    if (failure == null) {
+      SnackbarUtil.showSuccess(
+        context,
+        many
+            ? '$cancelled slots cancelled. PKR ${refunded.toStringAsFixed(0)} refunded to your wallet.'
+            : 'Booking cancelled. PKR ${refunded.toStringAsFixed(0)} refunded to your wallet.',
+      );
+    } else if (cancelled > 0) {
+      SnackbarUtil.showError(
+        context,
+        '$cancelled of ${bookingIds.length} slots cancelled. $failure',
+      );
     } else {
       // Previously an empty catch: a cancellation that failed told the user
       // nothing at all, and the booking simply stayed where it was.
-      SnackbarUtil.showError(
-          context, res['message'] as String? ?? 'Could not cancel the booking.');
+      SnackbarUtil.showError(context, failure);
     }
+    // Refetch only when something actually changed. A cancel that was wholly
+    // refused (nothing cancelled) leaves the list exactly as it is, and a refetch
+    // there would read as the action having worked.
+    if (cancelled > 0) _load();
   }
 
   @override
@@ -292,6 +437,25 @@ class BookingsScreenState extends State<BookingsScreen>
   Widget _bookingCard(Map<String, dynamic> b, {required bool upcoming}) {
     final status = b['status'] as String;
     final statusColor = _statusColor(status);
+    // Present only on a card standing for several bookings made together.
+    final groupCount = (b['_groupCount'] as int?) ?? 1;
+    final isGroup = groupCount > 1;
+    final ids = isGroup
+        ? List<String>.from(b['_groupIds'] as List)
+        : <String>[b['id'].toString()];
+
+    // A run that is still back to back reads as one stretch of time. One that has
+    // been broken up — a middle hour cancelled on its own — lists its start times
+    // instead, because a range would claim an hour the player no longer holds.
+    final String timeText;
+    if (!isGroup) {
+      timeText = '${_safeTime(b['start_time'])} – ${_safeTime(b['end_time'])}';
+    } else if (b['_groupContiguous'] == true) {
+      timeText = '${_safeTime(b['start_time'])} – ${_safeTime(b['_groupEnd'])}';
+    } else {
+      timeText = (b['_groupStarts'] as List).map(_safeTime).join(', ');
+    }
+
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, '/booking-detail',
           arguments: {'bookingId': b['id']}),
@@ -314,6 +478,16 @@ class BookingsScreenState extends State<BookingsScreen>
               style: GoogleFonts.poppins(color: Colors.white,
                 fontWeight: FontWeight.bold, fontSize: 14),
               maxLines: 1, overflow: TextOverflow.ellipsis)),
+            if (isGroup) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                margin: const EdgeInsets.only(right: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(6)),
+                child: Text('$groupCount SLOTS', style: GoogleFonts.poppins(
+                  color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+            ],
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.2),
@@ -329,8 +503,7 @@ class BookingsScreenState extends State<BookingsScreen>
             Expanded(child: _infoItem(Icons.calendar_today_outlined,
               _fmtSlotDate(b['slot_date'] ?? ''))),
             const SizedBox(width: 8),
-            Expanded(child: _infoItem(Icons.access_time_outlined,
-              '${_safeTime(b['start_time'])} – ${_safeTime(b['end_time'])}')),
+            Expanded(child: _infoItem(Icons.access_time_outlined, timeText)),
           ]),
           const SizedBox(height: 8),
           Row(children: [
@@ -339,20 +512,29 @@ class BookingsScreenState extends State<BookingsScreen>
             Expanded(child: _infoItem(Icons.currency_rupee,
               'PKR ${asNum(b['total_amount']).toStringAsFixed(0)}')),
           ]),
+          // Said once, because it is the one thing about a grouped card a player
+          // would not otherwise expect: the slots are separate bookings underneath
+          // and each carries its own QR code.
+          if (isGroup) ...[
+            const SizedBox(height: 8),
+            _infoItem(Icons.qr_code_2_outlined,
+              '$groupCount QR codes — one per slot'),
+          ],
           if (upcoming && status == 'confirmed') ...[
             const SizedBox(height: 12),
             const Divider(color: AppColors.border, height: 1),
             const SizedBox(height: 12),
             Row(children: [
               Expanded(child: OutlinedButton(
-                onPressed: () => _cancel(b['id']),
+                onPressed: () => _cancel(ids),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.error,
                   side: const BorderSide(color: AppColors.error),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   padding: const EdgeInsets.symmetric(vertical: 10)),
-                child: Text('Cancel', style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600, fontSize: 12)))),
+                child: Text(isGroup ? 'Cancel all $groupCount' : 'Cancel',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600, fontSize: 12)))),
             ]),
           ],
         ])),

@@ -72,6 +72,7 @@ const { notify } = require('../utils/notify');
 const settings = require('../utils/globalSettings');
 const chat = require('../utils/chatCore');
 const group = require('../utils/slotGroup');
+const discounts = require('./discountService');
 
 /** Uniform failure. `code` is for machines, `message` is for humans. */
 function fail(status, code, message) {
@@ -630,6 +631,11 @@ async function listCancellable(client, { userId, limit = 5 }) {
   const { rows } = await runner.query(
     `SELECT b.id, b.slot_date, b.start_time, b.end_time, b.status,
             b.security_deposit, b.deposit_amount, b.base_price,
+            -- Read through to_jsonb rather than named: the column arrives with
+            -- migration 035, and naming it would break this list on a database
+            -- where that has not run. Absent reads as NULL, which is what an
+            -- ungrouped booking means anyway.
+            to_jsonb(b) ->> 'booking_group_id' AS booking_group_id,
             v.id AS venue_id, v.name AS venue_name, v.city, v.address,
             v.latitude, v.longitude
        FROM bookings b JOIN venues v ON v.id = b.venue_id
@@ -699,6 +705,7 @@ async function runInTx(fn) {
 }
 
 const createBookingTx = (input) => runInTx((c) => createBooking(c, input));
+const createBookingGroupTx = (input) => runInTx((c) => createBookingGroup(c, input));
 const cancelBookingTx = (input) => runInTx((c) => cancelBooking(c, input));
 
 // REJECT (owner-side, and the admin suspension cascade)
@@ -791,6 +798,9 @@ async function rejectBooking(client, { bookingId, ownerId, reason = 'owner_rejec
 module.exports = {
   createBooking,
   createBookingTx,
+  createBookingGroup,
+  createBookingGroupTx,
+  previewGroup,
   previewCancellation,
   cancelBooking,
   cancelBookingTx,

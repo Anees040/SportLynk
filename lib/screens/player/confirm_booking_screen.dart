@@ -8,16 +8,27 @@ import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/num_util.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/offline_banner.dart';
 
 class ConfirmBookingScreen extends StatefulWidget {
   final Map<String, dynamic> venue;
   final Map<String, dynamic> slot;
   final DateTime selectedDate;
+
+  /// The whole run when the player selected consecutive slots, first to last.
+  ///
+  /// Optional and defaulting to `[slot]`, so every existing caller and test keeps
+  /// its single-slot behaviour untouched. When it holds more than one slot this
+  /// screen quotes the run through `POST /bookings/group/quote` and books it
+  /// through `POST /bookings/group`.
+  final List<Map<String, dynamic>>? slots;
+
   const ConfirmBookingScreen({
     super.key,
     required this.venue,
     required this.slot,
     required this.selectedDate,
+    this.slots,
   });
   @override
   State<ConfirmBookingScreen> createState() => _ConfirmBookingScreenState();
@@ -28,16 +39,89 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   double _walletBalance = 0;
   bool _walletLoaded = false;
 
+  /// The server's quote for a multi-slot run: total, discount and saving.
+  ///
+  /// Fetched here rather than passed in from the venue screen so the figure the
+  /// player agrees to is the figure the server just computed from the owner's
+  /// current ladder. Null for a single slot, and null while the request is in
+  /// flight.
+  Map<String, dynamic>? _quote;
+  bool _quoteLoading = false;
+  String? _quoteError;
+
   /// Policy (server is the source of truth — these constants are display only):
   /// the full slot price is escrowed at booking; 20% of it is the at-risk
   /// deposit and the free-cancellation window is 24h before slot start.
   static const int _depositPercent = 20;
   static const int _cancellationWindowHours = 24;
 
+  /// The slots being booked, first to last. One element is the ordinary case.
+  List<Map<String, dynamic>> get _run =>
+      (widget.slots == null || widget.slots!.isEmpty) ? [widget.slot] : widget.slots!;
+
+  bool get _isGroup => _run.length > 1;
+
+  /// What the run costs at list price — the sum of the slots' own prices, since
+  /// each hour is priced separately by the model.
+  double get _listTotal => _run.fold<double>(0, (sum, s) => sum + asNum(s['price']));
+
+  /// What the player actually pays. The server's quote when there is one; the list
+  /// total otherwise. Never a locally computed discount: the discount ladder lives
+  /// on the server and a second copy here would be a price the booking contradicts.
+  double get _payable {
+    final q = _quote;
+    if (q != null && q['total'] != null) return asNum(q['total']);
+    return _listTotal;
+  }
+
+  double get _discountPercent => _quote == null ? 0 : asNum(_quote!['discountPercent']);
+  double get _saved => _quote == null ? 0 : asNum(_quote!['saved']);
+
   @override
   void initState() {
     super.initState();
     _loadWallet();
+    if (_isGroup) _loadQuote();
+  }
+
+  /// Prices the run on the server. The booking button stays disabled until this
+  /// resolves: paying before the discount is known would show the player one
+  /// number and charge another.
+  Future<void> _loadQuote() async {
+    setState(() {
+      _quoteLoading = true;
+      _quoteError = null;
+    });
+    try {
+      final token = Provider.of<AuthProvider>(context, listen: false).token!;
+      final resp = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/bookings/group/quote'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'venueId': widget.venue['id'],
+          'slotIds': _run.map((s) => s['id']).toList(),
+        }),
+      );
+      final data = jsonDecode(resp.body);
+      if (!mounted) return;
+      setState(() {
+        _quoteLoading = false;
+        if (data['success'] == true) {
+          _quote = Map<String, dynamic>.from(data['data'] as Map);
+        } else {
+          _quoteError = (data['message'] ?? 'Could not price these slots.').toString();
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _quoteLoading = false;
+        _quoteError = 'Network error. Could not price these slots.';
+      });
+    }
   }
 
   Future<void> _loadWallet() async {
@@ -65,7 +149,27 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   }
 
   Future<void> _confirmBooking() async {
-    final amountToPay = asNum(widget.slot['price']);
+    // Refused before anything else, and deliberately not queued. A booking
+    // competes for the slot with every other player, is priced at the moment it
+    // lands, and moves money through escrow — replayed when the network returns it
+    // would meet a taken slot or a different price, so a pending-clock treatment
+    // would be a promise the server never made.
+    if (!await OfflineActionNotice.guard(context, 'Booking a slot')) return;
+    if (!mounted) return;
+
+    final amountToPay = _payable;
+
+    // A wallet read that never completed leaves the balance at its initial zero,
+    // and the comparison below would then tell a funded player to top up. The
+    // unknown case is named as unknown and the read is retried instead.
+    if (!_walletLoaded) {
+      SnackbarUtil.showError(
+        context,
+        'Your wallet balance could not be checked. Please try again.',
+      );
+      await _loadWallet();
+      return;
+    }
 
     if (_walletBalance < amountToPay) {
       SnackbarUtil.showError(
@@ -77,22 +181,38 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     setState(() => _loading = true);
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
+      // One endpoint per shape. The group route creates N bookings sharing a group
+      // id in one transaction; the single route is unchanged.
       final resp = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/bookings'),
+        Uri.parse('${ApiConstants.baseUrl}/bookings${_isGroup ? '/group' : ''}'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-        body: jsonEncode({
-          'slotId': widget.slot['id'],
-          'venueId': widget.venue['id'],
-        }),
+        body: jsonEncode(
+          _isGroup
+              ? {
+                  'venueId': widget.venue['id'],
+                  'slotIds': _run.map((s) => s['id']).toList(),
+                }
+              : {
+                  'slotId': widget.slot['id'],
+                  'venueId': widget.venue['id'],
+                },
+        ),
       );
       final data = jsonDecode(resp.body);
       if (mounted) {
         setState(() => _loading = false);
         if (data['success'] == true) {
-          _showSuccessScreen(data['data']);
+          // The group response carries `bookings`; the single response is the
+          // booking itself. The success screen shows the first one's code, because
+          // each slot in a group has its own QR and the player checks in per hour.
+          final payload = data['data'];
+          final first = _isGroup && payload is Map && payload['bookings'] is List
+              ? Map<String, dynamic>.from((payload['bookings'] as List).first as Map)
+              : Map<String, dynamic>.from(payload as Map);
+          _showSuccessScreen(first);
         } else {
           SnackbarUtil.showError(context, data['message'] ?? 'Booking failed');
         }
@@ -120,8 +240,11 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           manualCode: manualCode,
           venueName: widget.venue['name'] ?? '',
           date: _fmtDate(widget.selectedDate),
+          // The whole run, not just the first slot: a player who booked three
+          // hours has to see three hours confirmed.
           time:
-              '${_safeTime(widget.slot['start_time'])} – ${_safeTime(widget.slot['end_time'])}',
+              '${_safeTime(_run.first['start_time'])} – ${_safeTime(_run.last['end_time'])}',
+          slotCount: _run.length,
         ),
       ),
     );
@@ -129,13 +252,17 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final price = asNum(widget.slot['price']);
+    final price = _listTotal;
     // Full slot price is escrowed at booking; 20% of it is the at-risk deposit.
-    final amountToPay = double.parse(price.toStringAsFixed(2));
+    final amountToPay = double.parse(_payable.toStringAsFixed(2));
     final depositAtRisk = double.parse(
-      (price * (_depositPercent / 100)).toStringAsFixed(2),
+      (amountToPay * (_depositPercent / 100)).toStringAsFixed(2),
     );
     final remainingWallet = _walletBalance - amountToPay;
+    // A group cannot be paid for until the server has priced it. Showing the list
+    // total and charging the discounted one would be the wrong way round, and
+    // charging the list total would overcharge.
+    final priceUnknown = _isGroup && _quote == null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -166,7 +293,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
         child: SafeArea(
           top: false,
           child: ElevatedButton(
-            onPressed: (_loading || remainingWallet < 0)
+            onPressed: (_loading || priceUnknown || remainingWallet < 0)
                 ? null
                 : _confirmBooking,
             style: ElevatedButton.styleFrom(
@@ -177,7 +304,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
               ),
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
-            child: _loading
+            child: _loading || _quoteLoading
                 ? const SizedBox(
                     width: 20,
                     height: 20,
@@ -187,7 +314,9 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                     ),
                   )
                 : Text(
-                    'Pay PKR ${amountToPay.toStringAsFixed(0)}',
+                    priceUnknown
+                        ? 'Price unavailable'
+                        : 'Pay PKR ${amountToPay.toStringAsFixed(0)}',
                     style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -267,12 +396,15 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                               color: AppColors.textSecondary,
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              '${_safeTime(widget.slot['start_time'])} – '
-                              '${_safeTime(widget.slot['end_time'])}',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
+                            Expanded(
+                              child: Text(
+                                '${_safeTime(_run.first['start_time'])} – '
+                                '${_safeTime(_run.last['end_time'])}'
+                                '${_isGroup ? '  ·  ${_run.length} slots' : ''}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
                             ),
                           ],
@@ -287,19 +419,91 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
 
             // Escrow breakdown
             _section('Payment (held in escrow)', [
-              _moneyRow('Slot price', 'PKR ${price.toStringAsFixed(0)}'),
+              _moneyRow(
+                _isGroup ? '${_run.length} slots' : 'Slot price',
+                'PKR ${price.toStringAsFixed(0)}',
+              ),
+              // The discount line only appears when one was actually applied, and
+              // it reports the server's number rather than one computed here.
+              if (_discountPercent > 0) ...[
+                const SizedBox(height: 8),
+                _moneyRow(
+                  'Multi-slot discount (${_discountPercent.toStringAsFixed(0)}%)',
+                  '– PKR ${_saved.toStringAsFixed(0)}',
+                ),
+              ],
+              // Named as unknown rather than guessed at. The pay button is
+              // disabled in this state, so the player is never shown a price the
+              // booking would contradict.
+              if (_quoteError != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 16,
+                      color: AppColors.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _quoteError!,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _quoteLoading ? null : _loadQuote,
+                      child: Text(
+                        'Retry',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 8),
               _moneyRow(
                 'Paid now, held in escrow',
-                'PKR ${amountToPay.toStringAsFixed(0)}',
+                priceUnknown ? '—' : 'PKR ${amountToPay.toStringAsFixed(0)}',
                 highlight: true,
               ),
               const SizedBox(height: 8),
               _moneyRow(
                 'At-risk deposit ($_depositPercent%)',
-                'PKR ${depositAtRisk.toStringAsFixed(0)}',
+                priceUnknown ? '—' : 'PKR ${depositAtRisk.toStringAsFixed(0)}',
               ),
               const SizedBox(height: 12),
+              // Said plainly, because it is the one thing about a group booking a
+              // player would not expect: the hours are separate bookings.
+              if (_isGroup)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Each slot is confirmed separately, with its own QR code '
+                          'and its own cancellation window.',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -598,12 +802,18 @@ class _BookingSuccessScreen extends StatelessWidget {
   final String date;
   final String time;
 
+  /// How many slots were booked. 1 for an ordinary booking; a group says so,
+  /// because the code shown here belongs to the first slot only and the player
+  /// needs to know the others are in their bookings list.
+  final int slotCount;
+
   const _BookingSuccessScreen({
     required this.bookingId,
     required this.manualCode,
     required this.venueName,
     required this.date,
     required this.time,
+    this.slotCount = 1,
   });
 
   @override
@@ -716,6 +926,14 @@ class _BookingSuccessScreen extends StatelessWidget {
                         _infoRow(Icons.calendar_today_outlined, date),
                         const SizedBox(height: 8),
                         _infoRow(Icons.access_time_outlined, time),
+                        if (slotCount > 1) ...[
+                          const SizedBox(height: 8),
+                          _infoRow(
+                            Icons.layers_outlined,
+                            '$slotCount slots booked together — each has its own '
+                            'QR code in My Bookings',
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         const Divider(color: AppColors.border),
                         const SizedBox(height: 12),

@@ -3,17 +3,20 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const pool = require('../db/pool');
 const authMiddleware = require('../middleware/authMiddleware');
+const userService = require('../services/userService');
 
 // GET /api/users/me/player — get full player profile with defaults
 router.get('/me/player', authMiddleware, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const result = await pool.query(`
-      SELECT 
+      SELECT
         u.id, u.name, u.email, u.phone, u.avatar_url, u.created_at,
         COALESCE(pp.sport_preferences, '{}') as sport_preferences,
         COALESCE(pp.elo_rating, 1000) as elo_rating,
         COALESCE(pp.trust_score, 100) as trust_score,
+        COALESCE(pp.is_public, true) as is_public,
+        pp.bio,
         COALESCE(w.balance, 0) as balance,
         COALESCE(w.frozen_balance, 0) as frozen_balance
       FROM users u
@@ -48,7 +51,7 @@ router.get('/me/player', authMiddleware, async (req, res, next) => {
 
 // PATCH /api/users/me/update
 router.patch('/me/update', authMiddleware, async (req, res, next) => {
-  const { name, email, sportPreferences, avatarUrl } = req.body;
+  const { name, email, sportPreferences, avatarUrl, isPublic, bio } = req.body;
   const userId = req.user.id;
 
   const client = await pool.connect();
@@ -94,13 +97,38 @@ router.patch('/me/update', authMiddleware, async (req, res, next) => {
       `, [userId, sportPreferences]);
     }
 
+    // Profile visibility and bio (player-only). Sent only by the player profile
+    // screen; an owner never provides them, so the player_profiles row is not
+    // created for a non-player. The row is ensured first (the INSERT is a no-op when
+    // registration already created it), then only the fields actually provided are
+    // written, so toggling visibility does not disturb a bio and vice versa.
+    if (isPublic !== undefined || bio !== undefined) {
+      await client.query(`
+        INSERT INTO player_profiles (user_id, elo_rating, trust_score)
+        VALUES ($1, 1000, 50)
+        ON CONFLICT (user_id) DO NOTHING
+      `, [userId]);
+      if (isPublic !== undefined) {
+        await client.query(
+          'UPDATE player_profiles SET is_public = $1 WHERE user_id = $2',
+          [isPublic === true, userId]);
+      }
+      if (bio !== undefined) {
+        const cleanBio = (typeof bio === 'string' && bio.trim() !== '') ? bio.trim().slice(0, 300) : null;
+        await client.query(
+          'UPDATE player_profiles SET bio = $1 WHERE user_id = $2',
+          [cleanBio, userId]);
+      }
+    }
+
     await client.query('COMMIT');
 
     // Fetch updated data
     const result = await pool.query(`
-      SELECT 
+      SELECT
         u.name, u.email, u.avatar_url,
-        COALESCE(pp.sport_preferences, '{}') as sport_preferences
+        COALESCE(pp.sport_preferences, '{}') as sport_preferences,
+        pp.is_public, pp.bio
       FROM users u
       LEFT JOIN player_profiles pp ON pp.user_id = u.id
       WHERE u.id = $1
@@ -148,6 +176,24 @@ router.post('/me/change-password', authMiddleware, async (req, res, next) => {
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (err) {
     console.error('POST /me/change-password error:', err);
+    next(err);
+  }
+});
+
+// GET /api/users/:id/public-profile — another player's profile, honouring their
+// visibility. Declared after the literal /me/* routes so those win the match. The
+// service owns the visibility rule and the honest payload; this handler only unwraps
+// its result into the envelope.
+router.get('/:id/public-profile', authMiddleware, async (req, res, next) => {
+  try {
+    const r = await userService.publicProfile(pool, {
+      viewerId: req.user.id,
+      targetId: req.params.id,
+    });
+    if (!r.ok) return res.status(r.status).json({ success: false, message: r.message });
+    return res.json({ success: true, data: r.data });
+  } catch (err) {
+    console.error('GET /:id/public-profile error:', err);
     next(err);
   }
 });

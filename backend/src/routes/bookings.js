@@ -14,6 +14,8 @@ const {
 // FR8.15 — one implementation of book/cancel, shared with the assistant.
 const {
   createBookingTx,
+  createBookingGroupTx,
+  previewGroup,
   cancelBookingTx,
 } = require("../services/bookingService");
 const { notify } = require("../utils/notify");
@@ -49,6 +51,67 @@ router.post(
       res.status(201).json({ success: true, data: result.data });
     } catch (e) {
       console.error("Booking creation error:", e);
+      next(e);
+    }
+  },
+);
+
+// POST /api/bookings/group/quote — what a run of consecutive slots would cost.
+//
+// Declared before /group so the two-segment path is matched first, and before
+// /:id for the same reason "disputes" is. Transport only: the consecutive-run
+// rule, the discount tier and the arithmetic are in the service and in
+// utils/slotGroup.js.
+//
+// A quote takes no locks, so the availability it reports is advisory. The booking
+// below re-reads every slot under a row lock and is the only authority.
+router.post(
+  "/group/quote",
+  authMiddleware,
+  checkRole("player"),
+  async (req, res, next) => {
+    const { venueId, slotIds } = req.body;
+    try {
+      const result = await previewGroup(pool, {
+        userId: req.user.id,
+        venueId,
+        slotIds,
+      });
+      if (!result.ok) {
+        return res.status(result.status).json({ success: false, message: result.message, code: result.code });
+      }
+      res.json({ success: true, data: result.data });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+// POST /api/bookings/group — book a run of consecutive slots as one group.
+//
+// Creates N `bookings` rows sharing a `booking_group_id`, each with its own
+// escrow, deposit, refund window and QR code. The whole run is one transaction:
+// the first slot that cannot be booked aborts all of them, because one hour plus
+// a refund is not a smaller version of the two hours the player asked for.
+router.post(
+  "/group",
+  authMiddleware,
+  checkRole("player"),
+  async (req, res, next) => {
+    const { venueId, slotIds, notes } = req.body;
+    try {
+      const result = await createBookingGroupTx({
+        userId: req.user.id,
+        venueId,
+        slotIds,
+        notes,
+      });
+      if (!result.ok) {
+        return res.status(result.status).json({ success: false, message: result.message, code: result.code });
+      }
+      res.status(201).json({ success: true, message: result.message, data: result.data });
+    } catch (e) {
+      console.error("Group booking creation error:", e);
       next(e);
     }
   },

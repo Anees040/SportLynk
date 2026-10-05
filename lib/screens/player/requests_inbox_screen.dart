@@ -10,6 +10,7 @@ import '../../services/request_service.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/match_widgets.dart' show MatchEmptyState;
+import '../shared/public_profile_screen.dart';
 
 /// The matchmaking request inbox (module 8c).
 ///
@@ -154,6 +155,23 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
     });
   }
 
+  // The other party's public profile — so the user can weigh who is asking, or whom
+  // they asked, before accepting. A row with no resolved user id is not tappable.
+  void _openProfile(PlayRequest r) {
+    final id = r.otherUserId;
+    if (id == null || id.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(
+          userId: id,
+          name: r.displayName,
+          avatarUrl: r.otherAvatar,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -180,8 +198,8 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
       body: TabBarView(
         controller: _tabs,
         children: [
-          _tabBody(incoming: true),
-          _tabBody(incoming: false),
+          _KeepAlive(child: _tabBody(incoming: true)),
+          _KeepAlive(child: _tabBody(incoming: false)),
         ],
       ),
     );
@@ -196,33 +214,26 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
     if (loading) {
       return const Center(child: CircularProgressIndicator());
     }
+    // MatchEmptyState is itself a scrollable, so it is handed straight to the
+    // RefreshIndicator — wrapping it in a second ListView nests one viewport in
+    // another with no bounded height, which is what used to throw on open.
     if (failed) {
       return RefreshIndicator(
         onRefresh: reload,
-        child: ListView(
-          children: const [
-            SizedBox(height: 120),
-            MatchEmptyState(
-              icon: Icons.cloud_off,
-              text: 'Could not load requests.\nPull down to try again.',
-            ),
-          ],
+        child: const MatchEmptyState(
+          icon: Icons.cloud_off,
+          text: 'Could not load requests.\nPull down to try again.',
         ),
       );
     }
     if (rows.isEmpty) {
       return RefreshIndicator(
         onRefresh: reload,
-        child: ListView(
-          children: [
-            const SizedBox(height: 120),
-            MatchEmptyState(
-              icon: incoming ? Icons.inbox_outlined : Icons.send_outlined,
-              text: incoming
-                  ? 'No requests yet.\nWhen someone asks you to play, it shows here.'
-                  : 'You have not asked anyone yet.\nFind players from the Matchmaking screen.',
-            ),
-          ],
+        child: MatchEmptyState(
+          icon: incoming ? Icons.inbox_outlined : Icons.send_outlined,
+          text: incoming
+              ? 'No requests yet.\nWhen someone asks you to play, it shows here.'
+              : 'You have not asked anyone yet.\nFind players from the Matchmaking screen.',
         ),
       );
     }
@@ -251,47 +262,52 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: AppColors.inputFill,
-                foregroundImage: avatar,
-                child: avatar == null
-                    ? const Icon(Icons.person, color: AppColors.textSecondary)
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      r.displayName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (r.sport != null && r.sport!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 2),
+          InkWell(
+            onTap: () => _openProfile(r),
+            borderRadius: BorderRadius.circular(10),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppColors.inputFill,
+                  foregroundImage: avatar,
+                  child: avatar == null
+                      ? const Icon(Icons.person, color: AppColors.textSecondary)
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        'Wants to play ${r.sport}',
+                        r.displayName,
                         style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (r.sport != null && r.sport!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Wants to play ${r.sport}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                const Icon(Icons.chevron_right, size: 20, color: AppColors.textSecondary),
+              ],
+            ),
           ),
           if (r.message != null && r.message!.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -381,15 +397,45 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
         ],
       );
     }
-    // Everything else is terminal (declined, cancelled, expired) — show the outcome.
-    return Align(alignment: Alignment.centerLeft, child: _statusPill(r.status));
+    // Everything else is terminal (declined, cancelled, expired) — show the outcome
+    // plainly, with the date it was decided so a withdrawn ask reads as spent rather
+    // than looking like it is still pending.
+    return Row(
+      children: [
+        _statusPill(r.status, label: _terminalLabel(r, incoming: incoming)),
+        if (r.decidedAt != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            _shortDate(r.decidedAt!),
+            style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // On the Sent tab a cancelled ask is one the viewer WITHDREW, so it reads
+  // "Withdrawn" rather than the neutral "Cancelled" that the model carries; every
+  // other terminal state keeps its own word.
+  String _terminalLabel(PlayRequest r, {required bool incoming}) {
+    if (!incoming && r.status == PlayRequestStatus.cancelled) return 'Withdrawn';
+    return r.status.label;
+  }
+
+  static String _shortDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${d.day} ${months[d.month - 1]}';
   }
 
   // The outcome badge for a decided or pending request. Unknown carries no label
   // (the server sent a status this build predates), so it renders nothing rather
-  // than an empty pill.
-  Widget _statusPill(PlayRequestStatus s) {
-    if (s.label.isEmpty) return const SizedBox.shrink();
+  // than an empty pill. [label] overrides the wording without changing the colour.
+  Widget _statusPill(PlayRequestStatus s, {String? label}) {
+    final text = label ?? s.label;
+    if (text.isEmpty) return const SizedBox.shrink();
     final (Color fg, Color bg) = switch (s) {
       PlayRequestStatus.pending =>
         (AppColors.warningText, AppColors.warning.withValues(alpha: 0.14)),
@@ -405,9 +451,32 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
       child: Text(
-        s.label,
+        text,
         style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg),
       ),
     );
+  }
+}
+
+/// Keeps a tab's built subtree alive when the other tab is on screen, so swapping
+/// between Incoming and Sent does not rebuild the list from scratch each time — the
+/// stutter the plain TabBarView showed on every switch.
+class _KeepAlive extends StatefulWidget {
+  final Widget child;
+  const _KeepAlive({required this.child});
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }

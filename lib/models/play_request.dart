@@ -112,6 +112,11 @@ class DiscoverPlayer {
   final int bookings30d;
   final bool playsSport;
 
+  /// False when this player keeps their profile private. The row still appears (a
+  /// private account is not hidden, only closed), but it shows a lock instead of a
+  /// Request button, since the server refuses an ask to a private player.
+  final bool isPublic;
+
   /// True when this user already has a pending request from the viewer, so the row
   /// shows "Requested" (disabled) rather than letting a duplicate ask hit the 409.
   final bool pendingRequest;
@@ -124,6 +129,7 @@ class DiscoverPlayer {
     this.trustScore,
     this.bookings30d = 0,
     this.playsSport = false,
+    this.isPublic = true,
     this.pendingRequest = false,
   });
 
@@ -135,6 +141,7 @@ class DiscoverPlayer {
         trustScore: j['trustScore'] == null ? null : asNum(j['trustScore']),
         bookings30d: asNum(j['bookings30d']).toInt(),
         playsSport: j['playsSport'] == true,
+        isPublic: j['isPublic'] != false,
         pendingRequest: j['pendingRequest'] == true,
       );
 }

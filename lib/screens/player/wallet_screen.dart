@@ -3,12 +3,15 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/offline_cache.dart';
 import '../../utils/num_util.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/frozen_balance_sheet.dart';
 import '../../widgets/network_error_view.dart';
+import '../../widgets/offline_banner.dart';
 import '../../widgets/transaction_detail_sheet.dart';
 import '../../widgets/withdraw_sheet.dart';
 import 'wallet_history_screen.dart';
@@ -25,15 +28,48 @@ class _WalletScreenState extends State<WalletScreen> with ReconnectRefresh<Walle
   List<Map<String, dynamic>> _txns = [];
   bool _loading = true;
   String? _error;
+
+  /// Set while the figures on screen came from disk rather than this session.
+  DateTime? _cachedAt;
   static const _amounts = [500.0, 1000.0, 2000.0, 5000.0];
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    // Concurrent, not chained — see [_hydrateFromCache].
+    _load();
+    _hydrateFromCache();
+  }
 
   // Balance and transactions can move while the app sits backgrounded or offline;
   // a returning connection refetches them without a manual pull.
   @override
   void onReconnect() => _load();
+
+  /// Show the last known balance if it arrives before the network does.
+  ///
+  /// A balance is the one figure where staleness has to be visible, so the strip
+  /// carries the "saved N min ago" wording whenever these numbers came from disk:
+  /// a cached balance that silently reads as current is how a player plans a
+  /// booking they can no longer afford.
+  ///
+  /// The `_wallet != null` guard means a response that already landed wins; the
+  /// cache never demotes fresh money figures to stale ones.
+  Future<void> _hydrateFromCache() async {
+    final cached = await OfflineCache.read(OfflineCache.wallet);
+    if (!mounted || cached == null || _wallet != null) return;
+    final map = cached.asMap();
+    if (map == null || map['wallet'] is! Map) return;
+    setState(() {
+      _wallet = Map<String, dynamic>.from(map['wallet'] as Map);
+      final txns = map['txns'];
+      _txns = txns is List
+          ? txns.whereType<Map>().map(Map<String, dynamic>.from).toList()
+          : const [];
+      _cachedAt = cached.at;
+      _loading = false;
+    });
+  }
 
   Future<void> _load() async {
     final token = Provider.of<AuthProvider>(context, listen: false).token;
@@ -43,25 +79,40 @@ class _WalletScreenState extends State<WalletScreen> with ReconnectRefresh<Walle
       setState(() { _loading = false; _error = 'Please sign in again to view your wallet.'; });
       return;
     }
-    setState(() => _loading = true);
+    // Only spin when there is nothing to look at; a cached balance stays put while
+    // the refresh runs behind it.
+    if (_wallet == null) setState(() => _loading = true);
     final walletResp = await _api.get('/wallet/me', token: token);
     final txnResp =
         await _api.get('/wallet/transactions', token: token, queryParams: {'limit': '5'});
     if (!mounted) return;
+    final ok = walletResp['success'] == true && walletResp['data'] is Map;
     setState(() {
-      if (walletResp['success'] == true && walletResp['data'] is Map) {
+      if (ok) {
         _wallet = Map<String, dynamic>.from(walletResp['data'] as Map);
         _txns = txnResp['success'] == true && txnResp['data'] is List
             ? List<Map<String, dynamic>>.from(txnResp['data'] as List)
             : const [];
         _error = null;
+        _cachedAt = null;
       } else {
         // A balance is never shown as a fabricated zero: on failure the screen
         // keeps whatever it last held and offers a retry rather than inventing 0.
-        _error = '${walletResp['message'] ?? 'Could not load your wallet.'}';
+        // With a cached balance present the retry is replaced by the offline
+        // strip, which explains the staleness without hiding the figure.
+        _error = _wallet != null
+            ? null
+            : '${walletResp['message'] ?? 'Could not load your wallet.'}';
       }
       _loading = false;
     });
+    if (ok) {
+      context.read<ConnectivityProvider>().markReachable();
+      await OfflineCache.write(
+          OfflineCache.wallet, {'wallet': _wallet, 'txns': _txns});
+    } else if (walletResp['statusCode'] == 0) {
+      if (mounted) context.read<ConnectivityProvider>().markUnreachable();
+    }
   }
 
   Future<void> _topUp(double amount) async {
@@ -87,7 +138,15 @@ class _WalletScreenState extends State<WalletScreen> with ReconnectRefresh<Walle
     }
   }
 
-  void _showTopUpSheet() {
+  void _showTopUpSheet() async {
+    // Guarded before the sheet opens rather than after the amount is chosen: a
+    // simulated three-second payment dialog that ends in a connection error is a
+    // worse experience than being told up front, and a top-up must never appear to
+    // have been accepted for later.
+    if (!await OfflineActionNotice.guard(context, 'Adding money to your wallet')) {
+      return;
+    }
+    if (!mounted) return;
     showModalBottomSheet(context: context, isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
@@ -102,6 +161,13 @@ class _WalletScreenState extends State<WalletScreen> with ReconnectRefresh<Walle
   // whether to show the request form or the pending withdrawal, because that
   // depends on server state this screen does not load.
   Future<void> _showWithdrawSheet() async {
+    // Same reasoning as the top-up, with more at stake: a withdrawal moves money
+    // out at request time, and the sheet's own "available" figure comes from a
+    // balance that may be a cached one.
+    if (!await OfflineActionNotice.guard(context, 'Requesting a withdrawal')) {
+      return;
+    }
+    if (!mounted) return;
     final token = Provider.of<AuthProvider>(context, listen: false).token;
     if (token == null) return;
     final changed = await WithdrawSheet.show(
@@ -144,21 +210,24 @@ class _WalletScreenState extends State<WalletScreen> with ReconnectRefresh<Walle
               AppColors.primary)),
         ],
       ),
-      body: _loading
-        ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-        : _wallet == null
-          ? RefreshIndicator(color: AppColors.accent, onRefresh: _load,
-              child: NetworkErrorView(
-                title: 'Could not load wallet',
-                message: _error ?? 'Please try again.',
-                onRetry: _load,
-              ))
-          : RefreshIndicator(color: AppColors.accent, onRefresh: _load,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              child: Column(children: [
-                // Balance card
+      body: Column(children: [
+        OfflineBanner(cachedAt: _cachedAt),
+        Expanded(
+          child: _loading
+            ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+            : _wallet == null
+              ? RefreshIndicator(color: AppColors.accent, onRefresh: _load,
+                  child: NetworkErrorView(
+                    title: 'Could not load wallet',
+                    message: _error ?? 'Please try again.',
+                    onRetry: _load,
+                  ))
+              : RefreshIndicator(color: AppColors.accent, onRefresh: _load,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(children: [
+                    // Balance card
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
@@ -323,9 +392,11 @@ class _WalletScreenState extends State<WalletScreen> with ReconnectRefresh<Walle
                         style: GoogleFonts.poppins(
                           fontSize: 13, color: AppColors.textSecondary))))
                   : Column(children: _txns.map(_txnTile).toList()),
-                const SizedBox(height: 24),
-              ]),
-            )),
+                    const SizedBox(height: 24),
+                  ]),
+                )),
+        ),
+      ]),
     );
   }
 

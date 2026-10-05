@@ -25,6 +25,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const chat = require('../utils/chatCore');
+const receipts = require('../utils/chatReceipts');
 const access = require('../utils/teamAccess');
 const list = require('../utils/chatList');
 const qr = require('../utils/quickReplies');
@@ -35,7 +36,20 @@ router.use(auth);
 // The reaction palette. A closed set, not free emoji: an arbitrary string in this
 // column is rendered on every device that loads the message, so it is validated
 // exactly the way every other user-supplied string in this codebase is.
-const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
+//
+// The first eight are the quick-tap row the app shows on a long press; the rest
+// are the "+" picker behind it. Both halves must be listed here — a picker offering
+// an emoji this array omits reads as a reaction that applies and then vanishes a
+// moment later, because the optimistic bubble reverts when the route answers 400.
+// Kept in step with `_reactionEmojis` in lib/screens/shared/chat_thread_screen.dart.
+const REACTIONS = [
+  // Quick row
+  '👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉',
+  // Picker
+  '👏', '💯', '✅', '❌', '⚽', '🏏', '🏆', '😍',
+  '😎', '🤔', '😅', '😭', '🙌', '👌', '💪', '😡',
+  '🥳', '😴', '🤝', '👀', '💔', '😤', '🤷', '⏰',
+];
 
 const fail = (res, status, message) => res.status(status).json({ success: false, message });
 const ok = (res, data) => res.json({ success: true, data });
@@ -45,11 +59,17 @@ const ok = (res, data) => res.json({ success: true, data });
  * type and ref plus the caller's GROUP role ('admin' | 'member') — the role is
  * what authorises deleting someone else's message, so it is read here in the same
  * query that proves membership rather than trusted from anywhere else.
+ *
+ * `history_from` comes back in the same row and is the caller's read boundary
+ * (migration 036): the earliest message they may see. NULL means no bound, which
+ * is every membership that predates the column. Every endpoint that returns
+ * message CONTENT passes it through to the query, so there is one boundary and
+ * not one per door.
  */
 async function member(client, channelId, userId) {
   if (!access.isUuid(channelId)) return null;
   const r = await client.query(
-    `SELECT c.id, c.type, c.ref_id, m.role
+    `SELECT c.id, c.type, c.ref_id, m.role, m.history_from
        FROM chat_channels c
        JOIN chat_channel_members m ON m.channel_id = c.id
       WHERE c.id = $1 AND m.user_id = $2 AND m.left_at IS NULL`,
@@ -57,6 +77,29 @@ async function member(client, channelId, userId) {
   );
   return r.rows[0] || null;
 }
+
+/** How many people are live members of a channel — the poll gate's input. */
+async function liveMemberCount(client, channelId) {
+  const { rows } = await client.query(
+    `SELECT count(*)::int AS n FROM chat_channel_members
+      WHERE channel_id = $1 AND left_at IS NULL`,
+    [channelId],
+  );
+  return rows[0] ? rows[0].n : 0;
+}
+
+/**
+ * A poll is a group question, so it takes a group. Two people in a room can ask
+ * each other directly, and a ballot between them is a worse version of the
+ * conversation they are already having — so the action is refused below this many
+ * live members, and the client hides the entry point on the same rule.
+ *
+ * Counting members rather than switching on the channel TYPE is what makes this
+ * hold everywhere: a direct room and a booking room are structurally a pair, and
+ * a coordination room with one captain per side is the same shape even though its
+ * type says 'captain'.
+ */
+const POLL_MIN_MEMBERS = 3;
 
 // The CHAT list
 //
@@ -158,6 +201,12 @@ router.get('/match/:matchId', refLookup('captain', 'matchId'));
  * cursor: the client passes the oldest message it already holds to page backwards.
  * Reactions are aggregated in the same shape emitPersistedMessage sends live, so a
  * message looks identical whether it arrived over the socket or in history.
+ *
+ * The reader's history window (036) bounds the page from below. Without it,
+ * adding a player to a team handed them every message the roster had ever sent —
+ * membership was the only check, and membership says nothing about when it began.
+ * It is applied here rather than in the client because a boundary the client
+ * enforces is not a boundary: the rows would still be on the wire.
  */
 router.get('/:channelId/messages', async (req, res, next) => {
   const client = await pool.connect();
@@ -183,10 +232,12 @@ router.get('/:channelId/messages', async (req, res, next) => {
             SELECT 1 FROM chat_message_hides h
              WHERE h.message_id = m.id AND h.user_id = $4
           )
+          -- The reader's history window (036): nothing from before they joined.
+          AND ($5::timestamptz IS NULL OR m.created_at >= $5)
         GROUP BY m.id, u.name, u.avatar_url
         ORDER BY m.created_at DESC
         LIMIT $3`,
-      [req.params.channelId, before, limit, req.user.id],
+      [req.params.channelId, before, limit, req.user.id, m.history_from],
     );
     return ok(res, rows.reverse());
   } catch (e) { next(e); } finally { client.release(); }
@@ -288,6 +339,17 @@ router.post('/:channelId/messages', async (req, res, next) => {
     await client.query('COMMIT');
 
     const hydrated = await chat.emitPersistedMessage(client, req.params.channelId, out.message.id);
+    // The second tick. emitPersistedMessage has just put the row on every online
+    // member's socket, so for those members delivered is now a fact — and nothing
+    // else was recording it: the mark only moved when a socket CONNECTED, which
+    // meant a recipient who was already online when the message landed kept a
+    // watermark older than it and the sender's second tick never appeared. Only
+    // for a genuinely new message; a retried clientId has already been delivered.
+    if (!out.duplicate) {
+      await receipts.markDeliveredToOnline(pool, {
+        channelId: req.params.channelId, senderId: req.user.id,
+      });
+    }
     return res.status(out.duplicate ? 200 : 201).json({ success: true, data: hydrated || out.message });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -298,23 +360,25 @@ router.post('/:channelId/messages', async (req, res, next) => {
 // Read MARK  (blue tick)
 
 /**
- * Mark the channel read up to `at` (or now). GREATEST so a late-arriving mark can
- * never move a watermark backwards. This is the REST counterpart of the socket
+ * Mark the channel read up to `at` (or now). The watermark only ever moves
+ * forwards (chatReceipts uses GREATEST), so a late-arriving mark cannot turn read
+ * messages unread again. This is the REST counterpart of the socket
  * `message:read` event — used when the app is foregrounded but the socket has not
- * yet (re)connected.
+ * yet (re)connected — and it goes through the same helper, which is what makes it
+ * broadcast the resulting receipt. It used to write the row and tell nobody, so a
+ * read performed on this path left the sender's ticks grey until their next
+ * refetch.
  */
 router.post('/:channelId/read', async (req, res, next) => {
   try {
     if (!access.isUuid(req.params.channelId)) return fail(res, 404, 'Chat not found.');
-    const n = await pool.query(
-      `UPDATE chat_channel_members
-          SET last_read_at = GREATEST(last_read_at, COALESCE($3::timestamptz, now())),
-              last_delivered_at = GREATEST(last_delivered_at, COALESCE($3::timestamptz, now()))
-        WHERE channel_id = $1 AND user_id = $2 AND left_at IS NULL`,
-      [req.params.channelId, req.user.id, req.body.at || null],
-    );
-    if (!n.rowCount) return fail(res, 403, 'You are not a chat member.');
-    return ok(res, { read: true });
+    const marks = await receipts.markRead(pool, {
+      channelId: req.params.channelId,
+      userId: req.user.id,
+      at: req.body.at || null,
+    });
+    if (!marks) return fail(res, 403, 'You are not a chat member.');
+    return ok(res, { read: true, ...marks });
   } catch (e) { next(e); }
 });
 
@@ -324,6 +388,11 @@ router.post('/:channelId/read', async (req, res, next) => {
  * Every live member with their read/delivered watermarks and last-seen. The chat
  * screen loads this once, then keeps the marks current from live `receipt` events;
  * the group tick for one of my messages is min(other members' mark) vs its time.
+ *
+ * `history_from` is part of that computation and not incidental: a member who
+ * joined after a message was sent cannot see it, so they must not hold its ticks
+ * at one grey forever. The client skips them for messages older than their
+ * window.
  */
 router.get('/:channelId/members', async (req, res, next) => {
   const client = await pool.connect();
@@ -332,6 +401,7 @@ router.get('/:channelId/members', async (req, res, next) => {
     if (!m) return fail(res, 403, 'You are not a chat member.');
     const { rows } = await client.query(
       `SELECT cm.user_id, cm.role, cm.last_read_at, cm.last_delivered_at,
+              cm.history_from,
               u.name, u.avatar_url, u.last_seen_at
          FROM chat_channel_members cm
          JOIN users u ON u.id = cm.user_id
@@ -480,13 +550,19 @@ router.post('/:channelId/messages/:messageId/hide', async (req, res, next) => {
 // nudge telling every open client to refetch GET /pinned rather than a payload
 // each would have to merge into its own banner state.
 
-/** GET the channel's pinned messages, newest pin first — the banner's source. */
+/**
+ * GET the channel's pinned messages, newest pin first — the banner's source.
+ *
+ * Bounded by the reader's history window (036) for the same reason the timeline
+ * is: a pinned announcement from before somebody joined is still a message they
+ * may not read, and the banner shows its text on open.
+ */
 router.get('/:channelId/pinned', async (req, res, next) => {
   const client = await pool.connect();
   try {
     const m = await member(client, req.params.channelId, req.user.id);
     if (!m) return fail(res, 403, 'You are not a chat member.');
-    return ok(res, await chat.listPinned(client, req.params.channelId));
+    return ok(res, await chat.listPinned(client, req.params.channelId, 20, m.history_from));
   } catch (e) { next(e); } finally { client.release(); }
 });
 
@@ -558,15 +634,26 @@ router.delete('/:channelId/messages/:messageId/pin', async (req, res, next) => {
 // POLLS  (a WhatsApp-style poll posted into the room)
 //
 // A poll is a message of kind 'poll' whose body is the question; the ballot and
-// the votes live in chat_polls / chat_poll_votes. Any member may create one and
-// any member may vote — a poll is a group question, not an admin announcement, so
-// it is not gated the way pinning is. Creating and voting both re-push the poll
-// message to the room so every open client sees the new tally at once.
+// the votes live in chat_polls / chat_poll_votes. Any MEMBER OF A GROUP may create
+// one and any member may vote — a poll is a group question, not an admin
+// announcement, so it is not gated the way pinning is. Creating and voting both
+// re-push the poll message to the room so every open client sees the new tally at
+// once.
+//
+// It IS gated on the room having a group in it (POLL_MIN_MEMBERS). A poll offered
+// in a one-to-one chat — a player and a venue owner, two captains — is a ballot
+// between two people who can simply answer each other, and it was reaching both
+// of those rooms. The client hides the entry point on the same rule; this is the
+// half that makes it true, since a hidden button is not a restriction.
 router.post('/:channelId/polls', async (req, res, next) => {
   const client = await pool.connect();
   try {
     const m = await member(client, req.params.channelId, req.user.id);
     if (!m) return fail(res, 403, 'You are not a chat member.');
+
+    if (await liveMemberCount(client, req.params.channelId) < POLL_MIN_MEMBERS) {
+      return fail(res, 400, 'Polls are for group chats. Just ask them directly.');
+    }
 
     const question = access.squashMultiline(req.body.question || '');
     if (!question) return fail(res, 400, 'A poll needs a question.');
@@ -591,6 +678,10 @@ router.post('/:channelId/polls', async (req, res, next) => {
     await client.query('COMMIT');
 
     const hydrated = await chat.emitPersistedMessage(client, req.params.channelId, messageId);
+    // A poll is a message, so it earns the same second tick as one.
+    await receipts.markDeliveredToOnline(pool, {
+      channelId: req.params.channelId, senderId: req.user.id,
+    });
     return ok(res, hydrated);
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch (_) { /* already resolved */ }
@@ -623,7 +714,9 @@ router.post('/:channelId/polls/:pollId/vote', async (req, res, next) => {
 
 /**
  * GET the channel's shared photos, newest first, paginated on `before` (a
- * created_at cursor, like history). Served by idx_chat_messages_media (015).
+ * created_at cursor, like history). Served by idx_chat_messages_media (015), and
+ * bounded below by the reader's history window (036) — the gallery is the second
+ * door into a room's backlog and must not be a way around the first.
  */
 router.get('/:channelId/media', async (req, res, next) => {
   const client = await pool.connect();
@@ -632,7 +725,10 @@ router.get('/:channelId/media', async (req, res, next) => {
     if (!m) return fail(res, 403, 'You are not a chat member.');
     const limit = Math.min(Math.max(Number(req.query.limit) || 60, 1), 100);
     return ok(res, await chat.listMedia(client, {
-      channelId: req.params.channelId, before: req.query.before || null, limit,
+      channelId: req.params.channelId,
+      before: req.query.before || null,
+      limit,
+      since: m.history_from,
     }));
   } catch (e) { next(e); } finally { client.release(); }
 });

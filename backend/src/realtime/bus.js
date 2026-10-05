@@ -92,6 +92,25 @@ function emitMessage(channelId, memberIds, event, payload) {
   }
 }
 
+/**
+ * A read/delivered watermark moved: to the open thread AND to the member's own
+ * devices.
+ *
+ * Two rooms in one emit, so a socket that is in both receives it once (Socket.IO
+ * de-duplicates across the room list; two separate `.emit()` calls would not).
+ * The second room is what lets the reader's OWN other screens react — the inbox
+ * is mounted underneath the open thread and has no other way to learn that the
+ * room it shows a badge for has just been read.
+ */
+function emitReceipt(channelId, userId, payload) {
+  if (!io || !channelId || !userId) return;
+  try {
+    io.to([channelRoom(channelId), userRoom(userId)]).emit('receipt', payload);
+  } catch (e) {
+    console.warn('[rt] emitReceipt failed:', e.message);
+  }
+}
+
 /** Which user ids currently have at least one socket connected. */
 function onlineUserIds() {
   if (!io) return [];
@@ -143,6 +162,7 @@ module.exports = {
   emitToUsers,
   emitToChannel,
   emitMessage,
+  emitReceipt,
   onlineUserIds,
   isUserOnline,
   isUserViewingChannel,

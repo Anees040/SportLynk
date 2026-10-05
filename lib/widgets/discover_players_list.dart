@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../services/request_service.dart';
 import '../utils/reconnect_refresh.dart';
 import '../utils/snackbar_util.dart';
+import '../screens/shared/public_profile_screen.dart';
 import 'match_widgets.dart' show MatchEmptyState;
 
 /// The "find players to ask" list behind the Players tab (module 8c).
@@ -91,23 +92,33 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
     }
   }
 
+  // The player's public profile — so the viewer can see who they are about to ask.
+  void _openProfile(DiscoverPlayer p) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(
+          userId: p.userId,
+          name: p.name,
+          avatarUrl: p.avatarUrl,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
     if (_failed) {
-      // Pull-to-retry needs a scrollable, so the empty view rides inside a list.
+      // MatchEmptyState is itself the scrollable; handing it to RefreshIndicator
+      // directly avoids nesting a viewport inside another unbounded one.
       return RefreshIndicator(
         onRefresh: _load,
-        child: ListView(
-          children: const [
-            SizedBox(height: 120),
-            MatchEmptyState(
-              icon: Icons.cloud_off,
-              text: 'Could not load players.\nPull down to try again.',
-            ),
-          ],
+        child: const MatchEmptyState(
+          icon: Icons.cloud_off,
+          text: 'Could not load players.\nPull down to try again.',
         ),
       );
     }
@@ -115,14 +126,9 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
     if (players.isEmpty) {
       return RefreshIndicator(
         onRefresh: _load,
-        child: ListView(
-          children: const [
-            SizedBox(height: 120),
-            MatchEmptyState(
-              icon: Icons.person_search_outlined,
-              text: 'No players to show yet.\nCheck back once more people join.',
-            ),
-          ],
+        child: const MatchEmptyState(
+          icon: Icons.person_search_outlined,
+          text: 'No players to show yet.\nCheck back once more people join.',
         ),
       );
     }
@@ -147,50 +153,60 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: AppColors.inputFill,
-            foregroundImage: avatar,
-            child: avatar == null
-                ? const Icon(Icons.person, color: AppColors.textSecondary)
-                : null,
-          ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  p.name,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+            child: InkWell(
+              onTap: () => _openProfile(p),
+              borderRadius: BorderRadius.circular(10),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: AppColors.inputFill,
+                    foregroundImage: avatar,
+                    child: avatar == null
+                        ? const Icon(Icons.person, color: AppColors.textSecondary)
+                        : null,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        sports,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          p.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                sports,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (p.trustScore != null) ...[
+                              const SizedBox(width: 8),
+                              _trustChip(p.trustScore!),
+                            ],
+                          ],
+                        ),
+                      ],
                     ),
-                    if (p.trustScore != null) ...[
-                      const SizedBox(width: 8),
-                      _trustChip(p.trustScore!),
-                    ],
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -261,6 +277,31 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
               ),
             ),
           ],
+        ),
+      );
+    }
+    // A private player cannot be asked (the server refuses it), so the button is a
+    // lock that opens their gated profile rather than a dead Request that 403s.
+    if (!p.isPublic) {
+      return SizedBox(
+        width: 92,
+        height: 36,
+        child: OutlinedButton(
+          onPressed: () => _openProfile(p),
+          style: OutlinedButton.styleFrom(
+            padding: EdgeInsets.zero,
+            foregroundColor: AppColors.textSecondary,
+            side: const BorderSide(color: AppColors.border),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline, size: 14),
+              SizedBox(width: 4),
+              Text('Private', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ],
+          ),
         ),
       );
     }

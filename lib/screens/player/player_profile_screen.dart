@@ -120,8 +120,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
     }
   }
 
-  Future<void> _saveProfile({String? avatarUrl}) async {
-    if (_nameCtrl.text.trim().length < 3) {
+  Future<void> _saveProfile({String? avatarUrl}) async {    if (_nameCtrl.text.trim().length < 3) {
       _snack('Name must be at least 3 characters', AppColors.error);
       return;
     }
@@ -159,6 +158,24 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
       backgroundColor: Colors.transparent,
       builder: (context) => _ChangePasswordSheet(),
     );
+  }
+
+  /// Flip the profile between public and private. The switch moves at once so the
+  /// control feels live; a failed write reverts it and surfaces the reason, rather
+  /// than leaving the toggle claiming a state the server did not accept.
+  Future<void> _setVisibility(bool value) async {
+    if (_profile == null) return;
+    final prev = _profile!['is_public'] != false;
+    if (prev == value) return;
+    setState(() => _profile!['is_public'] = value);
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) return;
+    final data = await _api.patch('/users/me/update', {'isPublic': value}, token: token);
+    if (!mounted) return;
+    if (data['success'] != true) {
+      setState(() => _profile!['is_public'] = prev);
+      _snack('${data['message'] ?? 'Could not update visibility.'}', AppColors.error);
+    }
   }
 
   void _snack(String msg, Color color) {
@@ -415,6 +432,35 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
             ),
             const SizedBox(height: 40),
           ] else ...[
+            const SizedBox(height: 12),
+            Container(
+              color: Colors.white,
+              child: SwitchListTile(
+                value: _profile!['is_public'] != false,
+                onChanged: _setVisibility,
+                activeThumbColor: AppColors.accent,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                secondary: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.inputFill,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    _profile!['is_public'] != false ? Icons.public : Icons.lock_outline,
+                    color: AppColors.textPrimary, size: 20),
+                ),
+                title: Text('Public profile',
+                    style: GoogleFonts.poppins(
+                        fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                subtitle: Text(
+                  _profile!['is_public'] != false
+                      ? 'Anyone can see your sports and teams and send you play requests.'
+                      : 'Only your name, photo and scores are visible. Others cannot open your profile or ask you to play.',
+                  style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
+                ),
+              ),
+            ),
             const SizedBox(height: 12),
             Container(
               color: Colors.white,

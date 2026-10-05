@@ -31,6 +31,7 @@
  */
 const pool = require('../db/pool');
 const access = require('../utils/teamAccess');
+const discounts = require('./discountService');
 
 /** Pakistan is UTC+5 with no DST, so one constant is the whole timezone story. */
 const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
@@ -198,8 +199,20 @@ async function venueDetail(client, { venueId, userId, date = null } = {}) {
       [venueId, slotDate, now.time, userId],
     );
   }
+  // The owner's multi-slot ladder, sent with the page rather than fetched
+  // separately: the player needs it to decide whether to select a second hour, so
+  // a screen that has the grid but not the discount would be showing a price it is
+  // about to contradict. Empty when the venue has no ladder (or before migration
+  // 035), which the client renders as nothing at all.
+  const tiers = await discounts.tiersFor(runner, venueId);
   return { ok: true, status: 200, code: 'ok', message: null,
-    data: { ...venue.rows[0], slots: slots.rows }, slotDate };
+    data: {
+      ...venue.rows[0],
+      slots: slots.rows,
+      discount_tiers: tiers,
+      discount_summary: discounts.describeTiers(tiers),
+    },
+    slotDate };
 }
 
 /**

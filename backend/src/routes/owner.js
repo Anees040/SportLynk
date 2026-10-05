@@ -21,6 +21,8 @@ const mlClient = require("../services/mlClient");
 const settings = require("../utils/globalSettings");
 const { TtlCache, ONE_HOUR_MS } = require("../utils/ttlCache");
 const slotService = require("../services/slotService");
+const discounts = require("../services/discountService");
+const slotGroup = require("../utils/slotGroup");
 
 router.use(auth, checkRole("owner"));
 
@@ -727,6 +729,85 @@ router.patch("/venues/:id", async (req, res, next) => {
         removed: shape.removed,
         keptOutside: shape.keptOutside,
       } : null,
+    });
+  } catch (e) {
+    next(e);
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/owner/venues/:id/discounts — the venue's multi-slot discount ladder.
+router.get("/venues/:id/discounts", async (req, res, next) => {
+  try {
+    const owned = await pool.query(
+      'SELECT id FROM venues WHERE id=$1 AND owner_id=$2',
+      [req.params.id, req.user.id],
+    );
+    if (!owned.rows.length) {
+      return res.status(404).json({ success: false, message: 'Venue not found or unauthorized' });
+    }
+    const tiers = await discounts.tiersFor(pool, req.params.id);
+    res.json({
+      success: true,
+      data: {
+        tiers,
+        summary: discounts.describeTiers(tiers),
+        maxPercent: slotGroup.MAX_DISCOUNT_PERCENT,
+        minSlots: slotGroup.MIN_DISCOUNT_SLOTS,
+        maxSlots: slotGroup.MAX_DISCOUNT_SLOTS,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// PUT /api/owner/venues/:id/discounts — replace the ladder.
+//
+// PUT rather than PATCH because the ladder is edited as a whole: the body is the
+// complete set of rules, and a rule the owner removed on screen has to be gone.
+// The replacement is one transaction, so a rejected row leaves the previous ladder
+// exactly as it was rather than half-applied.
+//
+// No slot price is rewritten. A discount is applied when a booking is created
+// (bookingService.createBooking), so changing the ladder affects the next booking
+// and never a price a player has already agreed to.
+router.put("/venues/:id/discounts", async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const owned = await client.query(
+      'SELECT id FROM venues WHERE id=$1 AND owner_id=$2',
+      [req.params.id, req.user.id],
+    );
+    if (!owned.rows.length) {
+      return res.status(404).json({ success: false, message: 'Venue not found or unauthorized' });
+    }
+
+    await client.query('BEGIN');
+    let result;
+    try {
+      result = await discounts.setTiers(client, {
+        venueId: req.params.id,
+        tiers: req.body && req.body.tiers,
+      });
+      if (!result.ok) {
+        await client.query('ROLLBACK');
+        return res.status(result.code === 'migration_pending' ? 409 : 400)
+          .json({ success: false, message: result.message, code: result.code });
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    }
+
+    res.json({
+      success: true,
+      message: result.tiers.length
+        ? `${result.tiers.length} discount rule${result.tiers.length === 1 ? '' : 's'} saved.`
+        : 'Multi-slot discounts turned off.',
+      data: { tiers: result.tiers, summary: discounts.describeTiers(result.tiers) },
     });
   } catch (e) {
     next(e);

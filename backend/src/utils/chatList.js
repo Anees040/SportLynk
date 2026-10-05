@@ -187,11 +187,17 @@ async function contextFor(client, rows, userId) {
 // System messages count (a "booking cancelled" pill is news); tombstones do not
 // (a deleted message must not leave a permanent +1 nobody can clear); and the
 // reader's own messages never do.
+//
+// `history_from` (036) bounds it from below for the same reason the history
+// endpoint does: a badge counting messages the reader is not allowed to open is a
+// count opening the thread can never clear, which is the one thing a badge must
+// never be. NULL means no bound.
 const UNREAD_SQL = `(SELECT count(*) FROM chat_messages x
     WHERE x.channel_id = c.id
       AND x.deleted_at IS NULL
       AND (x.sender_id IS NULL OR x.sender_id <> $1)
-      AND x.created_at > COALESCE(m.last_read_at, '-infinity'::timestamptz))`;
+      AND x.created_at > COALESCE(m.last_read_at, '-infinity'::timestamptz)
+      AND x.created_at >= COALESCE(m.history_from, '-infinity'::timestamptz))`;
 
 /**
  * Every room this user is in, most recent first.

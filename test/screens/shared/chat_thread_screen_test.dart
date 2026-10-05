@@ -339,4 +339,116 @@ void main() {
       expect(find.byIcon(Icons.forward_outlined), findsNothing);
     });
   });
+
+  // "New poll" belongs to a group
+  //
+  // A poll is a group question. It was offered in every room type, which put a
+  // ballot in front of two people — a player and a venue owner, or two captains —
+  // who can simply answer each other. Direct and booking rooms are structurally a
+  // pair and are ruled out without waiting for the member list; a coordination
+  // room is ruled out by the member count when it holds one captain per side and
+  // in by it when both brought a vice-captain. The server refuses on the same
+  // threshold, so this is the half that keeps the two agreeing.
+  group('the New poll action', () {
+    List<Map<String, dynamic>> roster(int n) => [
+          for (var i = 1; i <= n; i++)
+            {
+              'user_id': 'u-$i',
+              'role': 'member',
+              'name': 'Player $i',
+              'last_read_at': null,
+              'last_delivered_at': null,
+            },
+        ];
+
+    Future<void> openMenu(WidgetTester tester) async {
+      await tapVisible(tester, find.byTooltip('More'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('is absent in a two-person booking room', (tester) async {
+      await pumpThread(tester, api);
+      await settleData(tester);
+      await openMenu(tester);
+
+      expect(find.text('Shared media'), findsOneWidget,
+          reason: 'the menu is open, so an absent poll item is a real absence');
+      expect(find.text('New poll'), findsNothing);
+    });
+
+    testWidgets('is offered in a team room with three members', (tester) async {
+      api.ok(kMembers, roster(3));
+      await pumpScreen(
+        tester,
+        const ChatThreadScreen.team(
+          teamId: 'team-1',
+          teamName: 'Lahore Lions',
+          channelId: 'c-1',
+        ),
+        auth: FakeAuth(token: null),
+      );
+      await settleData(tester);
+      await openMenu(tester);
+
+      expect(find.text('New poll'), findsOneWidget);
+    });
+
+    testWidgets('is withheld from a team room that is down to two members', (
+      tester,
+    ) async {
+      api.ok(kMembers, roster(2));
+      await pumpScreen(
+        tester,
+        const ChatThreadScreen.team(
+          teamId: 'team-1',
+          teamName: 'Lahore Lions',
+          channelId: 'c-1',
+        ),
+        auth: FakeAuth(token: null),
+      );
+      await settleData(tester);
+      await openMenu(tester);
+
+      expect(find.text('Group info'), findsOneWidget,
+          reason: 'this is a team room — only the poll item should be missing');
+      expect(find.text('New poll'), findsNothing);
+    });
+
+    testWidgets('is offered in a four-member coordination room', (tester) async {
+      api.ok(kMembers, roster(4));
+      await pumpScreen(
+        tester,
+        const ChatThreadScreen.forMatch(
+          matchId: 'match-1',
+          title: 'Falcons vs Titans',
+          channelId: 'c-1',
+        ),
+        auth: FakeAuth(token: null),
+      );
+      await settleData(tester);
+      await openMenu(tester);
+
+      expect(find.text('New poll'), findsOneWidget);
+    });
+
+    testWidgets('is withheld from a captain-to-captain room of two', (
+      tester,
+    ) async {
+      api.ok(kMembers, roster(2));
+      await pumpScreen(
+        tester,
+        const ChatThreadScreen.forMatch(
+          matchId: 'match-1',
+          title: 'Falcons vs Titans',
+          channelId: 'c-1',
+        ),
+        auth: FakeAuth(token: null),
+      );
+      await settleData(tester);
+      await openMenu(tester);
+
+      expect(find.text('Shared media'), findsOneWidget);
+      expect(find.text('New poll'), findsNothing);
+    });
+  });
 }

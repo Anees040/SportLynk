@@ -13,13 +13,25 @@
  *      membership and skip a query per keystroke — the room can only have been
  *      entered by passing the check.
  *
- * `socket.to(room)` excludes the sender, which is exactly right here: I don't
- * need my own typing indicator, and my own read doesn't change how I see anyone
- * else's ticks.
+ * JOINING IS NOT READING
+ *   `channel:join` stamps DELIVERED and nothing else. It used to stamp read as
+ *   well, on the reasoning that a message on screen is read — but a socket
+ *   re-joins its rooms on every reconnect, and a reconnect happens while the
+ *   phone is asleep with the thread merely mounted behind a lock screen. That
+ *   turned "this device has the channel open somewhere" into a read receipt
+ *   nobody had earned, and the sender watched their ticks go blue although the
+ *   recipient had not looked at anything. Read is now only ever the explicit
+ *   `message:read` below, which the client sends when the thread is genuinely in
+ *   front of somebody (foregrounded and on screen).
+ *
+ * Both marks are moved through utils/chatReceipts so the socket path, the connect
+ * hook and the REST fallback cannot drift apart again; that module also owns the
+ * `receipt` fan-out, including the copy sent to the reader's own devices.
  */
 
 const pool = require('../db/pool');
 const bus = require('./bus');
+const receipts = require('../utils/chatReceipts');
 const { isUuid } = require('../utils/teamAccess');
 
 function registerChatEvents(io, socket) {
@@ -29,27 +41,19 @@ function registerChatEvents(io, socket) {
 
   /**
    * Open a thread. The only DB-checked entry point: confirm the user is a live
-   * member, then join the channel room and stamp read+delivered to now (a
-   * message on screen is, by definition, read). Broadcast the resulting
-   * receipt so a sender watching sees blue ticks immediately.
+   * member, stamp delivered (the device demonstrably has this channel now), then
+   * join the channel room. A null answer from markDelivered means "not a member,
+   * or has left", and the room is not joined — which is what keeps every later
+   * handler's `socket.rooms` check a valid proof of membership.
    */
   socket.on('channel:join', async (payload = {}) => {
     if (!allow()) return;
     const channelId = payload.channelId;
     if (!isUuid(channelId)) return;
     try {
-      const { rowCount } = await pool.query(
-        `UPDATE chat_channel_members
-            SET last_read_at = now(), last_delivered_at = now()
-          WHERE channel_id = $1 AND user_id = $2 AND left_at IS NULL`,
-        [channelId, userId],
-      );
-      if (!rowCount) return; // not a member (or has left) — do not join the room
+      const marks = await receipts.markDelivered(pool, { channelId, userId });
+      if (!marks) return; // not a member (or has left) — do not join the room
       socket.join(bus.channelRoom(channelId));
-      const at = new Date().toISOString();
-      socket.to(bus.channelRoom(channelId)).emit('receipt', {
-        channelId, userId, deliveredAt: at, readAt: at,
-      });
     } catch (e) {
       console.warn('[rt] channel:join failed:', e.message);
     }
@@ -79,22 +83,16 @@ function registerChatEvents(io, socket) {
    * Read up to now. Moves the blue-tick watermark and tells the channel, so this
    * is the live counterpart of POST /api/chat/:id/read (which handles the same
    * for a client that is not currently socket-connected).
+   *
+   * The client sends this only while the thread is visible and the app is
+   * foregrounded, which is the whole claim a blue tick makes.
    */
   socket.on('message:read', async (payload = {}) => {
     if (!allow()) return;
     const channelId = payload.channelId;
     if (!isUuid(channelId) || !inChannel(channelId)) return;
     try {
-      await pool.query(
-        `UPDATE chat_channel_members
-            SET last_read_at = now(), last_delivered_at = now()
-          WHERE channel_id = $1 AND user_id = $2 AND left_at IS NULL`,
-        [channelId, userId],
-      );
-      const at = new Date().toISOString();
-      socket.to(bus.channelRoom(channelId)).emit('receipt', {
-        channelId, userId, deliveredAt: at, readAt: at,
-      });
+      await receipts.markRead(pool, { channelId, userId });
     } catch (e) {
       console.warn('[rt] message:read failed:', e.message);
     }

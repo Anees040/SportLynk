@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
+import '../../providers/connectivity_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/location_service.dart';
+import '../../services/offline_cache.dart';
 import '../../utils/num_util.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../widgets/network_error_view.dart';
+import '../../widgets/offline_banner.dart';
 import 'venue_detail_screen.dart';
 
 class FindVenuesScreen extends StatefulWidget {
@@ -41,6 +45,22 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
   String _selectedSport = '';
   static const _sports = ['All', 'Football', 'Cricket'];
 
+  /// Set while the venues on screen were restored from disk.
+  DateTime? _cachedAt;
+
+  /// Whether the current view is the plain catalogue — no search text, no sport,
+  /// default price and rating bounds.
+  ///
+  /// Gates the cache write. A filtered response saved under the same key would be
+  /// read back on the next cold open as if it were everything the city had, which
+  /// is the silent-wrong-data failure this whole pass exists to remove.
+  bool get _isUnfilteredView =>
+      _searchCtrl.text.trim().isEmpty &&
+      _selectedSport.isEmpty &&
+      _minPrice == 0 &&
+      _maxPrice == 10000 &&
+      _minRating == 0;
+
   // Filter states
   double _minPrice = 0;
   double _maxPrice = 10000;
@@ -51,8 +71,31 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
   void initState() {
     super.initState();
     _selectedSport = widget.initialSport ?? '';
+    // Concurrent, not chained — see [_hydrateFromCache].
     _load();
+    _hydrateFromCache();
     _searchCtrl.addListener(_onSearch);
+  }
+
+  /// Draw the last known catalogue if it arrives before the network does, so the
+  /// screen opens with venues instead of a spinner — and still shows them when
+  /// there is no connection at all.
+  ///
+  /// Two guards, both load-bearing. Only an unfiltered view hydrates, or a cached
+  /// full list would appear underneath an active filter showing venues the filter
+  /// excludes. And an already-populated list is left alone, so a disk read that
+  /// loses the race to the response cannot overwrite it.
+  Future<void> _hydrateFromCache() async {
+    if (!_isUnfilteredView) return;
+    final cached = await OfflineCache.read(OfflineCache.venues);
+    if (!mounted || cached == null || _venues.isNotEmpty) return;
+    final rows = cached.asRows();
+    if (rows.isEmpty) return;
+    setState(() {
+      _venues = rows;
+      _cachedAt = cached.at;
+      _loading = false;
+    });
   }
 
   @override
@@ -99,6 +142,16 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
   /// helpful; overriding a deliberate choice every fetch is not.
   bool _didAutoSelectSport = false;
 
+  /// Set the moment the player taps a sport chip (including All) or clears filters.
+  ///
+  /// The seed below runs in `_load`'s async continuation, after the profile fetch
+  /// has been awaited. On a slow or cold backend that continuation can land AFTER
+  /// the player has already tapped a chip, and `_selectedSport.isEmpty` cannot tell
+  /// "never chose" apart from "chose All" — so without this flag the first load's
+  /// deferred seed overwrites a just-tapped All and the filter appears to jump back
+  /// to the preferred sport. A deliberate choice, once made, is never seeded over.
+  bool _userTouchedSport = false;
+
   /// True while the player has an active query. Search is a different mode from
   /// browsing: the rail is suppressed and the list is titled as results.
   bool get _isSearching => _searchCtrl.text.trim().isNotEmpty;
@@ -133,11 +186,18 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
       _minRating = 0;
       _sort = 'rating';
     });
+    // Clearing to the full catalogue is a deliberate "show all", so the seed must
+    // not quietly re-narrow it on the next load.
+    _userTouchedSport = true;
     _load();
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    // Keep cached venues visible while a refresh runs behind them; the spinner is
+    // only for a screen that has nothing to draw.
+    if (_venues.isEmpty) {
+      setState(() => _loading = true);
+    }
 
     // The profile read only seeds the sport auto-select; its failure is tolerated,
     // exactly as the recommendation rail's is, and never blocks the venue list.
@@ -148,10 +208,14 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
       }
     }
 
-    // Seed the chip from the player's stated preference, once.
+    // Seed the chip from the player's stated preference, once — and never over a
+    // choice the player has already made (see [_userTouchedSport]).
     if (!_didAutoSelectSport) {
       _didAutoSelectSport = true;
-      if (widget.initialSport == null && _selectedSport.isEmpty && _userPrefs.isNotEmpty) {
+      if (!_userTouchedSport &&
+          widget.initialSport == null &&
+          _selectedSport.isEmpty &&
+          _userPrefs.isNotEmpty) {
         final pref = _userPrefs.first.toLowerCase();
         if (_sports.any((s) => s.toLowerCase() == pref)) {
           // Stored lower case: every comparison on this field lower-cases it, and
@@ -204,9 +268,11 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
     final recoData = results[1];
 
     if (!mounted) return;
+    final ok = data['success'] == true;
     setState(() {
-      if (data['success'] == true) {
+      if (ok) {
         _error = null;
+        _cachedAt = null;
         _venues = List<Map<String, dynamic>>.from(data['data'] as List);
         final payload = recoData['success'] == true ? recoData['data'] : null;
         _recommended = payload is Map && payload['venues'] is List
@@ -217,11 +283,25 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
       } else {
         // The request failed. Surface the reason `ApiClient` translated (a 500, a
         // dropped connection, a cold-start timeout) instead of an empty list that
-        // reads as "no venues here".
-        _error = data['message'] as String? ?? 'Could not load venues.';
+        // reads as "no venues here" — unless cached venues are already drawn, in
+        // which case they stay and the offline strip carries the explanation.
+        _error = _venues.isNotEmpty
+            ? null
+            : data['message'] as String? ?? 'Could not load venues.';
       }
       _loading = false;
     });
+    if (ok) {
+      context.read<ConnectivityProvider>().markReachable();
+      // Only the unfiltered, unsearched list is cached. A cache keyed on nothing
+      // but filled from a filtered response would hand the next cold open a
+      // narrowed list presented as the whole catalogue.
+      if (_isUnfilteredView) {
+        await OfflineCache.write(OfflineCache.venues, _venues);
+      }
+    } else if (data['statusCode'] == 0) {
+      if (mounted) context.read<ConnectivityProvider>().markUnreachable();
+    }
   }
 
   void _showFilterModal() {
@@ -401,6 +481,7 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
         elevation: 0,
       ),
       body: Column(children: [
+        OfflineBanner(cachedAt: _cachedAt),
         // Search + filter
         Container(
           color: AppColors.primary,
@@ -487,6 +568,9 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
                         final next = isAll ? '' : s.toLowerCase();
+                        // A deliberate tap, even back to the same chip, is user
+                        // intent the preference seed must never override.
+                        _userTouchedSport = true;
                         if (next == _selectedSport) return;
                         setState(() => _selectedSport = next);
                         _load();

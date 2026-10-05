@@ -18,6 +18,7 @@ import '../../services/team_service.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/reco_widgets.dart';
 import '../../widgets/team_stat_widgets.dart';
+import '../shared/public_profile_screen.dart';
 
 /// The team's "Group info" — the WhatsApp screen reached by tapping the chat
 /// header. It is both a profile (logo, record, roster) and the admin console
@@ -967,6 +968,21 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     final isMe = m.id == _myId;
     final canManage = _team!.amCaptain && !isMe;
     return ListTile(
+      // The tile opens the member's public profile; managing them is the separate
+      // explicit button in the trailing slot. Viewing one's own card here would only
+      // duplicate the profile tab, so self is not tappable.
+      onTap: isMe
+          ? null
+          : () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PublicProfileScreen(
+                    userId: m.id,
+                    name: m.name,
+                    avatarUrl: m.avatarUrl,
+                  ),
+                ),
+              ),
       leading: Stack(
         children: [
           CircleAvatar(

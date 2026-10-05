@@ -210,6 +210,14 @@ function validateVisibility(raw, fallback = 'public') {
  * hosts rather than a redirect to anywhere.
  */
 const MEDIA_HOSTS = ['res.cloudinary.com'];
+// res.cloudinary.com is a shared CDN, so pinning the host still admits any
+// Cloudinary account's assets — including an attacker's, as a tracking pixel on
+// a host the app already trusts. The app uploads to exactly one cloud, whose
+// name is public (it ships inside the client), so a delivery URL's first path
+// segment — the cloud name — must be ours. Overridable for a different cloud,
+// with the shipped default as the fallback so a missing env does not silently
+// reopen the gap.
+const MEDIA_CLOUD = process.env.CLOUDINARY_CLOUD_NAME || 'dzcklcydu';
 function validateMediaUrl(raw, { label = 'Image', required = false } = {}) {
   if (raw === undefined || raw === null || String(raw).trim() === '') {
     return required
@@ -228,6 +236,14 @@ function validateMediaUrl(raw, { label = 'Image', required = false } = {}) {
     return { ok: false, message: `${label} must be an https link.` };
   }
   if (!MEDIA_HOSTS.includes(url.hostname.toLowerCase())) {
+    return { ok: false, message: `${label} must be uploaded through the app.` };
+  }
+  // The cloud name is the first path segment of a Cloudinary delivery URL
+  // (/<cloud>/<resource_type>/<delivery_type>/...). A bare host, or any other
+  // account, has a different first segment and is refused with the same reason
+  // as a foreign host — from the user's side it is the same cause.
+  const cloud = url.pathname.split('/').find((seg) => seg.length > 0);
+  if (cloud !== MEDIA_CLOUD) {
     return { ok: false, message: `${label} must be uploaded through the app.` };
   }
   return { ok: true, value: url.toString() };

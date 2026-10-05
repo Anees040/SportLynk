@@ -8,14 +8,18 @@ import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../models/match.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
 import '../../services/chat_service.dart';
 import '../../services/match_service.dart';
+import '../../services/offline_cache.dart';
 import '../../services/pricing_service.dart';
 import '../../services/realtime_service.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../widgets/apply_price_sheet.dart';
 import '../../widgets/header_actions.dart';
+import '../../widgets/network_error_view.dart';
 import '../../widgets/notification_bell.dart';
+import '../../widgets/offline_banner.dart';
 import '../../widgets/pricing_widgets.dart';
 import '../shared/chats_screen.dart';
 import 'owner_booking_requests_screen.dart';
@@ -37,6 +41,26 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
   Map<String, dynamic>? _data;
   bool _loading = true;
   static String get _base => ApiConstants.baseUrl;
+
+  /// When the figures on screen were fetched, when they came from the cache rather
+  /// than from this session's request. Drives the banner's "saved 10 min ago", so a
+  /// revenue total from this morning is never read as the current one.
+  DateTime? _cachedAt;
+
+  /// The failure sentence for a load that had nothing cached to fall back on.
+  ///
+  /// Only that case earns a full error view. Before this existed a failed dashboard
+  /// left [_data] null and the body rendered every figure through `?? 0` — so an
+  /// outage displayed "REVENUE TODAY / PKR 0" and "BOOKINGS 0", which is not a
+  /// quiet empty state but a wrong number an owner would act on.
+  String? _error;
+
+  /// Set once a fetch has returned real figures.
+  ///
+  /// Guards the cache hydration against a race it would otherwise lose silently:
+  /// the two run concurrently, and a slow disk read landing after a fast response
+  /// would replace this session's figures with saved ones and re-label them stale.
+  bool _networkAnswered = false;
 
   // Match results awaiting this owner's verification (ER2.2)
   // Kept out of /owner/dashboard on purpose: a failure fetching matches must not
@@ -67,7 +91,13 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
   @override
   void initState() {
     super.initState();
+    // Both started together, deliberately NOT chained. Reading the cache is disk
+    // I/O, and awaiting it before the request would delay every online load by
+    // however long shared_preferences takes to answer — paying an offline cost on
+    // a connection that is fine. Whichever resolves first paints; [_hydrateFromCache]
+    // stands down if the network already answered.
     _load();
+    _hydrateFromCache();
     _loadToVerify();
     // The card should appear the moment the second captain submits, without the
     // owner having to pull to refresh. The socket is already connected for every
@@ -88,10 +118,12 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
 
   // Recover a dashboard that failed to load while offline, and re-read the chat
   // badge for anything that arrived during the outage. A dashboard already loaded
-  // is left alone so a transient socket blip cannot blank the revenue figures.
+  // from the network is left alone so a transient socket blip cannot blank the
+  // revenue figures; cached figures are refreshed, because stale is exactly what
+  // reconnecting is the chance to fix.
   @override
   void onReconnect() {
-    if (_data == null) _refreshAll();
+    if (_data == null || _cachedAt != null) _refreshAll();
     _loadChatBadge();
   }
 
@@ -176,34 +208,83 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
     await _loadToVerify();
   }
 
+  /// Draw the last good dashboard if it arrives before the network does.
+  ///
+  /// Runs alongside the fetch rather than before it, so the cache adds no disk
+  /// latency to an online load, and stands down when the network has already
+  /// answered rather than overwriting fresher figures with saved ones.
+  Future<void> _hydrateFromCache() async {
+    final cached = await OfflineCache.read(OfflineCache.ownerHome);
+    if (!mounted || cached == null || _networkAnswered) return;
+    final data = cached.asMap();
+    if (data == null) return;
+    setState(() {
+      _data = data;
+      _cachedAt = cached.at;
+      _error = null;
+      _loading = false;
+    });
+  }
+
   Future<void> _load() async {
+    // The spinner is only for a screen with nothing to show. With cached figures
+    // already drawn, a refresh happens underneath them — replacing the revenue
+    // total with a spinner on every resume is the flicker this avoids.
+    final hadData = _data != null;
+    if (!hadData && mounted) setState(() => _loading = true);
+
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
     try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token;
-      if (token == null) {
-        if (mounted) setState(() => _loading = false);
-        return;
-      }
       final resp = await http.get(
         Uri.parse('$_base/owner/dashboard'),
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
       final json = jsonDecode(resp.body);
-      if (mounted && json['success'] == true) {
+      if (json['success'] == true) {
+        final data = json['data'];
+        _networkAnswered = true;
         setState(() {
-          _data = json['data'];
+          _data = data is Map ? Map<String, dynamic>.from(data) : null;
+          _cachedAt = null;  // on screen is now this session's data, not a saved copy
+          _error = null;
           _loading = false;
         });
+        context.read<ConnectivityProvider>().markReachable();
+        await OfflineCache.write(OfflineCache.ownerHome, _data);
+        if (!mounted) return;
         // Chained rather than parallel: the venue id only exists once this landed.
         // Not awaited by the caller's refresh indicator either — the spinner should
         // stop when the revenue numbers are on screen, not when the ML service
         // finishes thinking.
-        final venueId = (json['data']?['venue']?['id'])?.toString();
+        final venueId = (_data?['venue']?['id'])?.toString();
         if (venueId != null && venueId.isNotEmpty) _loadPricing(venueId);
-      } else {
-        if (mounted) setState(() => _loading = false);
+        return;
       }
+      // The server answered and refused. That is a fault worth a sentence, not a
+      // connection the owner might go and re-check, so connectivity is left alone.
+      setState(() {
+        _loading = false;
+        _error = hadData
+            ? null
+            : (json['message'] as String? ?? 'Could not load your dashboard.');
+      });
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      // No answer reached us — a timeout, a dead socket, or a body that did not
+      // parse. The figures already on screen stay, and the offline strip carries
+      // the explanation; only a load with nothing cached earns the error view.
+      if (!mounted) return;
+      context.read<ConnectivityProvider>().markUnreachable();
+      setState(() {
+        _loading = false;
+        _error = hadData
+            ? null
+            : 'Could not reach the server. Check your connection and try again.';
+      });
     }
   }
 
@@ -289,6 +370,14 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
       return const Center(child: CircularProgressIndicator(color: AppColors.accent));
     }
 
+    // A first load that failed with nothing cached must say so. Falling through to
+    // the body below would draw every figure through its `?? 0` default, and a
+    // dashboard reading "PKR 0 / 0 bookings" is a number the owner would act on
+    // rather than a state they can recognise as a failure.
+    if (_error != null && _data == null) {
+      return NetworkErrorView(message: _error!, onRetry: _refreshAll);
+    }
+
     final stats = _data?['stats'] as Map<String, dynamic>? ?? {};
     final upcoming = (_data?['upcomingBookings'] as List?) ?? [];
     final wallet = _data?['wallet'] as Map<String, dynamic>? ?? {};
@@ -334,6 +423,10 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
               const SizedBox(width: 14),
             ],
           ),
+
+          // Directly under the app bar, so the explanation sits above the figures it
+          // applies to rather than below them.
+          SliverToBoxAdapter(child: OfflineBanner(cachedAt: _cachedAt)),
 
           // STATS row
           SliverToBoxAdapter(

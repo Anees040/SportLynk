@@ -44,6 +44,46 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Where the last signed-in user's full profile is kept between launches.
+  ///
+  /// Distinct from the JWT, which carries only enough to route (id, role) and, on
+  /// this backend, no usable name — which is why the app opened to "Welcome
+  /// Player" and waited on a slow server for the real one. The profile saved here
+  /// is restored in [loadUser] so the name and avatar are on screen from the first
+  /// frame, online or offline, and the background refresh only updates them.
+  static const String _userCacheKey = 'cached_user_v1';
+
+  /// Persist the full profile, or clear it when passed null. Best effort: a missed
+  /// write only costs a slower next open, never a failed sign-in.
+  Future<void> _cacheUser(User? u) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (u == null) {
+        await prefs.remove(_userCacheKey);
+      } else {
+        await prefs.setString(_userCacheKey, jsonEncode(u.toJson()));
+      }
+    } catch (_) {
+      // A profile that will not round-trip is a programming error at the model,
+      // not a runtime condition to fail a login over.
+    }
+  }
+
+  /// The profile saved by the last session, or null when absent or unreadable. A
+  /// corrupt entry reads as a miss so a bad cache can never block startup.
+  Future<User?> _restoreCachedUser() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_userCacheKey);
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      return User.fromJson(Map<String, dynamic>.from(decoded));
+    } catch (_) {
+      return null;
+    }
+  }
+
   void setLoading(bool val) {
     _isLoading = val;
     notifyListeners();
@@ -63,6 +103,7 @@ class AuthProvider extends ChangeNotifier {
         _token = data['token'] as String;
         _currentUser = User.fromJson(data['user'] as Map<String, dynamic>);
         await _authService.saveToken(_token!);
+        await _cacheUser(_currentUser);
         _bindSession();
         _isLoading = false;
         notifyListeners();
@@ -110,6 +151,7 @@ class AuthProvider extends ChangeNotifier {
         _token = data['token'] as String;
         _currentUser = User.fromJson(data['user'] as Map<String, dynamic>);
         await _authService.saveToken(_token!);
+        await _cacheUser(_currentUser);
         _bindSession();
         _isLoading = false;
         notifyListeners();
@@ -147,6 +189,7 @@ class AuthProvider extends ChangeNotifier {
           }
           if (d['user'] != null) {
             _currentUser = User.fromJson(d['user'] as Map<String, dynamic>);
+            await _cacheUser(_currentUser);
           }
         }
         _isLoading = false;
@@ -206,10 +249,12 @@ class AuthProvider extends ChangeNotifier {
       return;
     }
 
-    // The token alone already carries who this is (id, name, role), so the app can
-    // open to the right home screen immediately — no network wait on a cold or slow
-    // start.
-    _currentUser = _userFromToken(_token!);
+    // Prefer the full profile saved from the last session: it carries the real
+    // name and avatar, which the token's payload does not, so the app opens
+    // showing who the user is instead of "Welcome Player" waiting on a slow or
+    // sleeping server. The token's minimal identity is the fallback for a first
+    // launch with nothing cached yet.
+    _currentUser = await _restoreCachedUser() ?? _userFromToken(_token!);
 
     if (_currentUser != null) {
       // Everything the wrapper needs to route is in hand. Bind the session and
@@ -231,8 +276,10 @@ class AuthProvider extends ChangeNotifier {
       _token = null;
       _currentUser = null;
       await _authService.clearToken();
+      await _cacheUser(null);
     } else {
       _currentUser = result.user;
+      await _cacheUser(_currentUser);
     }
 
     _bindSession();
@@ -254,13 +301,18 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = null;
       await _authService.clearToken();
       // An expired token ends the session as surely as a logout, so the cached
-      // screens go with it rather than waiting for whoever logs in next.
+      // screens and the cached identity go with it rather than waiting for whoever
+      // logs in next.
       await OfflineCache.clearForUser();
       OfflineCache.userId = null;
+      await _cacheUser(null);
       ApiClient.authToken = null;
       RealtimeService().disconnect();
     } else if (result.user != null) {
       _currentUser = result.user;
+      // The authority on the profile has answered; refresh the saved copy so the
+      // next launch opens on a name or avatar changed on another device.
+      await _cacheUser(_currentUser);
     }
     notifyListeners();
   }
@@ -351,6 +403,7 @@ class AuthProvider extends ChangeNotifier {
     // must not wait on disk any more than it waits on the network.
     unawaited(OfflineCache.clearForUser());
     OfflineCache.userId = null;
+    unawaited(_cacheUser(null));
     _currentUser = null;
     _token = null;
     _errorMessage = null;
@@ -368,6 +421,9 @@ class AuthProvider extends ChangeNotifier {
       email: data['email'],
       avatarUrl: data['avatarUrl'] ?? data['avatar_url'],
     );
+    // Keep the saved copy in step with an in-app edit, so a changed name or avatar
+    // is what the next launch opens on rather than the pre-edit profile.
+    unawaited(_cacheUser(_currentUser));
     notifyListeners();
   }
 }

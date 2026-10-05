@@ -388,6 +388,31 @@ void main() {
       expect(api.to('/venues').last.param('sport'), isNull,
           reason: 'the preference must not be re-applied on a later load');
     });
+
+    testWidgets('tapping All before the first load resolves is not re-seeded',
+        (tester) async {
+      // The race behind "tapping All switches to Cricket": the preference seed runs
+      // in _load's continuation AFTER the profile fetch is awaited. On a slow or
+      // cold backend that continuation lands after the player has already tapped
+      // All, and an empty sport cannot tell "chose All" from "never chose" — so the
+      // seed used to overwrite the tap. The delayed profile reproduces it; a
+      // deliberate tap must win.
+      api.ok('/venues', [venue()]);
+      api.ok('/users/me/player', {'sport_preferences': <String>['cricket']},
+          delay: const Duration(milliseconds: 300));
+
+      await pumpScreen(tester, const FindVenuesScreen());
+      // The first load is suspended on the delayed profile, so no venues have been
+      // fetched yet; the chip row is drawn beside the loader and is tappable.
+      await tester.tap(find.text('All'));
+      await tester.pump();
+
+      // Now let the delayed profile — and the seed in the continuation — complete.
+      await settleData(tester, step: const Duration(milliseconds: 300));
+
+      expect(api.to('/venues').last.param('sport'), isNull,
+          reason: 'a just-tapped All must not be re-seeded to the preference');
+    });
   });
 
   group('searching', () {

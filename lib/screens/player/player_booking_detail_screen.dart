@@ -7,7 +7,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
 import '../../services/chat_service.dart';
+import '../../widgets/network_error_view.dart';
 import '../shared/chat_thread_screen.dart';
 import 'rate_experience_screen.dart';
 
@@ -21,6 +23,16 @@ class PlayerBookingDetailScreen extends StatefulWidget {
 class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
   Map<String, dynamic>? _booking;
   bool _loading = true;
+
+  /// The failure sentence for a load that could not reach the server or was
+  /// refused.
+  ///
+  /// Distinguished from a genuine absence on purpose. Before this existed, every
+  /// failure left [_booking] null and the screen rendered "Booking not found" — so
+  /// a dropped connection told the player a booking they are looking at from their
+  /// own list does not exist. "Not found" is now reserved for a server that
+  /// answered and had no such booking; anything else is an error with a retry.
+  String? _error;
 
   /// The booking's chat room, or null when there is none.
   ///
@@ -83,23 +95,42 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       final resp = await http.get(
         Uri.parse('${ApiConstants.baseUrl}/bookings/${widget.bookingId}'),
         headers: {'Authorization': 'Bearer $token'},
-      );
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
       final data = jsonDecode(resp.body);
-      if (mounted && data['success'] == true) {
+      if (data['success'] == true) {
         setState(() {
-          _booking = data['data'];
+          _booking = data['data'] is Map
+              ? Map<String, dynamic>.from(data['data'] as Map)
+              : null;
+          _error = null;
           _loading = false;
         });
+        context.read<ConnectivityProvider>().markReachable();
       } else {
-        if (mounted) setState(() => _loading = false);
+        // The server answered and declined. Its message carries the real reason —
+        // a genuine "not found", or a permission error — rather than the blanket
+        // absence the screen used to show for every failure.
+        setState(() {
+          _loading = false;
+          _error = data['message'] as String? ?? 'Could not load this booking.';
+        });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      // Nothing came back. This is the case that used to read as "Booking not
+      // found"; it is a connection failure, and it says so with a way to retry.
+      if (!mounted) return;
+      context.read<ConnectivityProvider>().markUnreachable();
+      setState(() {
+        _loading = false;
+        _error = 'Could not reach the server. Check your connection and try again.';
+      });
     }
   }
 
@@ -195,7 +226,11 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
       return Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(backgroundColor: AppColors.primary, iconTheme: const IconThemeData(color: Colors.white)),
-        body: Center(child: Text('Booking not found', style: GoogleFonts.poppins(color: AppColors.textSecondary))),
+        // An error with a retry when the load failed; the bare "not found" only
+        // when the server actually answered with no such booking (no [_error]).
+        body: _error != null
+            ? NetworkErrorView(message: _error!, onRetry: _load)
+            : Center(child: Text('Booking not found', style: GoogleFonts.poppins(color: AppColors.textSecondary))),
       );
     }
 

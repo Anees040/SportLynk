@@ -187,6 +187,18 @@ class ChatThreadScreen extends StatefulWidget {
 }
 
 class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBindingObserver {
+  /// Every reaction the app offers, in picker order. The server validates against
+  /// a closed set (`REACTIONS` in backend/src/routes/chat.js) and answers 400 for
+  /// anything outside it, which the optimistic bubble shows as a reaction that
+  /// lands and then disappears — so this list and that one must stay identical.
+  static const _reactionEmojis = [
+    '👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉',
+    '👏', '💯', '✅', '❌', '⚽', '🏏', '🏆', '😍',
+    '😎', '🤔', '😅', '😭', '🙌', '👌', '💪', '😡',
+    '🥳', '😴', '🤝', '👀', '💔', '😤', '🤷', '⏰',
+  ];
+
+  /// The quick-tap row on the floating pill: the first eight of the set above.
   static const _palette = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
 
   final _input = TextEditingController();
@@ -386,6 +398,27 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   bool get _suggestsAutomatically => widget.type == ChatChannelType.booking;
 
   bool get _suggestsAtAll => widget.type != ChatChannelType.unknown;
+
+  /// Whether to offer "New poll". A poll is a group question: two people in a
+  /// room can ask each other directly, and a ballot between them is a worse
+  /// version of the conversation they are already having.
+  ///
+  /// Direct and booking rooms are structurally a pair, so they are ruled out
+  /// without waiting for the member list; a coordination room is ruled out by the
+  /// same count when it holds one captain per side and in by it when both sides
+  /// brought a vice-captain. The server refuses below the same threshold — a
+  /// hidden button is not a restriction.
+  bool _canPoll(ChatController c) {
+    switch (widget.type) {
+      case ChatChannelType.direct:
+      case ChatChannelType.booking:
+      case ChatChannelType.unknown:
+        return false;
+      case ChatChannelType.team:
+      case ChatChannelType.captain:
+        return c.memberCount > 2;
+    }
+  }
 
   void _onControllerChange() {
     final count = _controller?.messages.length ?? 0;
@@ -733,7 +766,10 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _controller?.markReadNow();
+    // Visibility, not just a nudge on resume. A thread that stays mounted while
+    // the app is in the background must stop claiming reads, or every message
+    // that arrives behind a lock screen reports a blue tick to its sender.
+    _controller?.visible = state == AppLifecycleState.resumed;
   }
 
   @override
@@ -858,9 +894,38 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     _placeReactionPill();
   }
 
+  /// Select every message of a grouped row (a photo album) at once, so what the
+  /// highlight shows and what an action reaches are the same set.
+  void _enterSelectionAll(List<ChatMessage> msgs) {
+    final ids = msgs
+        .where((m) => !m.isSystem && !m.isDeleted)
+        .map((m) => m.id)
+        .toList();
+    if (ids.isEmpty) return;
+    HapticFeedback.selectionClick();
+    setState(() => _selected.addAll(ids));
+    _placeReactionPill();
+  }
+
   void _toggleSelect(String id) {
     setState(() {
       if (!_selected.remove(id)) _selected.add(id);
+    });
+    _placeReactionPill();
+  }
+
+  /// Toggle a whole grouped row: selected only when every member is.
+  void _toggleSelectAll(List<String> ids) {
+    if (ids.length == 1) {
+      _toggleSelect(ids.first);
+      return;
+    }
+    setState(() {
+      if (ids.every(_selected.contains)) {
+        _selected.removeAll(ids);
+      } else {
+        _selected.addAll(ids);
+      }
     });
     _placeReactionPill();
   }
@@ -1086,12 +1151,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   }
 
   void _openEmojiPicker(ChatMessage m) {
-    const emojis = [
-      '👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉',
-      '👏', '💯', '✅', '❌', '⚽', '🏏', '🏆', '😍',
-      '😎', '🤔', '😅', '😭', '🙌', '👌', '💪', '😡',
-      '🥳', '😴', '🤝', '👀', '💔', '😤', '🤷', '⏰',
-    ];
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -1101,7 +1160,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
           crossAxisCount: 8,
           shrinkWrap: true,
           padding: const EdgeInsets.all(14),
-          children: emojis
+          children: _reactionEmojis
               .map((e) => GestureDetector(
                     onTap: () {
                       Navigator.pop(context);
@@ -1492,7 +1551,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
             if (isTeam)
               const PopupMenuItem(value: 'info', child: Text('Group info')),
             const PopupMenuItem(value: 'media', child: Text('Shared media')),
-            if (widget.type != ChatChannelType.unknown)
+            if (_canPoll(c))
               const PopupMenuItem(value: 'poll', child: Text('New poll')),
             if (_suggestsAtAll && !_suggestsAutomatically)
               const PopupMenuItem(value: 'suggest', child: Text('Suggest replies')),
@@ -1609,9 +1668,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
                 showSender: showSender,
                 tickState: c.tickFor(group.last),
                 onOpen: (idx) => _openAlbum(group, idx),
-                onLongPress: _enterSelection,
+                onLongPress: (_) => _enterSelectionAll(group),
               ),
               replyTarget: group.first,
+              // An album is one row but several messages. Selecting it has to
+              // carry every id, or the highlight covers the whole collage while
+              // an action reaches only the first photo.
+              groupIds: group.map((g) => g.id).toList(),
             ));
         i += run;
         continue;
@@ -1659,9 +1722,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   /// Swipe uses a [Dismissible] whose `confirmDismiss` always returns false: the
   /// row springs back rather than leaving, giving the drag animation and the reveal
   /// icon while the release simply opens a reply — the standard chat idiom.
-  Widget _rowWrap(String id, GlobalKey key, Widget child, {ChatMessage? replyTarget}) {
+  Widget _rowWrap(String id, GlobalKey key, Widget child,
+      {ChatMessage? replyTarget, List<String>? groupIds}) {
     final highlighted = _highlightId == id;
-    final selected = _selected.contains(id);
+    // A grouped row (a photo album) stands for several messages; selection is a
+    // property of the row, so it covers all of them or none.
+    final ids = groupIds ?? [id];
+    final selected = ids.any(_selected.contains);
     // Full width is load-bearing, not decoration. A swipeable row is wrapped in a
     // Dismissible, whose background makes it lay the row out inside a Stack that
     // passes loose width constraints; without a width the row shrink-wraps to the
@@ -1683,8 +1750,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     if (_selecting) {
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => _toggleSelect(id),
-        onLongPress: () => _toggleSelect(id),
+        onTap: () => _toggleSelectAll(ids),
+        onLongPress: () => _toggleSelectAll(ids),
         child: AbsorbPointer(child: tinted),
       );
     }

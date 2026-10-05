@@ -22,7 +22,14 @@ import '../services/realtime_service.dart';
 /// Ticks are computed, not stored. For each of my messages the state is the
 /// weakest across every other member: read only once the last person has read,
 /// delivered only once the last device has it. That is what makes a group's blue
-/// tick mean "everyone", exactly like WhatsApp.
+/// tick mean "everyone", exactly like WhatsApp. Members who joined after a
+/// message are not counted for it — they are not allowed to see it, so they
+/// cannot be waited on.
+///
+/// Reading is claimed, never assumed. [visible] gates every read-mark, so the
+/// blue tick the sender sees means "the thread was in front of them", not "their
+/// phone happened to be reachable". A chat left mounted while the app is in the
+/// background used to mark every arriving message read on its owner's behalf.
 class ChatController extends ChangeNotifier {
   ChatController({
     required this.token,
@@ -73,6 +80,13 @@ class ChatController extends ChangeNotifier {
   /// bubble shows the reason for its latest attempt and nothing older.
   final Map<String, String> _sendError = {};
 
+  /// Per-poll vote generations: `_voteSeq` counts taps issued, `_voteSettled` the
+  /// replies accounted for. While the first exceeds the second a vote is in
+  /// flight and the local tally outranks any echo, which is what keeps rapid
+  /// option switching from snapping back to an earlier choice.
+  final Map<String, int> _voteSeq = {};
+  final Map<String, int> _voteSettled = {};
+
   /// Image uploads run a few at a time rather than strictly one after another, so
   /// a batch of photos appears and climbs together instead of trickling in; the
   /// cap keeps a phone's uplink from being split so thin that none makes progress.
@@ -93,6 +107,15 @@ class ChatController extends ChangeNotifier {
   bool _connected = false;
   String? _error;
   int _sendCounter = 0;
+
+  /// Whether the thread is actually in front of the user: on screen AND the app
+  /// foregrounded. The screen owns this (lifecycle + its own mount), and nothing
+  /// marks the channel read while it is false.
+  ///
+  /// It starts true because the only thing that constructs a ChatController is
+  /// the thread screen, which is on screen by the time it does — a false default
+  /// would race the first [_loadInitial] and leave a genuinely-read room unread.
+  bool _visible = true;
 
   /// The visible "Connecting…" state, held back behind a short grace so a brief
   /// blip does not flash the bar. Distinct from [_connected], which flips at once
@@ -585,13 +608,13 @@ class ChatController extends ChangeNotifier {
 
   Future<void> _uploadAndSendAudio(String clientId, String localPath,
       String? mediaMime, int durationMs, List<double> waveform, String? replyToId) async {
-    // Audio goes up under Cloudinary's Video resource type. An unsigned preset
-    // limited to images refuses it, and that refusal is the one message that
-    // explains why a voice note never arrives — so it is carried to the bubble
-    // rather than collapsed into a bare failure.
+    // Audio goes up under the Auto resource type, which posts to /auto/upload
+    // and lets Cloudinary classify the clip from its own bytes instead of from a
+    // type asserted here. A refusal is still carried to the bubble, because that
+    // message is the one thing that explains why a voice note never arrived.
     final up = await CloudinaryService().upload(
       localPath,
-      resourceType: CloudinaryResourceType.Video,
+      resourceType: CloudinaryResourceType.Auto,
       folder: 'chat_audio',
       onProgress: (sent, total) => _onUploadProgress(clientId, sent, total),
     );
@@ -818,6 +841,13 @@ class ChatController extends ChangeNotifier {
   /// Vote on (or un-vote) a poll option. Optimistic: the tally updates at once,
   /// mirroring the server's single/multi rule, then reconciles with the
   /// authoritative message the vote call returns (or reverts on failure).
+  ///
+  /// Switching options quickly puts several votes in flight at once, and the
+  /// server echoes each one over the socket as well as answering it. Without a
+  /// generation guard the older answers and echoes land after the newer
+  /// optimistic state and the selection visibly snaps back to a previous option
+  /// before settling. Only the newest vote may write, and [_pollVoteInFlight]
+  /// makes [_onMessage] leave an echoed poll alone while one is outstanding.
   Future<void> votePoll(ChatMessage m, int optionIndex) async {
     final poll = m.poll;
     if (poll == null || poll.closed) return;
@@ -842,9 +872,20 @@ class ChatController extends ChangeNotifier {
         votes: votes,
       ),
     );
+    final seq = (_voteSeq[m.id] ?? 0) + 1;
+    _voteSeq[m.id] = seq;
     _rebuild();
 
     final r = await _chat.votePoll(token, channelId, poll.id, optionIndex: optionIndex);
+
+    // Settle this attempt. A reply that arrives out of order must not reopen the
+    // in-flight window, so the watermark only ever moves forward.
+    final settled = _voteSettled[m.id] ?? 0;
+    if (seq > settled) _voteSettled[m.id] = seq;
+
+    // A newer tap already owns the displayed state; this reply is history.
+    if (_voteSeq[m.id] != seq) return;
+
     if (r['success'] == true && r['data'] is Map) {
       _byId[m.id] = ChatMessage.fromJson(Map<String, dynamic>.from(r['data'] as Map));
     } else {
@@ -853,11 +894,19 @@ class ChatController extends ChangeNotifier {
     _rebuild();
   }
 
+  /// Whether a vote on this poll is still outstanding, in which case the local
+  /// optimistic tally is newer than anything the server can echo.
+  bool _pollVoteInFlight(String messageId) =>
+      (_voteSeq[messageId] ?? 0) > (_voteSettled[messageId] ?? 0);
+
   // Live event handlers
   void _onMessage(Map<String, dynamic> data) {
     if ('${data['channel_id']}' != channelId) return;
     final m = ChatMessage.fromJson(data);
     if (m.clientId != null) _byId.remove('local:${m.clientId}');
+    // A poll echo that races my own outstanding vote would undo it on screen.
+    // Dropping it costs nothing: the vote call returns the authoritative row.
+    if (m.isPoll && _byId.containsKey(m.id) && _pollVoteInFlight(m.id)) return;
     _byId[m.id] = m;
     _rebuild();
     // Someone else spoke while I'm looking — mark read so their ticks go blue.
@@ -867,9 +916,17 @@ class ChatController extends ChangeNotifier {
   void _onReceipt(Map<String, dynamic> data) {
     if ('${data['channelId']}' != channelId) return;
     final userId = '${data['userId']}';
+    // My own marks are not part of my own ticks. The server sends them anyway,
+    // because the inbox needs them to drop its badge.
     if (userId == myUserId) return;
-    final delivered = DateTime.tryParse('${data['deliveredAt']}')?.toLocal();
-    final read = data['readAt'] != null ? DateTime.tryParse('${data['readAt']}')?.toLocal() : null;
+    // A receipt carries whichever marks moved, so an absent field means "this one
+    // did not move" and must not be read as a null watermark.
+    final delivered = data['deliveredAt'] != null
+        ? DateTime.tryParse('${data['deliveredAt']}')?.toLocal()
+        : null;
+    final read = data['readAt'] != null
+        ? DateTime.tryParse('${data['readAt']}')?.toLocal()
+        : null;
     if (delivered != null) _bump(_delivered, userId, delivered);
     if (read != null) _bump(_read, userId, read);
     notifyListeners();
@@ -980,7 +1037,13 @@ class ChatController extends ChangeNotifier {
   TickState tickFor(ChatMessage m) {
     if (m.failed) return TickState.sending; // bubble draws its own error affordance
     if (m.pending) return TickState.sending;
-    final others = _members.keys.where((id) => id != myUserId);
+    // Only the members who are allowed to see this message can be waited on for
+    // it. Somebody added to the team this morning has a watermark at the epoch
+    // for everything said before they arrived, and counting them would hold every
+    // one of those messages at a single grey tick for the whole room forever.
+    final others = _members.values
+        .where((p) => p.userId != myUserId && p.canSee(m.createdAt))
+        .map((p) => p.userId);
     if (others.isEmpty) return TickState.sent;
 
     DateTime minRead = _farFuture;
@@ -997,7 +1060,27 @@ class ChatController extends ChangeNotifier {
   }
 
   // Read marking
+
+  /// Tell the controller whether the thread is in front of the user. Setting it
+  /// true marks the room read — which is the only place a read-mark originates
+  /// from a change in visibility, so arriving at the screen, returning from the
+  /// background and coming back from a pushed route all behave identically.
+  set visible(bool v) {
+    if (_visible == v) return;
+    _visible = v;
+    if (v) _markRead();
+  }
+
+  bool get visible => _visible;
+
+  /// Claim a read, if the thread is genuinely being looked at.
+  ///
+  /// The guard is the fix for a blue tick nobody earned: the socket pushes every
+  /// message in the room to a thread that is merely MOUNTED, which includes one
+  /// sitting behind a lock screen or under another app, and marking those read
+  /// told the sender their message had been opened.
   void _markRead() {
+    if (!_visible) return;
     if (_connected) {
       _rt.markRead(channelId);
     } else {

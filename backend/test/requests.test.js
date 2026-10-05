@@ -63,7 +63,7 @@ test('2 — a non-uuid target is a 404, not a database round trip', async () => 
 });
 
 test('3 — a target who is not an active player is a 404 and pings no one', async () => {
-  const c = mkClient((sql) => (/FROM users WHERE id = ANY/.test(sql)
+  const c = mkClient((sql) => (/id = ANY/.test(sql)
     ? {
       rows: [{ id: R, role: 'player', is_active: true },
         { id: T, role: 'owner', is_active: true }],
@@ -77,10 +77,10 @@ test('3 — a target who is not an active player is a 404 and pings no one', asy
 
 test('4 — a second pending ask in the same direction is a friendly 409', async () => {
   const c = mkClient((sql) => {
-    if (/FROM users WHERE id = ANY/.test(sql)) {
+    if (/id = ANY/.test(sql)) {
       return {
         rows: [{ id: R, role: 'player', is_active: true },
-          { id: T, role: 'player', is_active: true }],
+          { id: T, role: 'player', is_active: true, is_public: true }],
       };
     }
     if (/INSERT INTO play_requests/.test(sql)) {
@@ -95,10 +95,10 @@ test('4 — a second pending ask in the same direction is a friendly 409', async
 
 test('5 — a created request is 201 and pings the target with play_request', async () => {
   const c = mkClient((sql) => {
-    if (/FROM users WHERE id = ANY/.test(sql)) {
+    if (/id = ANY/.test(sql)) {
       return {
-        rows: [{ id: R, name: 'Bilal', role: 'player', is_active: true },
-          { id: T, name: 'Sara', role: 'player', is_active: true }],
+        rows: [{ id: R, name: 'Bilal', role: 'player', is_active: true, is_public: true },
+          { id: T, name: 'Sara', role: 'player', is_active: true, is_public: true }],
       };
     }
     if (/INSERT INTO play_requests/.test(sql)) {
@@ -120,6 +120,39 @@ test('5 — a created request is 201 and pings the target with play_request', as
   assert.ok(n, 'the target is notified inside the same transaction');
   assert.equal(n.params[0], T);                      // recipient is the target
   assert.equal(n.params[2], 'play_request');         // the ask, not the accept
+});
+
+test('5b — a private player cannot be asked: 403 profile_private, and no row is written', async () => {
+  const c = mkClient((sql) => (/id = ANY/.test(sql)
+    ? {
+      rows: [{ id: R, name: 'Bilal', role: 'player', is_active: true, is_public: true },
+        { id: T, name: 'Sara', role: 'player', is_active: true, is_public: false }],
+    }
+    : null));
+  const r = await svc.createRequest(c, { requesterId: R, targetUserId: T });
+  assert.equal(r.status, 403);
+  assert.equal(r.code, 'profile_private');
+  assert.equal(c.calls.length, 1);                   // only the lookup ran
+  assert.ok(!ran(c, /INSERT INTO play_requests/));   // nothing inserted
+  assert.ok(!ran(c, /INSERT INTO notifications/));   // nobody pinged
+});
+
+test('5c — a null is_public (a player with no profile row) is treated as public', async () => {
+  const c = mkClient((sql) => {
+    if (/id = ANY/.test(sql)) {
+      return {
+        rows: [{ id: R, name: 'Bilal', role: 'player', is_active: true, is_public: true },
+          { id: T, name: 'Sara', role: 'player', is_active: true, is_public: null }],
+      };
+    }
+    if (/INSERT INTO play_requests/.test(sql)) {
+      return { rows: [{ id: 'req-2', status: 'pending', sport: null, message: null, created_at: 'C', expires_at: 'E' }] };
+    }
+    if (/INSERT INTO notifications/.test(sql)) return { rows: [{ id: 'n1', group_count: 1 }] };
+    return null;
+  });
+  const r = await svc.createRequest(c, { requesterId: R, targetUserId: T });
+  assert.equal(r.status, 201);                       // null visibility does not block the ask
 });
 
 // ── respond: guards ───────────────────────────────────────────────────────────
@@ -267,22 +300,23 @@ test('17 — discovery invents nothing: a null trust stays null, a null sport li
     rows: [
       {
         user_id: 'u9', name: 'Zed', avatar_url: null, sports: ['football', 'cricket'],
-        trust_score: 72, bookings_30d: 3, plays_sport: true, pending_request: false,
+        trust_score: 72, is_public: true, bookings_30d: 3, plays_sport: true, pending_request: false,
       },
       {
         user_id: 'u10', name: 'Amy', avatar_url: 'http://x/a.png', sports: null,
-        trust_score: null, bookings_30d: 0, plays_sport: false, pending_request: true,
+        trust_score: null, is_public: false, bookings_30d: 0, plays_sport: false, pending_request: true,
       },
     ],
   }));
   const r = await svc.discoverPlayers(c, { userId: R, sport: 'football' });
   assert.deepEqual(r.data[0], {
     userId: 'u9', name: 'Zed', avatarUrl: null, sports: ['football', 'cricket'],
-    trustScore: 72, bookings30d: 3, playsSport: true, pendingRequest: false,
+    trustScore: 72, isPublic: true, bookings30d: 3, playsSport: true, pendingRequest: false,
   });
   assert.equal(r.data[1].trustScore, null);          // not a fabricated default
   assert.deepEqual(r.data[1].sports, []);            // null preferences to empty, not invented
   assert.equal(r.data[1].pendingRequest, true);
+  assert.equal(r.data[1].isPublic, false);           // a private player is flagged, not hidden
 });
 
 // ── static source: the service invariants behaviour alone cannot pin ────────────

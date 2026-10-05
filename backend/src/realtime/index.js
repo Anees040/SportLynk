@@ -17,19 +17,24 @@
  *
  * The tick system (single / double / blue), end to end
  *   ✓   sent       chat_messages row exists (REST created it, bus emitted it)
- *   ✓✓  delivered  the recipient's socket connected and the server stamped
- *                  last_delivered_at = now() (see markDeliveredOnConnect)
- *   ✓✓  read       the recipient opened the thread and the server stamped
- *                  last_read_at
- *   Both marks live on chat_channel_members (migration 015). When a mark moves the
- *   server broadcasts a `receipt` into the channel room so the sender, if they are
- *   looking, watches their ticks turn grey→grey-grey→blue in real time.
+ *   ✓✓  delivered  the recipient's device has it — stamped both when a socket
+ *                  connects (markDeliveredOnConnect, for everything that was
+ *                  waiting) and when a message is pushed to a member who was
+ *                  already online (receipts.markDeliveredToOnline, called by the
+ *                  send route)
+ *   ✓✓  read       the recipient had the thread in front of them and the client
+ *                  said so with `message:read`
+ *   Both marks live on chat_channel_members (migration 015) and are moved only
+ *   through utils/chatReceipts, which also owns the `receipt` fan-out — so the
+ *   sender, if they are looking, watches their ticks turn grey → grey-grey → blue
+ *   in real time, and the reader's own inbox drops its badge.
  */
 
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 const bus = require('./bus');
+const receipts = require('../utils/chatReceipts');
 const { registerChatEvents } = require('./chatEvents');
 
 /**
@@ -52,37 +57,6 @@ function makeFloodLimiter({ capacity = 30, refillMs = 10000 } = {}) {
     tokens -= 1;
     return true;
   };
-}
-
-/** The user's active (not-left) channel ids — the fan-out set for presence. */
-async function activeChannelIds(userId) {
-  const { rows } = await pool.query(
-    `SELECT channel_id FROM chat_channel_members
-      WHERE user_id = $1 AND left_at IS NULL`,
-    [userId],
-  );
-  return rows.map((r) => r.channel_id);
-}
-
-/**
- * On connect, everything already waiting for this user is now "delivered".
- * Stamp the mark on every channel they belong to and tell each channel so a
- * sender watching sees the second tick appear. Returns the channel ids so the
- * caller can reuse them for presence without a second query.
- */
-async function markDeliveredOnConnect(io, userId) {
-  const channelIds = await activeChannelIds(userId);
-  if (!channelIds.length) return channelIds;
-  const deliveredAt = new Date().toISOString();
-  await pool.query(
-    `UPDATE chat_channel_members SET last_delivered_at = now()
-      WHERE user_id = $1 AND left_at IS NULL`,
-    [userId],
-  );
-  for (const channelId of channelIds) {
-    io.to(bus.channelRoom(channelId)).emit('receipt', { channelId, userId, deliveredAt });
-  }
-  return channelIds;
 }
 
 /** Tell a user's channels whether they just came online / went offline. */
@@ -143,9 +117,11 @@ function initRealtime(httpServer) {
 
     // Deliver-on-connect + presence online. Wrapped because a socket that
     // connects and instantly drops must not take the process down with an
-    // unhandled rejection.
+    // unhandled rejection. The stamp returns the channels it touched — every live
+    // membership — which is exactly the fan-out set presence needs, so the two
+    // share one query.
     try {
-      const channelIds = await markDeliveredOnConnect(io, userId);
+      const channelIds = await receipts.markDeliveredOnConnect(pool, userId);
       socket.data.channelIds = channelIds;
       broadcastPresence(io, channelIds, userId, true);
     } catch (e) {

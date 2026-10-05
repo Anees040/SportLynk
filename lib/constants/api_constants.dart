@@ -167,6 +167,14 @@ class ApiConstants {
   static String userReviews(String userId) => '/users/$userId/reviews';
   static String flagReview(String reviewId) => '/reviews/$reviewId/flag';
 
+  // Users
+  /// Another player's profile, honouring their visibility (module 8c). A public
+  /// profile returns the full detail; a private one returns only the header
+  /// (name/avatar/trust/ELO) and the client shows the gated view. The viewer's own
+  /// profile edits still go through `/users/me/update`.
+  static String userPublicProfile(String id) => '/users/$id/public-profile';
+  static const String updateMe = '/users/me/update';
+
   // Admin moderation
   /// Under `/api/admin`, behind `checkRole('admin')`. The queue is every review
   /// needing an eye (reported or model-escalated or already hidden); the PATCH

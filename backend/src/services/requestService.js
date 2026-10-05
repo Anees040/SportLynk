@@ -73,13 +73,23 @@ async function createRequest(client, { requesterId, targetUserId, sport = null, 
   }
 
   const people = await client.query(
-    'SELECT id, name, role, is_active FROM users WHERE id = ANY($1::uuid[])',
+    `SELECT u.id, u.name, u.role, u.is_active, pp.is_public
+       FROM users u
+       LEFT JOIN player_profiles pp ON pp.user_id = u.id
+      WHERE u.id = ANY($1::uuid[])`,
     [[requesterId, targetUserId]],
   );
   const requester = people.rows.find((r) => String(r.id) === String(requesterId));
   const target = people.rows.find((r) => String(r.id) === String(targetUserId));
   if (!target || target.role !== 'player' || target.is_active !== true) {
     return err(404, 'not_found', 'Player not found.');
+  }
+  // A private profile is not open to being asked to play by a stranger (the same
+  // rule that hides their stats). `is_public` is NULL only for a player with no
+  // profile row, which predates the column's default and reads as public.
+  if (target.is_public === false) {
+    return err(403, 'profile_private',
+      'This player keeps their profile private and is not accepting play requests.');
   }
 
   const note = typeof message === 'string' && message.trim() ? message.trim().slice(0, 500) : null;
@@ -287,6 +297,7 @@ async function discoverPlayers(client, { userId, sport = null, limit = 40 } = {}
     `SELECT u.id AS user_id, u.name, u.avatar_url,
             COALESCE(pp.sport_preferences, '{}') AS sports,
             pp.trust_score,
+            COALESCE(pp.is_public, true) AS is_public,
             COALESCE(act.n, 0)::int AS bookings_30d,
             ($2::text IS NOT NULL
              AND $2 = ANY(COALESCE(pp.sport_preferences, '{}'))) AS plays_sport,
@@ -313,6 +324,7 @@ async function discoverPlayers(client, { userId, sport = null, limit = 40 } = {}
     avatarUrl: r.avatar_url,
     sports: Array.isArray(r.sports) ? r.sports : [],
     trustScore: r.trust_score,
+    isPublic: r.is_public !== false,
     bookings30d: Number(r.bookings_30d || 0),
     playsSport: !!r.plays_sport,
     pendingRequest: !!r.pending_request,
