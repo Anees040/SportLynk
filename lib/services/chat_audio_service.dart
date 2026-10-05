@@ -31,6 +31,14 @@ class ChatAudioService extends ChangeNotifier {
   Duration _position = Duration.zero;
   Duration? _duration;
 
+  // Playback speed, cycled by the bubble's speed control. just_audio re-applies
+  // the player's speed to every new source it loads (see _setPlatformActive in
+  // the package), so one setting carries across clips without being re-sent —
+  // matching WhatsApp, where the chosen speed persists for the session rather
+  // than resetting on each note.
+  static const List<double> speeds = <double>[1.0, 1.5, 2.0];
+  double _speed = 1.0;
+
   String? get currentId => _currentId;
   bool get playing => _playing;
   bool get loading => _loading;
@@ -42,6 +50,10 @@ class ChatAudioService extends ChangeNotifier {
   String? get errorText => _errorText;
   Duration get position => _position;
   Duration? get duration => _duration;
+
+  /// The current playback speed, always one of [speeds]. The bubble renders its
+  /// label from this and advances it through [cycleSpeed].
+  double get speed => _speed;
 
   bool isCurrent(String id) => _currentId == id;
 
@@ -144,6 +156,23 @@ class ChatAudioService extends ChangeNotifier {
     _position = to;
     notifyListeners();
     await _player.seek(to);
+  }
+
+  /// Advance the playback speed to the next of [speeds], wrapping 2x back to 1x,
+  /// and apply it to the live player. The setting is not tied to a clip: it holds
+  /// across notes, so a listener who set 1.5x hears the next note at 1.5x too.
+  Future<void> cycleSpeed() async {
+    final next = speeds[(speeds.indexOf(_speed) + 1) % speeds.length];
+    _speed = next;
+    notifyListeners();
+    try {
+      await _player.setSpeed(next);
+    } catch (e) {
+      // Speed is cosmetic and has nowhere on the bubble to report a fault, so a
+      // rare platform refusal is logged rather than thrown out of a tap handler.
+      // The label still reflects the user's choice; only the audio rate lagged.
+      debugPrint('[chat-audio] setSpeed($next) failed: $e');
+    }
   }
 
   /// Stop and release the current clip — called when the thread closes so a note
