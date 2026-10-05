@@ -437,6 +437,13 @@ class ChatMember {
   final DateTime lastDeliveredAt;
   final DateTime? lastSeenAt;
 
+  /// The earliest message this member is allowed to read (migration 036), or
+  /// null for a membership with no lower bound. Part of the tick computation and
+  /// not decoration: a member who joined after a message was sent cannot see it,
+  /// so their watermark must not be allowed to hold that message at one grey
+  /// tick for everybody else forever.
+  final DateTime? historyFrom;
+
   ChatMember({
     required this.userId,
     required this.role,
@@ -445,9 +452,14 @@ class ChatMember {
     required this.lastReadAt,
     required this.lastDeliveredAt,
     this.lastSeenAt,
+    this.historyFrom,
   });
 
   bool get isAdmin => role == 'admin';
+
+  /// Whether this member can see a message sent at [at] — false only when they
+  /// joined after it was sent.
+  bool canSee(DateTime at) => historyFrom == null || !at.isBefore(historyFrom!);
 
   factory ChatMember.fromJson(Map<String, dynamic> j) => ChatMember(
         userId: '${j['user_id']}',
@@ -457,6 +469,7 @@ class ChatMember {
         lastReadAt: _epoch(j['last_read_at']),
         lastDeliveredAt: _epoch(j['last_delivered_at']),
         lastSeenAt: _date(j['last_seen_at']),
+        historyFrom: _date(j['history_from']),
       );
 }
 
