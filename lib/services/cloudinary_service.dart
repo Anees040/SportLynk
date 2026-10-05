@@ -24,10 +24,12 @@ class CloudinaryService {
 
   /// Upload one file and report either its URL or why it failed.
   ///
-  /// This is the single place an upload happens; [uploadImage] and [uploadAudio]
-  /// are thin wrappers that discard the reason for callers that have nowhere to
-  /// show it. `onProgress` is the uploader's byte-progress callback —
-  /// `(sent, total)`, with `total <= 0` until the body is measured.
+  /// This is the single place an upload happens. [uploadImage] is a thin wrapper
+  /// that discards the reason for callers with nowhere to show it; the chat
+  /// voice-note path calls this directly, with [CloudinaryResourceType.Auto], so
+  /// it can put a refusal on the failed bubble. `onProgress` is the uploader's
+  /// byte-progress callback — `(sent, total)`, with `total <= 0` until the body
+  /// is measured.
   Future<UploadOutcome> upload(
     String filePath, {
     required CloudinaryResourceType resourceType,
@@ -77,20 +79,6 @@ class CloudinaryService {
         resourceType: CloudinaryResourceType.Image,
         folder: folder,
         onProgress: onProgress,
-      ))
-          .url;
-
-  /// Upload a voice note. Cloudinary handles audio under its Video resource
-  /// type, so the returned URL lives under `/video/upload/` on the same
-  /// res.cloudinary.com host the backend already trusts for chat media. An
-  /// unsigned preset restricted to images refuses this, which is why [upload]'s
-  /// reason is surfaced rather than swallowed.
-  Future<String?> uploadAudio(String filePath,
-          {String folder = 'chat_audio'}) async =>
-      (await upload(
-        filePath,
-        resourceType: CloudinaryResourceType.Video,
-        folder: folder,
       ))
           .url;
 
