@@ -40,6 +40,22 @@ enum ChatPattern {
 
   /// Concentric quarter-arcs, the art-deco fan.
   arcs,
+
+  /// Cricket kit: bats crossed over stumps, with the ball between them.
+  cricket,
+
+  /// Pitch markings — centre circles, corner arcs and halfway lines.
+  pitch,
+
+  /// Trophies and medals, for the tournament side of the app.
+  trophies,
+
+  /// A court net: diagonal mesh with a heavier tape line, as on a badminton or
+  /// tennis net.
+  net,
+
+  /// Numbered jersey plates, the team-sheet motif.
+  jerseys,
 }
 
 /// A background the user can pick: a ground colour plus the pattern drawn over
@@ -47,6 +63,11 @@ enum ChatPattern {
 enum ChatBgPreset {
   doodle('Doodle', AppColors.chatBackground, ChatPattern.doodle),
   sport('Sport', AppColors.chatBgSand, ChatPattern.sport, strong: true),
+  cricket('Cricket', AppColors.chatBgSand, ChatPattern.cricket, strong: true),
+  pitch('Pitch', AppColors.chatBgMint, ChatPattern.pitch, strong: true),
+  trophies('Trophy', AppColors.chatBgGold, ChatPattern.trophies, strong: true),
+  net('Net', AppColors.chatBgTeal, ChatPattern.net),
+  jerseys('Kit', AppColors.chatBgDusk, ChatPattern.jerseys, strong: true),
   honeycomb('Hive', AppColors.chatBgTeal, ChatPattern.honeycomb),
   waves('Waves', AppColors.chatBgMint, ChatPattern.waves, strong: true),
   confetti('Confetti', AppColors.chatBgRose, ChatPattern.confetti, strong: true),
@@ -145,6 +166,16 @@ class _ChatPatternPainter extends CustomPainter {
         _blueprint(canvas, size, stroke);
       case ChatPattern.arcs:
         _arcs(canvas, size, stroke);
+      case ChatPattern.cricket:
+        _cricket(canvas, size, stroke);
+      case ChatPattern.pitch:
+        _pitch(canvas, size, stroke);
+      case ChatPattern.trophies:
+        _trophies(canvas, size, stroke, fill);
+      case ChatPattern.net:
+        _net(canvas, size, stroke);
+      case ChatPattern.jerseys:
+        _jerseys(canvas, size, stroke, fill);
     }
   }
 
@@ -332,6 +363,159 @@ class _ChatPatternPainter extends CustomPainter {
         draw(r, c, Offset(c * cell, r * cell));
       }
     }
+  }
+
+  /// Crossed bats, stumps and a ball — the kit for the sport the app is mostly
+  /// booked for.
+  void _cricket(Canvas canvas, Size size, Paint p) {
+    const cell = 88.0;
+    _forEachCell(size, cell, (r, c, origin) {
+      final rnd = _cellRandom(r, c);
+      final centre =
+          origin + Offset(rnd.nextDouble() * cell * 0.5, rnd.nextDouble() * cell * 0.5);
+      canvas.save();
+      canvas.translate(centre.dx, centre.dy);
+      canvas.rotate((rnd.nextDouble() - 0.5) * 0.5);
+      if (rnd.nextBool()) {
+        // Three stumps under their bails.
+        for (final x in const [-6.0, 0.0, 6.0]) {
+          canvas.drawLine(Offset(x, -9), Offset(x, 9), p);
+        }
+        canvas.drawLine(const Offset(-8, -9), const Offset(8, -9), p);
+      } else {
+        // A bat — blade and handle — with the ball beside it.
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(center: const Offset(0, 2), width: 9, height: 17),
+            const Radius.circular(3),
+          ),
+          p,
+        );
+        canvas.drawLine(const Offset(0, -7), const Offset(0, -14), p);
+        canvas.drawCircle(const Offset(11, 8), 3.6, p);
+      }
+      canvas.restore();
+    });
+  }
+
+  /// Pitch markings: a centre circle with its halfway line, and corner arcs.
+  void _pitch(Canvas canvas, Size size, Paint p) {
+    const cell = 150.0;
+    _forEachCell(size, cell, (r, c, origin) {
+      final centre = origin + const Offset(cell / 2, cell / 2);
+      canvas.drawCircle(centre, 26, p);
+      canvas.drawCircle(centre, 2.5, p);
+      canvas.drawLine(
+          Offset(origin.dx, centre.dy), Offset(origin.dx + cell, centre.dy), p);
+      for (var k = 0; k < 4; k++) {
+        final corner = switch (k) {
+          0 => origin,
+          1 => origin + const Offset(cell, 0),
+          2 => origin + const Offset(cell, cell),
+          _ => origin + const Offset(0, cell),
+        };
+        canvas.drawArc(
+          Rect.fromCircle(center: corner, radius: 13),
+          -math.pi / 2 * k,
+          math.pi / 2,
+          false,
+          p,
+        );
+      }
+    });
+  }
+
+  /// Trophies and medals, for the tournament side of the app.
+  void _trophies(Canvas canvas, Size size, Paint stroke, Paint fill) {
+    const cell = 82.0;
+    _forEachCell(size, cell, (r, c, origin) {
+      final rnd = _cellRandom(r, c);
+      final centre =
+          origin + Offset(rnd.nextDouble() * cell * 0.5, rnd.nextDouble() * cell * 0.5);
+      canvas.save();
+      canvas.translate(centre.dx, centre.dy);
+      if (rnd.nextBool()) {
+        // Cup: bowl, handles, stem, base.
+        canvas.drawPath(
+          Path()
+            ..moveTo(-7, -9)
+            ..lineTo(7, -9)
+            ..lineTo(5, 1)
+            ..lineTo(-5, 1)
+            ..close(),
+          stroke,
+        );
+        canvas.drawArc(Rect.fromCircle(center: const Offset(-9, -6), radius: 4),
+            math.pi / 2, math.pi, false, stroke);
+        canvas.drawArc(Rect.fromCircle(center: const Offset(9, -6), radius: 4),
+            -math.pi / 2, math.pi, false, stroke);
+        canvas.drawLine(const Offset(0, 1), const Offset(0, 7), stroke);
+        canvas.drawLine(const Offset(-6, 8), const Offset(6, 8), stroke);
+      } else {
+        // Medal on a ribbon.
+        canvas.drawLine(const Offset(-5, -11), const Offset(-1, -3), stroke);
+        canvas.drawLine(const Offset(5, -11), const Offset(1, -3), stroke);
+        canvas.drawCircle(const Offset(0, 4), 7, stroke);
+        canvas.drawCircle(const Offset(0, 4), 2, fill);
+      }
+      canvas.restore();
+    });
+  }
+
+  /// Court netting: a diagonal mesh crossed by the heavier tape line.
+  void _net(Canvas canvas, Size size, Paint p) {
+    const gap = 17.0;
+    final mesh = Paint()
+      ..color = p.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    final tape = Paint()
+      ..color = p.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+    final span = size.width + size.height;
+    for (var d = -size.height; d < span; d += gap) {
+      canvas.drawLine(Offset(d, 0), Offset(d + size.height, size.height), mesh);
+      canvas.drawLine(Offset(d, size.height), Offset(d + size.height, 0), mesh);
+    }
+    for (var y = gap * 4; y < size.height; y += gap * 8) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), tape);
+    }
+  }
+
+  /// Jersey plates — the team sheet, which is what a team chat is.
+  void _jerseys(Canvas canvas, Size size, Paint stroke, Paint fill) {
+    const cell = 78.0;
+    _forEachCell(size, cell, (r, c, origin) {
+      final rnd = _cellRandom(r, c);
+      final centre =
+          origin + Offset(rnd.nextDouble() * cell * 0.5, rnd.nextDouble() * cell * 0.5);
+      canvas.save();
+      canvas.translate(centre.dx, centre.dy);
+      canvas.rotate((rnd.nextDouble() - 0.5) * 0.4);
+      canvas.drawPath(
+        Path()
+          ..moveTo(-7, -8)
+          ..lineTo(-3, -10)
+          ..lineTo(3, -10)
+          ..lineTo(7, -8)
+          ..lineTo(11, -4)
+          ..lineTo(8, -1)
+          ..lineTo(8, 11)
+          ..lineTo(-8, 11)
+          ..lineTo(-8, -1)
+          ..lineTo(-11, -4)
+          ..close(),
+        stroke,
+      );
+      canvas.drawArc(Rect.fromCircle(center: const Offset(0, -10), radius: 3), 0,
+          math.pi, false, stroke);
+      // A squat bar stands in for the squad number: a real glyph would need a
+      // text layout per cell, which is far more cost than the mark is worth.
+      canvas.drawRect(
+          Rect.fromCenter(center: const Offset(0, 4), width: 5, height: 2), fill);
+      canvas.restore();
+    });
   }
 
   @override
