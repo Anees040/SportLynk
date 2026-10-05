@@ -19,6 +19,14 @@ const String _uploadMarker = '/upload/';
 String chatThumbUrl(String url, {int width = 800}) =>
     _withTransform(url, 'c_limit,w_$width,q_auto,f_auto');
 
+/// The full-screen viewer's copy. Still a derivative, not the original: a phone
+/// screen is ~1200px on its longest edge even at a high pixel ratio, so fetching
+/// a multi-megabyte original to display it is the long black-screen wait the
+/// viewer used to show. Capped generously so pinch-zoom still has detail to
+/// reveal.
+String chatFullUrl(String url, {int width = 1600}) =>
+    _withTransform(url, 'c_limit,w_$width,q_auto,f_auto');
+
 String _withTransform(String url, String transform) {
   if (!url.contains(_cloudinaryHost)) return url;
   final i = url.indexOf(_uploadMarker);
