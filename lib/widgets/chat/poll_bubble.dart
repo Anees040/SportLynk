@@ -80,15 +80,22 @@ class PollBubble extends StatelessWidget {
         onTap: poll.closed ? null : () => onVote(i),
         child: Stack(
           children: [
-            // The share-of-vote fill behind the row.
+            // The share-of-vote fill behind the row, animated to its new width so
+            // a changed vote slides rather than snapping between tallies.
             Positioned.fill(
-              child: FractionallySizedBox(
-                widthFactor: frac == 0 ? 0.0001 : frac,
-                alignment: Alignment.centerLeft,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: mine ? AppColors.accentLight : AppColors.inputFill,
-                    borderRadius: BorderRadius.circular(10),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(end: frac),
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, _) => FractionallySizedBox(
+                  widthFactor: value <= 0 ? 0.0001 : value,
+                  alignment: Alignment.centerLeft,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    decoration: BoxDecoration(
+                      color: mine ? AppColors.accentLight : AppColors.inputFill,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ),
