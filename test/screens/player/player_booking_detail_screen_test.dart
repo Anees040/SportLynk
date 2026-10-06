@@ -122,14 +122,17 @@ void main() {
       },
     );
 
-    testWidgets('a failed load shows Booking not found', (tester) async {
-      // A real reachable state: `_load` leaves `_booking` null on failure, and the
-      // build renders the not-found card rather than degrading to a default.
+    testWidgets('a failed load with no cache shows an error with a retry', (tester) async {
+      // Fixed: a failed load now shows an error-with-retry; the bare "Booking not
+      // found" is reserved for a server that answered with no such booking, not a
+      // dropped connection to a booking the player opened from their own list.
       api.fail(kBooking, 'boom');
       await pumpDetail(tester, api);
       await settleData(tester);
 
-      expect(find.text('Booking not found'), findsOneWidget);
+      expect(find.text('Booking not found'), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('boom'), findsOneWidget);
     });
   });
 
