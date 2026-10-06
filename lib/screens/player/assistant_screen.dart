@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/assistant.dart';
@@ -98,17 +99,21 @@ class _AssistantScreenState extends State<AssistantScreen> {
   String? _tailId;
   bool _wasBusy = false;
 
-  /// Scout's palette for this build.
-  ///
-  /// Derived from the platform brightness rather than read through
-  /// [ScoutTheme.of], because this State's own context sits above the [Theme] that
-  /// [build] installs: `of` here would resolve the app's light-only theme and leave
-  /// the screen's chrome light while everything inside the wrapper went dark. The
-  /// widgets below the wrapper are in the right place and use [ScoutTheme.of].
-  ScoutTheme get _palette =>
-      MediaQuery.platformBrightnessOf(context) == Brightness.dark
-      ? ScoutTheme.dark
-      : ScoutTheme.light;
+  /// Whether Scout is in dark mode. Defaults to light, so the assistant matches the
+  /// rest of the (light-only) app on first open rather than following the phone into
+  /// dark; the in-header toggle flips it and the choice is remembered per device in
+  /// [SharedPreferences]. The dark palette is kept, not discarded — it is one tap away.
+  static const String _themePrefKey = 'scout_theme_dark';
+  bool _dark = false;
+
+  /// Scout's palette for this build, chosen by [_dark] rather than the platform
+  /// brightness: the app is light-only, so the assistant should not go dark merely
+  /// because the phone is — but a user who wants dark can still ask for it with the
+  /// header toggle. Read directly (not via [ScoutTheme.of]) because this State's own
+  /// context sits above the [Theme] that [build] installs; `of` here would resolve
+  /// the app's light theme and leave the chrome light while the wrapper went dark.
+  /// The widgets below the wrapper are in the right place and use [ScoutTheme.of].
+  ScoutTheme get _palette => _dark ? ScoutTheme.dark : ScoutTheme.light;
 
   @override
   void initState() {
@@ -129,6 +134,12 @@ class _AssistantScreenState extends State<AssistantScreen> {
       c.start(loadHistory: wanted != null && wanted.isNotEmpty);
     }
     _scroll.addListener(_onScroll);
+    // Restore the remembered Scout theme for this device (defaults to light).
+    SharedPreferences.getInstance().then((p) {
+      if (!mounted) return;
+      final dark = p.getBool(_themePrefKey) ?? false;
+      if (dark != _dark) setState(() => _dark = dark);
+    });
   }
 
   @override
@@ -298,13 +309,22 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
+  /// Flip Scout between light and dark and remember the choice for this device. Only
+  /// the assistant changes; the rest of the app stays light. The dark palette is
+  /// preserved — this toggle is the one way back to it.
+  Future<void> _toggleTheme() async {
+    setState(() => _dark = !_dark);
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_themePrefKey, _dark);
+  }
+
   // Build
 
   @override
   Widget build(BuildContext context) {
     final c = _c;
     return Theme(
-      data: ScoutTheme.data(MediaQuery.platformBrightnessOf(context)),
+      data: ScoutTheme.data(_dark ? Brightness.dark : Brightness.light),
       child: PopScope(
         // The gesture back has to carry the same result as the button, or a user who
         // swipes out after booking would return to a stale bookings list. With the chat
@@ -448,6 +468,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 ),
               ],
             ),
+          ),
+          _barAction(
+            icon: _dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+            tooltip: _dark ? 'Switch to light theme' : 'Switch to dark theme',
+            onTap: _toggleTheme,
           ),
           _barAction(
             icon: Icons.menu_rounded,
