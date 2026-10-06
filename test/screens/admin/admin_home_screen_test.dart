@@ -166,17 +166,18 @@ void main() {
   });
 
   group('when the stats fail to load', () {
-    testWidgets('the failure is surfaced in a snackbar, not swallowed',
+    testWidgets('a failed first load shows an error with a retry, not a zeroed desk',
         (tester) async {
+      // Fixed: a failed stats load with nothing cached now shows an error-with-retry
+      // instead of a desk reading zero across the board plus a transient
+      // raw-exception snackbar (admin_home_screen.dart).
       api.fail(kStats, 'boom');
       await pumpAdmin(tester, api);
       await settleData(tester);
 
-      // The screen names the reason rather than leaving a silent zeroed desk
-      // (admin_home:83).
-      expect(find.text('Failed to load stats: boom'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pumpAndSettle();
+      expect(find.text('Failed to load stats: boom'), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('boom'), findsOneWidget);
     });
   });
 
