@@ -155,6 +155,7 @@ class OfflineCache {
   static const String venues = 'venues';
   static const String notifications = 'notifications';
   static const String chatInbox = 'chat_inbox';
+  static const String playerProfile = 'player_profile';
   static const String ownerHome = 'owner_home';
   static const String ownerVenues = 'owner_venues';
   static const String ownerBookingRequests = 'owner_booking_requests';
