@@ -34,6 +34,16 @@ class AppColors {
   static const Color success = Color(0xFF16A34A);
   static const Color white = Color(0xFFFFFFFF);
 
+  /// The tone for a sport the app does not sell as its own category — football and
+  /// futsal read as [accent], cricket as [warning]. A third hue so a sport chip is
+  /// never mistaken for one of those two.
+  static const Color sportOther = Color(0xFF3B82F6);
+
+  /// The scrim under text laid over a venue photo. A photo is arbitrary, so the
+  /// badges and the name need their own ground rather than relying on the image
+  /// being dark where the text happens to fall.
+  static const Color photoScrim = Color(0x8A000000);
+
   // Team-chat surfaces. The thread sits on a warm neutral rather than the app's
   // near-white background: against white, the pale "mine" bubble lost its
   // right-aligned reading and looked centred. On this ground a light-green
