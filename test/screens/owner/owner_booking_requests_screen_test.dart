@@ -109,16 +109,18 @@ void main() {
       expect(find.text('No pending bookings'), findsOneWidget);
     });
 
-    testWidgets('a failed load reads as the empty state, not an error', (
+    testWidgets('a failed load with no cache shows an error with a retry', (
       tester,
     ) async {
-      // Defect, pinned: `_loadAll` swallows a failure into empty lists, so a 500 is
-      // indistinguishable from an empty queue. No error-with-retry state exists.
+      // Fixed: `_loadAll` now surfaces a failure as an error-with-retry instead of
+      // three empty tabs indistinguishable from an empty queue.
       api.fail(kBookings, 'boom');
       await pumpBookings(tester, api);
       await settleTabs(tester);
 
-      expect(find.text('No pending bookings'), findsOneWidget);
+      expect(find.text('No pending bookings'), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('boom'), findsOneWidget);
     });
 
     testWidgets('the three status tabs show, with a live pending count', (
