@@ -121,24 +121,19 @@ void main() {
       expect(find.text('AI Suggested Price'), findsOneWidget);
     });
 
-    testWidgets('dashboard failure renders zeroed empty content, not an error', (
+    testWidgets('a dashboard load that fails with no cache shows an error, not zeros', (
       tester,
     ) async {
-      // Defect, pinned: _load catches the failure and leaves _data null, so the
-      // dashboard renders zero/empty values without an error or retry control.
+      // Fixed: `_load` now records the failure and, with nothing cached, the
+      // dashboard shows an error with a retry instead of rendering "PKR 0" across
+      // the stat and wallet cards as though the figures were real.
       api.fail(kDashboard, 'dashboard unavailable');
       await pumpHome(tester, api);
       await settleHome(tester);
 
-      // The empty sentinel appears in both the stat card and wallet card.
-      expect(find.text('PKR 0'), findsNWidgets(2));
-      await tester.scrollUntilVisible(
-        find.text('No upcoming bookings today'),
-        500,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.text('No upcoming bookings today'), findsOneWidget);
-      expect(find.text('Retry'), findsNothing);
+      expect(find.text('PKR 0'), findsNothing);
+      expect(find.text('dashboard unavailable'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
     });
   });
 
