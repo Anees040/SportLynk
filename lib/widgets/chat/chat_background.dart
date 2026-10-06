@@ -532,16 +532,26 @@ Future<ChatBgPreset?> showChatBackgroundPicker(
 ) {
   return showModalBottomSheet<ChatBgPreset>(
     context: context,
+    // Scroll-controlled and height-capped: the preset grid plus its header stands
+    // taller than the default sheet (9/16 of the screen) on shorter devices, which
+    // overflowed the bottom. Capping at 85% and letting the content scroll removes
+    // the overflow on every form factor rather than only the tall ones.
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
     builder: (ctx) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             Center(
               child: Container(
                 width: 40,
@@ -603,6 +613,8 @@ Future<ChatBgPreset?> showChatBackgroundPicker(
               }).toList(),
             ),
           ],
+            ),
+          ),
         ),
       ),
     ),
