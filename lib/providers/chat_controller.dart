@@ -222,10 +222,17 @@ class ChatController extends ChangeNotifier {
     await _loadPinned();
   }
 
-  // Local cache — a single per-channel key holding the newest page as JSON, so a
-  // reopened room shows history before the socket or REST resolves.
+  // Local cache — a single per-channel key holding the newest messages as JSON,
+  // so a reopened room shows history before the socket or REST resolves.
   String get _cacheKey => 'chat_cache_$channelId';
-  static const int _cacheLimit = 40;
+
+  // How many of the newest messages are retained offline. Raised from one page
+  // (40) so history scrolled through while online survives into an offline reopen
+  // rather than snapping back to a single screen. Deliberately bounded: this cache
+  // lives in shared_preferences, whose whole store is read into memory, so every
+  // channel's blob is resident at once — unlimited history belongs in a local
+  // database (sqflite/Hive), not here. 120 is roughly three screens of scrollback.
+  static const int _cacheLimit = 120;
 
   Future<void> _hydrateFromCache() async {
     try {
