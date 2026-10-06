@@ -145,16 +145,17 @@ void main() {
       expect(find.textContaining('No open disputes.'), findsOneWidget);
     });
 
-    testWidgets('a failed load reads as the empty state, not an error',
+    testWidgets('a failed load with no cache shows an error with a retry',
         (tester) async {
-      // Defect, pinned rather than fixed: `AdminService.disputes` swallows a
-      // failure into an empty page, so a 500 is indistinguishable from an empty
-      // queue. There is no error-with-retry state on this screen.
+      // Fixed: `AdminService.disputes` now flags a failed read (`ok: false`), so the
+      // screen shows an error-with-retry instead of "No open disputes", which would
+      // tell the admin every contested result had been ruled.
       api.fail(kDisputes, 'boom');
       await pumpDisputes(tester, api);
       await settleData(tester);
 
-      expect(find.textContaining('No open disputes.'), findsOneWidget);
+      expect(find.textContaining('No open disputes.'), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
     });
   });
 
