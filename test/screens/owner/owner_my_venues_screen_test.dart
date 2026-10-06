@@ -109,17 +109,18 @@ void main() {
       expect(find.text('Register a Venue'), findsOneWidget);
     });
 
-    testWidgets('a failed load reads as the empty state, not an error', (
+    testWidgets('a failed load with no cache shows an error with a retry', (
       tester,
     ) async {
-      // Defect, pinned rather than fixed: a non-200 or thrown load leaves `_venues`
-      // empty and only debugPrints, so a server failure is indistinguishable from an
-      // owner with no venues. There is no error-with-retry state here.
+      // Fixed: a non-200 or thrown load now surfaces an error-with-retry instead of
+      // the "No venues yet" prompt an owner with venues would read as data loss.
       api.fail(kVenues, 'boom');
       await pumpVenues(tester, api);
       await settleData(tester);
 
-      expect(find.text('No venues yet'), findsOneWidget);
+      expect(find.text('No venues yet'), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('boom'), findsOneWidget);
     });
 
     testWidgets('an inactive venue is marked pending rather than by sport', (
