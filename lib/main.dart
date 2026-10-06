@@ -70,6 +70,9 @@ class SportLynkApp extends StatelessWidget {
           // navigator from there, so `DeepLink` owns it and `PushService` goes through
           // `DeepLink.open`/`park` rather than touching Navigator itself.
           navigatorKey: DeepLink.navigatorKey,
+          // Lets DeepLink see which screen is already on top, so a repeat
+          // notification tap does not stack a second copy of the same screen.
+          navigatorObservers: [DeepLink.routeObserver],
           title: 'SportLynk',
           debugShowCheckedModeBanner: false,
           scrollBehavior: NoScrollbarBehavior(),
