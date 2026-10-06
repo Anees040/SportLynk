@@ -105,6 +105,7 @@ class ChatAudioService extends ChangeNotifier {
   /// useful in a log and unreadable in a bubble, so the common cases are named and
   /// anything else falls back to the type.
   String _describe(Object e) {
+    if (e is String) return e;
     if (e is TimeoutException) return 'Took too long to load';
     if (e is PlayerException) {
       final m = (e.message ?? '').trim();
@@ -137,8 +138,17 @@ class ChatAudioService extends ChangeNotifier {
     _duration = null;
     notifyListeners();
     try {
-      await _player.setUrl(url).timeout(const Duration(seconds: 25));
+      final decoded = await _player.setUrl(url).timeout(const Duration(seconds: 25));
       if (_currentId != id) return; // another clip was started while this loaded
+      // The host accepted the upload but the decoder found no audio in it — a zero
+      // or absent duration. That is the signature of a clip stored under the wrong
+      // resource type: the file downloads, "plays", and reaches completed at once,
+      // which otherwise shows only as a silent snap back to 0:00, indistinguishable
+      // from a broken player. Surface it as a failure with a retry instead.
+      if (decoded == null || decoded == Duration.zero) {
+        _fail(id, 'This clip could not be played — it may not have uploaded correctly');
+        return;
+      }
       _loading = false;
       notifyListeners();
       _player.play();
