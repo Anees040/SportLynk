@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -455,9 +457,9 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
   }
 
   Color _sportColor(String sport) => switch (sport.toLowerCase()) {
-    'football' || 'futsal' => const Color(0xFF22C55E),
-    'cricket' => const Color(0xFFF59E0B),
-    _ => const Color(0xFF3B82F6),
+    'football' || 'futsal' => AppColors.accent,
+    'cricket' => AppColors.warning,
+    _ => AppColors.sportOther,
   };
 
   IconData _sportIcon(String sport) => switch (sport.toLowerCase()) {
@@ -685,7 +687,16 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
                         ),
                         SliverToBoxAdapter(
                           child: SizedBox(
-                            height: 240,
+                            // A horizontal list bounds its children's height, so the
+                            // rail card cannot grow on its own: at a large system text
+                            // scale its text block would overflow. The height tracks
+                            // the scale, clamped so an extreme setting cannot eat the
+                            // whole screen.
+                            height: 140 +
+                                110 *
+                                    MediaQuery.textScalerOf(context)
+                                        .scale(1)
+                                        .clamp(1.0, 1.8),
                             child: ListView.builder(
                               padding: const EdgeInsets.symmetric(horizontal: 16),
                               scrollDirection: Axis.horizontal,
@@ -780,109 +791,162 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
     );
   }
 
+  /// The rail card: one of the few venues picked for this player.
+  ///
+  /// Its job is different from [_venueCard]'s. The list answers "what is there"; the
+  /// rail answers "why this one, for you" — so the match percentage and the reasons
+  /// the recommender gave are the card's subject, not an afterthought. `match_pct`
+  /// and `reasons` are rendered only when the server actually sent them: the rail
+  /// also serves the heuristic and cold-start paths, which carry no score, and a
+  /// fabricated percentage beside a real one would make both untrustworthy.
   Widget _aiRecommendedCard(Map<String, dynamic> v) {
     final sportType = (v['sport_type'] ?? 'sport').toString();
     final matchPct = v['match_pct'];
+    final rating = asNum(v['rating']);
     final reasons = v['reasons'] is List ? List<String>.from(v['reasons']) : <String>[];
-    
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(
-        builder: (_) => VenueDetailScreen(venueId: v['id']))),
-      child: Container(
-        width: 280,
-        margin: const EdgeInsets.only(right: 16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))],
+
+    return Container(
+      width: 272,
+      margin: const EdgeInsets.only(right: 14),
+      child: Material(
+        color: AppColors.cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: AppColors.border),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Stack(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => VenueDetailScreen(venueId: v['id']))),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Background Image/Gradient
-              Container(
-                decoration: BoxDecoration(color: const Color(0xFF0A1F13)),
-                child: (v['venue_photos'] != null && (v['venue_photos'] as List).isNotEmpty)
-                    ? Image.network(v['venue_photos'][0], fit: BoxFit.cover, width: double.infinity, height: double.infinity,
-                        errorBuilder: (ctx, err, stack) => Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.1), size: 100)))
-                    : Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.1), size: 100)),
-              ),
-              // Gradient Overlay
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.transparent, Colors.black87],
-                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                    stops: [0.4, 1.0],
-                  ),
+              SizedBox(
+                height: 108,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _venuePhoto(v, sportType),
+                    // The match score, where the eye lands first — this is the one
+                    // card whose reason for existing is that number.
+                    if (matchPct != null)
+                      Positioned(
+                        top: 9,
+                        left: 9,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.auto_awesome,
+                                color: AppColors.white, size: 11),
+                            const SizedBox(width: 4),
+                            Text('$matchPct% match',
+                                style: GoogleFonts.poppins(
+                                    color: AppColors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold)),
+                          ]),
+                        ),
+                      ),
+                    if (rating > 0)
+                      Positioned(
+                        top: 9,
+                        right: 9,
+                        child: _photoBadge(
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.star_rounded,
+                                color: AppColors.warning, size: 12),
+                            const SizedBox(width: 3),
+                            Text(rating.toStringAsFixed(1),
+                                style: GoogleFonts.poppins(
+                                    color: AppColors.white,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold)),
+                          ]),
+                        ),
+                      ),
+                    if (v['distance_km'] != null)
+                      Positioned(
+                        bottom: 9,
+                        right: 9,
+                        child: _photoBadge(
+                          child: Text('${v['distance_km']} km',
+                              style: GoogleFonts.poppins(
+                                  color: AppColors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              // Rating Badge
-              Positioned(
-                top: 12, right: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(matchPct != null ? Icons.auto_awesome : Icons.star_rounded, color: Colors.amber, size: 14),
-                    const SizedBox(width: 4),
-                    Text(matchPct != null ? '$matchPct% match' : '${v['rating'] ?? 'N/A'}',
-                      style: GoogleFonts.poppins(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ]),
-                ),
-              ),
-              // Content
-              Positioned(
-                bottom: 16, left: 16, right: 16,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(v['name'] ?? 'Venue',
-                      style: GoogleFonts.poppins(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 4),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: AppColors.textPrimary)),
+                    const SizedBox(height: 3),
                     Row(
                       children: [
-                        const Icon(Icons.location_on, color: Colors.white70, size: 14),
-                        const SizedBox(width: 4),
+                        const Icon(Icons.location_on_outlined,
+                            color: AppColors.textSecondary, size: 12),
+                        const SizedBox(width: 3),
                         Expanded(
                           child: Text(v['address'] ?? v['city'] ?? '',
-                            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                  fontSize: 11, color: AppColors.textSecondary)),
                         ),
                       ],
                     ),
-                    if (v['distance_km'] != null) ...[
-                      const SizedBox(height: 3),
+                    if (reasons.isNotEmpty) ...[
+                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          const Icon(Icons.near_me_rounded, color: Colors.white70, size: 12),
-                          const SizedBox(width: 4),
-                          Text('${v['distance_km']} km away',
-                            style: GoogleFonts.poppins(
-                                color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.w500)),
+                          for (final r in reasons.take(2)) ...[
+                            Flexible(child: _amenityChip(r)),
+                            const SizedBox(width: 6),
+                          ],
                         ],
                       ),
                     ],
-                    const SizedBox(height: 8),
-                    if (reasons.isNotEmpty) ...[
-                      Wrap(spacing: 5, runSpacing: 4, children: reasons.take(3).map((reason) => Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)),
-                        child: Text(reason, style: GoogleFonts.poppins(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w500)),
-                      )).toList()),
-                      const SizedBox(height: 7),
-                    ],
+                    const SizedBox(height: 10),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('PKR ${asNum(v['price_per_hour']).toStringAsFixed(0)}/hr',
-                          style: GoogleFonts.poppins(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.bold)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(8)),
-                          child: Text('Book', style: GoogleFonts.poppins(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        Flexible(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(
+                                text: 'PKR ${asNum(v['price_per_hour']).toStringAsFixed(0)}',
+                                style: GoogleFonts.poppins(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              TextSpan(
+                                text: ' /hr',
+                                style: GoogleFonts.poppins(
+                                    color: AppColors.textSecondary, fontSize: 10.5),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                        const Icon(Icons.arrow_forward_rounded,
+                            color: AppColors.accent, size: 16),
                       ],
                     ),
                   ],
@@ -895,134 +959,308 @@ class _FindVenuesScreenState extends State<FindVenuesScreen>
     );
   }
 
-  /// The one list card for a venue: photo left, facts right.
+  /// The amenities a venue actually advertises, as display labels.
   ///
-  /// Used for every row in the browse and search list, and the recommendation rail
-  /// uses a compact variant of the same anatomy so the screen reads as one system.
-  /// Facts are ordered by what a player decides on — sport, name, where, how far,
-  /// what it costs — rather than by what happens to be in the payload.
+  /// `venues.amenities` is JSONB shaped as a map (migration 003): a boolean value
+  /// means "has it", and any other non-empty value (a count, a note) is shown as a
+  /// label too. Keys are snake_case in the database and read as words here, exactly
+  /// as the venue detail screen renders them. Returns empty for a venue that lists
+  /// none — the card then omits the row rather than inventing facilities.
+  List<String> _amenityLabels(Map<String, dynamic> v) {
+    final raw = v['amenities'];
+    Map<String, dynamic> m;
+    if (raw is Map) {
+      m = Map<String, dynamic>.from(raw);
+    } else if (raw is String) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map) return const [];
+        m = Map<String, dynamic>.from(decoded);
+      } catch (_) {
+        return const [];
+      }
+    } else {
+      return const [];
+    }
+    final out = <String>[];
+    for (final e in m.entries) {
+      final val = e.value;
+      if (val is bool) {
+        if (!val) continue;
+      } else if (val == null || val.toString().trim().isEmpty) {
+        continue;
+      }
+      final words = e.key.toString().replaceAll('_', ' ').trim();
+      if (words.isEmpty) continue;
+      out.add(words[0].toUpperCase() + words.substring(1));
+    }
+    return out;
+  }
+
+  /// The cover image for a venue, or a sport glyph on the brand field when there is
+  /// no photo or the URL will not load. Always drawn inside a parent that has given
+  /// it a bounded height.
+  Widget _venuePhoto(Map<String, dynamic> v, String sportType) {
+    final photos = v['venue_photos'];
+    final first = (photos is List && photos.isNotEmpty) ? photos.first?.toString() : null;
+    final url = (first != null && first.isNotEmpty) ? first : (v['image_url'] as String?);
+    final fallback = ColoredBox(
+      color: AppColors.primaryDark,
+      child: Center(
+        child: Icon(_sportIcon(sportType),
+            color: AppColors.white.withValues(alpha: 0.22), size: 44),
+      ),
+    );
+    if (url == null || url.isEmpty) return fallback;
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stack) => fallback,
+    );
+  }
+
+  /// A badge laid over a venue photo: translucent dark ground, white content, so it
+  /// reads on any image.
+  Widget _photoBadge({required Widget child}) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.photoScrim,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: child,
+        ),
+      );
+
+  /// One amenity pill under the venue's name.
+  Widget _amenityChip(String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.inputFill,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500)),
+      );
+
+  /// The one list card for a venue: a photo band with its badges, then the facts.
+  ///
+  /// Laid out as a Column over a fixed-height photo rather than a Row of a stretched
+  /// image beside a text block. That is not only a visual choice: the previous card
+  /// stretched its photo to the row's height, which inside a `SliverList` is
+  /// unbounded, so the image was handed an infinite height constraint and the card
+  /// threw at layout — leaving the list empty whichever sport was selected. A photo
+  /// with its own height can never be given an unbounded one.
+  ///
+  /// Facts are ordered by what a player decides on — what sport, how good, how far,
+  /// what it is called, where, what it offers, what it costs. Every one is a real
+  /// column; a venue with no rating, no photo, no amenities or no known distance
+  /// simply shows fewer of them.
   Widget _venueCard(Map<String, dynamic> v) {
     final sportType = (v['sport_type'] ?? 'sport').toString();
     final sportColor = _sportColor(sportType);
     final rating = asNum(v['rating']);
+    final reviews = asNum(v['total_reviews']).toInt();
     final distance = v['distance_km'];
+    final verified = v['is_verified'] == true;
+    final amenities = _amenityLabels(v);
 
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(
-        builder: (_) => VenueDetailScreen(venueId: v['id']))),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))]),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Material(
+      color: AppColors.cardBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => VenueDetailScreen(venueId: v['id']))),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
-              child: SizedBox(
-                width: 112,
-                child: Container(
-                  color: AppColors.primaryDark,
-                  child: (v['venue_photos'] != null && (v['venue_photos'] as List).isNotEmpty)
-                      ? Image.network(v['venue_photos'][0], fit: BoxFit.cover,
-                          errorBuilder: (ctx, err, stack) => Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.2), size: 40)))
-                      : Center(child: Icon(_sportIcon(sportType), color: Colors.white.withValues(alpha: 0.2), size: 40)),
-                ),
+            SizedBox(
+              height: 150,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _venuePhoto(v, sportType),
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: sportColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(_sportIcon(sportType), color: AppColors.white, size: 12),
+                        const SizedBox(width: 5),
+                        Text(sportType.toUpperCase(),
+                            style: GoogleFonts.poppins(
+                                color: AppColors.white,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5)),
+                      ]),
+                    ),
+                  ),
+                  // An unrated venue says "New" rather than showing a zero, which
+                  // would read as a bad score instead of an absent one.
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: _photoBadge(
+                      child: rating > 0
+                          ? Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.star_rounded,
+                                  color: AppColors.warning, size: 13),
+                              const SizedBox(width: 3),
+                              Text(rating.toStringAsFixed(1),
+                                  style: GoogleFonts.poppins(
+                                      color: AppColors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold)),
+                              if (reviews > 0) ...[
+                                const SizedBox(width: 3),
+                                Text('($reviews)',
+                                    style: GoogleFonts.poppins(
+                                        color: AppColors.white, fontSize: 10)),
+                              ],
+                            ])
+                          : Text('New',
+                              style: GoogleFonts.poppins(
+                                  color: AppColors.white,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  if (distance != null)
+                    Positioned(
+                      bottom: 10,
+                      right: 10,
+                      child: _photoBadge(
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.near_me_rounded,
+                              color: AppColors.white, size: 11),
+                          const SizedBox(width: 4),
+                          Text('$distance km',
+                              style: GoogleFonts.poppins(
+                                  color: AppColors.white,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                    ),
+                ],
               ),
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(color: sportColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
-                            child: Text(sportType.toUpperCase(),
-                              maxLines: 1, overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.poppins(color: sportColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        // An unrated venue shows "New" rather than a zero, which would
-                        // read as a bad score instead of an absent one.
-                        if (rating > 0) ...[
-                          const Icon(Icons.star_rounded, color: Colors.amber, size: 15),
-                          const SizedBox(width: 3),
-                          Text(rating.toStringAsFixed(1),
-                            maxLines: 1,
-                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                        ] else
-                          Text('New', maxLines: 1, style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(v['name'] ?? 'Venue',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_outlined, color: AppColors.textSecondary, size: 13),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(v['address'] ?? v['city'] ?? '',
-                            style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Price and distance share one line, so both have to survive a
-                    // large system text scale inside ~254 logical pixels. The price
-                    // is Flexible and ellipsises; the distance chip keeps its natural
-                    // width because an elided distance says nothing. Laid out as one
-                    // Text.rich rather than two Texts so the unit cannot be orphaned
-                    // onto its own overflowing line.
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text.rich(
-                            TextSpan(children: [
-                              TextSpan(
-                                text: 'PKR ${asNum(v['price_per_hour']).toStringAsFixed(0)}',
-                                style: GoogleFonts.poppins(
-                                    color: AppColors.accent,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                              TextSpan(
-                                text: ' /hr',
-                                style: GoogleFonts.poppins(
-                                    color: AppColors.textSecondary, fontSize: 11),
-                              ),
-                            ]),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(v['name'] ?? 'Venue',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (distance != null) ...[
+                            style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15.5,
+                                color: AppColors.textPrimary)),
+                      ),
+                      // Only shown when the venue really is verified; its absence is
+                      // not an accusation, so nothing is drawn in its place.
+                      if (verified) ...[
+                        const SizedBox(width: 6),
+                        const Icon(Icons.verified_rounded,
+                            color: AppColors.accent, size: 16),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined,
+                          color: AppColors.textSecondary, size: 13),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(v['address'] ?? v['city'] ?? '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
+                                fontSize: 11.5, color: AppColors.textSecondary)),
+                      ),
+                    ],
+                  ),
+                  if (amenities.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        for (final a in amenities.take(2)) ...[
+                          Flexible(child: _amenityChip(a)),
                           const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppColors.inputFill,
-                              borderRadius: BorderRadius.circular(6)),
-                            child: Text('$distance km',
-                              maxLines: 1,
-                              style: GoogleFonts.poppins(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-                          ),
                         ],
+                        if (amenities.length > 2)
+                          _amenityChip('+${amenities.length - 2}'),
                       ],
                     ),
                   ],
-                ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text.rich(
+                          TextSpan(children: [
+                            TextSpan(
+                              text: 'PKR ${asNum(v['price_per_hour']).toStringAsFixed(0)}',
+                              style: GoogleFonts.poppins(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            TextSpan(
+                              text: ' /hr',
+                              style: GoogleFonts.poppins(
+                                  color: AppColors.textSecondary, fontSize: 11),
+                            ),
+                          ]),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Not its own button: the whole card opens the venue, which is
+                      // where slots are picked, so a second tap target to the same
+                      // place would be noise. This states where the tap leads.
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Text('Book',
+                              style: GoogleFonts.poppins(
+                                  color: AppColors.white,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 3),
+                          const Icon(Icons.arrow_forward_rounded,
+                              color: AppColors.white, size: 13),
+                        ]),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
