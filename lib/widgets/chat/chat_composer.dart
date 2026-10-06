@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -72,9 +71,6 @@ class _ChatComposerState extends State<ChatComposer> {
   bool _hasText = false;
 
   AudioRecorder? _recorder;
-  // Plays the short cue when a recording starts (Issue 4). Created lazily so a
-  // composer that never records a voice note pays nothing for it.
-  AudioPlayer? _cuePlayer;
   bool _recording = false;
   bool _armed = false; // finger still down (the press may outlive the async start)
   bool _cancelHint = false;
@@ -115,21 +111,18 @@ class _ChatComposerState extends State<ChatComposer> {
     _ticker?.cancel();
     _ampSub?.cancel();
     _recorder?.dispose();
-    _cuePlayer?.dispose();
     super.dispose();
   }
 
-  /// The short start-of-recording cue: a light haptic and a brief tone, played
-  /// the moment recording begins (Issue 4). Failures are swallowed — a missing
-  /// audio route must never stop a voice note from being recorded.
+  /// A light haptic the moment recording begins. There is deliberately NO audio
+  /// cue: playing a sound through a media player while the recorder is capturing
+  /// starved the microphone on-device — the playback stream took over the audio
+  /// path a fraction of a second in, the capture suspended, and every clip held
+  /// only its first ~0.4s. That produced a ~5KB file for a multi-second hold, a
+  /// near-flat waveform, and a note that "records" but plays its opening instant
+  /// and resets to 0:00. A tactile cue needs no audio session and cannot do that.
   Future<void> _playRecStartCue() async {
     HapticFeedback.mediumImpact();
-    try {
-      final p = _cuePlayer ??= AudioPlayer();
-      await p.setAsset('assets/sounds/rec_start.wav');
-      await p.seek(Duration.zero);
-      await p.play();
-    } catch (_) {}
   }
 
   void _onChanged() {
