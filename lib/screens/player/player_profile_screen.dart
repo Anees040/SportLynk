@@ -5,9 +5,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/offline_cache.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/network_error_view.dart';
+import '../../widgets/offline_banner.dart';
 import '../../services/cloudinary_service.dart';
 import 'trust_score_screen.dart';
 import '../../utils/reconnect_refresh.dart';
@@ -32,6 +35,15 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
   // screen never invents stats to fill the gap.
   String? _error;
 
+  /// When the shown profile came from the cache rather than this session's fetch.
+  /// Drives the offline strip's "saved 10 min ago", so an ELO or trust score read
+  /// from disk is never mistaken for a live one.
+  DateTime? _cachedAt;
+
+  /// Set once the network has answered, so a slow cache read landing afterwards
+  /// cannot overwrite the fresher profile and re-label it stale.
+  bool _networkAnswered = false;
+
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
 
@@ -41,14 +53,18 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
   @override
   void initState() {
     super.initState();
+    // Concurrent, not chained: the cache paints the last profile instantly while
+    // the fetch refreshes it, so a cold or offline open is never a spinner.
     _load();
+    _hydrateFromCache();
   }
 
-  // Fill in the moment connectivity returns, but only when the first load never
-  // succeeded — a loaded profile already refreshes through AuthProvider.
+  // Fill in the moment connectivity returns. A cached profile is refreshed too
+  // (its stats are stale and nothing else updates elo/trust), unlike a live one
+  // which AuthProvider already keeps current for the identity fields.
   @override
   void onReconnect() {
-    if (_profile == null) _load();
+    if (_profile == null || _cachedAt != null) _load();
   }
 
   @override
@@ -56,6 +72,26 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     super.dispose();
+  }
+
+  /// Draw the last good profile if it arrives before the network does.
+  Future<void> _hydrateFromCache() async {
+    final cached = await OfflineCache.read(OfflineCache.playerProfile);
+    if (!mounted || cached == null || _networkAnswered) return;
+    final data = cached.asMap();
+    if (data == null) return;
+    setState(() {
+      _profile = data;
+      _cachedAt = cached.at;
+      _error = null;
+      _nameCtrl.text = data['name'] ?? '';
+      _emailCtrl.text = data['email'] ?? '';
+      final prefs = data['sport_preferences'];
+      _sports = prefs is List
+          ? prefs.map((e) => e.toString()).where((s) => _allowedSports.contains(s)).toList()
+          : [];
+      _loading = false;
+    });
   }
 
   Future<void> _load() async {
@@ -78,8 +114,10 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
     if (!mounted) return;
     if (resp['success'] == true && resp['data'] is Map) {
       final d = Map<String, dynamic>.from(resp['data'] as Map);
+      _networkAnswered = true;
       setState(() {
         _profile = d;
+        _cachedAt = null;  // on screen is now this session's data, not a saved copy
         _error = null;
         _nameCtrl.text = d['name'] ?? '';
         _emailCtrl.text = d['email'] ?? '';
@@ -89,10 +127,20 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
             : [];
         _loading = false;
       });
+      context.read<ConnectivityProvider>().markReachable();
+      await OfflineCache.write(OfflineCache.playerProfile, d);
     } else {
+      // `statusCode == 0` is ApiClient's transport failure — the offline case, so
+      // the cached profile (if any) stays under the strip and only a load with
+      // nothing cached becomes the retry view.
+      if (resp['statusCode'] == 0) {
+        context.read<ConnectivityProvider>().markUnreachable();
+      }
       setState(() {
         _loading = false;
-        _error = '${resp['message'] ?? 'Could not load your profile.'}';
+        _error = _profile != null
+            ? null
+            : '${resp['message'] ?? 'Could not load your profile.'}';
       });
     }
   }
@@ -143,6 +191,9 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
         _profile = {...?_profile, ...updated};
         _isEditing = false;
       });
+      // Keep the saved copy in step with the edit, so a reopen offline shows the
+      // new name/avatar rather than the pre-edit profile.
+      await OfflineCache.write(OfflineCache.playerProfile, _profile);
       _snack('Profile updated successfully!', AppColors.success);
     } else {
       // ApiClient's message is already phrased for the user (offline, timeout, or
@@ -224,11 +275,10 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
   }
 
   /// The bare title bar used by the error state, which has no profile to edit.
+  /// Inherits the app-wide green [AppBarTheme] rather than overriding it to white,
+  /// so the Profile screen reads with the same header as every other screen.
   AppBar _appBar() => AppBar(
         title: Text('My Profile', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-        elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.textPrimary,
       );
 
   @override
@@ -273,8 +323,6 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
       appBar: AppBar(
         title: Text('My Profile', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.textPrimary,
         actions: [
           TextButton(
             onPressed: () {
@@ -297,19 +345,25 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
               _isEditing ? 'Cancel' : 'Edit',
               style: GoogleFonts.poppins(
                 fontWeight: FontWeight.bold,
-                color: _isEditing ? AppColors.textSecondary : AppColors.accent,
+                // On the green header the accent green read poorly; white (and a
+                // dimmed white for Cancel) matches the inherited foreground.
+                color: _isEditing ? Colors.white70 : Colors.white,
               ),
             ),
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: RefreshIndicator(
-        color: AppColors.accent,
-        onRefresh: _load,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(children: [
+      body: Column(
+        children: [
+          OfflineBanner(cachedAt: _cachedAt),
+          Expanded(
+            child: RefreshIndicator(
+              color: AppColors.accent,
+              onRefresh: _load,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(children: [
           Container(
             color: Colors.white,
             width: double.infinity,
@@ -479,9 +533,12 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
             const SizedBox(height: 40),
           ]
           ]),
+                ),
+              ),
+            ),
+          ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _editField(String label, TextEditingController ctrl, IconData icon, {TextInputType? type}) {
