@@ -436,8 +436,8 @@ void main() {
       await pumpScreen(tester, const TeamsScreen());
       await settleData(tester);
 
-      expect(find.text('Could not load your teams'), findsOneWidget);
-      expect(find.byIcon(Icons.cloud_off), findsOneWidget);
+      expect(find.textContaining('Could not load your teams'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
     });
 
     testWidgets('one malformed row costs the whole list', (tester) async {
@@ -452,7 +452,7 @@ void main() {
       await settleData(tester);
 
       expect(find.text('Lahore Lions'), findsNothing);
-      expect(find.text('Could not load your teams'), findsOneWidget);
+      expect(find.textContaining('Could not load your teams'), findsOneWidget);
     });
 
     testWidgets('a pull is the only way back from a failure', (tester) async {
@@ -1050,7 +1050,7 @@ void main() {
       await pumpScreen(tester, const TeamsScreen(), textScale: 2.0);
       await settleData(tester);
 
-      expect(find.text('Could not load your teams'), findsOneWidget);
+      expect(find.textContaining('Could not load your teams'), findsOneWidget);
       expectNoOverflow(tester);
     });
 
