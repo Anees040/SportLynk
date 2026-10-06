@@ -17,13 +17,15 @@
  *   sentiment_norm    (avg(sentiment_score) + 1) / 2      — model score on review text
  *
  * Cold start. A brand-new user has no reviews, no bookings, no matches — every
- * component is absent. Rather than let "no data" read as "zero trust" (the
- * cold-start injustice ER2.5 warns about), an absent component contributes a
- * neutral 0.5 prior to the aggregate. A user with no signal at all therefore
- * scores round(35·.5 + 30·.5 + 20·.5 + 15·.5) = 50 — exactly the documented
- * baseline. The component COLUMNS are stored NULL when there is no signal (so a
- * UI can say "no data yet" rather than draw a misleading 50% bar); only the
- * aggregate substitutes the prior.
+ * component is absent. Trust here is a reputation to keep, not one to earn: an
+ * absent component contributes a full 1.0 to the aggregate, so a user with no
+ * signal at all scores round(35·1 + 30·1 + 20·1 + 15·1) = 100 — the baseline a new
+ * account starts from — and only a real negative (a poor review, a no-show, a
+ * dispute the other side filed) pulls it down. Good conduct keeps the score at 100
+ * rather than lifting it, which is the deliberate consequence of a lose-only model.
+ * The component COLUMNS are still stored NULL when there is no signal (so a UI can
+ * say "no data yet" rather than draw a full bar); only the aggregate substitutes
+ * the prior.
  *
  * dispute_free_rate is a proxy. Fault in a dispute is not adjudicated
  * until an admin resolves it, so before then the metric can only count "disputes the
@@ -49,8 +51,10 @@
 // Spec weights. They sum to 100, so the aggregate is already on a 0..100 scale.
 const WEIGHTS = { rating: 35, attendance: 30, disputes: 20, sentiment: 15 };
 
-// What an absent component contributes to the aggregate (not to its column).
-const NEUTRAL_PRIOR = 0.5;
+// What an absent component contributes to the aggregate (not to its column). At
+// 1.0 a zero-signal user scores 100 and trust is lose-only: only a real negative
+// signal lowers a component below its full value. See the cold-start note above.
+const NEUTRAL_PRIOR = 1.0;
 
 /** pg returns numeric/bigint as strings; NULL as null. */
 const asNum = (v) => (v === null || v === undefined ? null : Number(v));
