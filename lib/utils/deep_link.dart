@@ -24,6 +24,12 @@ class DeepLink {
   /// Installed by `SportLynkApp` on its `MaterialApp`.
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+  /// Watches the root navigator so [open] can tell which screen is already on top
+  /// and avoid pushing a second copy of it. Passed to
+  /// `MaterialApp.navigatorObservers` in `main.dart`.
+  static final _DeepLinkRouteObserver _obs = _DeepLinkRouteObserver();
+  static NavigatorObserver get routeObserver => _obs;
+
   /// A link that arrived before there was anywhere to send it.
   ///
   /// The cold-start case is the whole reason this exists: a tray tap on a killed app
@@ -51,6 +57,11 @@ class DeepLink {
     '/notifications',
     '/owner-bookings',
     '/owner-verify-matches',
+    // A play request (player invitation) deep-links here via requestsInboxLink in
+    // notificationTypes.js. It was missing from this set, so every such tap fell to
+    // the fallback below and stacked a second /notifications screen instead of
+    // opening the inbox — the "tap the back button repeatedly to get home" bug.
+    '/requests-inbox',
     '/team-roster',
     '/tournament-detail',
     '/wallet',
@@ -119,13 +130,32 @@ class DeepLink {
       return true;
     }
     if (!knownRoutes.contains(route)) {
-      nav.pushNamed('/notifications');
+      // Unknown or renamed route: show the feed instead -- but never stack a second
+      // notifications screen on top of the one a feed tap came from.
+      if (_obs.topRoute != '/notifications') nav.pushNamed('/notifications');
       return true;
     }
+    // Single-top: a repeat tap on a notification for the screen already open must not
+    // push another copy of it (the "stacks redundant routes, back out one by one"
+    // complaint). A tap for a DIFFERENT target -- another booking, say -- still
+    // navigates, because the arguments are compared too.
+    if (_obs.topRoute == route && _sameArgs(_obs.topArgs, args)) return true;
     // `arguments` is always a map, never null, even for a route that ignores it: the
     // route builders in main.dart cast it non-null, and a null there is a crash on a
     // screen the user reached by tapping a notification.
     nav.pushNamed(route, arguments: args);
+    return true;
+  }
+
+  /// Shallow equality over two deep-link argument maps. The values are ids and
+  /// scalars, so a shallow compare is enough to tell "the same screen" from "a
+  /// different one". A null top-args is equal only to an empty argument map.
+  static bool _sameArgs(Map<String, dynamic>? a, Map<String, dynamic> b) {
+    if (a == null) return b.isEmpty;
+    if (a.length != b.length) return false;
+    for (final e in b.entries) {
+      if (!a.containsKey(e.key) || a[e.key] != e.value) return false;
+    }
     return true;
   }
 
@@ -159,4 +189,31 @@ class DeepLink {
   /// replaying it under a new account would either bounce off AuthGuard or -- worse
   /// -- open a screen keyed to somebody else's booking id.
   static void clear() => _pending = null;
+}
+
+/// Records the route currently on top of the root navigator, for [DeepLink.open]'s
+/// single-top check. It observes only and changes no navigation itself. When the top
+/// route is unknown (null), [DeepLink.open] errs toward navigating rather than
+/// suppressing, so a mis-tracked state can at worst push a duplicate -- never swallow
+/// a tap, which is the failure a deep link must avoid above all.
+class _DeepLinkRouteObserver extends NavigatorObserver {
+  String? topRoute;
+  Map<String, dynamic>? topArgs;
+
+  void _set(Route<dynamic>? route) {
+    topRoute = route?.settings.name;
+    final a = route?.settings.arguments;
+    topArgs = a is Map ? Map<String, dynamic>.from(a) : null;
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => _set(route);
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => _set(previousRoute);
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) =>
+      _set(newRoute);
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _set(previousRoute);
 }
