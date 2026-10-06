@@ -27,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final topInset = MediaQuery.of(context).padding.top;
     
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -36,13 +37,21 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       child: Scaffold(
       backgroundColor: AppColors.background, // Very light cool gray background
-      body: SingleChildScrollView(
-        child: Stack(
-          children: [
-            // Theme Color Header
-            Container(
+      // The header and the back button are drawn behind the scrollable rather than
+      // inside it. The screen asks for white system icons, so the strip under the
+      // status bar has to stay dark at every scroll offset; a header that scrolled
+      // away took the only dark pixels with it and left the white form card sitting
+      // under the clock and battery. The scrollable is inset below the status bar so
+      // that the same white card can never reach it either.
+      body: Stack(
+        children: [
+          // Theme Color Header
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
               height: size.height * 0.35,
-              width: double.infinity,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [AppColors.primaryDark, AppColors.primary], // Deep forest, matching splash + welcome
@@ -51,25 +60,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
             ),
-            
-            // Back Button
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 10,
-              left: 16,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 22),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
+          ),
 
-            // Main Content
-            SafeArea(
+          SafeArea(
+            bottom: false, // The keyboard is dodged by the scaffold, not by an inset.
+            child: SingleChildScrollView(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: Column(
                   children: [
                     SizedBox(height: size.height * 0.08), // Spacing from top
-                    
+
                     // Welcome Text (over dark background)
                     Text(
                       'Welcome Back!',
@@ -203,7 +204,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
-                        
+
                         // Overlapping Large Logo
                         Positioned(
                           top: 0,
@@ -251,8 +252,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+
+          // Back Button — above the scrollable so it stays reachable at any offset,
+          // and the only control allowed inside the status bar's own strip.
+          Positioned(
+            top: topInset + 10,
+            left: 16,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 22),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ],
       ),
     ),
     );
