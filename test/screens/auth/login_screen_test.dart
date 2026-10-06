@@ -28,12 +28,21 @@
 // (:60), neither of which belongs in a widget test; those tests override `login` and
 // assert the screen's decision, while the failure tests use the real provider because
 // its failure path touches neither.
+//
+// The fifth is the frame the form is drawn in, pinned by `the system insets`. This
+// screen asks for white system icons, so the strip behind them has to stay dark at
+// every scroll offset; that holds only because the header gradient sits outside the
+// scrollable and the viewport is held inside the safe area. `flutter_test` hands out a
+// view with no insets and no keyboard, which is a device with no status bar and
+// nothing to scroll — so those tests set both themselves, or they assert nothing.
 
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sportlynk/constants/colors.dart';
 import 'package:sportlynk/screens/auth/login_screen.dart';
 
 import '../screen_harness.dart';
@@ -64,6 +73,56 @@ Future<void> fillAndSubmit(
   await tester.pump();
   await settleData(tester);
   await tester.pump(const Duration(milliseconds: 400));
+}
+
+/// A status bar inset on the order of a Pixel 7's, and the view height
+/// [pumpScreen] already uses. Both are logical pixels.
+const double _statusBar = 48;
+const double _viewHeight = 915;
+
+/// A keyboard tall enough to force the form to scroll, which is the only condition
+/// under which the status bar can be reached at all.
+const double _keyboard = 420;
+
+/// The header gradient, matched on its colours rather than a key: it is the only
+/// gradient on the screen, and its first stop is the brand's darkest green.
+final Finder headerGradient = find.byWidgetPredicate(
+  (widget) {
+    if (widget is! Container) return false;
+    final decoration = widget.decoration;
+    if (decoration is! BoxDecoration) return false;
+    final gradient = decoration.gradient;
+    return gradient is LinearGradient &&
+        gradient.colors.first == AppColors.primaryDark;
+  },
+  description: 'the header gradient',
+);
+
+/// The page's scroll position, rather than one of the two a `TextFormField` keeps for
+/// its own contents: `EditableText` builds a `Scrollable` of its own, so the page's is
+/// taken as the first one under the `SingleChildScrollView`.
+ScrollPosition pageScroll(WidgetTester tester) => tester
+    .state<ScrollableState>(find
+        .descendant(
+          of: find.byType(SingleChildScrollView),
+          matching: find.byType(Scrollable),
+        )
+        .first)
+    .position;
+
+/// Pumps the screen onto a view that has a status bar and, optionally, a keyboard.
+///
+/// `FakeViewPadding` is in physical pixels and [pumpScreen] pins the device pixel
+/// ratio at 1, so these are logical pixels as well. The insets are set before the
+/// pump because [pumpScreen] registers `tester.view.reset()` as the teardown.
+Future<void> pumpWithInsets(
+  WidgetTester tester, {
+  double keyboard = 0,
+}) async {
+  tester.view.viewPadding = const FakeViewPadding(top: _statusBar);
+  tester.view.padding = const FakeViewPadding(top: _statusBar);
+  tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
+  await pumpScreen(tester, const LoginScreen());
 }
 
 void main() {
@@ -464,6 +523,72 @@ void main() {
 
       expect(find.text('Phone or Email'), findsOneWidget);
       expect(find.byType(TextFormField), findsNWidgets(2));
+    });
+  });
+
+  group('the system insets', () {
+    testWidgets('the form scrolls inside the status bar, not under it',
+        (tester) async {
+      // The whole of the bug. The viewport used to start at the top of the screen, so
+      // the only thing keeping the white card off the system icons was the gradient
+      // that scrolled away with it.
+      await pumpWithInsets(tester, keyboard: _keyboard);
+
+      expect(tester.getRect(find.byType(SingleChildScrollView)).top,
+          greaterThanOrEqualTo(_statusBar));
+    });
+
+    testWidgets('the header gradient stays over the status bar at full scroll',
+        (tester) async {
+      await pumpWithInsets(tester, keyboard: _keyboard);
+      final atRest = tester.getRect(headerGradient);
+      expect(atRest.top, 0);
+      expect(atRest.bottom, greaterThan(_statusBar));
+
+      final position = pageScroll(tester);
+      expect(position.maxScrollExtent, greaterThan(0),
+          reason: 'the keyboard has to make the form scrollable, or this proves nothing');
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pump();
+
+      expect(tester.getRect(headerGradient), atRest);
+    });
+
+    testWidgets('the keyboard shortens the form instead of covering it',
+        (tester) async {
+      // `resizeToAvoidBottomInset`: the viewport ends where the keyboard begins, which
+      // is what leaves the focused field somewhere a scroll can reach.
+      await pumpWithInsets(tester, keyboard: _keyboard);
+
+      expect(tester.getRect(find.byType(SingleChildScrollView)).bottom,
+          lessThanOrEqualTo(_viewHeight - _keyboard));
+    });
+
+    testWidgets('the submit button can be brought into view over the keyboard',
+        (tester) async {
+      await pumpWithInsets(tester, keyboard: _keyboard);
+
+      await tester.ensureVisible(find.byType(ElevatedButton));
+      await tester.pump();
+
+      final viewport = tester.getRect(find.byType(SingleChildScrollView));
+      final button = tester.getRect(find.byType(ElevatedButton));
+      expect(button.top, greaterThanOrEqualTo(viewport.top));
+      expect(button.bottom, lessThanOrEqualTo(viewport.bottom));
+    });
+
+    testWidgets('the system icons are asked for in light on both platforms',
+        (tester) async {
+      // One field per platform, and they are inverses: Android reads
+      // `statusBarIconBrightness` as the colour of the icons, iOS reads
+      // `statusBarBrightness` as the brightness of what is behind them. Changing one
+      // without the other leaves invisible icons on the other platform.
+      await pumpWithInsets(tester);
+
+      final region = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.byType(AnnotatedRegion<SystemUiOverlayStyle>));
+      expect(region.value.statusBarIconBrightness, Brightness.light);
+      expect(region.value.statusBarBrightness, Brightness.dark);
     });
   });
 }
