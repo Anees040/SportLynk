@@ -97,16 +97,18 @@ void main() {
       expect(find.text('No slots for this date'), findsOneWidget);
     });
 
-    testWidgets('a failed slot read reads as the empty day, not an error', (
+    testWidgets('a failed slot read with no cache shows an error with a retry', (
       tester,
     ) async {
-      // Defect, pinned: both direct HTTP loaders catch failures and replace the
-      // slot list with [], so the screen has no distinct error or retry state.
+      // Fixed: a failed load now shows an error-with-retry instead of "No slots for
+      // this date", which would wrongly invite the owner to regenerate slots that
+      // already exist but could not be read.
       api.fail(kSlots, 'boom');
       await pumpCalendar(tester, api);
       await settleCalendar(tester);
 
-      expect(find.text('No slots for this date'), findsOneWidget);
+      expect(find.text('No slots for this date'), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
     });
   });
 
