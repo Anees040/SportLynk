@@ -101,6 +101,10 @@ class _OwnerQrScannerScreenState extends State<OwnerQrScannerScreen> {
                 'Time',
                 '${(d['startTime']?.toString() ?? '').length >= 5 ? d['startTime'].toString().substring(0, 5) : ''} – ${(d['endTime']?.toString() ?? '').length >= 5 ? d['endTime'].toString().substring(0, 5) : ''}',
               ),
+              // A grouped booking checks in as one scan; say how many slots it
+              // settled so the owner knows the single tap covered the whole run.
+              if ((d['slotCount'] as num? ?? 1).toInt() > 1)
+                _detailRow('Slots', '${(d['slotCount'] as num).toInt()} slots'),
               const Divider(color: AppColors.border),
               _detailRow(
                 'Payment Received',
