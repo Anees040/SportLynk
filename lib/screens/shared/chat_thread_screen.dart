@@ -16,6 +16,7 @@ import '../../models/chat_channel.dart';
 import '../../models/chat_message.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_controller.dart';
+import '../../providers/notification_provider.dart';
 import '../../services/chat_service.dart';
 import '../../services/chat_audio_service.dart';
 import '../../utils/snackbar_util.dart';
@@ -353,6 +354,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
   /// three cases: not created yet, created before this feature shipped, or created
   /// and not this viewer's.
   Future<void> _bootstrap() async {
+    // Captured before the awaits below so there is no BuildContext use after one.
+    final notif = context.read<NotificationProvider>();
     if (_channelId == null || _channelId!.isEmpty) {
       final ref = widget.refId;
       if (ref != null && ref.isNotEmpty) {
@@ -388,6 +391,14 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     final c = ChatController(token: _token, channelId: _channelId!, myUserId: _myId)
       ..addListener(_onControllerChange);
     setState(() => _controller = c);
+
+    // Opening the room clears its rows from the bell. Reading the messages moves the
+    // chat's own read watermark, which is a separate fact from the notification feed;
+    // without this the "3 new messages" row stayed lit after the chat was read. It
+    // runs whatever path the user took to get here — a notification tap, the inbox or
+    // a deep link — and is fire-and-forget, since a failure only leaves the badge as
+    // it was and the feed reconciles on its next open.
+    notif.markChannelRead(_channelId!);
   }
 
   /// True where a canned reply is a help rather than a nuisance: a booking room
