@@ -245,6 +245,24 @@ class NotificationProvider extends ChangeNotifier {
     await refresh();
   }
 
+  /// Clear one chat's notifications when its thread is opened.
+  ///
+  /// Reading a chat moves its own message watermark, which is a different fact from
+  /// the bell: the chat_message/chat_mention rows for the channel stay unread and the
+  /// badge stays lit until this runs. The chat screen calls it on open, by whatever
+  /// path the user reached the room — a notification tap, the inbox, or a deep link —
+  /// so "I opened it and the count is still there" cannot happen. The server owns the
+  /// count, so this re-reads `/summary` rather than guessing; the feed is refreshed
+  /// too when it is loaded so its rows render read. A channel with no notifications
+  /// simply clears nothing, which makes it safe to call unconditionally.
+  Future<void> markChannelRead(String channelId) async {
+    final t = _token;
+    if (t == null || channelId.isEmpty) return;
+    await _svc.readChannel(t, channelId);
+    await refreshSummary();
+    if (_items.isNotEmpty) await refresh();
+  }
+
   /// Dismiss, not delete. The row leaves the feed and the badge; it stays on disk
   /// with `dismissed_at` set, which is what keeps "you were marked a no-show" from
   /// being erasable evidence and what lets support answer "I never got told".
