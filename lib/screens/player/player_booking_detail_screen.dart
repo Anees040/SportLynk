@@ -44,6 +44,12 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
   /// tap opens the thread with the id already in hand.
   String? _chatChannelId;
 
+  /// The sibling bookings when this one is part of a multi-slot group, newest
+  /// slot last. Null (or length 1) means a single booking, which renders exactly
+  /// as before. A group renders as one booking — all its slots, one QR, one
+  /// cancel — because that is how the player made it.
+  List<Map<String, dynamic>>? _group;
+
   @override
   void initState() {
     super.initState();
@@ -113,6 +119,10 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
           _loading = false;
         });
         context.read<ConnectivityProvider>().markReachable();
+        // If this booking was made as part of a multi-slot group, pull its
+        // siblings so the screen can show the whole run as one booking.
+        final gid = _booking?['booking_group_id']?.toString();
+        if (gid != null && gid.isNotEmpty && gid != 'null') _loadGroup(gid);
       } else {
         // The server answered and declined. Its message carries the real reason —
         // a genuine "not found", or a permission error — rather than the blanket
@@ -134,15 +144,73 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
     }
   }
 
+  /// Load the sibling bookings of a multi-slot group.
+  ///
+  /// A failed fetch leaves the single-booking view untouched — the booking the
+  /// screen already holds is still correct — so it is not surfaced as an error.
+  /// Only a genuine group (more than one row) switches the screen into group mode.
+  Future<void> _loadGroup(String groupId) async {
+    try {
+      final token = Provider.of<AuthProvider>(context, listen: false).token;
+      if (token == null || token.isEmpty) return;
+      final resp = await http.get(
+        Uri.parse('${ApiConstants.baseUrl}/bookings/group/$groupId'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      final data = jsonDecode(resp.body);
+      if (data['success'] == true && data['data'] is List) {
+        final rows = (data['data'] as List)
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        if (rows.length > 1) setState(() => _group = rows);
+      }
+    } catch (_) {
+      // Group view is an enhancement; the single booking still shows.
+    }
+  }
+
+  bool get _isGroup => (_group?.length ?? 0) > 1;
+  int get _groupCount => _group?.length ?? 1;
+  String? get _groupId => _booking?['booking_group_id']?.toString();
+
+  /// The escrow held across the whole group — the sum of the rows, which is what
+  /// the player paid, not any one slot's share.
+  double get _groupEscrowTotal => (_group ?? const <Map<String, dynamic>>[]).fold<double>(
+        0,
+        (s, b) => s + _parseNum(b['security_deposit'], _parseNum(b['total_amount'], 0)),
+      );
+
+  String _hhmm(dynamic t) {
+    final s = (t ?? '').toString();
+    return s.length >= 5 ? s.substring(0, 5) : s;
+  }
+
+  /// The group's playing window: the first slot's start to the last slot's end.
+  /// The server returns the rows in slot order, so first and last are the ends.
+  String get _groupTimeRange {
+    final g = _group;
+    if (g == null || g.isEmpty) return '';
+    return '${_hhmm(g.first['start_time'])} – ${_hhmm(g.last['end_time'])}';
+  }
+
   Future<void> _cancelBooking() async {
+    final group = _isGroup;
+    final count = _groupCount;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Cancel Booking?', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        title: Text(group ? 'Cancel all $count slots?' : 'Cancel Booking?',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
         content: Text(
-          'Cancel at least 24 hours before slot time for a full refund. Within 24 hours '
-          'you get 80% back and the 20% deposit goes to the venue.',
+          group
+              ? 'All $count slots in this booking will be cancelled together. Each slot '
+                  'is refunded by its own window — at least 24 hours before the slot is a '
+                  'full refund; within 24 hours the venue keeps that slot\'s 20% deposit.'
+              : 'Cancel at least 24 hours before slot time for a full refund. Within 24 hours '
+                  'you get 80% back and the 20% deposit goes to the venue.',
           style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
         ),
         actions: [
@@ -152,7 +220,8 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Cancel Booking', style: GoogleFonts.poppins(color: AppColors.error, fontWeight: FontWeight.w600)),
+            child: Text(group ? 'Cancel all' : 'Cancel Booking',
+                style: GoogleFonts.poppins(color: AppColors.error, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -161,10 +230,12 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
     if (!mounted) return;
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
-      final resp = await http.patch(
-        Uri.parse('${ApiConstants.baseUrl}/bookings/${widget.bookingId}/cancel'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
+      // One atomic request for the whole group, so the player can never be left with
+      // a half-cancelled booking; the single endpoint for a lone booking.
+      final uri = (group && _groupId != null)
+          ? Uri.parse('${ApiConstants.baseUrl}/bookings/group/$_groupId/cancel')
+          : Uri.parse('${ApiConstants.baseUrl}/bookings/${widget.bookingId}/cancel');
+      final resp = await http.patch(uri, headers: {'Authorization': 'Bearer $token'});
       final data = jsonDecode(resp.body);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -174,7 +245,18 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
         ));
         if (data['success'] == true) Navigator.pop(context);
       }
-    } catch (_) {}
+    } catch (_) {
+      // Previously an empty catch: a cancellation that failed told the player
+      // nothing, and the booking stayed where it was. The failure is surfaced.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Could not cancel. Check your connection and try again.',
+              style: GoogleFonts.poppins(color: Colors.white)),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
   }
 
   Future<void> _reportProblem() async {
@@ -356,8 +438,13 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                       decoration: BoxDecoration(color: AppColors.accentLight, borderRadius: BorderRadius.circular(20)),
                       child: Text(
-                        'Valid for your booking slot only',
+                        // One scan settles the whole group, so this QR covers every
+                        // slot in the booking — the owner scans it once at the gate.
+                        _isGroup
+                            ? 'One scan checks in all $_groupCount slots'
+                            : 'Valid for your booking slot only',
                         style: GoogleFonts.poppins(color: AppColors.accent, fontSize: 11),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   if (isCheckedIn)
@@ -424,13 +511,22 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
                 _detRow(
                   Icons.access_time_outlined,
                   'Time',
-                  '${(_booking!['start_time'] ?? '').toString().length >= 5 ? (_booking!['start_time']).toString().substring(0, 5) : '—'} – ${(_booking!['end_time'] ?? '').toString().length >= 5 ? (_booking!['end_time']).toString().substring(0, 5) : '—'}',
+                  // A group shows the whole run (first start to last end); a single
+                  // booking shows its own slot.
+                  _isGroup
+                      ? _groupTimeRange
+                      : '${(_booking!['start_time'] ?? '').toString().length >= 5 ? (_booking!['start_time']).toString().substring(0, 5) : '—'} – ${(_booking!['end_time'] ?? '').toString().length >= 5 ? (_booking!['end_time']).toString().substring(0, 5) : '—'}',
                 ),
+                if (_isGroup)
+                  _detRow(Icons.layers_outlined, 'Slots',
+                      '$_groupCount consecutive slots'),
                 const Divider(color: AppColors.border),
                 _detRow(
                   Icons.currency_rupee,
                   'Amount Held in Escrow',
-                  'PKR ${_parseNum(_booking!['security_deposit'], _parseNum(_booking!['total_amount'], 0)).toStringAsFixed(0)}',
+                  // The group total — what the player actually paid — not one slot's
+                  // share.
+                  'PKR ${(_isGroup ? _groupEscrowTotal : _parseNum(_booking!['security_deposit'], _parseNum(_booking!['total_amount'], 0))).toStringAsFixed(0)}',
                   valueColor: AppColors.accent,
                 ),
               ]),
