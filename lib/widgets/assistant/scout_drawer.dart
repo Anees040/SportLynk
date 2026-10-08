@@ -36,6 +36,14 @@ class _ScoutDrawerState extends State<ScoutDrawer> {
   String? _error;
   bool _busy = false;
 
+  /// Whether the drawer is showing archived chats instead of the active ones.
+  ///
+  /// Archiving a chat removes it from the active list — that is the whole point of
+  /// it — but the conversation is kept, not deleted. This view is where it stays
+  /// reachable, which is the difference between Archive and Delete: from here a chat
+  /// can be read again, resumed, or unarchived back into the active list.
+  bool _showArchived = false;
+
   @override
   void initState() {
     super.initState();
@@ -45,14 +53,27 @@ class _ScoutDrawerState extends State<ScoutDrawer> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      final list = await widget.controller.listThreads();
-      if (mounted) setState(() => _threads = list);
+      final list = await widget.controller.listThreads(includeArchived: _showArchived);
+      // The active view asks the server to exclude archived threads, so the list
+      // comes back ready. The archived view asks for everything and keeps only the
+      // archived ones — the same list, filtered to the half this view is about.
+      final shown = _showArchived ? list.where((t) => t.archived).toList() : list;
+      if (mounted) setState(() => _threads = shown);
     } on ScoutUnavailable catch (e) {
       // The server's own sentence, which says more than "something went wrong".
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not load your chats.');
     }
+  }
+
+  /// Switch between the active list and the archive, loading the one now shown.
+  void _toggleArchived() {
+    setState(() {
+      _showArchived = !_showArchived;
+      _threads = null; // draw the loader while the other list resolves
+    });
+    _load();
   }
 
   /// "3m", "5h", "2d" — enough to place a conversation, short enough for one line.
@@ -92,6 +113,14 @@ class _ScoutDrawerState extends State<ScoutDrawer> {
   Future<void> _archive(ScoutThread t) async {
     setState(() => _busy = true);
     await widget.controller.archiveThread(t.id);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    await _load();
+  }
+
+  Future<void> _unarchive(ScoutThread t) async {
+    setState(() => _busy = true);
+    await widget.controller.archiveThread(t.id, archived: false);
     if (!mounted) return;
     setState(() => _busy = false);
     await _load();
@@ -156,38 +185,58 @@ class _ScoutDrawerState extends State<ScoutDrawer> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Your chats',
-            style: TextStyle(
-              color: t.ink,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 12),
-          // The one affordance that must never be hunted for. Full width and at the
-          // top, because starting a new conversation is the most common reason the
-          // drawer is opened at all.
-          SizedBox(
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: _busy ? null : _newChat,
-              icon: const Icon(Icons.add_rounded, size: 19),
-              label: const Text('New chat'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: t.accent,
-                foregroundColor: t.canvas,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _showArchived ? 'Archived chats' : 'Your chats',
+                  style: TextStyle(
+                    color: t.ink,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                textStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              ),
+              // The single switch between the active list and the archive. It is the
+              // thing that was missing: Archive sent chats somewhere with no way back.
+              TextButton.icon(
+                onPressed: _busy ? null : _toggleArchived,
+                icon: Icon(
+                  _showArchived ? Icons.inbox_rounded : Icons.archive_outlined,
+                  size: 17,
+                ),
+                label: Text(_showArchived ? 'Active' : 'Archived'),
+                style: TextButton.styleFrom(foregroundColor: t.inkSoft),
+              ),
+            ],
+          ),
+          // Starting a new chat belongs to the active list, not the archive.
+          if (!_showArchived) ...[
+            const SizedBox(height: 12),
+            // The one affordance that must never be hunted for. Full width and at the
+            // top, because starting a new conversation is the most common reason the
+            // drawer is opened at all.
+            SizedBox(
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: _busy ? null : _newChat,
+                icon: const Icon(Icons.add_rounded, size: 19),
+                label: const Text('New chat'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: t.accent,
+                  foregroundColor: t.canvas,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -239,7 +288,9 @@ class _ScoutDrawerState extends State<ScoutDrawer> {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            'No chats yet. Whatever you ask first becomes one.',
+            _showArchived
+                ? 'No archived chats. Archiving a chat tucks it away here without deleting it.'
+                : 'No chats yet. Whatever you ask first becomes one.',
             textAlign: TextAlign.center,
             style: TextStyle(color: t.inkFaint, fontSize: 12.5, height: 1.4),
           ),
@@ -302,13 +353,17 @@ class _ScoutDrawerState extends State<ScoutDrawer> {
           if (v == 'resume') _resume(thread);
           if (v == 'rename') await _rename(thread);
           if (v == 'archive') await _archive(thread);
+          if (v == 'unarchive') await _unarchive(thread);
           if (v == 'delete') await _delete(thread);
         },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'resume', child: Text('Resume')),
-          PopupMenuItem(value: 'rename', child: Text('Rename')),
-          PopupMenuItem(value: 'archive', child: Text('Archive')),
-          PopupMenuItem(value: 'delete', child: Text('Delete')),
+        itemBuilder: (_) => [
+          const PopupMenuItem(value: 'resume', child: Text('Resume')),
+          const PopupMenuItem(value: 'rename', child: Text('Rename')),
+          if (thread.archived)
+            const PopupMenuItem(value: 'unarchive', child: Text('Unarchive'))
+          else
+            const PopupMenuItem(value: 'archive', child: Text('Archive')),
+          const PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
       ),
       onTap: _busy ? null : () => _resume(thread),
