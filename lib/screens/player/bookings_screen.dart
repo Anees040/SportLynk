@@ -210,8 +210,8 @@ class BookingsScreenState extends State<BookingsScreen>
       }
 
       out.add({
-        // The first member carries the card: its id is what a tap opens, and the
-        // detail screen is per booking because the QR code is.
+        // The first member carries the card: its id is what a tap opens, and its
+        // `booking_group_id` is what lets the detail screen show the whole run.
         ...members.first,
         'total_amount': members.fold<double>(0, (s, m) => s + asNum(m['total_amount'])),
         '_groupCount': members.length,
@@ -348,6 +348,47 @@ class BookingsScreenState extends State<BookingsScreen>
     // refused (nothing cancelled) leaves the list exactly as it is, and a refetch
     // there would read as the action having worked.
     if (cancelled > 0) _load();
+  }
+
+  /// Cancel a whole multi-slot group in one atomic request.
+  ///
+  /// The group was booked as one action and is cancelled as one: the server
+  /// cancels every still-cancellable slot in a single transaction and refunds each
+  /// by its own window, so the player is never left with a half-cancelled booking
+  /// to finish slot by slot — the exact complaint the per-slot loop produced. A
+  /// single booking still goes through [_cancel].
+  Future<void> _cancelGroup(String? groupId, int count) async {
+    if (!await OfflineActionNotice.guard(context, 'Cancelling a booking')) return;
+    if (!mounted || groupId == null || groupId.isEmpty) return;
+    final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text('Cancel all $count slots?',
+        style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+      content: Text(
+        'All $count slots in this booking will be cancelled together. Each one is '
+        'refunded by its own window — at least 24 hours before the slot is a full '
+        'refund; inside that window the venue keeps that slot\'s 20% deposit.',
+        style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false),
+          child: Text('Keep', style: GoogleFonts.poppins(color: AppColors.textSecondary))),
+        TextButton(onPressed: () => Navigator.pop(context, true),
+          child: Text('Cancel all',
+            style: GoogleFonts.poppins(color: AppColors.error, fontWeight: FontWeight.w600))),
+      ],
+    ));
+    if (ok != true || !mounted) return;
+    final res = await ApiClient().patch('/bookings/group/$groupId/cancel', const {});
+    if (!mounted) return;
+    if (res['success'] == true) {
+      final data = res['data'];
+      final refunded = data is Map ? asNum(data['refund']) : 0.0;
+      SnackbarUtil.showSuccess(context,
+        '$count slots cancelled. PKR ${refunded.toStringAsFixed(0)} refunded to your wallet.');
+      _load();
+    } else {
+      SnackbarUtil.showError(context, res['message'] as String? ?? 'Could not cancel the booking.');
+    }
   }
 
   @override
@@ -513,12 +554,12 @@ class BookingsScreenState extends State<BookingsScreen>
               'PKR ${asNum(b['total_amount']).toStringAsFixed(0)}')),
           ]),
           // Said once, because it is the one thing about a grouped card a player
-          // would not otherwise expect: the slots are separate bookings underneath
-          // and each carries its own QR code.
+          // would not otherwise expect: the slots are separate bookings underneath,
+          // but they check in as one — a single QR opens and settles the whole run.
           if (isGroup) ...[
             const SizedBox(height: 8),
             _infoItem(Icons.qr_code_2_outlined,
-              '$groupCount QR codes — one per slot'),
+              'One QR — checks in all $groupCount slots'),
           ],
           if (upcoming && status == 'confirmed') ...[
             const SizedBox(height: 12),
@@ -526,7 +567,17 @@ class BookingsScreenState extends State<BookingsScreen>
             const SizedBox(height: 12),
             Row(children: [
               Expanded(child: OutlinedButton(
-                onPressed: () => _cancel(ids),
+                // A group cancels atomically, in one request, so the player never
+                // has to clear slot after slot; a single booking keeps the plain
+                // path. Both route through the same refund rules.
+                onPressed: () {
+                  final gid = b['booking_group_id']?.toString();
+                  if (isGroup && gid != null && gid.isNotEmpty) {
+                    _cancelGroup(gid, groupCount);
+                  } else {
+                    _cancel(ids);
+                  }
+                },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.error,
                   side: const BorderSide(color: AppColors.error),
