@@ -96,6 +96,98 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (mounted) p.refreshSummary();
   }
 
+  /// The filter picker.
+  ///
+  /// The bell's filter used to be a single icon that silently flipped "unread only"
+  /// on and off, with nothing to see and nothing to choose -- which read as a filter
+  /// that does nothing. This opens the actual set of filters: read state and every
+  /// category, each with its count, so there is always something to select. The
+  /// category chips below remain as the quick path once the user knows what they want.
+  Future<void> _openFilterSheet(NotificationProvider p) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.cardBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        Widget categoryTile(String key, String label) {
+          final selected = p.category == key;
+          final count = p.byCategory[key] ?? 0;
+          return ListTile(
+            dense: true,
+            selected: selected,
+            selectedTileColor: AppColors.accentLight.withValues(alpha: 0.4),
+            leading: Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              size: 20,
+              color: selected ? AppColors.accent : AppColors.textSecondary,
+            ),
+            title: Text(label, style: GoogleFonts.poppins(fontSize: 13.5)),
+            trailing: count > 0
+                ? Text('$count',
+                    style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600))
+                : null,
+            // setCategory treats re-selecting the active one as "clear", so only call
+            // it when the selection actually changes; selecting All clears the filter.
+            onTap: () {
+              if (key.isEmpty) {
+                p.setCategory(null);
+              } else if (!selected) {
+                p.setCategory(key);
+              }
+              Navigator.pop(sheetCtx);
+            },
+          );
+        }
+
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Text('Filter notifications',
+                      style: GoogleFonts.poppins(
+                          fontSize: 15, fontWeight: FontWeight.w700)),
+                ),
+                SwitchListTile(
+                  value: p.unreadOnly,
+                  activeThumbColor: AppColors.accent,
+                  dense: true,
+                  title: Text('Unread only',
+                      style: GoogleFonts.poppins(fontSize: 13.5)),
+                  onChanged: (v) {
+                    p.setUnreadOnly(v);
+                    Navigator.pop(sheetCtx);
+                  },
+                ),
+                const Divider(height: 1, color: AppColors.divider),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+                  child: Text('CATEGORY',
+                      style: GoogleFonts.poppins(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: AppColors.textSecondary)),
+                ),
+                categoryTile('', 'All categories'),
+                for (final c in _chips) categoryTile(c[0], c[1]),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _confirmClearRead() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -123,9 +215,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         title: const Text('Notifications'),
         actions: [
           IconButton(
-            tooltip: p.unreadOnly ? 'Show all' : 'Unread only',
-            onPressed: () => p.setUnreadOnly(!p.unreadOnly),
-            icon: Icon(p.unreadOnly ? Icons.filter_alt : Icons.filter_alt_outlined),
+            tooltip: 'Filter',
+            onPressed: () => _openFilterSheet(p),
+            icon: Icon(
+              (p.unreadOnly || p.category != null)
+                  ? Icons.filter_alt
+                  : Icons.filter_alt_outlined,
+            ),
           ),
           IconButton(
             tooltip: 'Mark all read',
