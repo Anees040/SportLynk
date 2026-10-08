@@ -214,6 +214,15 @@ Future<void> openMenu(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 400));
 }
 
+/// Opens the filter picker. The filter control no longer toggles unread-only on a
+/// blind tap — it opens the sheet of selectable options (status + category), which
+/// is the whole point of the change this test file was updated for.
+Future<void> openFilter(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Filter'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+}
+
 void main() {
   group('on the first frame', () {
     testWidgets('attaches the session before it fetches', (tester) async {
@@ -387,39 +396,93 @@ void main() {
     });
   });
 
-  group('the unread filter', () {
-    testWidgets('offers to hide the read rows', (tester) async {
+  group('the filter picker', () {
+    testWidgets('the filter control opens a sheet of options', (tester) async {
       await _pumpFeed(tester, _Feed());
 
-      expect(find.byTooltip('Unread only'), findsOneWidget);
-      expect(find.byIcon(Icons.filter_alt_outlined), findsOneWidget);
+      expect(find.byTooltip('Filter'), findsOneWidget);
+      await openFilter(tester);
+
+      expect(find.text('Filter notifications'), findsOneWidget);
+      expect(find.text('Unread only'), findsOneWidget);
+      expect(find.text('All categories'), findsOneWidget);
     });
 
-    testWidgets('offers to show them again once it is on', (tester) async {
-      await _pumpFeed(tester, _Feed(unreadFilter: true));
+    // Every category is offered whether or not it has rows, so there is always
+    // something to select — the "filter opens but shows nothing" complaint.
+    testWidgets('lists a selectable option for every category', (tester) async {
+      await _pumpFeed(tester, _Feed());
 
-      expect(find.byTooltip('Show all'), findsOneWidget);
-      expect(find.byIcon(Icons.filter_alt), findsOneWidget);
+      await openFilter(tester);
+
+      for (final label in const [
+        'Bookings', 'Matches', 'Tournaments', 'Chat',
+        'Teams', 'Wallet', 'Venues', 'Reviews', 'System',
+      ]) {
+        expect(find.text(label), findsOneWidget, reason: '$label should be offered');
+      }
     });
 
-    testWidgets('a tap turns it on', (tester) async {
+    testWidgets('selecting a category filters by it', (tester) async {
       final feed = _Feed();
       await _pumpFeed(tester, feed);
 
-      await tester.tap(find.byTooltip('Unread only'));
+      await openFilter(tester);
+      await tester.tap(find.text('Chat'));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(feed.calls, contains('category:chat'));
+    });
+
+    testWidgets('selecting All categories clears the filter', (tester) async {
+      final feed = _Feed(selected: 'wallet');
+      await _pumpFeed(tester, feed);
+
+      await openFilter(tester);
+      await tester.tap(find.text('All categories'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(feed.calls, contains('category:null'));
+    });
+
+    testWidgets('flipping unread-only turns it on', (tester) async {
+      final feed = _Feed();
+      await _pumpFeed(tester, feed);
+
+      await openFilter(tester);
+      await tester.tap(find.byType(SwitchListTile));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
       expect(feed.calls, contains('unreadOnly:true'));
     });
 
-    testWidgets('a tap turns it back off', (tester) async {
+    testWidgets('flipping it back turns it off', (tester) async {
       final feed = _Feed(unreadFilter: true);
       await _pumpFeed(tester, feed);
 
-      await tester.tap(find.byTooltip('Show all'));
+      await openFilter(tester);
+      await tester.tap(find.byType(SwitchListTile));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
       expect(feed.calls, contains('unreadOnly:false'));
+    });
+
+    // Re-selecting the active category is not a no-op the user can see: the tile
+    // stays open-selected, so the call is only made when the selection changes.
+    testWidgets('re-selecting the active category sends nothing', (tester) async {
+      final feed = _Feed(selected: 'chat');
+      await _pumpFeed(tester, feed);
+
+      await openFilter(tester);
+      await tester.tap(find.text('Chat'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(feed.calls, isNot(contains('category:chat')));
     });
   });
 
@@ -840,7 +903,7 @@ void main() {
       await _pumpFeed(tester, _Feed(feed: [notif()]), textScale: 2.0);
 
       expect(find.text('Booking confirmed'), findsOneWidget);
-      expect(find.byTooltip('Unread only'), findsOneWidget);
+      expect(find.byTooltip('Filter'), findsOneWidget);
     });
   });
 }
