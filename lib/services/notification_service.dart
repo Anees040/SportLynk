@@ -147,6 +147,12 @@ class NotificationService {
   Future<Map<String, dynamic>> markUnread(String token, String id) =>
       _api.patch(ApiConstants.notificationUnread(id), const {}, token: token);
 
+  /// Clear one chat's notifications when its thread is opened. The server marks
+  /// every chat_message/chat_mention row for the channel read and returns the fresh
+  /// summary, so the badge settles in one trip. Scoped to the caller server-side.
+  Future<Map<String, dynamic>> readChannel(String token, String channelId) =>
+      _api.patch(ApiConstants.notificationChannelRead(channelId), const {}, token: token);
+
   /// `category` null = everything. The server scopes both forms to the caller, so
   /// there is no id to get wrong here.
   Future<Map<String, dynamic>> readAll(String token, {String? category}) =>
