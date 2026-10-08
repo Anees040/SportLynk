@@ -140,6 +140,10 @@ class ApiConstants {
   static String notificationRead(String id) => '/notifications/$id/read';
   static String notificationUnread(String id) => '/notifications/$id/unread';
   static String notification(String id) => '/notifications/$id';
+  // Clears one chat's notifications when its thread is opened — the bell half of
+  // marking a chat read (the message watermark is a separate fact).
+  static String notificationChannelRead(String channelId) =>
+      '/notifications/channel/$channelId/read';
 
   // Matches
   /// The match list is `?team_id=` (snake) because it mirrors the SQL column,
