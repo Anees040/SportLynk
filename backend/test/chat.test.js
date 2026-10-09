@@ -237,6 +237,46 @@ test('19 — {venue} and {price} are substituted when the booking supplies them'
   assert.ok(fill("That's PKR {price} for the hour.").includes('2500'));
 });
 
+// 19b–19e — the conversational layer (FR8.10): a courtesy or a direct question has
+// one natural answer the 23-label topic cannot choose, so a precise pattern layer
+// sits over the table. The point of it is that "Assalamualaikum" is no longer
+// answered with "Assalam-o-Alaikum!" — a greeting echoed back — but with its reply.
+
+test('19b — a salam is answered with its reply, in every room', () => {
+  for (const audience of ['owner', 'player', 'captain']) {
+    const r = qr.conversationalReply('Assalamualaikum', audience);
+    assert.ok(Array.isArray(r) && r.length === 3, `${audience} salam → three replies`);
+    assert.match(r[0], /alaikum/i, `${audience} salam leads with its reply, not another greeting`);
+  }
+  for (const s of ['assalam o alaikum', 'salam', 'salaam', 'aoa', 'slm']) {
+    assert.ok(qr.conversationalReply(s, 'captain'), `"${s}" is recognised as a salam`);
+  }
+  assert.equal(qr.conversationalReply('book the ground please', 'captain'), null,
+    'an ordinary message is not mistaken for a salam');
+});
+
+test('19c — a team-mate yes/no question gets yes / maybe / no, a count question does not', () => {
+  const r = qr.conversationalReply('Are you coming to the match?', 'captain');
+  assert.ok(Array.isArray(r) && r.length === 3);
+  assert.match(r[0], /yes/i);
+  // Looks similar, wants a number not a yes — must fall through to the intent table.
+  assert.equal(qr.conversationalReply('kitne log aa rahe hain?', 'captain'), null);
+});
+
+test('19d — "what time are we playing?" gets a time answer', () => {
+  assert.ok(qr.conversationalReply('What time are we playing?', 'captain'));
+  assert.ok(qr.conversationalReply('kitne baje khelenge?', 'captain'));
+});
+
+test('19e — coordination turns stay out of a booking room', () => {
+  // In a booking room "is it free?" is an availability question, not "can you play?"
+  // — the captain-only gate keeps the yes/no layer from hijacking it.
+  assert.equal(qr.conversationalReply('is the slot free?', 'owner'), null);
+  assert.equal(qr.conversationalReply('are you coming?', 'player'), null);
+  // The salam courtesy still applies everywhere.
+  assert.ok(qr.conversationalReply('salam', 'owner'));
+});
+
 // 4 — the inbox subtitle: a wall clock that must never be re-zoned
 //
 // `bookings.slot_date` and `start_time` are PKT wall clock, not instants. The same
