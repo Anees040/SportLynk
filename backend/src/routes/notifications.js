@@ -250,6 +250,27 @@ router.get('/types', async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
+/**
+ * PATCH /api/notifications/channel/:channelId/read — clear one chat's notifications.
+ *
+ * Opening a chat marks its MESSAGES read (chatReceipts), which is a different fact
+ * from the notification feed. Until this existed nothing connected the two, so a
+ * player who read a chat still saw its "3 new messages" row lit in the bell, and the
+ * count a tap was meant to clear only cleared when the row itself was opened from the
+ * feed. This marks every chat_message/chat_mention row pointing at the channel read
+ * (both carry entity_type='channel', entity_id=<channelId>), scoped to the caller,
+ * and returns the fresh summary so the badge settles in one trip.
+ *
+ * A literal path, declared before /:id for the reason the file header gives.
+ */
+router.patch('/channel/:channelId/read', async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.channelId)) return fail(res, 404, 'Chat not found');
+    const marked = await feed.markReadByChannel(pool, req.user.id, req.params.channelId);
+    return ok(res, { marked, ...(await feed.summary(pool, req.user.id)) });
+  } catch (e) { return next(e); }
+});
+
 // One row  —  declared last, after every literal path above
 
 /** PATCH /api/notifications/:id/read — idempotent; a second call is a no-op, not an error. */
