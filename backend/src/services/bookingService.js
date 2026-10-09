@@ -617,6 +617,109 @@ async function cancelBooking(client, { userId, bookingId }) {
   return result;
 }
 
+/**
+ * Cancel every still-cancellable slot in a multi-slot group, as one transaction.
+ *
+ * A grouped booking is N rows sharing a booking_group_id (migration 035). The
+ * player booked them with one action and cancels them with one: this finds the
+ * group's cancellable members and runs the SAME per-row cancelBooking over each, so
+ * every slot is still refunded by its own 24-hour window — the only correct split,
+ * since each hour sits a different distance from its own start — while the player
+ * performs a single action instead of one per slot. Reusing cancelBooking means
+ * there is no second copy of the refund math (FR8.15); this function only decides
+ * the set and sums what moved.
+ *
+ * All-or-nothing: a refusal on any member aborts the whole group (the *Tx wrapper
+ * rolls back), because a half-cancelled group is exactly the ambiguous state the
+ * grouping exists to avoid. Members already cancelled, checked in or past are not
+ * in the set, so cancelling a group with one slot already gone cancels the rest.
+ *
+ * Caller must already be inside a transaction.
+ */
+async function cancelBookingGroup(client, { userId, groupId }) {
+  if (!groupId) return fail(400, 'missing_args', 'groupId required');
+  if (!(await hasGroupColumns(client))) {
+    return fail(409, 'migration_pending',
+      'Multi-slot bookings are not available on this database.');
+  }
+
+  // The cancellable members, oldest slot first — the order cancelBooking takes its
+  // own row lock in — locked here too so a concurrent cancel or check-in of the same
+  // group cannot process a row twice. Scoped to the caller.
+  const { rows } = await client.query(
+    `SELECT b.id FROM bookings b
+      WHERE b.booking_group_id = $1 AND b.player_id = $2
+        AND b.status IN ('pending','confirmed')
+      ORDER BY b.slot_date, b.start_time
+      FOR UPDATE OF b`,
+    [groupId, userId],
+  );
+  if (!rows.length) {
+    return fail(404, 'nothing_to_cancel', 'This booking has no slots left to cancel.');
+  }
+
+  let refund = 0;
+  let penalty = 0;
+  let escrow = 0;
+  let late = false;
+  let venueName = null;
+  const pills = [];
+  for (const r of rows) {
+    const one = await cancelBooking(client, { userId, bookingId: r.id });
+    // The first refusal is the group's refusal; its code and message carry out
+    // unchanged so the player is told which rule stopped it.
+    if (!one.ok) return one;
+    refund += asNum(one.data.refund);
+    penalty += asNum(one.data.penalty);
+    escrow += asNum(one.data.escrow);
+    late = late || one.data.late === true;
+    venueName = venueName || one.data.venueName;
+    if (one.chatPill) pills.push(one.chatPill);
+  }
+
+  refund = round2(refund);
+  penalty = round2(penalty);
+  escrow = round2(escrow);
+
+  const result = done(200, {
+    groupId,
+    count: rows.length,
+    venueName,
+    refund,
+    penalty,
+    escrow,
+    late,
+  }, penalty > 0
+    ? `${rows.length} slots cancelled — PKR ${refund} refunded, PKR ${penalty} forfeited to the venue.`
+    : `${rows.length} slots cancelled — PKR ${refund} refunded to your wallet.`);
+  // An array of pills, one per booking room that had one. runInTx emits them after
+  // commit, the same discipline the single cancel's chatPill follows.
+  result.chatPills = pills;
+  return result;
+}
+
+/**
+ * Every booking in a group, oldest slot first — the detail screen's group view.
+ *
+ * Scoped to the caller, so a group id that is not theirs (or does not exist, or
+ * predates migration 035) returns [] and the screen falls back to the single
+ * booking it already holds rather than erroring.
+ */
+async function listGroup(client, { userId, groupId }) {
+  const runner = client || pool;
+  if (!groupId || !(await hasGroupColumns(runner))) return [];
+  const { rows } = await runner.query(
+    `SELECT b.*, v.name as venue_name, v.city, v.address,
+            v.latitude, v.longitude,
+            COALESCE(v.venue_photos[1],null) as venue_photo
+       FROM bookings b JOIN venues v ON v.id = b.venue_id
+      WHERE b.booking_group_id = $1 AND b.player_id = $2
+      ORDER BY b.slot_date, b.start_time`,
+    [groupId, userId],
+  );
+  return rows.map((r) => ({ ...r, slot_date: localDateStr(r.slot_date) }));
+}
+
 // Reads — shared so Scout's answers and the REST list can never disagree
 
 /**
@@ -695,6 +798,13 @@ async function runInTx(fn) {
     if (result && result.ok && result.chatPill) {
       await chat.emitPills(pool, result.chatPill);
     }
+    // A group cancellation returns an array of pills — one per booking room that
+    // had one — emitted the same way and only on the commit branch.
+    if (result && result.ok && Array.isArray(result.chatPills)) {
+      for (const pill of result.chatPills) {
+        await chat.emitPills(pool, pill);
+      }
+    }
     return result;
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch { /* connection already gone */ }
@@ -707,6 +817,7 @@ async function runInTx(fn) {
 const createBookingTx = (input) => runInTx((c) => createBooking(c, input));
 const createBookingGroupTx = (input) => runInTx((c) => createBookingGroup(c, input));
 const cancelBookingTx = (input) => runInTx((c) => cancelBooking(c, input));
+const cancelBookingGroupTx = (input) => runInTx((c) => cancelBookingGroup(c, input));
 
 // REJECT (owner-side, and the admin suspension cascade)
 
@@ -804,6 +915,9 @@ module.exports = {
   previewCancellation,
   cancelBooking,
   cancelBookingTx,
+  cancelBookingGroup,
+  cancelBookingGroupTx,
+  listGroup,
   rejectBooking,
   listCancellable,
   listMyBookings,
