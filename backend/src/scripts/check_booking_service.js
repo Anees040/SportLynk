@@ -24,13 +24,19 @@
  *   double-book           second attempt on a booked slot is refused (slot_taken)
  *   double-cancel         second cancel is refused (not_cancellable)
  *   broke player          a balance below the slot price is refused, wallet intact
+ *   group book            N slots share one group id, escrows sum to the total paid
+ *   group cancel          one call cancels every slot; each refunds by its own
+ *                         window; all slots free; ledger sums to the per-slot refunds
  */
 const pool = require('../db/pool');
 const {
   createBooking,
+  createBookingGroup,
   cancelBooking,
+  cancelBookingGroup,
   previewCancellation,
   listCancellable,
+  listGroup,
 } = require('../services/bookingService');
 const { POLICY, round2, asNum, depositFor } = require('../utils/escrow');
 
@@ -284,6 +290,149 @@ async function brokeCheck(client) {
     `an unknown slot id is refused with 404 slot_not_found — got ${ghost.status}/${ghost.code}`);
 }
 
+/**
+ * Multi-slot groups: book a consecutive run together, then cancel it as one.
+ *
+ * The player books N hours with one action, so the cancel must be one action too —
+ * and it must still refund each hour by its OWN window (that is what keeps the
+ * grouped design money-safe). This proves both: the group is one transaction, and
+ * cancelling the group leaves every slot free and the ledger equal to the sum of
+ * the per-slot refunds. Skipped, not failed, on a database without migration 035.
+ */
+async function groupCycle(client) {
+  console.log('');
+  console.log('── MULTI-SLOT GROUP (book together, cancel together) ──');
+
+  const { rows: hasCols } = await client.query(
+    `SELECT count(*)::int AS c FROM information_schema.columns
+      WHERE table_name = 'bookings'
+        AND column_name IN ('booking_group_id', 'discount_percent')`,
+  );
+  if (hasCols[0].c !== 2) {
+    console.log('   ~ skipped: migration 035 is not applied — the grouping columns are absent.');
+    return;
+  }
+
+  // A pair of back-to-back free slots at one venue, both far enough out that the
+  // cancellation is an EARLY one, so the expected refund is the full escrow.
+  const { rows: pair } = await client.query(
+    `SELECT a.id AS a_id, a.venue_id, a.price AS a_price, a.slot_date, a.start_time,
+            a.end_time AS a_end, b.id AS b_id, b.price AS b_price,
+            b.start_time AS b_start, b.end_time AS b_end,
+            v.name AS venue_name, v.owner_id
+       FROM slots a
+       JOIN slots b ON b.venue_id = a.venue_id
+                   AND b.slot_date = a.slot_date
+                   AND b.start_time = a.end_time
+                   AND b.status = 'available'
+       JOIN venues v ON v.id = a.venue_id
+      WHERE a.status = 'available'
+        AND (a.locked_until IS NULL OR a.locked_until < NOW())
+        AND (b.locked_until IS NULL OR b.locked_until < NOW())
+        AND a.price > 0 AND b.price > 0
+        AND (a.slot_date + a.start_time) > (NOW() + interval '5 hours'
+              + interval '${POLICY.CANCELLATION_WINDOW_HOURS} hours')
+      ORDER BY a.slot_date ASC, a.start_time ASC
+      LIMIT 1`,
+  );
+  if (!pair.length) {
+    console.log('   ~ skipped: no two consecutive free future slots exist to group.');
+    return;
+  }
+  const s = pair[0];
+  const listTotal = round2(asNum(s.a_price) + asNum(s.b_price));
+  const player = await findPlayer(client, listTotal);
+  if (!player) {
+    console.log(`   ~ skipped: no player wallet holds PKR ${listTotal}.`);
+    return;
+  }
+
+  const before = await wallet(client, player.id);
+  const ownerBefore = await wallet(client, s.owner_id);
+  const dstr = s.slot_date instanceof Date
+    ? s.slot_date.toLocaleDateString('en-CA') : String(s.slot_date).slice(0, 10);
+  console.log(`   two slots ${dstr} ${String(s.start_time).slice(0, 5)}–${String(s.b_end).slice(0, 5)} `
+    + `at ${s.venue_name}, PKR ${listTotal} before any discount`);
+
+  const booked = await createBookingGroup(client, {
+    userId: player.id,
+    venueId: s.venue_id,
+    slotIds: [s.a_id, s.b_id],
+    notes: '__check_booking_service_group',
+  });
+  check(booked.ok && booked.status === 201, 'createBookingGroup returns 201', JSON.stringify(booked));
+  if (!booked.ok) return;
+
+  const groupId = booked.data.groupId;
+  const escrow = round2(asNum(booked.data.total));
+  check(typeof groupId === 'string' && groupId.length === 36,
+    `the group carries a booking_group_id (${groupId})`);
+  check(booked.data.count === 2, `two bookings were created — got ${booked.data.count}`);
+
+  const { rows: members } = await client.query(
+    `SELECT id, status, booking_group_id, security_deposit, total_amount
+       FROM bookings WHERE booking_group_id = $1`, [groupId]);
+  check(members.length === 2, `both rows share that group id — got ${members.length}`);
+  check(members.every((m) => m.status === 'pending'),
+    'every slot opens its own booking as pending');
+  check(near(
+    members.reduce((sum, m) => sum + asNum(m.security_deposit), 0), escrow,
+  ), `the rows' escrows sum to the group total (${escrow})`);
+  check(new Set(members.map((m) => m.id)).size === members.length,
+    'each slot is a distinct booking row with its own QR code underneath');
+
+  const afterBook = await wallet(client, player.id);
+  check(near(afterBook.balance, before.balance - escrow),
+    `the player paid the group total in one movement `
+    + `(${before.balance} → ${afterBook.balance}, -${escrow})`);
+  check(near(afterBook.frozen, before.frozen + escrow),
+    `and exactly the group total is frozen (${before.frozen} → ${afterBook.frozen})`);
+
+  const group = await listGroup(client, { userId: player.id, groupId });
+  check(group.length === 2, `listGroup returns the whole run — got ${group.length}`);
+  check(group.length === 2
+    && String(group[0].start_time) <= String(group[1].start_time),
+    'and returns it in slot order, first hour first');
+
+  // The whole point of the change: ONE call cancels every slot in the booking.
+  const cancelled = await cancelBookingGroup(client, { userId: player.id, groupId });
+  check(cancelled.ok && cancelled.status === 200,
+    'cancelBookingGroup cancels the whole booking in one call', JSON.stringify(cancelled));
+  if (!cancelled.ok) return;
+  check(cancelled.data.count === 2,
+    `and reports two slots cancelled — got ${cancelled.data.count}`);
+  check(near(cancelled.data.escrow, escrow),
+    `the refund is summed across the slots (${cancelled.data.escrow} vs ${escrow})`);
+  check(near(cancelled.data.refund, escrow) && near(cancelled.data.penalty, 0),
+    `an early group cancel is a full refund (refund ${cancelled.data.refund}, penalty ${cancelled.data.penalty})`);
+
+  const { rows: after } = await client.query(
+    `SELECT status FROM bookings WHERE booking_group_id = $1`, [groupId]);
+  check(after.length === 2 && after.every((r) => r.status === 'cancelled'),
+    `every row in the group is cancelled — got ${after.map((r) => r.status).join(',')}`);
+
+  const { rows: slotsFree } = await client.query(
+    `SELECT id, status FROM slots WHERE id = ANY($1::uuid[])`, [[s.a_id, s.b_id]]);
+  check(slotsFree.every((r) => r.status === 'available'),
+    `both slots are back on sale — got ${slotsFree.map((r) => r.status).join(',')}`);
+
+  const afterCancel = await wallet(client, player.id);
+  const ownerAfter = await wallet(client, s.owner_id);
+  check(near(afterCancel.balance, before.balance),
+    `the player is back to the opening balance over the cycle `
+    + `(${before.balance} → ${afterCancel.balance})`);
+  check(near(afterCancel.frozen, before.frozen),
+    `and nothing is left frozen (${before.frozen} → ${afterCancel.frozen})`);
+  check(near(ownerAfter.balance, ownerBefore.balance),
+    'an early group cancel credits the owner nothing');
+
+  // A second cancel has nothing left to cancel — the group is already settled.
+  const twice = await cancelBookingGroup(client, { userId: player.id, groupId });
+  check(!twice.ok && twice.status === 404 && twice.code === 'nothing_to_cancel',
+    `cancelling a settled group is refused with 404 nothing_to_cancel — `
+    + `got ${twice.status}/${twice.code}`);
+}
+
 async function main() {
   console.log('══ bookingService.js — live escrow verification (always rolled back) ══');
   console.log(`   policy: deposit ${POLICY.DEPOSIT_PERCENT}%, `
@@ -295,6 +444,7 @@ async function main() {
     await cycle(client, { late: false });
     await cycle(client, { late: true });
     await brokeCheck(client);
+    await groupCycle(client);
   } catch (err) {
     console.error('');
     console.error('✗ threw:', err.message);
