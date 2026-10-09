@@ -1097,6 +1097,12 @@ router.patch("/slots/:id/unblock", async (req, res, next) => {
 });
 
 // POST /api/owner/scan-qr — check in player: escrow (full price) player frozen → owner balance
+//
+// Multi-slot groups (migration 035) check in as one scan. The player books N
+// consecutive slots as one booking, so the owner scans one QR and every slot in
+// that group is settled together — each row still moves its own escrow and pays its
+// own commission, so the money is identical to scanning each slot, the owner just
+// scans once. A single booking (no group) behaves exactly as before.
 router.post("/scan-qr", async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -1110,19 +1116,22 @@ router.post("/scan-qr", async (req, res, next) => {
 
     await client.query("BEGIN");
 
-    const bookingRes = await client.query(
+    // The scanned row, and the group it belongs to. booking_group_id is read
+    // through to_jsonb so this still works on a database where migration 035 has
+    // not been applied — the column reads null and the scan checks in exactly the
+    // one booking, as before.
+    const scanRes = await client.query(
       `
-      SELECT b.id, b.status, b.security_deposit, b.slot_date, b.start_time, b.end_time,
-             b.player_id, u.name AS player_name, v.name AS venue_name, v.owner_id
+      SELECT b.id, b.status, v.owner_id,
+             to_jsonb(b) ->> 'booking_group_id' AS booking_group_id
       FROM bookings b
-      JOIN users u ON b.player_id=u.id
       JOIN venues v ON b.venue_id=v.id
       WHERE b.qr_code=$1 FOR UPDATE OF b
     `,
       [qrCode],
     );
 
-    if (!bookingRes.rows.length) {
+    if (!scanRes.rows.length) {
       await client.query("ROLLBACK");
       return res
         .status(404)
@@ -1131,9 +1140,9 @@ router.post("/scan-qr", async (req, res, next) => {
           message: "Invalid QR code. No booking found.",
         });
     }
-    const booking = bookingRes.rows[0];
+    const scanned = scanRes.rows[0];
 
-    if (booking.owner_id !== req.user.id) {
+    if (scanned.owner_id !== req.user.id) {
       await client.query("ROLLBACK");
       return res
         .status(403)
@@ -1142,25 +1151,60 @@ router.post("/scan-qr", async (req, res, next) => {
           message: "This QR code is not for your venue.",
         });
     }
-    if (booking.status === "checked_in") {
+    if (scanned.status === "checked_in") {
       await client.query("ROLLBACK");
       return res
         .status(409)
         .json({ success: false, message: "Player already checked in." });
     }
-    if (booking.status !== "confirmed") {
+    if (scanned.status !== "confirmed") {
       await client.query("ROLLBACK");
       return res
         .status(409)
         .json({
           success: false,
-          message: `Cannot check in: booking is ${booking.status}`,
+          message: `Cannot check in: booking is ${scanned.status}`,
         });
     }
 
-    const escrow = round2(booking.security_deposit);
+    // The slots this scan settles: the whole group when the booking is part of one,
+    // otherwise just the scanned booking. Confirmed members only — a sibling that
+    // was cancelled or already checked in is left as it is. Filtered by owner so a
+    // group can never reach across venues, and locked so a concurrent scan of the
+    // same group cannot settle a row twice.
+    const groupId = scanned.booking_group_id;
+    const targetRes = await client.query(
+      groupId
+        ? `
+          SELECT b.id, b.security_deposit, b.slot_date, b.start_time, b.end_time,
+                 b.player_id, u.name AS player_name, v.name AS venue_name
+          FROM bookings b
+          JOIN users u ON b.player_id=u.id
+          JOIN venues v ON b.venue_id=v.id
+          WHERE b.booking_group_id=$1 AND v.owner_id=$2 AND b.status='confirmed'
+          ORDER BY b.slot_date, b.start_time
+          FOR UPDATE OF b`
+        : `
+          SELECT b.id, b.security_deposit, b.slot_date, b.start_time, b.end_time,
+                 b.player_id, u.name AS player_name, v.name AS venue_name
+          FROM bookings b
+          JOIN users u ON b.player_id=u.id
+          JOIN venues v ON b.venue_id=v.id
+          WHERE b.id=$1
+          FOR UPDATE OF b`,
+      groupId ? [groupId, req.user.id] : [scanned.id],
+    );
+    const targets = targetRes.rows;
+    if (!targets.length) {
+      // Every slot in the group was already checked in by an earlier scan.
+      await client.query("ROLLBACK");
+      return res
+        .status(409)
+        .json({ success: false, message: "Player already checked in." });
+    }
 
-    // FR10.9. The platform's commission, taken here and nowhere else.
+    // FR10.9. The platform's commission, taken here and nowhere else, read once for
+    // the whole group.
     //
     // Why check-in is the right moment
     // This is the instant the money stops being contingent: the player showed up,
@@ -1187,87 +1231,113 @@ router.post("/scan-qr", async (req, res, next) => {
         + 'ledger type is missing. Run `node run_migration_021.js`.',
       );
     }
-    const split = canLogCommission
-      ? commissionSplit(escrow, commissionPct)
-      : commissionSplit(escrow, 0);
 
-    await client.query(
-      "UPDATE bookings SET status='checked_in', checked_in_at=NOW() WHERE id=$1",
-      [booking.id],
-    );
-
-    const playerWallet = await lockWallet(client, booking.player_id);
+    // The player and the owner each have one wallet; a group shares both. Locked
+    // once in a fixed order, then every slot's escrow is moved through them.
+    const playerId = targets[0].player_id;
+    const playerWallet = await lockWallet(client, playerId);
     const ownerWallet = await lockWallet(client, req.user.id);
 
-    const playerAfter = await applyWallet(client, playerWallet.id, {
-      frozen: -escrow,
-    });
-    // Credited gross first, then debited the commission, rather than crediting the
-    // net in one movement. Two movements means each ledger row's `balance_after` is
-    // the balance that row produced -- so an owner (and D4's CSV export,
-    // which reads the ledger rather than recomputing from prices) can reconcile the
-    // statement line by line. One netted movement would leave the `escrow_received`
-    // row claiming a gross amount beside a net balance, which is the kind of small
-    // inconsistency that makes a whole statement untrustworthy.
-    let ownerAfter = await applyWallet(client, ownerWallet.id, {
-      balance: split.gross,
-    });
+    let ownerAfter = null;
+    let totalEscrow = 0;
+    let totalCommission = 0;
 
-    await logTxn(client, {
-      walletId: playerWallet.id,
-      userId: booking.player_id,
-      bookingId: booking.id,
-      type: "escrow_release",
-      amount: -escrow,
-      balanceAfter: playerAfter.balance,
-      description: "Payment released to venue on check-in",
-      counterparty: booking.venue_name,
-    });
-    await logTxn(client, {
-      walletId: ownerWallet.id,
-      userId: req.user.id,
-      bookingId: booking.id,
-      type: "escrow_received",
-      amount: escrow,
-      balanceAfter: ownerAfter.balance,
-      description: "Received booking payment — player checked in",
-      counterparty: booking.player_name,
-    });
+    for (const booking of targets) {
+      const escrow = round2(booking.security_deposit);
+      const split = canLogCommission
+        ? commissionSplit(escrow, commissionPct)
+        : commissionSplit(escrow, 0);
 
-    if (split.commission > 0) {
+      await client.query(
+        "UPDATE bookings SET status='checked_in', checked_in_at=NOW() WHERE id=$1",
+        [booking.id],
+      );
+
+      const playerAfter = await applyWallet(client, playerWallet.id, {
+        frozen: -escrow,
+      });
+      // Credited gross first, then debited the commission, rather than crediting the
+      // net in one movement. Two movements means each ledger row's `balance_after` is
+      // the balance that row produced -- so an owner (and D4's CSV export,
+      // which reads the ledger rather than recomputing from prices) can reconcile the
+      // statement line by line. One netted movement would leave the `escrow_received`
+      // row claiming a gross amount beside a net balance, which is the kind of small
+      // inconsistency that makes a whole statement untrustworthy.
       ownerAfter = await applyWallet(client, ownerWallet.id, {
-        balance: -split.commission,
+        balance: split.gross,
+      });
+
+      await logTxn(client, {
+        walletId: playerWallet.id,
+        userId: playerId,
+        bookingId: booking.id,
+        type: "escrow_release",
+        amount: -escrow,
+        balanceAfter: playerAfter.balance,
+        description: "Payment released to venue on check-in",
+        counterparty: booking.venue_name,
       });
       await logTxn(client, {
         walletId: ownerWallet.id,
         userId: req.user.id,
         bookingId: booking.id,
-        type: "platform_commission",
-        amount: -split.commission,
-        // The balance the owner is left with, so the ledger's running
-        // balance column reconciles row by row.
+        type: "escrow_received",
+        amount: escrow,
         balanceAfter: ownerAfter.balance,
-        description: `SportLynk commission (${split.pct}%)`,
-        counterparty: "SportLynk",
+        description: "Received booking payment — player checked in",
+        counterparty: booking.player_name,
       });
+
+      if (split.commission > 0) {
+        ownerAfter = await applyWallet(client, ownerWallet.id, {
+          balance: -split.commission,
+        });
+        await logTxn(client, {
+          walletId: ownerWallet.id,
+          userId: req.user.id,
+          bookingId: booking.id,
+          type: "platform_commission",
+          amount: -split.commission,
+          // The balance the owner is left with, so the ledger's running
+          // balance column reconciles row by row.
+          balanceAfter: ownerAfter.balance,
+          description: `SportLynk commission (${split.pct}%)`,
+          counterparty: "SportLynk",
+        });
+      }
+
+      totalEscrow = round2(totalEscrow + escrow);
+      totalCommission = round2(totalCommission + split.commission);
     }
 
     await client.query("COMMIT");
+
+    const first = targets[0];
+    const last = targets[targets.length - 1];
     res.json({
       success: true,
       data: {
-        playerName: booking.player_name,
-        venueName: booking.venue_name,
-        slotDate: booking.slot_date,
-        startTime: booking.start_time,
-        endTime: booking.end_time,
-        amount: escrow,
-        commission: split.commission,
-        netToOwner: split.net,
-        commissionPct: split.pct,
+        playerName: first.player_name,
+        venueName: first.venue_name,
+        slotDate: first.slot_date,
+        // For a group these span the run; for one booking they are its own times.
+        startTime: first.start_time,
+        endTime: last.end_time,
+        slotCount: targets.length,
+        slots: targets.map((t) => ({
+          slotDate: t.slot_date,
+          startTime: t.start_time,
+          endTime: t.end_time,
+        })),
+        amount: totalEscrow,
+        commission: totalCommission,
+        netToOwner: round2(totalEscrow - totalCommission),
+        commissionPct: canLogCommission ? commissionPct : 0,
         newOwnerBalance: ownerAfter?.balance || 0,
       },
-      message: "Check-in successful!",
+      message: targets.length > 1
+        ? `Checked in — ${targets.length} slots settled.`
+        : "Check-in successful!",
     });
   } catch (e) {
     await client.query("ROLLBACK");
