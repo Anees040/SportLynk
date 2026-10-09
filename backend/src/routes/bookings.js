@@ -17,6 +17,8 @@ const {
   createBookingGroupTx,
   previewGroup,
   cancelBookingTx,
+  cancelBookingGroupTx,
+  listGroup,
 } = require("../services/bookingService");
 const { notify } = require("../utils/notify");
 const { recomputeTrust } = require("../utils/trustScore");
@@ -117,6 +119,45 @@ router.post(
   },
 );
 
+// GET /api/bookings/group/:groupId — every booking in a multi-slot group.
+//
+// Declared before /:id so the two-segment "group/<id>" is never read as a booking
+// id. Lets the detail screen render a grouped booking as one card — all its slots,
+// one QR, one cancel — from whichever member it was opened with.
+router.get("/group/:groupId", authMiddleware, async (req, res, next) => {
+  try {
+    const rows = await listGroup(pool, {
+      userId: req.user.id,
+      groupId: req.params.groupId,
+    });
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// PATCH /api/bookings/group/:groupId/cancel — cancel every slot in the group at
+// once. Atomic: either all cancellable slots are cancelled or none are, so the
+// player is never left with a half-cancelled booking. Each slot is still refunded
+// by its own cancellation window inside the one transaction.
+router.patch("/group/:groupId/cancel", authMiddleware, async (req, res, next) => {
+  try {
+    const result = await cancelBookingGroupTx({
+      userId: req.user.id,
+      groupId: req.params.groupId,
+    });
+    if (!result.ok) {
+      return res
+        .status(result.status)
+        .json({ success: false, message: result.message, code: result.code });
+    }
+    res.json({ success: true, message: result.message, data: result.data });
+  } catch (e) {
+    console.error("Group cancellation error:", e);
+    next(e);
+  }
+});
+
 // GET /api/bookings/my — player's bookings
 router.get("/my", authMiddleware, async (req, res, next) => {
   try {
@@ -141,7 +182,6 @@ router.get("/my", authMiddleware, async (req, res, next) => {
     next(e);
   }
 });
-
 // GET /api/bookings/disputes/mine — the caller's own disputes, for the status line
 // on a booking. Declared BEFORE /:id so "disputes" is never read as a booking id.
 router.get("/disputes/mine", authMiddleware, async (req, res, next) => {
