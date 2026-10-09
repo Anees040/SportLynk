@@ -249,6 +249,30 @@ async function markAllRead(client, userId, category = null) {
 }
 
 /**
+ * Mark read every unread notification that points at one chat channel.
+ *
+ * A `chat_message` and a `chat_mention` both carry entity_type='channel' and
+ * entity_id=<channelId> (notificationTypes.js), so this clears both from one call.
+ * It is what opening a chat is supposed to do to its own notifications: before this
+ * existed, reading the messages moved the chat's own unread watermark but left the
+ * bell's rows untouched, so the count a tap was meant to clear stayed lit until the
+ * row was opened a second time from the feed itself.
+ *
+ * Scoped `AND user_id = $1` like every other state change here, so a channel id that
+ * is not the caller's matches no row. Returns the number cleared.
+ */
+async function markReadByChannel(client, userId, channelId) {
+  const { rowCount } = await client.query(
+    `UPDATE notifications
+        SET is_read = true, read_at = COALESCE(read_at, now())
+      WHERE user_id = $1 AND entity_type = 'channel' AND entity_id::text = $2
+        AND ${UNREAD}`,
+    [userId, channelId],
+  );
+  return rowCount;
+}
+
+/**
  * Swipe one row away. Also marks it read, because a dismissed row that still counted
  * toward the badge would leave a number the user cannot clear by any means.
  */
@@ -407,6 +431,7 @@ module.exports = {
   markRead,
   markUnread,
   markAllRead,
+  markReadByChannel,
   dismiss,
   clearRead,
   defaultPrefs,
