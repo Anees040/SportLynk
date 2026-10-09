@@ -76,7 +76,7 @@ const QUICK_REPLIES = {
       'Tell me the area and I will point you to it.',
       'Parking is right at the gate.',
     ],
-    greeting: ['Assalam-o-Alaikum!', 'Hello — how can I help?', 'Hi! What do you need?'],
+    greeting: ['Hello — how can I help?', 'Hi! What do you need?', 'Assalam-o-Alaikum!'],
     affirm: ['Done.', 'Noted, thanks.', 'Perfect, see you then.'],
     deny: ['No problem.', 'Understood.', 'Let me know if that changes.'],
   },
@@ -101,7 +101,7 @@ const QUICK_REPLIES = {
     ],
     contact_owner: ['Can you call me?', 'Please confirm here.', 'What is your number?'],
     find_venue: ['Where exactly is the ground?', 'Can you share the location?', 'Which gate?'],
-    greeting: ['Assalam-o-Alaikum!', 'Hi!', 'Hello, I had a question.'],
+    greeting: ['Hello!', 'Hi there!', 'Assalam-o-Alaikum!'],
     affirm: ['Yes, please.', 'Confirmed.', 'Sounds good.'],
     deny: ['No thanks.', 'Not that one.', 'Maybe later.'],
   },
@@ -115,7 +115,7 @@ const QUICK_REPLIES = {
     find_players: ['We are 11.', 'We are short two players.', 'Bringing a full squad.'],
     find_opponents: ['We are in.', 'Good game.', 'Rematch soon?'],
     team_stats: ['Good game.', 'Well played.', 'Rematch soon?'],
-    greeting: ['Assalam-o-Alaikum!', 'Hi, ready for the match?', 'Hello!'],
+    greeting: ['Hello!', 'Ready for the match?', 'Assalam-o-Alaikum!'],
     affirm: ['Confirmed.', 'Agreed.', 'See you there.'],
     deny: ['That does not work for us.', 'Sorry, cannot make it.', 'Can we reschedule?'],
   },
@@ -154,6 +154,58 @@ const LEXICON = [
 function lexiconIntent(text) {
   const t = String(text || '');
   for (const [re, intent] of LEXICON) if (re.test(t)) return intent;
+  return null;
+}
+
+/**
+ * A finer layer than the 23-label classifier, for the handful of conversational
+ * turns that have one natural answer the topic alone cannot choose.
+ *
+ * Model #4 is the right granularity for "this message is about availability", but
+ * too coarse for a courtesy or a direct question: it maps a salam and a "hi" to the
+ * same `greeting` label, so the topic cannot tell that one is answered with "Wa
+ * Alaikum Assalam" and the other with "Hello". This reads the words instead, and it
+ * is still a table — matched, never generated, the same discipline as the rest of
+ * the file — so nothing here can invent a price, a slot or a policy.
+ *
+ * It fires only on a confident, specific shape and returns null otherwise, so an
+ * availability, refund or squad-size question falls straight through to the intent
+ * table untouched. The match-coordination turns (who is coming, what time) are
+ * gated to the captain/team audience, where "are you free?" means "can you play?"
+ * and not "is the slot open?".
+ */
+function conversationalReply(text, audience) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  const lower = t.toLowerCase();
+  // A salam is matched on its stems rather than one compiled pattern: "salam",
+  // "salaam", "assalam o alaikum" and the "slm"/"aoa" shortcuts all have to land,
+  // and the words around them ("Assalamualaikum bhai") must not matter.
+  const isSalam = lower.includes('salam') || lower.includes('salaa')
+    || lower.includes('slm') || lower.includes('aoa') || lower.includes('assalam');
+  if (isSalam) {
+    return ['Wa Alaikum Assalam', 'Wa Alaikum Assalam! How are you?', 'Walaikum Assalam, kaise ho?'];
+  }
+  if (/\b(thank\s*you|thanks|thankyou|shukriya|shukria|jazak\s*allah)\b/i.test(t)) {
+    return ['You are welcome!', 'No problem at all.', 'Anytime!'];
+  }
+  // Coordinating a fixture only makes sense between team-mates and captains.
+  if (audience === 'captain') {
+    const isTimeQuestion = lower.includes('what time') || lower.includes('kitne baj')
+      || lower.includes('kitna baj') || lower.includes('kis waqt')
+      || lower.includes('time kya') || lower.includes('kab khel')
+      || lower.includes('kab shuru');
+    if (isTimeQuestion) {
+      return ['Let us start at 8 PM.', 'Whatever time suits everyone.', 'I will confirm the time shortly.'];
+    }
+    // A yes/no "are you turning up?", guarded against the count question
+    // ("kitne log aa rahe hain?") that looks similar but wants a number, not a yes.
+    if (/\?/.test(t)
+        && !/\b(kitne|kitna|kitni|how\s*many|kaun)\b/i.test(t)
+        && /\b(are\s*you|will\s*you|can\s*you|aao?ge|aa\s*rahe\s*ho|khelo?\s*ge|coming|available|free|ready|interested|joining)\b/i.test(t)) {
+      return ['Yes, I will be there.', 'Not sure yet, I will confirm.', 'Sorry, I can not make it.'];
+    }
+  }
   return null;
 }
 
@@ -249,7 +301,13 @@ async function suggestFor(client, { channel, userId, userRole, text, messageId }
 
   const fill = filler(await bookingFacts(client, channel));
   const table = QUICK_REPLIES[audience] || {};
-  const picked = (intent && table[intent]) || GENERIC[audience] || GENERIC.player;
+  // A specific conversational turn (a salam, a "what time?", a "are you coming?")
+  // answers itself better than its topic does, and takes precedence when it fires.
+  // The source still reflects how the MESSAGE was understood — the model, the
+  // keyword table, or neither — because the reply text being chosen by a rule does
+  // not make a model-classified message any less model-classified.
+  const convo = conversationalReply(src.text, audience);
+  const picked = convo || (intent && table[intent]) || GENERIC[audience] || GENERIC.player;
 
   return {
     data: {
@@ -268,5 +326,5 @@ async function suggestFor(client, { channel, userId, userRole, text, messageId }
 
 module.exports = {
   QUICK_REPLIES, GENERIC, LEXICON,
-  lexiconIntent, audienceFor, resolveSourceText, bookingFacts, filler, suggestFor,
+  lexiconIntent, conversationalReply, audienceFor, resolveSourceText, bookingFacts, filler, suggestFor,
 };
