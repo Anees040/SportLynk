@@ -8,17 +8,23 @@ router.get('/home', authMiddleware, async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    // Upcoming bookings (max 3) — wrapped in try-catch so missing table doesn't crash
+    // Upcoming bookings — wrapped in try-catch so missing table doesn't crash.
+    // `booking_group_id` is read through to_jsonb so this keeps working on a
+    // database where migration 035 has not run (absent reads as NULL, which is what
+    // an ungrouped booking means). The client folds a multi-slot group into one
+    // card, so the limit is raised past 3 to give grouping its members before the
+    // dashboard shows the first few.
     let upcomingBookings = [];
     try {
       const upcoming = await pool.query(`
         SELECT b.id, b.slot_date, b.start_time, b.end_time, b.status,
           b.total_amount, v.name as venue_name, v.city,
+          to_jsonb(b) ->> 'booking_group_id' AS booking_group_id,
           COALESCE(v.venue_photos[1], null) as venue_photo
         FROM bookings b JOIN venues v ON v.id = b.venue_id
         WHERE b.player_id = $1 AND b.status IN ('confirmed','pending')
           AND b.slot_date >= CURRENT_DATE
-        ORDER BY b.slot_date, b.start_time LIMIT 3`, [userId]);
+        ORDER BY b.slot_date, b.start_time LIMIT 20`, [userId]);
       upcomingBookings = upcoming.rows;
     } catch (e) {
       console.log('Bookings query skipped (table may not exist):', e.message);
