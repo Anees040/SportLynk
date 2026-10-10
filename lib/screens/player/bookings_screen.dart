@@ -5,8 +5,11 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/connectivity_provider.dart';
+import '../../providers/data_sync_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/offline_cache.dart';
+import '../../utils/booking_grouping.dart';
+import '../../utils/cancellation_message.dart';
 import '../../utils/num_util.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
@@ -46,6 +49,12 @@ class BookingsScreenState extends State<BookingsScreen>
   /// stale.
   bool _networkAnswered = false;
 
+  /// The app-wide data-change signal. The Bookings list reloads when a cancellation
+  /// or booking happens anywhere else — the detail screen, Scout — not only when it
+  /// performed the change itself.
+  DataSyncProvider? _sync;
+  int _lastBookingsRev = 0;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -61,11 +70,15 @@ class BookingsScreenState extends State<BookingsScreen>
     // stands down if the network already answered.
     _load();
     _hydrateFromCache();
+    _sync = context.read<DataSyncProvider>();
+    _lastBookingsRev = _sync!.bookingsRevision;
+    _sync!.addListener(_onDataSync);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _sync?.removeListener(_onDataSync);
     _tab.dispose();
     super.dispose();
   }
@@ -99,6 +112,17 @@ class BookingsScreenState extends State<BookingsScreen>
     }
   }
 
+  // Reload when a booking changed elsewhere in the app. The revision guard means a
+  // wallet-only signal (a top-up) does not pull this list for nothing.
+  void _onDataSync() {
+    final sync = _sync;
+    if (!mounted || sync == null) return;
+    if (sync.bookingsRevision != _lastBookingsRev) {
+      _lastBookingsRev = sync.bookingsRevision;
+      reloadNow();
+    }
+  }
+
   /// Draw the last good rows if they arrive before the network does.
   ///
   /// The whole behavioural change is here — the tab opens populated, offline or on
@@ -125,103 +149,16 @@ class BookingsScreenState extends State<BookingsScreen>
   void _applyRows(List<Map<String, dynamic>> all) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    _upcoming = _collapseGroups(all.where((b) {
+    _upcoming = collapseBookingGroups(all.where((b) {
       final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
       return d != null && !d.isBefore(today)
         && ['confirmed','pending'].contains(b['status']);
     }).toList());
-    _past = _collapseGroups(all.where((b) {
+    _past = collapseBookingGroups(all.where((b) {
       final d = DateTime.tryParse(b['slot_date'] ?? '')?.toLocal();
       return d == null || d.isBefore(today)
         || ['cancelled','rejected','no_show','checked_in','completed','refunded'].contains(b['status']);
     }).toList());
-  }
-
-  /// A TIME value as 'HH:MM:SS', so two of them can be compared as strings.
-  String _timeKey(dynamic raw) {
-    final s = raw == null ? '' : raw.toString().trim();
-    final m = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?$').firstMatch(s);
-    if (m == null) return s;
-    return '${m.group(1)!.padLeft(2, '0')}:${m.group(2)}:${m.group(3) ?? '00'}';
-  }
-
-  /// Fold the bookings that were made together into one row each.
-  ///
-  /// A multi-slot booking is N rows sharing a `booking_group_id` — each with its
-  /// own escrow, refund window and QR code — because that is what leaves the money
-  /// paths untouched. The player asked for two hours of play, though, so the list
-  /// shows one card.
-  ///
-  /// Grouped by id AND status, deliberately. Once one hour of a run is cancelled
-  /// the remaining hours are a different thing from the cancelled one, and a single
-  /// card would have to invent a combined status to describe them. Splitting by
-  /// status instead means every card has a status that is simply true.
-  ///
-  /// Rows carrying no group id — every booking made before migration 035, and every
-  /// single-slot booking after it — pass through untouched.
-  List<Map<String, dynamic>> _collapseGroups(List<Map<String, dynamic>> rows) {
-    final order = <String>[];
-    final buckets = <String, List<Map<String, dynamic>>>{};
-
-    for (final b in rows) {
-      final gid = b['booking_group_id']?.toString();
-      final key = (gid == null || gid.isEmpty)
-          ? 'single:${b['id']}'
-          : 'group:$gid:${b['status']}';
-      final bucket = buckets[key];
-      if (bucket == null) {
-        buckets[key] = [b];
-        order.add(key);
-      } else {
-        bucket.add(b);
-      }
-    }
-
-    final out = <Map<String, dynamic>>[];
-    for (final key in order) {
-      final members = buckets[key]!;
-      if (members.length == 1) {
-        out.add(members.first);
-        continue;
-      }
-      members.sort((a, b) {
-        final byDate = (a['slot_date'] ?? '').toString()
-            .compareTo((b['slot_date'] ?? '').toString());
-        return byDate != 0
-            ? byDate
-            : _timeKey(a['start_time']).compareTo(_timeKey(b['start_time']));
-      });
-
-      // Whether what is left of the run is still back to back. It may not be: one
-      // hour out of the middle can be cancelled on its own, and printing
-      // "18:00 – 21:00 · 2 slots" for 18:00 and 20:00 would claim an hour the
-      // player no longer has.
-      var contiguous = true;
-      for (var i = 1; i < members.length; i += 1) {
-        final prevEnd = _timeKey(members[i - 1]['end_time']);
-        final nextStart = _timeKey(members[i]['start_time']);
-        final sameDay = (members[i - 1]['slot_date'] ?? '').toString()
-            == (members[i]['slot_date'] ?? '').toString();
-        final seam = !sameDay && prevEnd == '24:00:00' && nextStart == '00:00:00';
-        if (!(sameDay && prevEnd == nextStart) && !seam) {
-          contiguous = false;
-          break;
-        }
-      }
-
-      out.add({
-        // The first member carries the card: its id is what a tap opens, and its
-        // `booking_group_id` is what lets the detail screen show the whole run.
-        ...members.first,
-        'total_amount': members.fold<double>(0, (s, m) => s + asNum(m['total_amount'])),
-        '_groupCount': members.length,
-        '_groupContiguous': contiguous,
-        '_groupEnd': members.last['end_time'],
-        '_groupStarts': members.map((m) => m['start_time']).toList(),
-        '_groupIds': members.map((m) => m['id'].toString()).toList(),
-      });
-    }
-    return out;
   }
 
   Future<void> _load() async {
@@ -313,13 +250,21 @@ class BookingsScreenState extends State<BookingsScreen>
     // which state they are in.
     var cancelled = 0;
     var refunded = 0.0;
+    var penalty = 0.0;
+    var anyLate = false;
+    Map? lastData;
     String? failure;
     for (final id in bookingIds) {
       final res = await ApiClient().patch('/bookings/$id/cancel', const {});
       if (res['success'] == true) {
         cancelled += 1;
         final data = res['data'];
-        if (data is Map && data['refund'] != null) refunded += asNum(data['refund']);
+        if (data is Map) {
+          refunded += asNum(data['refund']);
+          penalty += asNum(data['penalty']);
+          anyLate = anyLate || data['late'] == true;
+          lastData = data;
+        }
       } else {
         failure = res['message'] as String? ?? 'Could not cancel the booking.';
         break;
@@ -330,9 +275,12 @@ class BookingsScreenState extends State<BookingsScreen>
     if (failure == null) {
       SnackbarUtil.showSuccess(
         context,
-        many
-            ? '$cancelled slots cancelled. PKR ${refunded.toStringAsFixed(0)} refunded to your wallet.'
-            : 'Booking cancelled. PKR ${refunded.toStringAsFixed(0)} refunded to your wallet.',
+        cancellationMessage({
+          'refund': refunded,
+          'penalty': penalty,
+          'late': anyLate,
+          'balanceAfter': lastData?['balanceAfter'],
+        }, count: cancelled),
       );
     } else if (cancelled > 0) {
       SnackbarUtil.showError(
@@ -344,10 +292,11 @@ class BookingsScreenState extends State<BookingsScreen>
       // nothing at all, and the booking simply stayed where it was.
       SnackbarUtil.showError(context, failure);
     }
-    // Refetch only when something actually changed. A cancel that was wholly
-    // refused (nothing cancelled) leaves the list exactly as it is, and a refetch
-    // there would read as the action having worked.
-    if (cancelled > 0) _load();
+    // A completed cancellation moves money and frees a slot, so the Home dashboard,
+    // this list and the Wallet all need to re-read. Announcing it once through the
+    // app-wide signal refreshes all three — this screen included, via its own
+    // listener — instead of this tab refreshing alone while the others go stale.
+    if (cancelled > 0) context.read<DataSyncProvider>().bookingsChanged();
   }
 
   /// Cancel a whole multi-slot group in one atomic request.
@@ -382,10 +331,9 @@ class BookingsScreenState extends State<BookingsScreen>
     if (!mounted) return;
     if (res['success'] == true) {
       final data = res['data'];
-      final refunded = data is Map ? asNum(data['refund']) : 0.0;
       SnackbarUtil.showSuccess(context,
-        '$count slots cancelled. PKR ${refunded.toStringAsFixed(0)} refunded to your wallet.');
-      _load();
+        cancellationMessage(data is Map ? data : const {}, count: count));
+      context.read<DataSyncProvider>().bookingsChanged();
     } else {
       SnackbarUtil.showError(context, res['message'] as String? ?? 'Could not cancel the booking.');
     }
@@ -550,7 +498,7 @@ class BookingsScreenState extends State<BookingsScreen>
           Row(children: [
             Expanded(child: _infoItem(Icons.location_on_outlined, b['city'] ?? '')),
             const SizedBox(width: 8),
-            Expanded(child: _infoItem(Icons.currency_rupee,
+            Expanded(child: _infoItem(Icons.payments_outlined,
               'PKR ${asNum(b['total_amount']).toStringAsFixed(0)}')),
           ]),
           // Said once, because it is the one thing about a grouped card a player
