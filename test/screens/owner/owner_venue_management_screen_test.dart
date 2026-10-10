@@ -131,7 +131,12 @@ void main() {
         'New floodlights',
       );
       await tester.enterText(field('Price Per Hour'), '2500');
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Save Changes'));
+      // The form scrolls, and Save sits at its foot below the fold on this surface;
+      // reveal it before tapping or the tap lands on nothing and the PATCH never fires.
+      final save = find.widgetWithText(ElevatedButton, 'Save Changes');
+      await tester.ensureVisible(save);
+      await tester.pump();
+      await tester.tap(save);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
