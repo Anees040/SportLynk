@@ -676,7 +676,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
                 ]),
                 const SizedBox(height: 2),
                 Row(children: [
-                  const Icon(Icons.currency_rupee, size: 12, color: AppColors.textSecondary),
+                  const Icon(Icons.payments_outlined, size: 12, color: AppColors.textSecondary),
                   const SizedBox(width: 3),
                   Expanded(
                     child: Text('PKR ${reg['price_per_hour'] ?? '—'}/hr',
