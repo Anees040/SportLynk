@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/connectivity_provider.dart';
+import '../../providers/data_sync_provider.dart';
 import 'player_profile_screen.dart';
 import 'bookings_screen.dart';
 import 'wallet_screen.dart';
@@ -14,6 +15,7 @@ import '../../services/api_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/offline_cache.dart';
 import '../../services/realtime_service.dart';
+import '../../utils/booking_grouping.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../widgets/assistant/scout_fab.dart';
 import '../../widgets/header_actions.dart';
@@ -23,16 +25,25 @@ import '../shared/chats_screen.dart';
 import 'assistant_screen.dart';
 
 class PlayerHomeScreen extends StatefulWidget {
-  const PlayerHomeScreen({super.key});
+  /// Which bottom tab to open on. Lets a push to `/player-home` land on Bookings
+  /// (tab 1) rather than Home — the booking-confirmation screen's "View in Booking
+  /// History" uses it.
+  final int initialTab;
+  const PlayerHomeScreen({super.key, this.initialTab = 0});
   @override
   State<PlayerHomeScreen> createState() => _PlayerHomeScreenState();
 }
 
 class _PlayerHomeScreenState extends State<PlayerHomeScreen>
     with ReconnectRefresh<PlayerHomeScreen> {
-  int _tab = 0;
-  int _prevTab = 0;
+  late int _tab;
+  late int _prevTab;
   Map<String, dynamic>? _homeData;
+
+  /// App-wide data-change signal. Reloads the dashboard's upcoming-bookings strip
+  /// and stat count when a booking is made or cancelled anywhere else in the app.
+  DataSyncProvider? _sync;
+  int _lastBookingsRev = 0;
 
   /// When [_homeData] came from the cache rather than this session's network call,
   /// so the strip can say how old the figures on screen are.
@@ -60,16 +71,22 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
   @override
   void initState() {
     super.initState();
+    _tab = widget.initialTab;
+    _prevTab = widget.initialTab;
     // Concurrent, not chained — see [_hydrateFromCache].
     _load();
     _hydrateFromCache();
     _watchChat();
+    _sync = context.read<DataSyncProvider>();
+    _lastBookingsRev = _sync!.bookingsRevision;
+    _sync!.addListener(_onDataSync);
   }
 
   @override
   void dispose() {
     _badgeDebounce?.cancel();
     _msgSub?.cancel();
+    _sync?.removeListener(_onDataSync);
     super.dispose();
   }
 
@@ -80,6 +97,19 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
   void onReconnect() {
     if (_homeData == null) _load();
     _loadChatBadge();
+  }
+
+  // Reload the dashboard when a booking changed elsewhere (a cancellation on the
+  // Bookings tab or detail screen, a booking through Scout), so the upcoming strip
+  // and the stat count stay honest without the user returning to this tab. The
+  // revision guard skips a wallet-only change.
+  void _onDataSync() {
+    final sync = _sync;
+    if (!mounted || sync == null) return;
+    if (sync.bookingsRevision != _lastBookingsRev) {
+      _lastBookingsRev = sync.bookingsRevision;
+      _load();
+    }
   }
 
   /// Keep the header badge honest for as long as this screen lives.
@@ -308,7 +338,14 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
   // Lifted out, the header cannot move and the status bar keeps its green backdrop.
   Widget _buildHome(AuthProvider auth) {    final firstName = (auth.currentUser?.name ?? 'Player').split(' ').first;
     final profile = _homeData?['profile'] as Map<String, dynamic>?;
-    final upcoming = (_homeData?['upcomingBookings'] as List?) ?? [];
+    // Fold multi-slot groups into one entry each — the same collapse the Bookings
+    // tab uses — so a 3-slot booking is one card and counts once, not three.
+    final upcoming = collapseBookingGroups(
+      ((_homeData?['upcomingBookings'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(),
+    );
     final trustScore = _parseNum(profile?['trust_score'], 100).round();
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -344,7 +381,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
                   ),
                 ),
                 SliverToBoxAdapter(child: _quickActions()),
-                SliverToBoxAdapter(child: _buildUpcomingBookings()),
+                SliverToBoxAdapter(child: _buildUpcomingBookings(upcoming)),
                 const SliverToBoxAdapter(child: SizedBox(height: 32)),
               ],
             ),
@@ -640,8 +677,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
     );
   }
 
-  Widget _buildUpcomingBookings() {
-    final bookings = (_homeData?['upcomingBookings'] as List?) ?? [];
+  Widget _buildUpcomingBookings(List<Map<String, dynamic>> bookings) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -693,8 +729,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
                 ]),
               )
             : Column(
-                children: bookings.take(3).map((b) =>
-                  _bookingCard(b as Map<String, dynamic>)).toList(),
+                children: bookings.take(3).map(_bookingCard).toList(),
               ),
       ]),
     );
@@ -745,9 +780,18 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
               const SizedBox(width: 10),
               const Icon(Icons.access_time, size: 11, color: Color(0xFF94A3B8)),
               const SizedBox(width: 4),
-              Text(_formatTime(b['start_time']),
-                style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF94A3B8))),
+              Flexible(
+                child: Text(_cardTimeLabel(b),
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF94A3B8))),
+              ),
             ]),
+            if (((b['_groupCount'] as int?) ?? 1) > 1) ...[
+              const SizedBox(height: 4),
+              Text('${b['_groupCount']} slots booked together',
+                style: GoogleFonts.poppins(
+                  fontSize: 10, color: AppColors.accent, fontWeight: FontWeight.w600)),
+            ],
           ])),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -760,6 +804,16 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
         ]),
       ),
     );
+  }
+
+  /// The time cell for a dashboard booking card: a single slot shows its start, a
+  /// collapsed multi-slot group shows the whole run's start-to-end window.
+  String _cardTimeLabel(Map<String, dynamic> b) {
+    final count = (b['_groupCount'] as int?) ?? 1;
+    if (count > 1) {
+      return '${_formatTime(b['start_time'])} – ${_formatTime(b['_groupEnd'])}';
+    }
+    return _formatTime(b['start_time']);
   }
 
   String _formatTime(dynamic t) {
