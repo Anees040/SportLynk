@@ -94,8 +94,16 @@ class AppRoutes {
     '/owner-pending': (_) => const AuthGuard(child: OwnerPendingScreen()),
 
     // The three homes
-    '/player-home': (_) =>
-        const AuthGuard(requiredRole: 'player', child: PlayerHomeScreen()),
+    '/player-home': (context) {
+      // A route argument of {'tab': n} opens that bottom tab — the booking success
+      // screen routes to {'tab': 1} so "View in Booking History" lands on Bookings.
+      final args = ModalRoute.of(context)?.settings.arguments;
+      final tab = (args is Map && args['tab'] is int) ? args['tab'] as int : 0;
+      return AuthGuard(
+        requiredRole: 'player',
+        child: PlayerHomeScreen(initialTab: tab),
+      );
+    },
     '/owner-home': (_) =>
         const AuthGuard(requiredRole: 'owner', child: OwnerHomeScreen()),
     '/admin-home': (_) =>
