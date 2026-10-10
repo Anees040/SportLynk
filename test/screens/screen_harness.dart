@@ -57,6 +57,7 @@ import 'package:sportlynk/constants/app_theme.dart';
 import 'package:sportlynk/models/user.dart';
 import 'package:sportlynk/providers/auth_provider.dart';
 import 'package:sportlynk/providers/connectivity_provider.dart';
+import 'package:sportlynk/providers/data_sync_provider.dart';
 import 'package:sportlynk/providers/notification_provider.dart';
 import 'package:sportlynk/services/api_service.dart';
 import 'package:sportlynk/services/realtime_service.dart';
@@ -662,6 +663,10 @@ Future<RouteLog> pumpScreen(
         ChangeNotifierProvider<ConnectivityProvider>(
           create: (_) => ConnectivityProvider()..markReachable(),
         ),
+        // The player shell's cross-screen refresh signal. App-level in main.dart, so
+        // it is app-level here too — the Home, Bookings and Wallet tabs read it in
+        // initState, and a screen pumped without it would throw before its first paint.
+        ChangeNotifierProvider<DataSyncProvider>(create: (_) => DataSyncProvider()),
         ...providers,
       ],
       child: MaterialApp(
