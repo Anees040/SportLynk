@@ -259,7 +259,7 @@ void main() {
   group('a send that failed', () {
     testWidgets('it says so, and the bubble becomes the retry', (tester) async {
       await pumpBubble(tester, msg(failed: true), isMine: true);
-      expect(find.text('Not sent · tap to retry'), findsOneWidget);
+      expect(find.text('Not sent'), findsOneWidget);
       expect(tester.widget<Icon>(find.byIcon(Icons.error_outline)).color,
           AppColors.error);
       await tester.tap(find.text('See you at 7'));
@@ -268,7 +268,7 @@ void main() {
 
     testWidgets('a delivered message ignores a tap', (tester) async {
       await pumpBubble(tester, msg(), isMine: true);
-      expect(find.text('Not sent · tap to retry'), findsNothing);
+      expect(find.text('Not sent'), findsNothing);
       await tester.tap(find.text('See you at 7'));
       expect(retries, 0);
     });
