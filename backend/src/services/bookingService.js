@@ -608,6 +608,9 @@ async function cancelBooking(client, { userId, bookingId }) {
     penalty,
     late: lateCancel,
     escrow,
+    // The player's available balance after the refund landed, so the screen can
+    // state "PKR N is back in your wallet (balance: PKR X)" without a second read.
+    balanceAfter: playerAfter.balance,
   }, message);
   // Rides on the envelope, not in `data`: `data` is the JSON the player sees, and
   // a message id is not part of the cancellation receipt. Callers that commit and
@@ -663,6 +666,10 @@ async function cancelBookingGroup(client, { userId, groupId }) {
   let escrow = 0;
   let late = false;
   let venueName = null;
+  // The running wallet balance after each member refunds; the last one is the
+  // player's balance once the whole group is cancelled, which is what the screen
+  // shows. Each cancelBooking refunds into the same locked wallet in sequence.
+  let balanceAfter = 0;
   const pills = [];
   for (const r of rows) {
     const one = await cancelBooking(client, { userId, bookingId: r.id });
@@ -674,6 +681,7 @@ async function cancelBookingGroup(client, { userId, groupId }) {
     escrow += asNum(one.data.escrow);
     late = late || one.data.late === true;
     venueName = venueName || one.data.venueName;
+    balanceAfter = asNum(one.data.balanceAfter);
     if (one.chatPill) pills.push(one.chatPill);
   }
 
@@ -689,6 +697,7 @@ async function cancelBookingGroup(client, { userId, groupId }) {
     penalty,
     escrow,
     late,
+    balanceAfter,
   }, penalty > 0
     ? `${rows.length} slots cancelled — PKR ${refund} refunded, PKR ${penalty} forfeited to the venue.`
     : `${rows.length} slots cancelled — PKR ${refund} refunded to your wallet.`);
