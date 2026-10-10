@@ -212,8 +212,8 @@ void main() {
     test('the drawer read asks for a page size and no archived rows', () async {
       api.ok({'threads': const []});
       await api.run(() => service.threads('JWT'));
-      expect(api.endpoint(), '/assistant/threads?limit=30');
-      expect(api.query(), {'limit': '30'});
+      expect(api.endpoint(), '/assistant/threads?limit=50');
+      expect(api.query(), {'limit': '50'});
     });
 
     test('archived rows are asked for explicitly', () async {
@@ -268,10 +268,17 @@ void main() {
       expect((await api.run(() => service.threads('JWT'))).map((t) => t.id), ['th1']);
     });
 
-    test('a failure and a wrong-typed block are both an empty drawer', () async {
+    test('a failure throws, and a wrong-typed block is an empty drawer', () async {
+      // A failed read throws so the drawer can tell an outage from an empty account
+      // and offer a retry — an empty list would read as "no chats yet".
       api.fail('Unauthorised.', status: 401);
-      expect(await api.run(() => service.threads('JWT')), isEmpty);
+      await expectLater(
+        api.run(() => service.threads('JWT')),
+        throwsA(isA<ScoutUnavailable>()),
+      );
 
+      // A well-formed answer whose threads field is the wrong shape is not an outage;
+      // it is simply no threads, and reads as an empty list.
       final wrong = FakeApi()..ok({'threads': 'not a list'});
       expect(await wrong.run(() => service.threads('JWT')), isEmpty);
     });
