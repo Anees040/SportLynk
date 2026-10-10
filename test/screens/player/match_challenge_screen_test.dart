@@ -179,7 +179,7 @@ void main() {
       await settleData(tester);
 
       expect(
-        find.textContaining('no confirmed upcoming bookings'),
+        find.textContaining('No confirmed upcoming booking'),
         findsOneWidget,
       );
       // The icon-button factory is a private FilledButton subtype, so assert the
