@@ -1917,7 +1917,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     // Hold the refresh while checkout is on top — nothing there reacts to a
     // repaint, and a snackbar would land over the confirm screen.
     _refreshTimer?.cancel();
-    await Navigator.push(
+    final booked = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ConfirmBookingScreen(
@@ -1931,6 +1931,14 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
       ),
     );
     if (!mounted) return;
+    if (booked == true) {
+      // The booking completed. Those slots are now ours and booked, so drop the
+      // selection without the reclaim path's "taken by another player" notice —
+      // which would otherwise fire over the success screen when the refresh below
+      // re-reads the grid and finds our own just-booked slot gone. Holds are already
+      // released server-side at booking, so this does not call release again.
+      setState(() => _clearSelection(releaseHolds: false));
+    }
     _startAutoRefresh();
     _load();
   }
