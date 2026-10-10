@@ -30,8 +30,16 @@ const POLICY = {
    * without pushing a fraction into `('x hours')::INTERVAL`.
    */
   AUTO_DECIDE_AFTER_MINUTES: 2 * 60,
-  /** Pending requests whose slot starts sooner than this are auto-rejected. */
-  AUTO_DECIDE_MIN_LEAD_HOURS: 2,
+  /**
+   * A pending request is auto-rejected (full refund) only once its slot is this
+   * close to starting and the owner still has not approved. Short on purpose: a
+   * near-term booking must not be killed the moment it is made. The owner keeps the
+   * whole runway up to this cut-off to approve or reject — and to screen the
+   * player's trust score — and the player is refunded in full if that runway runs
+   * out. Replaces the old 2-hour lead, which rejected a booking made 100 minutes
+   * before kickoff on the very next sweep.
+   */
+  AUTO_REJECT_MIN_LEAD_MINUTES: 15,
   /** Smallest withdrawal SportLynk will accept, in PKR (FR7.4). */
   WITHDRAWAL_MIN_AMOUNT: 200,
   /** How long a withdrawal sits `pending` before the job marks it paid out. */
@@ -71,6 +79,7 @@ function applyTestOverride(envVar, policyKey, scale = 1, unit = 'min') {
 }
 
 applyTestOverride('SL_TEST_AUTO_DECIDE_MINUTES', 'AUTO_DECIDE_AFTER_MINUTES');
+applyTestOverride('SL_TEST_AUTO_REJECT_LEAD_MINUTES', 'AUTO_REJECT_MIN_LEAD_MINUTES');
 applyTestOverride('SL_TEST_NO_SHOW_MINUTES', 'NO_SHOW_GRACE_MINUTES');
 applyTestOverride('SL_TEST_SETTLE_MINUTES', 'WITHDRAWAL_SETTLE_MINUTES');
 applyTestOverride('SL_TEST_SWEEP_SECONDS', 'SWEEP_INTERVAL_MS', 1000, 'sec');
