@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/data_sync_provider.dart';
 import '../../utils/num_util.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/offline_banner.dart';
@@ -212,6 +213,9 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           final first = _isGroup && payload is Map && payload['bookings'] is List
               ? Map<String, dynamic>.from((payload['bookings'] as List).first as Map)
               : Map<String, dynamic>.from(payload as Map);
+          // A new booking changes the upcoming list, the home dashboard and the
+          // frozen wallet balance; announce it so all three refresh.
+          context.read<DataSyncProvider>().bookingsChanged();
           _showSuccessScreen(first);
         } else {
           SnackbarUtil.showError(context, data['message'] ?? 'Booking failed');
@@ -247,6 +251,10 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           slotCount: _run.length,
         ),
       ),
+      // Tells the venue screen underneath that the booking completed, so its slot-
+      // grid refresh clears the selection silently instead of reporting the slot the
+      // player just booked as "taken by another player".
+      result: true,
     );
   }
 
@@ -1026,8 +1034,8 @@ class _BookingSuccessScreen extends StatelessWidget {
                       Navigator.of(context).pushNamedAndRemoveUntil(
                         '/player-home',
                         (route) => false,
+                        arguments: {'tab': 1},
                       );
-                      // Navigate to bookings tab — home screen will handle this via route
                     },
                     child: Text(
                       'View in Booking History →',
