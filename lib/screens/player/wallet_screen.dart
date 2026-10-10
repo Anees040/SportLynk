@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/connectivity_provider.dart';
+import '../../providers/data_sync_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/offline_cache.dart';
 import '../../utils/num_util.dart';
@@ -33,12 +34,38 @@ class _WalletScreenState extends State<WalletScreen> with ReconnectRefresh<Walle
   DateTime? _cachedAt;
   static const _amounts = [500.0, 1000.0, 2000.0, 5000.0];
 
+  /// The app-wide data-change signal. A refund from a cancellation elsewhere moves
+  /// this balance, so the Wallet reloads when it fires rather than waiting for a
+  /// manual pull or a reconnect.
+  DataSyncProvider? _sync;
+  int _lastWalletRev = 0;
+
   @override
   void initState() {
     super.initState();
     // Concurrent, not chained — see [_hydrateFromCache].
     _load();
     _hydrateFromCache();
+    _sync = context.read<DataSyncProvider>();
+    _lastWalletRev = _sync!.walletRevision;
+    _sync!.addListener(_onWalletSync);
+  }
+
+  // Reload when the balance moved elsewhere — a cancellation refund, a booking, or
+  // a top-up. The revision guard skips a bookings-only change that left money alone.
+  void _onWalletSync() {
+    final sync = _sync;
+    if (!mounted || sync == null) return;
+    if (sync.walletRevision != _lastWalletRev) {
+      _lastWalletRev = sync.walletRevision;
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _sync?.removeListener(_onWalletSync);
+    super.dispose();
   }
 
   // Balance and transactions can move while the app sits backgrounded or offline;
@@ -130,7 +157,7 @@ class _WalletScreenState extends State<WalletScreen> with ReconnectRefresh<Walle
     Navigator.pop(context); // close simulation dialog
     if (resp['success'] == true) {
       SnackbarUtil.showSuccess(context, 'PKR ${amount.toStringAsFixed(0)} added to wallet!');
-      _load();
+      context.read<DataSyncProvider>().walletChanged();
     } else {
       // ApiClient phrases connectivity and server errors for display, so an
       // offline top-up reads as a calm sentence, not a raw exception.
@@ -175,7 +202,7 @@ class _WalletScreenState extends State<WalletScreen> with ReconnectRefresh<Walle
       token: token,
       available: asNum(_wallet?['balance']),
     );
-    if (changed && mounted) _load();
+    if (changed && mounted) context.read<DataSyncProvider>().walletChanged();
   }
 
   // FR7.2 — itemised escrow breakdown
