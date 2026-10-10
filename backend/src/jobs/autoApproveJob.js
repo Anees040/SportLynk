@@ -2,10 +2,14 @@
  * Auto-decision sweep for pending booking requests (FR4.10)
  *
  * Every 5 minutes:
- *   • pending for more than 2h and slot starts more than 2h from now
+ *   • pending longer than the owner-decision window, slot still comfortably ahead
  *       → auto-confirm (owner stayed silent; escrow stays frozen, no money moves)
- *   • pending and slot starts within 2h (or has already started)
+ *   • pending and slot starts within the short reject lead (or has already started)
  *       → auto-reject + full refund: player balance +P, frozen -P, slot freed
+ *
+ * The reject lead is deliberately short (minutes, not hours): a near-term booking
+ * stays pending so the owner can still approve it — and screen the player's trust
+ * score — right up to the cut-off, instead of being rejected the moment it is made.
  *
  * Both paths write a notification row for the player and the owner, and every
  * ledger write happens inside one transaction with FOR UPDATE on the booking
@@ -35,7 +39,7 @@ async function processPendingRequests() {
       `SELECT b.id,
               CASE
                 WHEN (b.slot_date::DATE + b.start_time::TIME)
-                     < (NOW() AT TIME ZONE $1) + ($2 || ' hours')::INTERVAL
+                     < (NOW() AT TIME ZONE $1) + ($2 || ' minutes')::INTERVAL
                   THEN 'reject'
                 WHEN b.created_at < NOW() - ($3 || ' minutes')::INTERVAL
                   THEN 'approve'
@@ -45,7 +49,7 @@ async function processPendingRequests() {
         WHERE b.status = 'pending'`,
       [
         POLICY.TIMEZONE,
-        String(POLICY.AUTO_DECIDE_MIN_LEAD_HOURS),
+        String(POLICY.AUTO_REJECT_MIN_LEAD_MINUTES),
         String(POLICY.AUTO_DECIDE_AFTER_MINUTES),
       ],
     );
@@ -191,7 +195,7 @@ async function autoReject(bookingId) {
         type: 'refund',
         amount: escrow,
         balanceAfter: after.balance,
-        description: `Auto-rejected — owner did not approve before the ${POLICY.AUTO_DECIDE_MIN_LEAD_HOURS}h cut-off`,
+        description: `Auto-rejected — owner did not approve before the ${describeDelay(POLICY.AUTO_REJECT_MIN_LEAD_MINUTES)} cut-off`,
         counterparty: b.venue_name,
       });
     }
@@ -201,14 +205,14 @@ async function autoReject(bookingId) {
       bookingId: b.id,
       type: 'booking_auto_rejected',
       title: 'Booking auto-rejected',
-      body: `${b.venue_name} did not approve in time (slot starts within ${POLICY.AUTO_DECIDE_MIN_LEAD_HOURS}h). PKR ${escrow} has been refunded in full.`,
+      body: `${b.venue_name} did not approve in time (slot starts within ${describeDelay(POLICY.AUTO_REJECT_MIN_LEAD_MINUTES)}). PKR ${escrow} has been refunded in full.`,
     });
     await notify(client, {
       userId: b.venue_owner_id || b.owner_id,
       bookingId: b.id,
       type: 'booking_auto_rejected_owner',
       title: 'Request expired',
-      body: `${b.player_name}'s request was auto-rejected — the slot starts within ${POLICY.AUTO_DECIDE_MIN_LEAD_HOURS}h and it was never approved.`,
+      body: `${b.player_name}'s request was auto-rejected — the slot starts within ${describeDelay(POLICY.AUTO_REJECT_MIN_LEAD_MINUTES)} and it was never approved.`,
     });
 
     await client.query('COMMIT');
@@ -228,7 +232,7 @@ async function autoReject(bookingId) {
 function startAutoApproveJob() {
   console.log(
     `[AutoApproveJob] Started — sweeps every ${POLICY.SWEEP_INTERVAL_MS / 60000} min ` +
-      `(auto-confirm after ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)}, auto-reject inside ${POLICY.AUTO_DECIDE_MIN_LEAD_HOURS}h of slot start).`,
+      `(auto-confirm after ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)}, auto-reject inside ${describeDelay(POLICY.AUTO_REJECT_MIN_LEAD_MINUTES)} of slot start).`,
   );
   setTimeout(processPendingRequests, 10000);
   setInterval(processPendingRequests, POLICY.SWEEP_INTERVAL_MS);
