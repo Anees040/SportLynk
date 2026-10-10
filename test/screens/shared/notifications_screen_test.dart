@@ -428,7 +428,7 @@ void main() {
       await _pumpFeed(tester, feed);
 
       await openFilter(tester);
-      await tester.tap(find.text('Chat'));
+      await tester.tap(find.widgetWithText(ListTile, 'Chat'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
@@ -478,7 +478,7 @@ void main() {
       await _pumpFeed(tester, feed);
 
       await openFilter(tester);
-      await tester.tap(find.text('Chat'));
+      await tester.tap(find.widgetWithText(ListTile, 'Chat'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
