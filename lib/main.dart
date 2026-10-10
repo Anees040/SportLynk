@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'constants/app_theme.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
-import 'providers/booking_provider.dart';
+import 'providers/data_sync_provider.dart';
 import 'providers/connectivity_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/venue_provider.dart';
@@ -51,7 +51,7 @@ class SportLynkApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => VenueProvider()),
-        ChangeNotifierProvider(create: (_) => BookingProvider()),
+        ChangeNotifierProvider(create: (_) => DataSyncProvider()),
         // The bell badge on all three home headers, the feed screen, and the
         // `notification:new` socket subscription that keeps them live.
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
