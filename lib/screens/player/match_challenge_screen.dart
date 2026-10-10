@@ -411,7 +411,10 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
         ),
         if (_bookings.isEmpty)
           _notice(
-            'You have no confirmed upcoming bookings left to link. Book a slot first — then the challenge can name a real time and place.',
+            'No confirmed upcoming booking to link yet. A challenge pins to a booking '
+            'that is confirmed by the owner, still upcoming, and not already hosting a '
+            'match. Book a slot — or wait for the owner to approve a pending one — then '
+            'come back.',
             AppColors.warning,
             Icons.event_busy,
           )
