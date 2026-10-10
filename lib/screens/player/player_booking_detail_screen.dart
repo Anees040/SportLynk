@@ -8,7 +8,9 @@ import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/connectivity_provider.dart';
+import '../../providers/data_sync_provider.dart';
 import '../../services/chat_service.dart';
+import '../../utils/cancellation_message.dart';
 import '../../widgets/network_error_view.dart';
 import '../shared/chat_thread_screen.dart';
 import 'rate_experience_screen.dart';
@@ -238,12 +240,26 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
       final resp = await http.patch(uri, headers: {'Authorization': 'Bearer $token'});
       final data = jsonDecode(resp.body);
       if (mounted) {
+        final ok = data['success'] == true;
+        // The unified cancellation line: refund, the venue's deduction if the
+        // cancellation was late, and the resulting wallet balance — the same wording
+        // the Bookings list uses, so the two never disagree.
+        final text = ok
+            ? cancellationMessage(
+                data['data'] is Map ? data['data'] as Map : const {},
+                count: group ? count : 1)
+            : (data['message']?.toString() ?? 'Could not cancel. Try again.');
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(data['message'] ?? 'Cancelled', style: GoogleFonts.poppins(color: Colors.white)),
-          backgroundColor: data['success'] == true ? AppColors.accent : AppColors.error,
+          content: Text(text, style: GoogleFonts.poppins(color: Colors.white)),
+          backgroundColor: ok ? AppColors.accent : AppColors.error,
           behavior: SnackBarBehavior.floating,
         ));
-        if (data['success'] == true) Navigator.pop(context);
+        if (ok) {
+          // Announce so the Home dashboard, the Bookings list and the Wallet all
+          // re-read as the user returns to them.
+          context.read<DataSyncProvider>().bookingsChanged();
+          Navigator.pop(context);
+        }
       }
     } catch (_) {
       // Previously an empty catch: a cancellation that failed told the player
@@ -522,7 +538,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
                       '$_groupCount consecutive slots'),
                 const Divider(color: AppColors.border),
                 _detRow(
-                  Icons.currency_rupee,
+                  Icons.payments_outlined,
                   'Amount Held in Escrow',
                   // The group total — what the player actually paid — not one slot's
                   // share.
