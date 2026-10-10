@@ -442,7 +442,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
                   _statCard(
                     'REVENUE TODAY',
                     'PKR ${_parseNum(stats['revenueToday']).toStringAsFixed(0)}',
-                    Icons.currency_rupee,
+                    Icons.payments_outlined,
                     AppColors.accent,
                   ),
                   const SizedBox(width: 10),
