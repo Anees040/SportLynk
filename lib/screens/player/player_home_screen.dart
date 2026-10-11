@@ -21,6 +21,7 @@ import '../../widgets/assistant/scout_fab.dart';
 import '../../widgets/header_actions.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/offline_banner.dart';
+import '../../widgets/swipe_page_view.dart';
 import '../shared/chats_screen.dart';
 import 'assistant_screen.dart';
 
@@ -38,6 +39,10 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
     with ReconnectRefresh<PlayerHomeScreen> {
   late int _tab;
   late int _prevTab;
+
+  /// Drives the swipeable tab pages and feeds the bottom bar the fractional
+  /// position it reads to slide its indicator with a drag.
+  late final PageController _pageController;
   Map<String, dynamic>? _homeData;
 
   /// App-wide data-change signal. Reloads the dashboard's upcoming-bookings strip
@@ -55,8 +60,10 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
   String? _homeError;
 
   /// Reaches into the live Bookings tab so a booking made in the chat can be pulled
-  /// in immediately. The tab is inside an [IndexedStack] with `wantKeepAlive`, so its
-  /// State outlives every tab switch — the key is the only handle to it.
+  /// in immediately. The tab is a kept-alive page inside the [SwipePageView], so its
+  /// State outlives every tab switch once built — the key is the only handle to it.
+  /// It is null until Bookings has been shown once, which the callers tolerate: a
+  /// tab that has never built has nothing stale to refresh.
   final GlobalKey<BookingsScreenState> _bookingsKey = GlobalKey<BookingsScreenState>();
 
   final ChatService _chat = ChatService();
@@ -73,6 +80,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
     super.initState();
     _tab = widget.initialTab;
     _prevTab = widget.initialTab;
+    _pageController = PageController(initialPage: widget.initialTab);
     // Concurrent, not chained — see [_hydrateFromCache].
     _load();
     _hydrateFromCache();
@@ -87,6 +95,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
     _badgeDebounce?.cancel();
     _msgSub?.cancel();
     _sync?.removeListener(_onDataSync);
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -202,7 +211,20 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
     });
   }
 
-  void _onTabChanged(int index) {
+  /// Jump straight to [index] with no slide. A bar tap in a messaging app
+  /// switches instantly; only a finger drag animates the pages. The bookkeeping
+  /// and per-tab reloads still run through [_onPageSettled], which the jump fires.
+  void _goToTab(int index) {
+    if (index == _tab) return;
+    _pageController.jumpToPage(index);
+  }
+
+  /// The single point the shell learns its tab changed, by tap or by swipe. A
+  /// returning tab reloads what may have gone stale while it was off screen: the
+  /// dashboard strip on Home, the list on Bookings.
+  void _onPageSettled(int index) {
+    if (!mounted) return;
+    HapticFeedback.selectionClick();
     _prevTab = _tab;
     setState(() => _tab = index);
     if (index == 0 && _prevTab != 0) _load();
@@ -226,7 +248,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
       if (_tab == 0) _load();
     }
     final target = exit.screen == null ? null : _tabOf(exit.screen!);
-    if (target != null && target != _tab) _onTabChanged(target);
+    if (target != null && target != _tab) _goToTab(target);
   }
 
   static int? _tabOf(String screen) => switch (screen) {
@@ -247,12 +269,13 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
     return PopScope(
       canPop: _tab == 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _tab != 0) _onTabChanged(0);
+        if (!didPop && _tab != 0) _goToTab(0);
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
-        body: IndexedStack(
-          index: _tab,
+        body: SwipePageView(
+          controller: _pageController,
+          onPageChanged: _onPageSettled,
           children: [
             _buildHome(auth),
             BookingsScreen(key: _bookingsKey),
@@ -272,7 +295,13 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
   }
 
   // Bottom navigation bar
+  //
+  // The highlight tracks the page controller's fractional position: a finger drag
+  // carries the accent and the pill across with it, while a tap jumps the page and
+  // the highlight lands on the new tab at once. At rest the fraction is a whole
+  // number and the active item reads exactly as it did before the bar was swipeable.
   Widget _buildNav() {
+    const unselected = Color(0xFF94A3B8);
     final items = [
       ('Home', Icons.home_rounded, Icons.home_outlined),
       ('Bookings', Icons.calendar_month, Icons.calendar_month_outlined),
@@ -292,38 +321,57 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
         top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(items.length, (i) {
-              final selected = _tab == i;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => _onTabChanged(i),
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: selected ? AppColors.accent.withValues(alpha: 0.1) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(selected ? items[i].$2 : items[i].$3,
-                        color: selected ? AppColors.accent : const Color(0xFF94A3B8),
-                        size: 24),
-                      const SizedBox(height: 3),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(items[i].$1,
-                          style: GoogleFonts.poppins(fontSize: 10,
-                            color: selected ? AppColors.accent : const Color(0xFF94A3B8),
-                            fontWeight: selected ? FontWeight.w700 : FontWeight.normal)),
+          child: AnimatedBuilder(
+            animation: _pageController,
+            builder: (context, _) {
+              final page = swipePage(_pageController, _tab);
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: List.generate(items.length, (i) {
+                  // 1 when this item is the current page, 0 a whole tab away, and
+                  // a fraction mid-drag so the accent transfers smoothly.
+                  final t = (1.0 - (page - i).abs()).clamp(0.0, 1.0);
+                  final color = Color.lerp(unselected, AppColors.accent, t)!;
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => _goToTab(i),
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          // The active icon lifts onto a round accent halo. Both the
+                          // lift and the halo track the drag, so mid-swipe they hand
+                          // across from the leaving tab to the arriving one.
+                          Transform.translate(
+                            offset: Offset(0, -6 * t),
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: AppColors.accent.withValues(alpha: 0.18 * t),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(t > 0.5 ? items[i].$2 : items[i].$3,
+                                  color: color, size: 24),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(items[i].$1,
+                              style: GoogleFonts.poppins(fontSize: 10,
+                                color: color,
+                                fontWeight: FontWeight.lerp(
+                                    FontWeight.normal, FontWeight.w700, t))),
+                          ),
+                        ]),
                       ),
-                    ]),
-                  ),
-                ),
+                    ),
+                  );
+                }),
               );
-            }),
+            },
           ),
         ),
       ),
@@ -536,7 +584,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
             icon: Icons.event_available_rounded,
             value: '$upcomingCount',
             label: upcomingCount == 1 ? 'Upcoming booking' : 'Upcoming bookings',
-            onTap: () => _onTabChanged(1),
+            onTap: () => _goToTab(1),
           ),
         ),
         const SizedBox(width: 12),
@@ -686,7 +734,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen>
             style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w800,
               color: AppColors.textPrimary)),
           GestureDetector(
-            onTap: () => _onTabChanged(1),
+            onTap: () => _goToTab(1),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               decoration: BoxDecoration(
