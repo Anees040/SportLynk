@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -21,6 +22,7 @@ import '../../widgets/network_error_view.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/offline_banner.dart';
 import '../../widgets/pricing_widgets.dart';
+import '../../widgets/swipe_page_view.dart';
 import '../shared/chats_screen.dart';
 import 'owner_booking_requests_screen.dart';
 import 'owner_match_verify_screen.dart';
@@ -38,6 +40,10 @@ class OwnerHomeScreen extends StatefulWidget {
 class _OwnerHomeScreenState extends State<OwnerHomeScreen>
     with ReconnectRefresh<OwnerHomeScreen> {
   int _tab = 0;
+
+  /// Drives the swipeable tab pages and feeds the bottom bar the fractional
+  /// position it reads to slide its indicator with a drag.
+  late final PageController _pageController;
   Map<String, dynamic>? _data;
   bool _loading = true;
   static String get _base => ApiConstants.baseUrl;
@@ -91,6 +97,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     // Both started together, deliberately NOT chained. Reading the cache is disk
     // I/O, and awaiting it before the request would delay every online load by
     // however long shared_preferences takes to answer — paying an offline cost on
@@ -113,6 +120,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
     _matchSub?.cancel();
     _badgeDebounce?.cancel();
     _msgSub?.cancel();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -288,6 +296,23 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
     }
   }
 
+  /// Jump straight to [index] with no slide. A bar tap in a messaging app
+  /// switches instantly; only a finger drag animates the pages. The settle
+  /// bookkeeping still runs through [_onPageSettled], which the jump fires.
+  void _goToTab(int index) {
+    if (index == _tab) return;
+    _pageController.jumpToPage(index);
+  }
+
+  /// The single point the shell learns its tab changed, by tap or by swipe. The
+  /// child tabs load their own data on first build, so there is nothing to reload
+  /// here beyond recording which tab now shows.
+  void _onPageSettled(int index) {
+    if (!mounted) return;
+    HapticFeedback.selectionClick();
+    setState(() => _tab = index);
+  }
+
   @override
   Widget build(BuildContext context) {
     // A back gesture off the Dashboard tab returns to it rather than closing the
@@ -295,22 +320,32 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
     return PopScope(
       canPop: _tab == 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _tab != 0) setState(() => _tab = 0);
+        if (!didPop && _tab != 0) _goToTab(0);
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
-        body: IndexedStack(index: _tab, children: [
-          _dashboardTab(),
-          const OwnerBookingRequestsScreen(),
-          const OwnerSlotCalendarScreen(),
-          const OwnerMyVenuesScreen(),   // multi-venue list
-          const OwnerProfileScreen(),
-        ]),
+        body: SwipePageView(
+          controller: _pageController,
+          onPageChanged: _onPageSettled,
+          children: [
+            _dashboardTab(),
+            const OwnerBookingRequestsScreen(),
+            const OwnerSlotCalendarScreen(),
+            const OwnerMyVenuesScreen(),   // multi-venue list
+            const OwnerProfileScreen(),
+          ],
+        ),
         bottomNavigationBar: _buildNav(),
       ),
     );
   }
 
+  // Bottom navigation bar
+  //
+  // The accent tracks the page controller's fractional position: a finger drag
+  // carries the highlight across with it, while a tap jumps the page and the
+  // highlight lands on the new tab at once. At rest the fraction is whole and the
+  // active item reads exactly as before the bar was swipeable.
   Widget _buildNav() {
     final items = [
       ('DASHBOARD', Icons.grid_view_rounded, Icons.grid_view_outlined),
@@ -326,35 +361,58 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
       ),
       child: SafeArea(
         top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: List.generate(items.length, (i) {
-            final sel = _tab == i;
-            return GestureDetector(
-              onTap: () => setState(() => _tab = i),
-              child: Container(
-                color: Colors.transparent,
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(
-                    sel ? items[i].$2 : items[i].$3,
-                    color: sel ? AppColors.accent : AppColors.textSecondary,
-                    size: 22,
+        child: AnimatedBuilder(
+          animation: _pageController,
+          builder: (context, _) {
+            final page = swipePage(_pageController, _tab);
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: List.generate(items.length, (i) {
+                // 1 on the current page, 0 a whole tab away, a fraction mid-drag.
+                final t = (1.0 - (page - i).abs()).clamp(0.0, 1.0);
+                final color = Color.lerp(AppColors.textSecondary, AppColors.accent, t)!;
+                return GestureDetector(
+                  onTap: () => _goToTab(i),
+                  child: Container(
+                    color: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      // The active icon lifts onto a round accent halo; both track
+                      // the drag so mid-swipe they hand across between tabs.
+                      Transform.translate(
+                        offset: Offset(0, -5 * t),
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withValues(alpha: 0.18 * t),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            t > 0.5 ? items[i].$2 : items[i].$3,
+                            color: color,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        items[i].$1,
+                        style: GoogleFonts.poppins(
+                          fontSize: 9,
+                          color: color,
+                          fontWeight: FontWeight.lerp(
+                              FontWeight.w400, FontWeight.w700, t),
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ]),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    items[i].$1,
-                    style: GoogleFonts.poppins(
-                      fontSize: 9,
-                      color: sel ? AppColors.accent : AppColors.textSecondary,
-                      fontWeight: sel ? FontWeight.w700 : FontWeight.w400,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ]),
-              ),
+                );
+              }),
             );
-          }),
+          },
         ),
       ),
     );
@@ -458,7 +516,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
                     '${stats['pendingCount'] ?? 0}',
                     Icons.pending_actions,
                     AppColors.warning,
-                    onTap: () => setState(() => _tab = 1),
+                    onTap: () => _goToTab(1),
                   ),
                 ]),
               ),
@@ -489,7 +547,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
                   _quickActionTile(
                     Icons.pending_actions_rounded, 'Requests',
                     const Color(0xFFFEF3C7), const Color(0xFFD97706),
-                    () => setState(() => _tab = 1),
+                    () => _goToTab(1),
                   ),
                 ]),
                 const SizedBox(height: 12),
@@ -497,13 +555,13 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
                   _quickActionTile(
                     Icons.stadium_rounded, 'My Venue',
                     const Color(0xFFD1FAE5), AppColors.accent,
-                    () => setState(() => _tab = 3),
+                    () => _goToTab(3),
                   ),
                   const SizedBox(width: 12),
                   _quickActionTile(
                     Icons.calendar_month_rounded, 'Schedule',
                     const Color(0xFFDBEAFE), const Color(0xFF2563EB),
-                    () => setState(() => _tab = 2),
+                    () => _goToTab(2),
                   ),
                 ]),
                 const SizedBox(height: 12),
@@ -658,7 +716,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
                   style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                 ),
                 TextButton(
-                  onPressed: () => setState(() => _tab = 2),
+                  onPressed: () => _goToTab(2),
                   child: Text(
                     'VIEW SCHEDULE',
                     style: GoogleFonts.poppins(fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w700, letterSpacing: 0.3),
