@@ -70,72 +70,15 @@ class PollBubble extends StatelessWidget {
     );
   }
 
-  Widget _option(int i) {
-    final mine = poll.didVote(myUserId, i);
-    final count = poll.countFor(i);
-    final frac = poll.fraction(i).clamp(0.0, 1.0);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: GestureDetector(
-        onTap: poll.closed ? null : () => onVote(i),
-        child: Stack(
-          children: [
-            // The share-of-vote fill behind the row, animated to its new width so
-            // a changed vote slides rather than snapping between tallies.
-            Positioned.fill(
-              child: TweenAnimationBuilder<double>(
-                tween: Tween<double>(end: frac),
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
-                builder: (context, value, _) => FractionallySizedBox(
-                  widthFactor: value <= 0 ? 0.0001 : value,
-                  alignment: Alignment.centerLeft,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    decoration: BoxDecoration(
-                      color: mine ? AppColors.accentLight : AppColors.inputFill,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    mine
-                        ? (poll.allowMultiple ? Icons.check_box : Icons.check_circle)
-                        : (poll.allowMultiple
-                            ? Icons.check_box_outline_blank
-                            : Icons.radio_button_unchecked),
-                    size: 18,
-                    color: mine ? AppColors.primary : AppColors.textSecondary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(poll.options[i],
-                        style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
-                  ),
-                  const SizedBox(width: 8),
-                  Text('$count',
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _option(int i) => _PollOption(
+        label: poll.options[i],
+        selected: poll.didVote(myUserId, i),
+        count: poll.countFor(i),
+        fraction: poll.fraction(i),
+        allowMultiple: poll.allowMultiple,
+        closed: poll.closed,
+        onTap: () => onVote(i),
+      );
 
   void _showVoters(BuildContext context) {
     showModalBottomSheet(
@@ -167,6 +110,155 @@ class PollBubble extends StatelessWidget {
                 ),
               ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One poll option as its own stateful row so a tap gives immediate feedback: it
+/// presses in, shows a hover state on a pointer device, and animates its tick when
+/// the selection toggles. A selected row carries an accent border, a firmer fill
+/// and bolder text, so a chosen option reads at a glance rather than by its icon
+/// alone.
+class _PollOption extends StatefulWidget {
+  final String label;
+  final bool selected;
+  final int count;
+  final double fraction;
+  final bool allowMultiple;
+  final bool closed;
+  final VoidCallback onTap;
+
+  const _PollOption({
+    required this.label,
+    required this.selected,
+    required this.count,
+    required this.fraction,
+    required this.allowMultiple,
+    required this.closed,
+    required this.onTap,
+  });
+
+  @override
+  State<_PollOption> createState() => _PollOptionState();
+}
+
+class _PollOptionState extends State<_PollOption> {
+  bool _pressed = false;
+  bool _hovered = false;
+
+  void _setPressed(bool v) {
+    if (_pressed != v) setState(() => _pressed = v);
+  }
+
+  void _setHovered(bool v) {
+    if (_hovered != v) setState(() => _hovered = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selected;
+    final frac = widget.fraction.clamp(0.0, 1.0);
+    // Contrast: a selected option gains an accent border and a firmer fill than the
+    // pale wash it had, and a hover previews that border on a pointer device.
+    final Color borderColor = selected
+        ? AppColors.accent
+        : (_hovered ? AppColors.accent.withValues(alpha: 0.45) : AppColors.border);
+    final Color fillColor =
+        selected ? AppColors.accent.withValues(alpha: 0.18) : AppColors.inputFill;
+
+    return MouseRegion(
+      cursor: widget.closed ? SystemMouseCursors.basic : SystemMouseCursors.click,
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: GestureDetector(
+        onTap: widget.closed ? null : widget.onTap,
+        onTapDown: widget.closed ? null : (_) => _setPressed(true),
+        onTapUp: widget.closed ? null : (_) => _setPressed(false),
+        onTapCancel: widget.closed ? null : () => _setPressed(false),
+        child: AnimatedScale(
+          scale: _pressed ? 0.98 : 1.0,
+          duration: const Duration(milliseconds: 90),
+          curve: Curves.easeOut,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Stack(
+              children: [
+                // The share-of-vote fill behind the row, animated to its new width
+                // so a changed tally slides rather than snapping.
+                Positioned.fill(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(end: frac),
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, value, _) => FractionallySizedBox(
+                      widthFactor: value <= 0 ? 0.0001 : value,
+                      alignment: Alignment.centerLeft,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        decoration: BoxDecoration(
+                          color: fillColor,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                  decoration: BoxDecoration(
+                    border:
+                        Border.all(color: borderColor, width: selected ? 1.6 : 1.0),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      // The tick swaps under an AnimatedSwitcher so selecting an
+                      // option scales its mark in rather than hard-cutting it.
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        transitionBuilder: (child, anim) =>
+                            ScaleTransition(scale: anim, child: child),
+                        child: Icon(
+                          selected
+                              ? (widget.allowMultiple
+                                  ? Icons.check_box
+                                  : Icons.check_circle)
+                              : (widget.allowMultiple
+                                  ? Icons.check_box_outline_blank
+                                  : Icons.radio_button_unchecked),
+                          key: ValueKey(selected),
+                          size: 18,
+                          color:
+                              selected ? AppColors.primary : AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(widget.label,
+                            style: TextStyle(
+                                fontSize: 14,
+                                color: AppColors.textPrimary,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400)),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('${widget.count}',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: selected
+                                  ? AppColors.primary
+                                  : AppColors.textSecondary)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
