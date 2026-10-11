@@ -1,6 +1,7 @@
 // The owner home fans out into dashboard, match-queue, chat-badge and pricing
-// reads, while its IndexedStack also mounts the owner child tabs. Every request is
-// stubbed so the test exercises the dashboard rather than accidental 404 fallbacks.
+// reads, while its swipeable pages mount the dashboard eagerly and the other owner
+// tabs on first swipe. Every request those tabs make is stubbed so the test
+// exercises the dashboard rather than accidental 404 fallbacks.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
@@ -79,7 +80,8 @@ void main() {
     api.ok(kPending, const []);
     api.ok(kUnread, {'total': 0, 'rooms': 0});
     api.ok(kPricing, pricing());
-    // IndexedStack children initialize on mount as well.
+    // The swipeable child tabs mount on first view; stubbed so a swipe to one in a
+    // later test lands on a fixture rather than a 404.
     api.ok(kVenues, const []);
     api.ok(kSlots, const []);
     api.ok(kBookings, const []);
@@ -115,7 +117,14 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('Ali Raza'),
         500,
-        scrollable: find.byType(Scrollable).first,
+        // The shell body is now a horizontal PageView, itself a Scrollable, so the
+        // vertical dashboard list has to be named by its axis rather than taken as
+        // the first Scrollable in the tree.
+        scrollable: find
+            .byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
       );
       expect(find.text('Ali Raza'), findsOneWidget);
       expect(find.text('AI Suggested Price'), findsOneWidget);
