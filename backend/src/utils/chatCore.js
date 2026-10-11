@@ -282,10 +282,17 @@ async function createPoll(client, { channelId, userId, question, options, allowM
  * `{ ok, status, message, messageId, channelId }`.
  */
 async function votePoll(client, { channelId, pollId, userId, optionIndex }) {
+  // FOR UPDATE serialises every vote on this poll. Two taps fired in quick
+  // succession arrive as concurrent requests, and a single-choice ballot clears
+  // the voter's prior pick before inserting the new one; without the row lock the
+  // two "clear then insert" pairs interleave and both inserts survive, leaving one
+  // voter selecting two options. The lock holds for the transaction the route
+  // opens, so the second vote waits for the first to commit and sees its result.
   const poll = (await client.query(
     `SELECT id, allow_multiple, closed_at, message_id,
             jsonb_array_length(options) AS n
-       FROM chat_polls WHERE id = $1 AND channel_id = $2`,
+       FROM chat_polls WHERE id = $1 AND channel_id = $2
+       FOR UPDATE`,
     [pollId, channelId],
   )).rows[0];
   if (!poll) return { ok: false, status: 404, message: 'Poll not found.' };
