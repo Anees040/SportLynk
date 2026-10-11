@@ -375,14 +375,25 @@ async function undo(client) {
   const teamIds = await idsOf('SELECT id FROM teams WHERE captain_id = ANY($1::uuid[])');
   const venueIds = await idsOf('SELECT id FROM venues WHERE owner_id = ANY($1::uuid[])');
   const bookingIds = (await client.query(
-    'SELECT id FROM bookings WHERE player_id = ANY($1::uuid[]) OR notes LIKE $2',
-    [userIds, `${NOTES_MARK}/%`],
+    `SELECT id FROM bookings
+      WHERE player_id = ANY($1::uuid[]) OR notes LIKE $2 OR venue_id = ANY($3::uuid[])`,
+    [userIds, `${NOTES_MARK}/%`, venueIds],
   )).rows.map((r) => r.id);
 
   const run = async (label, sql, params) => {
     const r = await client.query(sql, params);
     if (r.rowCount) log(`deleted ${r.rowCount} ${label}`);
   };
+
+  // Release escrow on any still-active booking in the set through the real cancel
+  // path before deleting it, so the correct wallet is refunded — including a real
+  // account that booked a seeded venue — rather than leaving money frozen.
+  const activeBookings = (await client.query(
+    `SELECT id, player_id FROM bookings WHERE id = ANY($1::uuid[]) AND status IN ('pending','confirmed')`,
+    [bookingIds],
+  )).rows;
+  for (const b of activeBookings) await booking.cancelBooking(client, { userId: b.player_id, bookingId: b.id });
+  if (activeBookings.length) log(`released escrow on ${activeBookings.length} active booking(s)`);
 
   // Reviews reference bookings + venues, and the ledger references bookings, so both
   // go before the bookings themselves.
