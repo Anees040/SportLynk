@@ -697,17 +697,29 @@ router.post('/:channelId/polls/:pollId/vote', async (req, res, next) => {
     if (!access.isUuid(req.params.pollId)) return fail(res, 404, 'Poll not found.');
 
     const optionIndex = Number.isInteger(+req.body.optionIndex) ? +req.body.optionIndex : -1;
+
+    // One transaction so votePoll's FOR UPDATE lock spans its clear-then-insert, and
+    // two taps fired in quick succession serialise instead of both leaving a vote on
+    // a single-choice poll.
+    await client.query('BEGIN');
     const r = await chat.votePoll(client, {
       channelId: req.params.channelId,
       pollId: req.params.pollId,
       userId: req.user.id,
       optionIndex,
     });
-    if (!r.ok) return fail(res, r.status, r.message);
+    if (!r.ok) {
+      await client.query('ROLLBACK');
+      return fail(res, r.status, r.message);
+    }
+    await client.query('COMMIT');
 
     const hydrated = await chat.emitPersistedMessage(client, r.channelId, r.messageId);
     return ok(res, hydrated);
-  } catch (e) { next(e); } finally { client.release(); }
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) { /* already resolved */ }
+    next(e);
+  } finally { client.release(); }
 });
 
 // Shared media  (the "all photos in this chat" gallery)
