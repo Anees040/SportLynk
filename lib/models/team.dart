@@ -60,6 +60,10 @@ class Team {
   final String? channelId;
   final String? captainId;
   final num memberCount;
+  /// True when the viewer has a pending join request to this team — set by
+  /// `GET /teams/discover` so "Request to join" persists as "Requested" across
+  /// revisits, not only after a tap this session.
+  final bool pendingRequest;
   final DateTime? createdAt;
   final List<TeamMember> roster;
 
@@ -87,6 +91,7 @@ class Team {
     this.channelId,
     this.captainId,
     this.memberCount = 0,
+    this.pendingRequest = false,
     this.createdAt,
     this.roster = const [],
     this.tournamentPlayed = 0,
@@ -121,6 +126,7 @@ class Team {
         channelId: (j['channelId'] ?? j['channel_id'])?.toString(),
         captainId: j['captain_id']?.toString(),
         memberCount: asNum(j['member_count']),
+        pendingRequest: j['pending_request'] == true,
         createdAt: _parseDate(j['created_at']),
         roster: (j['roster'] as List? ?? [])
             .whereType<Map>()
