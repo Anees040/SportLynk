@@ -415,7 +415,10 @@ async function discoverTeams(client, { userId, sport = null, q = '', limit = 60 
   params.push(clampLimit(limit, 60, 100));
   const { rows } = await runner.query(
     `SELECT ${access.TEAM_COLUMNS},
-            (SELECT count(*)::int FROM team_members m WHERE m.team_id = t.id) AS member_count
+            (SELECT count(*)::int FROM team_members m WHERE m.team_id = t.id) AS member_count,
+            EXISTS (SELECT 1 FROM team_join_requests r
+                     WHERE r.team_id = t.id AND r.user_id = $1
+                       AND r.status = 'pending') AS pending_request
        FROM teams t WHERE ${where}
       ORDER BY t.elo DESC, lower(t.name)
       LIMIT $${params.length}`,
