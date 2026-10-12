@@ -19,6 +19,8 @@ import '../../utils/snackbar_util.dart';
 import '../../widgets/reco_widgets.dart';
 import '../../widgets/team_stat_widgets.dart';
 import '../shared/public_profile_screen.dart';
+import 'invite_players_screen.dart';
+import '../shared/circle_crop_screen.dart';
 
 /// The team's "Group info" — the WhatsApp screen reached by tapping the chat
 /// header. It is both a profile (logo, record, roster) and the admin console
@@ -275,6 +277,16 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
   /// "for that player"; the plain Invite button passes nothing. Same link either
   /// way — the schema has no per-user invite, so this is always a link the captain
   /// sends the player themselves.
+  /// Open the directory of recommended players to invite one directly into the team.
+  void _openInvitePlayers() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InvitePlayersScreen(teamId: _team!.id, teamName: _team!.name),
+      ),
+    );
+  }
+
   Future<void> _createInvite([String? note]) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -362,11 +374,11 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
+        builder: (ctx, setSheet) => SafeArea(child: Padding(
           padding: EdgeInsets.only(
               left: 20, right: 20, top: 18,
               bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
-          child: Column(
+          child: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -487,8 +499,8 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                 ),
               ),
             ],
-          ),
-        ),
+          )),
+        )),
       ),
     );
     if (saved != true) return;
@@ -507,9 +519,11 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
   Future<String?> _pickLogo() async {
     final picked = await _picker.pickImage(
         source: ImageSource.gallery, maxWidth: 800, imageQuality: 85);
-    if (picked == null) return null;
+    if (picked == null || !mounted) return null;
+    final cropped = await cropToCircle(context, picked);
+    if (cropped == null) return null;
     if (mounted) SnackbarUtil.showSuccess(context, 'Uploading logo…');
-    final url = await CloudinaryService().uploadImage(picked.path, folder: 'teams');
+    final url = await CloudinaryService().uploadImage(cropped.path, folder: 'teams');
     if (url == null && mounted) {
       SnackbarUtil.showError(context, 'Could not upload the logo.');
     }
@@ -807,11 +821,27 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
   Widget _inviteSection() {
     return Column(
       children: [
+        // Two distinct actions: invite a specific player straight into the squad
+        // (lands in their inbox), or share one link for people already in contact.
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            icon: const Icon(Icons.person_add_alt_1, size: 18),
+            label: const Text('Invite players'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            ),
+            onPressed: _busy ? null : _openInvitePlayers,
+          ),
+        ),
+        const SizedBox(height: 10),
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
             icon: const Icon(Icons.link, size: 18),
-            label: const Text('Create invite link'),
+            label: const Text('Share invite link'),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.accent,
               side: const BorderSide(color: AppColors.accent),
