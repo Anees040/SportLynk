@@ -284,7 +284,10 @@ class _DiscoverTeamsScreenState extends State<DiscoverTeamsScreen> {
   }
 
   Widget _requestButton(Team t) {
-    final requested = _requested.contains(t.id);
+    // `t.pendingRequest` is the server's truth (a pending join request already
+    // stands), so the button reads "Requested" on revisit, not only after a tap this
+    // session; `_requested` carries the optimistic flip between tap and next load.
+    final requested = t.pendingRequest || _requested.contains(t.id);
     final sending = _sending.contains(t.id);
     if (requested) {
       return Row(
