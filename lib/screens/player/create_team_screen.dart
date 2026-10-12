@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/team_service.dart';
+import '../shared/circle_crop_screen.dart';
 
 class CreateTeamScreen extends StatefulWidget {
   const CreateTeamScreen({super.key});
@@ -69,9 +70,11 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
   Future<void> _pickLogo() async {
     final picked = await _picker.pickImage(
         source: ImageSource.gallery, maxWidth: 800, imageQuality: 85);
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
+    final cropped = await cropToCircle(context, picked);
+    if (cropped == null) return;
     setState(() => _uploadingLogo = true);
-    final url = await CloudinaryService().uploadImage(picked.path, folder: 'teams');
+    final url = await CloudinaryService().uploadImage(cropped.path, folder: 'teams');
     if (!mounted) return;
     setState(() {
       _uploadingLogo = false;
