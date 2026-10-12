@@ -104,12 +104,9 @@ class TeamService {
       }, token: token);
 
   // Invites
-  /// Mint a fresh 48h invite link. The raw token is returned exactly once.
-  ///
-  /// [note] rides along on the server's `req.body.note` — the roster rail names
-  /// the player the link was minted for, so the invite list reads as "for Ayaan"
-  /// rather than an anonymous link. There is no per-user invite in the schema;
-  /// this is still a single-use link the captain sends themselves.
+  /// Mint (or re-use) the team's shareable 48h invite link. Multi-use (WhatsApp-style):
+  /// it stays live until the captain revokes it or it expires, so one link onboards
+  /// many players. The raw token is returned exactly once.
   Future<Map<String, dynamic>> invite(String token, String id, {String? note}) =>
       _api.post(ApiConstants.teamInvites(id), {
         'note': ?note,
@@ -140,6 +137,29 @@ class TeamService {
   Future<Map<String, dynamic>> decideRequest(
           String token, String id, String requestId, String action) =>
       _api.patch(ApiConstants.teamRequest(id, requestId), {'action': action}, token: token);
+
+  // Direct team -> player invites (a captain invites a specific player into the team).
+  /// Invite one player into the team. The invite lands in their inbox.
+  Future<Map<String, dynamic>> invitePlayer(String token, String id, String userId, {String? message}) =>
+      _api.post(ApiConstants.teamPlayerInvites(id), {
+        'userId': userId,
+        if (message != null && message.isNotEmpty) 'message': message,
+      }, token: token);
+
+  /// The team's still-pending outbound player invites, so the invite screen can mark
+  /// a player already "Invited".
+  Future<Map<String, dynamic>> sentPlayerInvites(String token, String id) =>
+      _api.get(ApiConstants.teamPlayerInvites(id), token: token);
+
+  /// The signed-in player's own pending team invites, for their inbox.
+  Future<Map<String, dynamic>> myTeamInvites(String token) =>
+      _api.get(ApiConstants.teamPlayerInvitesMine, token: token);
+
+  /// Accept or decline a team invite addressed to me. Accept joins the team.
+  Future<Map<String, dynamic>> respondTeamInvite(String token, String inviteId, {required bool accept}) =>
+      _api.post(ApiConstants.teamPlayerInviteRespond(inviteId), {
+        'action': accept ? 'accept' : 'decline',
+      }, token: token);
 
   // Membership
   /// action ∈ {remove, captain, vice_captain, member}
