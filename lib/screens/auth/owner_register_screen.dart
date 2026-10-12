@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import '../shared/circle_crop_screen.dart';
 import 'dart:io';
 import '../../services/cloudinary_service.dart';
 import '../../constants/colors.dart';
@@ -130,7 +131,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
       Text('Personal Information', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
       Text("Let's verify your identity", style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
       const SizedBox(height: 24),
-      Center(child: GestureDetector(onTap: () async { final f = await _pickImg(); if (f != null) setState(() => _avatar = f); },
+      Center(child: GestureDetector(onTap: () async { final f = await _pickImg(); if (f == null || !mounted) return; final c = await cropToCircle(context, f); if (c != null) setState(() => _avatar = c); },
         child: Stack(children: [
           CircleAvatar(radius: 48, backgroundColor: AppColors.accentLight, child: _avatar != null ? ClipOval(child: _img(_avatar!, w: 96, h: 96)) : const Icon(Icons.person, size: 48, color: AppColors.accent)),
           Positioned(bottom: 0, right: 0, child: CircleAvatar(radius: 16, backgroundColor: AppColors.accent, child: const Icon(Icons.camera_alt, size: 16, color: AppColors.white))),
