@@ -229,11 +229,11 @@ router.get('/invites/:token', async (req, res, next) => {
       `SELECT t.id, t.name, t.sport::text AS sport, t.logo_url, t.visibility,
               (SELECT count(*)::int FROM team_members m WHERE m.team_id = t.id) AS member_count
          FROM team_invites i JOIN teams t ON t.id = i.team_id
-        WHERE i.token_hash = $1 AND i.used_at IS NULL
+        WHERE i.token_hash = $1
           AND i.revoked_at IS NULL AND i.expires_at > now()`,
       [hash],
     );
-    if (!rows[0]) return fail(res, 410, 'This invite link has expired or already been used.');
+    if (!rows[0]) return fail(res, 410, 'This invite link has expired or been revoked.');
     return ok(res, rows[0]);
   } catch (e) { next(e); }
 });
@@ -385,7 +385,8 @@ router.get('/:id/suggested-players', async (req, res, next) => {
 
 // Invites  (admin = captain or vice-captain)
 
-/** Mint a single-use invite. The RAW token is returned exactly once, never stored. */
+/** Mint a multi-use invite (WhatsApp-style): the one shareable link stays live until
+ *  the captain revokes it or it expires. The RAW token is returned once, never stored. */
 router.post('/:id/invites', async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -395,7 +396,7 @@ router.post('/:id/invites', async (req, res, next) => {
 
     const live = await client.query(
       `SELECT count(*)::int AS n FROM team_invites
-        WHERE team_id = $1 AND used_at IS NULL AND revoked_at IS NULL AND expires_at > now()`,
+        WHERE team_id = $1 AND revoked_at IS NULL AND expires_at > now()`,
       [req.params.id],
     );
     if (live.rows[0].n >= access.MAX_LIVE_INVITES) {
@@ -434,7 +435,7 @@ router.get('/:id/invites', async (req, res, next) => {
     const { rows } = await client.query(
       `SELECT i.id, i.token_prefix, i.note, i.created_at, i.expires_at, u.name AS created_by_name
          FROM team_invites i LEFT JOIN users u ON u.id = i.created_by
-        WHERE i.team_id = $1 AND i.used_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > now()
+        WHERE i.team_id = $1 AND i.revoked_at IS NULL AND i.expires_at > now()
         ORDER BY i.created_at DESC`,
       [req.params.id],
     );
@@ -475,22 +476,21 @@ router.post('/join/:token', async (req, res, next) => {
       `SELECT i.id AS invite_id, i.created_by AS inviter_id,
               t.id AS team_id, t.name, t.sport::text AS sport, t.logo_url, t.captain_id
          FROM team_invites i JOIN teams t ON t.id = i.team_id
-        WHERE i.token_hash = $1 AND i.used_at IS NULL
+        WHERE i.token_hash = $1
           AND i.revoked_at IS NULL AND i.expires_at > now()
         FOR UPDATE OF i`,
       [hash],
     );
     const inv = rows[0];
-    if (!inv) return bail(client, res, 410, 'This invite link has expired or already been used.');
+    if (!inv) return bail(client, res, 410, 'This invite link has expired or been revoked.');
 
     const already = await client.query(
       'SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2',
       [inv.team_id, req.user.id],
     );
     if (already.rowCount) {
-      // Idempotent: burn the token, report success, do not double-announce.
-      await client.query('UPDATE team_invites SET used_at = now(), used_by = $1 WHERE id = $2',
-        [req.user.id, inv.invite_id]);
+      // Idempotent and non-consuming: the link is multi-use, so a member tapping it
+      // again just gets a friendly "already in" and the link stays live for others.
       await client.query('COMMIT');
       return ok(res, { teamId: inv.team_id, alreadyMember: true }, 'You are already in this team.');
     }
@@ -504,8 +504,6 @@ router.post('/join/:token', async (req, res, next) => {
       `INSERT INTO team_members (team_id, user_id, role, invited_by) VALUES ($1,$2,'member',$3)`,
       [inv.team_id, req.user.id, inv.inviter_id],
     );
-    await client.query('UPDATE team_invites SET used_at = now(), used_by = $1 WHERE id = $2',
-      [req.user.id, inv.invite_id]);
 
     // `inv` aliases the team id as `team_id`; ensureTeamChannel reads `.id`.
     const channelId = await chat.ensureTeamChannel(client, {
@@ -665,6 +663,191 @@ router.patch('/:id/requests/:rid', async (req, res, next) => {
     if (sysId) await chat.emitPersistedMessage(client, channelId, sysId);
     bus.emitToUsers(r.user_id, 'team:update', { teamId: req.params.id });
     return ok(res, { status });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(e);
+  } finally { client.release(); }
+});
+
+// Direct team -> player invites  (admin invites a specific player; migration 039)
+
+/**
+ * POST /api/teams/:id/player-invites — an admin invites a specific player into the
+ * team: the mirror of a join request. It lands in the player's inbox and accepting
+ * adds them. Body: { userId, message? }. A private player cannot be invited, the same
+ * rule that stops a stranger asking them to play.
+ */
+router.post('/:id/player-invites', async (req, res, next) => {
+  if (!access.isUuid(req.params.id)) return fail(res, 404, 'Team not found.');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const g = await access.requireRole(client, req.params.id, req.user.id, 'admin');
+    if (g.error) return bail(client, res, g.error.status, g.error.message);
+    if (g.team.disbanded_at) return bail(client, res, 410, 'This team has been disbanded.');
+
+    const targetId = String(req.body.userId || '').trim();
+    if (!access.isUuid(targetId)) return bail(client, res, 400, 'Which player did you mean?');
+
+    const target = (await client.query(
+      `SELECT u.id, u.role, u.is_active, COALESCE(pp.is_public, true) AS is_public
+         FROM users u LEFT JOIN player_profiles pp ON pp.user_id = u.id WHERE u.id = $1`,
+      [targetId],
+    )).rows[0];
+    if (!target || target.role !== 'player' || target.is_active !== true) {
+      return bail(client, res, 404, 'Player not found.');
+    }
+    if (target.is_public === false) {
+      return bail(client, res, 403, 'This player keeps their profile private and is not accepting invites.');
+    }
+
+    if ((await client.query(
+      'SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2', [req.params.id, targetId],
+    )).rowCount) {
+      return bail(client, res, 409, 'That player is already on this team.');
+    }
+    if (await access.countMembers(client, req.params.id) >= access.MAX_TEAM_SIZE) {
+      return bail(client, res, 409, 'This team is already full.');
+    }
+
+    const msg = access.validateBio(req.body.message);
+    try {
+      await client.query(
+        `INSERT INTO team_player_invites (team_id, user_id, status, message, invited_by)
+         VALUES ($1, $2, 'pending', $3, $4)`,
+        [req.params.id, targetId, msg.ok ? msg.value : null, req.user.id],
+      );
+    } catch (e) {
+      if (e.code === '23505') return bail(client, res, 409, 'That player has already been invited.');
+      throw e;
+    }
+
+    const inviterName = await nameOf(client, req.user.id);
+    await notify(client, {
+      userId: targetId, type: 'team_invite',
+      title: g.team.name, body: `${inviterName} invited you to join ${g.team.name}.`,
+      payload: { teamId: req.params.id, teamName: g.team.name },
+      actorId: req.user.id,
+    });
+    await client.query('COMMIT');
+    bus.emitToUsers(targetId, 'team:invite', { teamId: req.params.id });
+    return ok(res, { invited: true }, 'Invite sent.');
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    const f = friendlyDbError(e);
+    return f ? fail(res, f.status, f.message) : next(e);
+  } finally { client.release(); }
+});
+
+/** The team's outstanding player invites (admin), so the invite screen can mark a
+ *  player already "Invited". */
+router.get('/:id/player-invites', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const g = await access.requireRole(client, req.params.id, req.user.id, 'admin');
+    if (g.error) { await client.query('ROLLBACK').catch(() => {}); return fail(res, g.error.status, g.error.message); }
+    const { rows } = await client.query(
+      `SELECT i.id, i.user_id, i.created_at, u.name, u.avatar_url
+         FROM team_player_invites i JOIN users u ON u.id = i.user_id
+        WHERE i.team_id = $1 AND i.status = 'pending'
+        ORDER BY i.created_at DESC`,
+      [req.params.id],
+    );
+    return ok(res, rows);
+  } catch (e) { next(e); } finally { client.release(); }
+});
+
+/** GET /api/teams/player-invites/mine — the signed-in player's pending team invites. */
+router.get('/player-invites/mine', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT i.id, i.message, i.created_at,
+              t.id AS team_id, t.name AS team_name, t.sport::text AS sport, t.logo_url,
+              (SELECT count(*)::int FROM team_members m WHERE m.team_id = t.id) AS member_count,
+              u.name AS invited_by_name
+         FROM team_player_invites i
+         JOIN teams t ON t.id = i.team_id
+         LEFT JOIN users u ON u.id = i.invited_by
+        WHERE i.user_id = $1 AND i.status = 'pending' AND t.disbanded_at IS NULL
+        ORDER BY i.created_at DESC`,
+      [req.user.id],
+    );
+    return ok(res, rows);
+  } catch (e) { next(e); }
+});
+
+/**
+ * POST /api/teams/player-invites/:iid/respond — the invited player accepts or
+ * declines. Body: { action: 'accept' | 'decline' }. Accept adds them to the team and
+ * opens/joins the team room, exactly as an approved join request does.
+ */
+router.post('/player-invites/:iid/respond', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const inv = (await client.query(
+      `SELECT i.id, i.team_id, t.name, t.logo_url, t.captain_id, t.disbanded_at
+         FROM team_player_invites i JOIN teams t ON t.id = i.team_id
+        WHERE i.id = $1 AND i.user_id = $2 AND i.status = 'pending'
+        FOR UPDATE OF i`,
+      [req.params.iid, req.user.id],
+    )).rows[0];
+    if (!inv) return bail(client, res, 404, 'That invite is no longer open.');
+
+    if (req.body.action !== 'accept') {
+      await client.query(
+        `UPDATE team_player_invites SET status = 'declined', decided_at = now() WHERE id = $1`,
+        [inv.id],
+      );
+      await client.query('COMMIT');
+      return ok(res, { status: 'declined' }, 'Invite declined.');
+    }
+
+    if (inv.disbanded_at) return bail(client, res, 410, 'This team has been disbanded.');
+    const already = await client.query(
+      'SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2', [inv.team_id, req.user.id],
+    );
+    if (already.rowCount) {
+      await client.query(`UPDATE team_player_invites SET status = 'accepted', decided_at = now() WHERE id = $1`, [inv.id]);
+      await client.query('COMMIT');
+      return ok(res, { teamId: inv.team_id, alreadyMember: true }, 'You are already in this team.');
+    }
+    if (await access.countMembers(client, inv.team_id) >= access.MAX_TEAM_SIZE) {
+      return bail(client, res, 409, 'This team is already full.');
+    }
+
+    await client.query(
+      `INSERT INTO team_members (team_id, user_id, role, invited_by) VALUES ($1,$2,'member',$3)`,
+      [inv.team_id, req.user.id, inv.captain_id],
+    );
+    await client.query(`UPDATE team_player_invites SET status = 'accepted', decided_at = now() WHERE id = $1`, [inv.id]);
+
+    const channelId = await chat.ensureTeamChannel(client, {
+      id: inv.team_id, name: inv.name, logo_url: inv.logo_url, captain_id: inv.captain_id,
+    });
+    await chat.syncTeamMember(client, channelId, req.user.id, 'member');
+    const joinerName = await nameOf(client, req.user.id);
+    const sysId = await announce(client, channelId, 'member_joined_request', {
+      targetId: req.user.id, targetName: joinerName,
+    });
+
+    const admins = (await client.query(
+      `SELECT user_id FROM team_members WHERE team_id = $1 AND role IN ('captain','vice_captain')`,
+      [inv.team_id],
+    )).rows.map((r) => r.user_id);
+    for (const uid of admins) {
+      if (String(uid) === String(req.user.id)) continue;
+      await notify(client, {
+        userId: uid, type: 'team_join',
+        title: inv.name, body: `${joinerName} accepted your invite and joined.`,
+        payload: { teamId: inv.team_id, teamName: inv.name, userId: req.user.id },
+        actorId: req.user.id,
+      });
+    }
+    await client.query('COMMIT');
+    if (sysId) await chat.emitPersistedMessage(client, channelId, sysId);
+    bus.emitToUsers([req.user.id, ...admins], 'team:update', { teamId: inv.team_id });
+    return ok(res, { teamId: inv.team_id, channelId }, `Welcome to ${inv.name}!`);
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     next(e);
