@@ -92,6 +92,14 @@ async function createRequest(client, { requesterId, targetUserId, sport = null, 
       'This player keeps their profile private and is not accepting play requests.');
   }
 
+  // Already connected — a direct room between the two exists — so a fresh play request
+  // is noise and would show as a new "Pending" beside the chat they already share.
+  const existingDm = await chat.directChannelId(client, requesterId, targetUserId);
+  if (existingDm) {
+    return err(409, 'already_connected',
+      'You are already connected with this player — open your chat to arrange a game.');
+  }
+
   const note = typeof message === 'string' && message.trim() ? message.trim().slice(0, 500) : null;
   const sportVal = typeof sport === 'string' && sport.trim() ? sport.trim() : null;
 
@@ -284,7 +292,9 @@ async function cancel(client, { id, userId }) {
  * profile, not a refusal to play, so matching players lead but the rest still appear —
  * the same choice suggestPlayers makes. `pending_request` flags anyone this user has
  * already asked, so the tab shows "Requested" (disabled) instead of hiding them and
- * letting a duplicate ask hit the 409. Self and non-players are excluded in SQL.
+ * letting a duplicate ask hit the 409. Self and non-players are excluded in SQL, and
+ * so are players who keep their profile private — a private account is not discoverable
+ * and is reachable only through a direct profile link.
  *
  * No ML here on purpose: this is the plain, un-gated "find any player" list, whereas
  * rosterService.suggestPlayers ranks candidates FOR A TEAM and is admin+team gated.
@@ -303,7 +313,10 @@ async function discoverPlayers(client, { userId, sport = null, limit = 40 } = {}
              AND $2 = ANY(COALESCE(pp.sport_preferences, '{}'))) AS plays_sport,
             EXISTS (SELECT 1 FROM play_requests pr
                      WHERE pr.requester_user_id = $1 AND pr.target_user_id = u.id
-                       AND pr.status = 'pending') AS pending_request
+                       AND pr.status = 'pending') AS pending_request,
+            (SELECT dc.channel_id FROM direct_channels dc
+              WHERE dc.user_lo = LEAST($1, u.id)
+                AND dc.user_hi = GREATEST($1, u.id)) AS direct_channel_id
        FROM users u
        JOIN player_profiles pp ON pp.user_id = u.id
        LEFT JOIN LATERAL (
@@ -313,6 +326,7 @@ async function discoverPlayers(client, { userId, sport = null, limit = 40 } = {}
             AND b.created_at >= now() - interval '30 days'
        ) act ON TRUE
       WHERE u.role = 'player' AND u.is_active = true AND u.id <> $1
+        AND COALESCE(pp.is_public, true) = true
       ORDER BY plays_sport DESC, bookings_30d DESC, u.name ASC
       LIMIT $4`,
     [userId, sportVal, BOOKED_STATUSES, lim],
@@ -328,6 +342,10 @@ async function discoverPlayers(client, { userId, sport = null, limit = 40 } = {}
     bookings30d: Number(r.bookings_30d || 0),
     playsSport: !!r.plays_sport,
     pendingRequest: !!r.pending_request,
+    // A direct room between the two already exists — they are connected, so the card
+    // offers Message instead of a redundant Request.
+    connected: !!r.direct_channel_id,
+    channelId: r.direct_channel_id ? String(r.direct_channel_id) : null,
   }));
   return { ok: true, status: 200, code: null, message: null, data };
 }
