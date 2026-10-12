@@ -112,14 +112,20 @@ class DiscoverPlayer {
   final int bookings30d;
   final bool playsSport;
 
-  /// False when this player keeps their profile private. The row still appears (a
-  /// private account is not hidden, only closed), but it shows a lock instead of a
-  /// Request button, since the server refuses an ask to a private player.
+  /// False when this player keeps their profile private. Discovery now excludes
+  /// private accounts server-side, so this reads true for every discover row; the
+  /// field stays because the shared model is also read in non-discovery contexts.
   final bool isPublic;
 
   /// True when this user already has a pending request from the viewer, so the row
   /// shows "Requested" (disabled) rather than letting a duplicate ask hit the 409.
   final bool pendingRequest;
+
+  /// True when the viewer and this player already share a direct chat (an accepted
+  /// request opened one). The row then offers Message instead of Request, and
+  /// [channelId] is that room to open.
+  final bool connected;
+  final String? channelId;
 
   const DiscoverPlayer({
     required this.userId,
@@ -131,6 +137,8 @@ class DiscoverPlayer {
     this.playsSport = false,
     this.isPublic = true,
     this.pendingRequest = false,
+    this.connected = false,
+    this.channelId,
   });
 
   factory DiscoverPlayer.fromJson(Map<String, dynamic> j) => DiscoverPlayer(
@@ -143,6 +151,8 @@ class DiscoverPlayer {
         playsSport: j['playsSport'] == true,
         isPublic: j['isPublic'] != false,
         pendingRequest: j['pendingRequest'] == true,
+        connected: j['connected'] == true,
+        channelId: j['channelId'] as String?,
       );
 }
 
