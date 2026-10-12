@@ -86,6 +86,10 @@ class ApiConstants {
   static String teamMember(String id, String userId) => '/teams/$id/members/$userId';
   static String leaveTeam(String id) => '/teams/$id/members/me';
   static String teamSuggestedPlayers(String id) => '/teams/$id/suggested-players';
+  // Direct team -> player invites (migration 039).
+  static String teamPlayerInvites(String id) => '/teams/$id/player-invites';
+  static const String teamPlayerInvitesMine = '/teams/player-invites/mine';
+  static String teamPlayerInviteRespond(String inviteId) => '/teams/player-invites/$inviteId/respond';
 
   // Chat
   static String chatForTeam(String teamId) => '/chat/team/$teamId';
