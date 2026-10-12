@@ -10,6 +10,7 @@ import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/sport_text_field.dart';
 import '../../widgets/password_strength_bar.dart';
+import '../shared/circle_crop_screen.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/phone_field.dart';
 import '../../utils/snackbar_util.dart';
@@ -89,7 +90,9 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
       source: ImageSource.gallery,
       imageQuality: 80,
     );
-    if (picked != null) setState(() => _avatarFile = picked);
+    if (picked == null || !mounted) return;
+    final cropped = await cropToCircle(context, picked);
+    if (cropped != null) setState(() => _avatarFile = cropped);
   }
 
   Widget _buildPickedImage(
