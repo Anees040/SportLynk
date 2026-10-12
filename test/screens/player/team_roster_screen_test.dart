@@ -717,7 +717,7 @@ void main() {
       await settleConsole(tester);
 
       expect(find.text('Invite'), findsOneWidget);
-      expect(find.text('Create invite link'), findsOneWidget);
+      expect(find.text('Share invite link'), findsOneWidget);
     });
 
     testWidgets('a member row offers management', (tester) async {
@@ -855,7 +855,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
-      expect(find.text('Create invite link'), findsOneWidget);
+      expect(find.text('Share invite link'), findsOneWidget);
     });
 
     testWidgets('the edit action is withheld', (tester) async {
@@ -891,7 +891,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
-      expect(find.text('Create invite link'), findsNothing);
+      expect(find.text('Share invite link'), findsNothing);
       expect(find.text('Suggested players'), findsNothing);
       expect(find.byIcon(Icons.edit_outlined), findsNothing);
     });
@@ -1140,7 +1140,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
-      await tester.tap(find.text('Create invite link'));
+      await tester.tap(find.text('Share invite link'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
@@ -1160,7 +1160,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
-      await tester.tap(find.text('Create invite link'));
+      await tester.tap(find.text('Share invite link'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
@@ -1179,7 +1179,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
-      await tester.tap(find.text('Create invite link'));
+      await tester.tap(find.text('Share invite link'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
@@ -1198,7 +1198,7 @@ void main() {
       await pumpScreen(tester, const TeamRosterScreen(teamId: 't-1'));
       await settleConsole(tester);
 
-      await tester.tap(find.text('Create invite link'));
+      await tester.tap(find.text('Share invite link'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
