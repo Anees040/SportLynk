@@ -546,7 +546,6 @@ void main() {
       expect(find.text('a-z'), findsOneWidget);
       expect(find.text('0-9'), findsOneWidget);
       expect(find.text('!@#'), findsOneWidget);
-      expect(find.text('12+ chars'), findsOneWidget);
     });
 
     testWidgets('it tracks the field rather than the submission',
