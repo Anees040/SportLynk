@@ -305,6 +305,7 @@ test('17 — discovery invents nothing: a null trust stays null, a null sport li
       {
         user_id: 'u10', name: 'Amy', avatar_url: 'http://x/a.png', sports: null,
         trust_score: null, is_public: false, bookings_30d: 0, plays_sport: false, pending_request: true,
+        direct_channel_id: 'dc-10',
       },
     ],
   }));
@@ -312,11 +313,14 @@ test('17 — discovery invents nothing: a null trust stays null, a null sport li
   assert.deepEqual(r.data[0], {
     userId: 'u9', name: 'Zed', avatarUrl: null, sports: ['football', 'cricket'],
     trustScore: 72, isPublic: true, bookings30d: 3, playsSport: true, pendingRequest: false,
+    connected: false, channelId: null,
   });
   assert.equal(r.data[1].trustScore, null);          // not a fabricated default
   assert.deepEqual(r.data[1].sports, []);            // null preferences to empty, not invented
   assert.equal(r.data[1].pendingRequest, true);
-  assert.equal(r.data[1].isPublic, false);           // a private player is flagged, not hidden
+  assert.equal(r.data[1].isPublic, false);           // the mapping still carries is_public
+  assert.equal(r.data[1].connected, true);           // a live direct room → "connected"
+  assert.equal(r.data[1].channelId, 'dc-10');        // and the room to open is carried
 });
 
 // ── static source: the service invariants behaviour alone cannot pin ────────────
