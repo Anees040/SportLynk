@@ -7,6 +7,7 @@ import '../../models/chat_channel.dart' show ChatChannelType;
 import '../../models/play_request.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/request_service.dart';
+import '../../services/team_service.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/match_widgets.dart' show MatchEmptyState;
@@ -30,6 +31,7 @@ class RequestsInboxScreen extends StatefulWidget {
 class _RequestsInboxScreenState extends State<RequestsInboxScreen>
     with ReconnectRefresh<RequestsInboxScreen>, SingleTickerProviderStateMixin {
   final _req = RequestService();
+  final _teamSvc = TeamService();
   late final TabController _tabs;
 
   String get _token => context.read<AuthProvider>().token ?? '';
@@ -48,6 +50,12 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
   // a double-tap cannot fire the same transition twice.
   final Set<String> _busy = {};
 
+  // Incoming team invites (migration 039), shown above the play requests on the
+  // Incoming tab. A captain can invite a player straight into a squad, and this is
+  // where the player accepts or declines.
+  List<Map<String, dynamic>>? _teamInvites;
+  final Set<String> _invBusy = {};
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +64,7 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadIncoming();
       _loadOutgoing();
+      _loadTeamInvites();
     });
   }
 
@@ -91,6 +100,32 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
       _failedOut = rows == null;
       _outgoing = rows;
     });
+  }
+
+  Future<void> _loadTeamInvites() async {
+    final r = await _teamSvc.myTeamInvites(_token);
+    if (!mounted || r['success'] != true) return;
+    setState(() => _teamInvites = (r['data'] as List? ?? const [])
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList());
+  }
+
+  Future<void> _respondInvite(Map<String, dynamic> inv, {required bool accept}) async {
+    final id = inv['id']?.toString() ?? '';
+    if (id.isEmpty || _invBusy.contains(id)) return;
+    setState(() => _invBusy.add(id));
+    final r = await _teamSvc.respondTeamInvite(_token, id, accept: accept);
+    if (!mounted) return;
+    setState(() => _invBusy.remove(id));
+    if (r['success'] != true) {
+      SnackbarUtil.showError(context, r['message']?.toString() ?? 'Could not update the invite.');
+      return;
+    }
+    await _loadTeamInvites();
+    if (!mounted) return;
+    SnackbarUtil.showSuccess(context,
+        accept ? 'You joined ${inv['team_name'] ?? 'the team'}.' : 'Invite declined.');
   }
 
   Future<void> _respond(PlayRequest r, {required bool accept}) async {
@@ -209,7 +244,16 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
     final loading = incoming ? _loadingIn : _loadingOut;
     final failed = incoming ? _failedIn : _failedOut;
     final rows = (incoming ? _incoming : _outgoing) ?? const [];
-    final reload = incoming ? _loadIncoming : _loadOutgoing;
+    final invites = incoming
+        ? (_teamInvites ?? const <Map<String, dynamic>>[])
+        : const <Map<String, dynamic>>[];
+    Future<void> reload() async {
+      if (incoming) {
+        await Future.wait([_loadIncoming(), _loadTeamInvites()]);
+      } else {
+        await _loadOutgoing();
+      }
+    }
 
     if (loading) {
       return const Center(child: CircularProgressIndicator());
@@ -226,13 +270,13 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
         ),
       );
     }
-    if (rows.isEmpty) {
+    if (rows.isEmpty && invites.isEmpty) {
       return RefreshIndicator(
         onRefresh: reload,
         child: MatchEmptyState(
           icon: incoming ? Icons.inbox_outlined : Icons.send_outlined,
           text: incoming
-              ? 'No requests yet.\nWhen someone asks you to play, it shows here.'
+              ? 'No requests yet.\nWhen someone asks you to play — or invites you to a team — it shows here.'
               : 'You have not asked anyone yet.\nFind players from the Matchmaking screen.',
         ),
       );
@@ -241,10 +285,93 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
       onRefresh: reload,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: rows.length,
+        itemCount: invites.length + rows.length,
         separatorBuilder: (_, _) => const SizedBox(height: 4),
-        itemBuilder: (_, i) => _card(rows[i], incoming: incoming),
+        itemBuilder: (_, i) => i < invites.length
+            ? _teamInviteCard(invites[i])
+            : _card(rows[i - invites.length], incoming: incoming),
       ),
+    );
+  }
+
+  // A team invite (team -> player): the captain-side counterpart to a join request.
+  // Accepting adds the player to the team.
+  Widget _teamInviteCard(Map<String, dynamic> inv) {
+    final id = inv['id']?.toString() ?? '';
+    final name = (inv['team_name'] ?? 'A team').toString();
+    final by = (inv['invited_by_name'] ?? 'A captain').toString();
+    final members = inv['member_count'];
+    final url = (inv['logo_url'] ?? '').toString().trim();
+    final avatar = url.isEmpty ? null : CachedNetworkImageProvider(url);
+    final busy = _invBusy.contains(id);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: AppColors.primary,
+            foregroundImage: avatar,
+            child: avatar == null
+                ? Text(name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+                : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.groups_2_outlined, size: 14, color: AppColors.accent),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                ),
+              ]),
+              const SizedBox(height: 2),
+              Text('$by invited you to join${members == null ? '' : '  ·  $members members'}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: busy ? null : () => _respondInvite(inv, accept: false),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textSecondary,
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              ),
+              child: const Text('Decline'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton(
+              onPressed: busy ? null : () => _respondInvite(inv, accept: true),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              ),
+              child: busy
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Accept'),
+            ),
+          ),
+        ]),
+      ]),
     );
   }
 
