@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import '../shared/circle_crop_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/colors.dart';
@@ -260,8 +261,9 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
         source: ImageSource.gallery, imageQuality: 80, maxWidth: 600);
-    if (picked == null) return;
-    if (!mounted) return;
+    if (picked == null || !mounted) return;
+    final cropped = await cropToCircle(context, picked);
+    if (cropped == null || !mounted) return;
 
     // Capture context-dependent references before any async gap
     final authProv = Provider.of<AuthProvider>(context, listen: false);
@@ -269,7 +271,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
 
     setState(() => _uploadingAvatar = true);
     try {
-      final url = await _cloudinary.uploadImage(picked.path, folder: 'owner_avatars');
+      final url = await _cloudinary.uploadImage(cropped.path, folder: 'owner_avatars');
       if (url == null) {
         if (mounted) _showSnack('Upload failed. Check Cloudinary config.', isError: true);
         return;
