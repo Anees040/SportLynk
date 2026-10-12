@@ -20,7 +20,7 @@ class PasswordStrengthBar extends StatelessWidget {
         LayoutBuilder(
           builder: (context, constraints) {
             final maxW = constraints.maxWidth;
-            final barW = password.isEmpty ? 0.0 : (score / 6) * maxW;
+            final barW = password.isEmpty ? 0.0 : (score / 5) * maxW;
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               height: 4,
@@ -91,20 +91,22 @@ class PasswordStrengthBar extends StatelessWidget {
   }
 
   List<_Check> _getChecks() {
+    // These five are the whole rule the forms actually enforce (min 8 + character
+    // variety). A "12+ chars" chip used to sit here too, but nothing enforces 12, so
+    // it only ever read as an unmet requirement on a password the form accepts.
     return [
       _Check('8+ chars', password.length >= 8),
       _Check('A-Z', password.contains(RegExp(r'[A-Z]'))),
       _Check('a-z', password.contains(RegExp(r'[a-z]'))),
       _Check('0-9', password.contains(RegExp(r'[0-9]'))),
       _Check('!@#', password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))),
-      _Check('12+ chars', password.length >= 12),
     ];
   }
 
   _Level _getLevel(int score) {
     if (score <= 1) return _Level('Weak', AppColors.error);
-    if (score <= 3) return _Level('Fair', AppColors.warning);
-    if (score <= 5) return _Level('Good', AppColors.accent);
+    if (score <= 2) return _Level('Fair', AppColors.warning);
+    if (score <= 4) return _Level('Good', AppColors.accent);
     return _Level('Strong', AppColors.success);
   }
 }
