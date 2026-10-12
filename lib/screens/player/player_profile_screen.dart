@@ -16,6 +16,7 @@ import 'trust_score_screen.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
 import 'help_support_screen.dart';
+import '../shared/circle_crop_screen.dart';
 
 class PlayerProfileScreen extends StatefulWidget {
   const PlayerProfileScreen({super.key});
@@ -150,11 +151,13 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
     try {
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 80);
-      if (pickedFile == null) return;
+      if (pickedFile == null || !mounted) return;
+      final cropped = await cropToCircle(context, pickedFile);
+      if (cropped == null) return;
 
       setState(() => _saving = true);
 
-      final url = await CloudinaryService().uploadImage(pickedFile.path, folder: 'avatars');
+      final url = await CloudinaryService().uploadImage(cropped.path, folder: 'avatars');
       if (url == null) {
         setState(() => _saving = false);
         _snack('Failed to upload image. Check Cloudinary settings.', AppColors.error);
