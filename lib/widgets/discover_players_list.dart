@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/colors.dart';
+import '../models/chat_channel.dart' show ChatChannelType;
 import '../models/play_request.dart';
 import '../providers/auth_provider.dart';
 import '../services/request_service.dart';
@@ -104,6 +105,19 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
         ),
       ),
     );
+  }
+
+  // The 1:1 room the viewer already shares with a connected player. Same named-route
+  // the requests inbox uses to open an accepted request's room.
+  void _openChat(DiscoverPlayer p) {
+    final id = p.channelId;
+    if (id == null || id.isEmpty) return;
+    Navigator.pushNamed(context, '/chat-thread', arguments: {
+      'channelId': id,
+      'type': ChatChannelType.direct.wire,
+      'title': p.name,
+      'imageUrl': p.avatarUrl,
+    });
   }
 
   @override
@@ -259,6 +273,31 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
         ),
       );
     }
+    // Already connected (an accepted request opened a DM) — offer the chat, not a
+    // second Request. The server also refuses a fresh ask to a connected player.
+    if (p.connected) {
+      return SizedBox(
+        width: 92,
+        height: 36,
+        child: OutlinedButton(
+          onPressed: () => _openChat(p),
+          style: OutlinedButton.styleFrom(
+            padding: EdgeInsets.zero,
+            foregroundColor: AppColors.primary,
+            side: const BorderSide(color: AppColors.primary),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.chat_bubble_outline, size: 14),
+              SizedBox(width: 4),
+              Text('Message', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      );
+    }
     if (asked) {
       return const SizedBox(
         width: 92,
@@ -280,31 +319,8 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
         ),
       );
     }
-    // A private player cannot be asked (the server refuses it), so the button is a
-    // lock that opens their gated profile rather than a dead Request that 403s.
-    if (!p.isPublic) {
-      return SizedBox(
-        width: 92,
-        height: 36,
-        child: OutlinedButton(
-          onPressed: () => _openProfile(p),
-          style: OutlinedButton.styleFrom(
-            padding: EdgeInsets.zero,
-            foregroundColor: AppColors.textSecondary,
-            side: const BorderSide(color: AppColors.border),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.lock_outline, size: 14),
-              SizedBox(width: 4),
-              Text('Private', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ),
-      );
-    }
+    // Private players are excluded from discovery server-side (a private account is
+    // not asked to play), so the list only ever holds public, askable players here.
     return SizedBox(
       width: 92,
       height: 36,
