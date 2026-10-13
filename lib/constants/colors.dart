@@ -34,6 +34,12 @@ class AppColors {
   static const Color success = Color(0xFF16A34A);
   static const Color white = Color(0xFFFFFFFF);
 
+  /// Soft ambient shadow for an elevated surface (see [AppCard]). Black at ~5%,
+  /// matching the Home screen's existing card elevation, kept as a token so cards
+  /// across the app cast one consistent shadow rather than a slightly different
+  /// inline value each time.
+  static const Color shadow = Color(0x0D000000);
+
   /// The tone for a sport the app does not sell as its own category — football and
   /// futsal read as [accent], cricket as [warning]. A third hue so a sport chip is
   /// never mistaken for one of those two.
@@ -75,4 +81,8 @@ class AppColors {
   /// than [accentLight], which marks the row a tapped quote jumped to, so
   /// "selected" and "jumped to" are never mistaken for each other.
   static const Color chatSelection = Color(0x3D166534);
+
+  /// WhatsApp's read-tick blue, used for the blue double-tick on a read message
+  /// and for the "Read by" heading on the message-info screen, so the two agree.
+  static const Color readTick = Color(0xFF34B7F1);
 }
