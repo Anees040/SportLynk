@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +17,7 @@ import '../../widgets/match_widgets.dart';
 import '../../widgets/reco_widgets.dart';
 import 'create_team_screen.dart';
 import 'match_challenge_screen.dart';
+import 'open_challenges_screen.dart';
 
 /// Matchmaking discovery — two tabs behind one screen.
 ///
@@ -47,6 +50,7 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen>
   final _matches = MatchService();
   final _teams = TeamService();
   final _searchCtrl = TextEditingController();
+  Timer? _searchDebounce;
   late final TabController _tabs;
 
   String get _token => context.read<AuthProvider>().token ?? '';
@@ -77,6 +81,7 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen>
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _tabs.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -151,6 +156,62 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen>
     }
   }
 
+  // The sport the whole Opponents list is in — matchmaking is same-sport only, so
+  // the team being played as decides it (the backend refuses a cross-sport
+  // challenge). Read from the picked team rather than the opponent rows, which carry
+  // no sport of their own because they cannot differ from it.
+  String? get _currentSport {
+    final teams = _myTeams;
+    if (teams == null || _teamId == null) return null;
+    for (final t in teams) {
+      if (t.id == _teamId) return t.sport;
+    }
+    return null;
+  }
+
+  IconData _sportIcon(String? sport) => switch ((sport ?? '').toLowerCase()) {
+        'football' || 'futsal' => Icons.sports_soccer,
+        'cricket' => Icons.sports_cricket,
+        _ => Icons.sports,
+      };
+
+  String _sportLabel(String? sport) {
+    final s = (sport ?? '').trim();
+    if (s.isEmpty) return 'Sport';
+    return s[0].toUpperCase() + s.substring(1).toLowerCase();
+  }
+
+  /// The sport badge shown on the team header and on every opponent card, so a
+  /// captain can see at a glance that a pairing is Football-to-Football and never
+  /// mistakes which game they are challenging into. [onDark] styles it for the
+  /// primary-coloured header; the light variant sits on a card.
+  Widget _sportChip(String? sport, {required bool onDark}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: onDark ? Colors.white.withValues(alpha: 0.16) : AppColors.accentLight,
+        borderRadius: BorderRadius.circular(20),
+        border: onDark ? null : Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_sportIcon(sport),
+              size: 13, color: onDark ? AppColors.accent : AppColors.primary),
+          const SizedBox(width: 5),
+          Text(
+            _sportLabel(sport),
+            style: GoogleFonts.poppins(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: onDark ? Colors.white : AppColors.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -163,6 +224,16 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen>
         backgroundColor: AppColors.primary,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Open challenge board',
+            icon: const Icon(Icons.campaign_outlined, color: Colors.white),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const OpenChallengesScreen()),
+            ),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabs,
           indicatorColor: AppColors.accent,
@@ -235,14 +306,20 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'PLAYING AS',
-            style: GoogleFonts.poppins(
-              fontSize: 9.5,
-              letterSpacing: 1.2,
-              fontWeight: FontWeight.w700,
-              color: Colors.white.withValues(alpha: 0.55),
-            ),
+          Row(
+            children: [
+              Text(
+                'PLAYING AS',
+                style: GoogleFonts.poppins(
+                  fontSize: 9.5,
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white.withValues(alpha: 0.55),
+                ),
+              ),
+              const Spacer(),
+              if (_currentSport != null) _sportChip(_currentSport, onDark: true),
+            ],
           ),
           const SizedBox(height: 8),
           if (teams.length > 1)
@@ -340,15 +417,36 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen>
     );
   }
 
+  // Debounced live search: the list filters as the captain types rather than only
+  // on submit. The reload is held back ~350ms so a word is one server round trip,
+  // not one per keystroke; a reload is skipped when the trimmed query is unchanged
+  // (so the clear-button rebuild alone never refetches).
+  void _onSearchChanged(String v) {
+    setState(() {}); // reflect the clear button as the text changes
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      final q = v.trim();
+      if (q == _query) return;
+      _query = q;
+      _load();
+    });
+  }
+
+  void _runSearchNow(String v) {
+    _searchDebounce?.cancel();
+    final q = v.trim();
+    if (q == _query) return;
+    _query = q;
+    _load();
+  }
+
   Widget _searchField() => Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
         child: TextField(
           controller: _searchCtrl,
           textInputAction: TextInputAction.search,
-          onSubmitted: (v) {
-            _query = v.trim();
-            _load();
-          },
+          onChanged: _onSearchChanged,
+          onSubmitted: _runSearchNow,
           decoration: InputDecoration(
             hintText: 'Search teams…',
             prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
@@ -357,6 +455,7 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen>
                 : IconButton(
                     icon: const Icon(Icons.clear, size: 18),
                     onPressed: () {
+                      _searchDebounce?.cancel();
                       _searchCtrl.clear();
                       _query = '';
                       _load();
@@ -452,7 +551,7 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen>
           return Column(
             children: [
               if (idx == firstOutOfBand && idx > 0) _bandDivider(),
-              _opponentCard(list[idx]),
+              _opponentCard(list[idx], _currentSport),
             ],
           );
         },
@@ -482,7 +581,7 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen>
         ),
       );
 
-  Widget _opponentCard(OpponentCandidate c) {
+  Widget _opponentCard(OpponentCandidate c, String? sport) {
     final t = c.team;
     final subtitle = [
       if (t.city != null && t.city!.isNotEmpty) t.city!,
@@ -541,15 +640,18 @@ class _FindOpponentsScreenState extends State<FindOpponentsScreen>
             ],
           ),
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              _sportChip(sport, onDark: false),
               TrustBadgeChip(
                 band: t.trustBand,
                 label: t.trustLabel,
                 score: t.trustScore,
                 showScore: true,
               ),
-              const SizedBox(width: 6),
               if (t.ranked && _list.myTeam?.ranked == true)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

@@ -79,6 +79,46 @@ router.post('/register/player', async (req, res, next) => {
   }
 });
 
+// POST /api/auth/register/owner/precheck
+// Early, read-only availability check so an owner is told a phone, email or CNIC is
+// already registered at step 1, before uploading documents and filling the later
+// steps only to be rejected at submit. It discloses only the three booleans the
+// final register/owner path already returns as 409s, writes no row, and sits behind
+// the same anonymous IP rate limiter as the rest of /api.
+router.post('/register/owner/precheck', async (req, res, next) => {
+  try {
+    const { phone, email, cnicNumber } = req.body;
+    const result = { phoneTaken: false, emailTaken: false, cnicTaken: false };
+
+    const cleanPhone = typeof phone === 'string' ? phone.replace(/\s/g, '') : '';
+    if (/^03\d{9}$/.test(cleanPhone)) {
+      const r = await pool.query('SELECT 1 FROM users WHERE phone = $1 LIMIT 1', [cleanPhone]);
+      result.phoneTaken = r.rows.length > 0;
+    }
+
+    const cleanEmail = typeof email === 'string' ? email.trim() : '';
+    if (cleanEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      const r = await pool.query('SELECT 1 FROM users WHERE email = $1 LIMIT 1', [cleanEmail]);
+      result.emailTaken = r.rows.length > 0;
+    }
+
+    // Compared digits-only against a stored value that may carry dashes, so the
+    // precheck agrees with the owner_cnic_unique constraint the submit relies on.
+    const cleanCnic = typeof cnicNumber === 'string' ? cnicNumber.replace(/\D/g, '') : '';
+    if (/^\d{13}$/.test(cleanCnic)) {
+      const r = await pool.query(
+        "SELECT 1 FROM owner_profiles WHERE replace(cnic_number, '-', '') = $1 LIMIT 1",
+        [cleanCnic],
+      );
+      result.cnicTaken = r.rows.length > 0;
+    }
+
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/auth/register/owner
 router.post('/register/owner', async (req, res, next) => {
   try {
@@ -223,7 +263,17 @@ router.post('/login', async (req, res, next) => {
 
     return res.json({
       success: true,
-      data: { token, user: { id: user.id, name: user.name, phone: user.phone, email: user.email, role: user.role, avatarUrl: user.avatar_url } },
+      data: {
+        token,
+        user: {
+          id: user.id, name: user.name, phone: user.phone, email: user.email,
+          role: user.role, avatarUrl: user.avatar_url,
+          // The admin tier. Harmlessly false/[] for players and owners, and for an
+          // admin on a pre-040 database (SELECT * simply omits the columns).
+          isSuperAdmin: user.is_super_admin === true,
+          permissions: Array.isArray(user.admin_permissions) ? user.admin_permissions : [],
+        },
+      },
       message: 'Login successful'
     });
   } catch (err) { next(err); }
@@ -281,7 +331,16 @@ router.get('/me', auth, async (req, res, next) => {
     const u = result.rows[0];
     return res.json({
       success: true,
-      data: { user: { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone, avatarUrl: u.avatar_url, created_at: u.created_at } },
+      data: {
+        user: {
+          id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone,
+          avatarUrl: u.avatar_url, created_at: u.created_at,
+          // Read from req.user, which authMiddleware already resolved from the row
+          // (and which tolerates a pre-040 database), rather than re-querying here.
+          isSuperAdmin: req.user.isSuperAdmin === true,
+          permissions: Array.isArray(req.user.permissions) ? req.user.permissions : [],
+        },
+      },
       message: 'User retrieved'
     });
   } catch (err) { next(err); }

@@ -28,13 +28,13 @@
 /**
  * The most slots one booking group may cover.
  *
- * Eight is a long evening at the shortest slot length and half a day at the
- * longest. The ceiling exists because a group is created as N real bookings inside
- * one transaction, each taking a row lock and a wallet lock: an unbounded N is an
- * unbounded transaction holding unbounded locks, and a player who can select
- * forty-eight slots can hold a venue's entire week open while they decide.
+ * Four hours is a generous single session at the shortest slot length. The ceiling
+ * exists because a group is created as N real bookings inside one transaction, each
+ * taking a row lock and a wallet lock: a lower N bounds how long those locks are
+ * held and stops one player holding a large block of a venue's day open while they
+ * decide.
  */
-const MAX_GROUP_SLOTS = 8;
+const MAX_GROUP_SLOTS = 4;
 
 /** Mirrors the CHECK on venue_slot_discounts.percent (migration 035). */
 const MAX_DISCOUNT_PERCENT = 50;

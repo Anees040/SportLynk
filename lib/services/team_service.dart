@@ -21,6 +21,16 @@ class TeamService {
   Future<List<Team>> mine(String token) async =>
       _teams(await _api.get(ApiConstants.myTeams, token: token));
 
+  /// Like [mine], but **null means the request failed** and an empty list means the
+  /// player genuinely has no teams. [mine] collapses both to `[]` (ApiClient never
+  /// throws), which is why the Teams tab went blank offline; this lets that screen
+  /// keep its cached teams on a failed load instead of showing "create a team".
+  Future<List<Team>?> mineOrNull(String token) async {
+    final r = await _api.get(ApiConstants.myTeams, token: token);
+    if (r['success'] != true) return null;
+    return _teams(r);
+  }
+
   /// The leaderboard (FR5.13).
   ///
   /// This endpoint answers with an object rather than a bare array, because

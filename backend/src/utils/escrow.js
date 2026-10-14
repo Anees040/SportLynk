@@ -25,6 +25,16 @@ const POLICY = {
   /** Trust-score penalty applied on a no-show. */
   NO_SHOW_TRUST_PENALTY: 10,
   /**
+   * The check-in window around a slot. A QR scan is accepted from this many minutes
+   * before the slot starts until this many after it ends; outside it the owner
+   * cannot release the player's escrow — not days early, and not long after. The
+   * late bound is a backstop: the no-show sweep above normally settles a missed slot
+   * 30 minutes after start, so this only matters when that sweep has not run yet, and
+   * it gives a clearer message than "booking is no_show" to a player arriving late.
+   */
+  CHECKIN_EARLY_MINUTES: 15,
+  CHECKIN_LATE_MINUTES: 15,
+  /**
    * A pending request older than this is auto-decided (FR4.10). Held in minutes
    * rather than hours so a test override can be finer-grained than one hour
    * without pushing a fraction into `('x hours')::INTERVAL`.
@@ -40,8 +50,40 @@ const POLICY = {
    * before kickoff on the very next sweep.
    */
   AUTO_REJECT_MIN_LEAD_MINUTES: 15,
+  /**
+   * Slots starting within this many minutes are "near-term" (same-day, imminent).
+   * A booking against one cannot wait out AUTO_DECIDE_AFTER_MINUTES, so it gets the
+   * short confirm window below instead.
+   */
+  NEAR_TERM_WINDOW_MINUTES: 2 * 60,
+  /**
+   * For a near-term slot, the short, urgent window an owner has to answer before the
+   * booking auto-CONFIRMS (not rejects). This closes the lost-revenue gap: a booking
+   * made 1–2 hours before kickoff used to be auto-rejected at AUTO_REJECT_MIN_LEAD
+   * because it could never reach the 2-hour auto-confirm. Now a silent owner's
+   * near-term booking confirms after this window — the owner stays free to approve or
+   * reject inside it — and only a booking too close to kickoff to wait this out (and
+   * still pending) is refunded.
+   */
+  NEAR_TERM_AUTO_CONFIRM_MINUTES: 10,
   /** Smallest withdrawal SportLynk will accept, in PKR (FR7.4). */
   WITHDRAWAL_MIN_AMOUNT: 200,
+  /**
+   * Cancellation-abuse policy (item 8). A player gets this many free cancellations in
+   * a trailing 30 days; each one beyond it costs CANCELLATION_TRUST_PENALTY points off
+   * their Trust Score — a reliability deduction applied in trustScore.js regardless of
+   * whether the cancellation fell inside or outside the 24h refund window, since the
+   * money rule already handles the refund and this is about blocking genuine players.
+   * A multi-slot group cancelled in one action counts as one cancellation.
+   */
+  FREE_CANCELLATIONS_PER_MONTH: 3,
+  CANCELLATION_TRUST_PENALTY: 5,
+  /**
+   * A booking cancelled within this many hours of its slot frees a prime, hard-to-
+   * refill slot. The freed slot is stamped `relisted_at` so browsing players see a
+   * "just freed" badge and can snap it up quickly (item 8's re-listing).
+   */
+  RELIST_WINDOW_HOURS: 48,
   /** How long a withdrawal sits `pending` before the job marks it paid out. */
   WITHDRAWAL_SETTLE_MINUTES: 24 * 60,
   /** How often the three background sweeps run. */
@@ -80,6 +122,7 @@ function applyTestOverride(envVar, policyKey, scale = 1, unit = 'min') {
 
 applyTestOverride('SL_TEST_AUTO_DECIDE_MINUTES', 'AUTO_DECIDE_AFTER_MINUTES');
 applyTestOverride('SL_TEST_AUTO_REJECT_LEAD_MINUTES', 'AUTO_REJECT_MIN_LEAD_MINUTES');
+applyTestOverride('SL_TEST_NEAR_TERM_CONFIRM_MINUTES', 'NEAR_TERM_AUTO_CONFIRM_MINUTES');
 applyTestOverride('SL_TEST_NO_SHOW_MINUTES', 'NO_SHOW_GRACE_MINUTES');
 applyTestOverride('SL_TEST_SETTLE_MINUTES', 'WITHDRAWAL_SETTLE_MINUTES');
 applyTestOverride('SL_TEST_SWEEP_SECONDS', 'SWEEP_INTERVAL_MS', 1000, 'sec');
@@ -175,6 +218,57 @@ function hoursUntilSlot(slotDate, startTime, now = new Date()) {
 /** True when a cancellation happens inside the 24h window (80/20 split applies). */
 function isLateCancellation(slotDate, startTime, now = new Date()) {
   return hoursUntilSlot(slotDate, startTime, now) < POLICY.CANCELLATION_WINDOW_HOURS;
+}
+
+/**
+ * One slot's [start, end] as epoch milliseconds, or null when it cannot be parsed.
+ * A slot whose end is at or before its start crosses midnight, so the end rolls to
+ * the next day (slots became minute-grained and past-midnight-capable in 034/035).
+ */
+function slotSpanMs(s) {
+  if (!s) return null;
+  const dateStr = s.slotDate instanceof Date
+    ? s.slotDate.toLocaleDateString('en-CA')
+    : String(s.slotDate || '').slice(0, 10);
+  const start = new Date(`${dateStr}T${String(s.startTime || '').slice(0, 8)}`);
+  let end = new Date(`${dateStr}T${String(s.endTime || '').slice(0, 8)}`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  if (end.getTime() <= start.getTime()) end = new Date(end.getTime() + 24 * 3600000);
+  return { start: start.getTime(), end: end.getTime() };
+}
+
+/**
+ * May a player be checked in right now, for the slot(s) one QR scan settles?
+ *
+ * The window opens CHECKIN_EARLY_MINUTES before the earliest slot starts and closes
+ * CHECKIN_LATE_MINUTES after the latest one ends — a single booking passes one slot,
+ * a multi-slot group its whole consecutive run. `now` must be PKT wall-clock, which
+ * the caller reads as `NOW() AT TIME ZONE 'Asia/Karachi'`; slot_date/start_time/
+ * end_time are PKT wall-clock too, so both sides share one frame and the server's own
+ * timezone cancels out of the subtraction — the reasoning hoursUntilSlot relies on,
+ * made safe here by sourcing `now` from the database rather than from `new Date()`.
+ *
+ * Empty or unparseable input returns ok: the gate only ever adds a refusal it can
+ * justify, so a player at the gate with a valid QR is never blocked by bad data.
+ */
+function checkinWindow(slots, now = new Date()) {
+  const spans = (Array.isArray(slots) ? slots : [slots]).map(slotSpanMs).filter(Boolean);
+  if (!spans.length) return { ok: true, reason: null };
+  const t = (now instanceof Date ? now : new Date(now)).getTime();
+  if (!Number.isFinite(t)) return { ok: true, reason: null };
+  const opensAt = Math.min(...spans.map((s) => s.start)) - POLICY.CHECKIN_EARLY_MINUTES * 60000;
+  const closesAt = Math.max(...spans.map((s) => s.end)) + POLICY.CHECKIN_LATE_MINUTES * 60000;
+  if (t < opensAt) {
+    return {
+      ok: false,
+      reason: 'too_early',
+      message: `Check-in opens ${POLICY.CHECKIN_EARLY_MINUTES} minutes before the slot.`,
+    };
+  }
+  if (t > closesAt) {
+    return { ok: false, reason: 'too_late', message: 'This slot has ended; check-in is closed.' };
+  }
+  return { ok: true, reason: null };
 }
 
 /** Lock a user's wallet row for the rest of the transaction (creates it if missing). */
@@ -319,6 +413,8 @@ module.exports = {
   penaltySplit,
   hoursUntilSlot,
   isLateCancellation,
+  slotSpanMs,
+  checkinWindow,
   lockWallet,
   applyWallet,
   logTxn,

@@ -316,7 +316,17 @@ async function discoverPlayers(client, { userId, sport = null, limit = 40 } = {}
                        AND pr.status = 'pending') AS pending_request,
             (SELECT dc.channel_id FROM direct_channels dc
               WHERE dc.user_lo = LEAST($1, u.id)
-                AND dc.user_hi = GREATEST($1, u.id)) AS direct_channel_id
+                AND dc.user_hi = GREATEST($1, u.id)) AS direct_channel_id,
+            -- The player's home area, derived from where they actually book rather
+            -- than a stored field (there is none — players have no city column). The
+            -- city they have booked in most, ties broken by the most recent booking;
+            -- null for a player who has never booked, which the UI shows as no area.
+            (SELECT v.city FROM bookings b2
+               JOIN venues v ON v.id = b2.venue_id
+              WHERE b2.player_id = u.id AND v.city IS NOT NULL AND v.city <> ''
+              GROUP BY v.city
+              ORDER BY count(*) DESC, max(b2.created_at) DESC
+              LIMIT 1) AS home_city
        FROM users u
        JOIN player_profiles pp ON pp.user_id = u.id
        LEFT JOIN LATERAL (
@@ -341,6 +351,8 @@ async function discoverPlayers(client, { userId, sport = null, limit = 40 } = {}
     isPublic: r.is_public !== false,
     bookings30d: Number(r.bookings_30d || 0),
     playsSport: !!r.plays_sport,
+    // Derived home area (see the subquery); null when the player has never booked.
+    homeCity: r.home_city ? String(r.home_city) : null,
     pendingRequest: !!r.pending_request,
     // A direct room between the two already exists — they are connected, so the card
     // offers Message instead of a redundant Request.

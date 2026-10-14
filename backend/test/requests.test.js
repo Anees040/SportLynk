@@ -301,6 +301,7 @@ test('17 — discovery invents nothing: a null trust stays null, a null sport li
       {
         user_id: 'u9', name: 'Zed', avatar_url: null, sports: ['football', 'cricket'],
         trust_score: 72, is_public: true, bookings_30d: 3, plays_sport: true, pending_request: false,
+        home_city: 'Islamabad',
       },
       {
         user_id: 'u10', name: 'Amy', avatar_url: 'http://x/a.png', sports: null,
@@ -313,6 +314,7 @@ test('17 — discovery invents nothing: a null trust stays null, a null sport li
   assert.deepEqual(r.data[0], {
     userId: 'u9', name: 'Zed', avatarUrl: null, sports: ['football', 'cricket'],
     trustScore: 72, isPublic: true, bookings30d: 3, playsSport: true, pendingRequest: false,
+    homeCity: 'Islamabad',
     connected: false, channelId: null,
   });
   assert.equal(r.data[1].trustScore, null);          // not a fabricated default

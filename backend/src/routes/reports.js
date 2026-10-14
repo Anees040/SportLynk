@@ -25,9 +25,15 @@ const express = require('express');
 const pool = require('../db/pool');
 const reports = require('../services/reportService');
 const csv = require('../utils/csv');
+const { requirePermission } = require('../middleware/permissionMiddleware');
 
 const ownerReports = express.Router();
 const platformReports = express.Router();
+
+// financial_reports is applied on the one platform route below, not as a router-level
+// `use`: platformReports is mounted at '/' in admin.js, so a `router.use` gate would
+// run for every admin request that falls through it. ownerReports is scoped to the
+// owner's own venues under routes/owner.js and is not gated here.
 
 function bad(res, status, message) {
   return res.status(status).json({ success: false, message });
@@ -94,7 +100,7 @@ ownerReports.get('/reports/financial', async (req, res, next) => {
  * owner before the total — which is where "commission earned per owner" (FR4.16)
  * lives, since commission is a ledger row on the owner's wallet.
  */
-platformReports.get('/reports/platform', async (req, res, next) => {
+platformReports.get('/reports/platform', requirePermission('financial_reports'), async (req, res, next) => {
   const r = reports.parseRange(req.query);
   if (!r.ok) return bad(res, r.status, r.message);
   try {

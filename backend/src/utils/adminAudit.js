@@ -40,6 +40,10 @@ const ACTIONS = Object.freeze({
   REVIEW_MODERATE: 'review.moderate',
   REGISTRATION_APPROVE: 'registration.approve',
   REGISTRATION_REJECT: 'registration.reject',
+  ADMIN_CREATE: 'admin.create',
+  ADMIN_UPDATE: 'admin.update',
+  ADMIN_REMOVE: 'admin.remove',
+  ADMIN_RESTORE: 'admin.restore',
 });
 
 /** jsonb columns take an object or nothing; `undefined` must not become `"null"`. */

@@ -10,6 +10,7 @@ import '../../services/request_service.dart';
 import '../../services/team_service.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/app_card.dart';
 import '../../widgets/match_widgets.dart' show MatchEmptyState;
 import '../shared/public_profile_screen.dart';
 
@@ -304,14 +305,10 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
     final url = (inv['logo_url'] ?? '').toString().trim();
     final avatar = url.isEmpty ? null : CachedNetworkImageProvider(url);
     final busy = _invBusy.contains(id);
-    return Container(
+    return AppCard(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
-      ),
+      border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           CircleAvatar(
@@ -378,14 +375,9 @@ class _RequestsInboxScreenState extends State<RequestsInboxScreen>
   Widget _card(PlayRequest r, {required bool incoming}) {
     final url = r.otherAvatar?.trim() ?? '';
     final avatar = url.isEmpty ? null : CachedNetworkImageProvider(url);
-    return Container(
+    return AppCard(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -36,6 +36,25 @@ void main() {
       expect(c.lng, closeTo(73.0479, 1e-9));
     });
 
+    test('reads a space-separated pair (no comma)', () {
+      final c = parseLatLng('24.8607 67.0011');
+      expect(c!.lat, closeTo(24.8607, 1e-9));
+      expect(c.lng, closeTo(67.0011, 1e-9));
+    });
+
+    test('reads a geo: share URI', () {
+      final c = parseLatLng('geo:24.8607,67.0011');
+      expect(c!.lat, closeTo(24.8607, 1e-9));
+      expect(c.lng, closeTo(67.0011, 1e-9));
+    });
+
+    test('reads coordinates from a /data= place-pin segment', () {
+      final c = parseLatLng(
+          'https://www.google.com/maps/place/Arena/data=!3d31.5204!4d74.3587');
+      expect(c!.lat, closeTo(31.5204, 1e-9));
+      expect(c.lng, closeTo(74.3587, 1e-9));
+    });
+
     test('returns null for a short share link with no coordinates', () {
       expect(parseLatLng('https://maps.app.goo.gl/abc123'), isNull);
     });

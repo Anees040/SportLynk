@@ -30,6 +30,77 @@ import '../services/realtime_service.dart';
 /// blue tick the sender sees means "the thread was in front of them", not "their
 /// phone happened to be reachable". A chat left mounted while the app is in the
 /// background used to mark every arriving message read on its owner's behalf.
+/// Where one recipient's copy of a message has reached: still only [sent] (on the
+/// server, not yet on their device), [delivered] (on their device), or [read]
+/// (they have opened the thread since). The three states of the "Message info"
+/// screen, derived from the same watermarks as the ticks.
+enum ReceiptStatus { sent, delivered, read }
+
+/// One recipient's status for a single message, for the "Message info" screen.
+/// [at] is the moment the state was reached (the member's read/delivered
+/// watermark), null while still only [ReceiptStatus.sent].
+class MessageReceipt {
+  final String userId;
+  final String name;
+  final String? avatarUrl;
+  final ReceiptStatus status;
+  final DateTime? at;
+
+  const MessageReceipt({
+    required this.userId,
+    required this.name,
+    required this.status,
+    this.avatarUrl,
+    this.at,
+  });
+}
+
+/// Pure core of [ChatController.receiptsFor], split out so it can be tested
+/// without a live controller: given the room's members and the current
+/// read/delivered watermarks, it classifies each recipient of [message]. Returns
+/// empty when the message is not the viewer's own (info is a sender's view) or is
+/// not sent yet. [epoch] is the "never" watermark a member with no mark carries.
+List<MessageReceipt> computeMessageReceipts({
+  required Iterable<ChatMember> members,
+  required String myUserId,
+  required Map<String, DateTime> read,
+  required Map<String, DateTime> delivered,
+  required DateTime epoch,
+  required ChatMessage message,
+}) {
+  if (message.senderId != myUserId || message.pending || message.failed) {
+    return const [];
+  }
+  final out = <MessageReceipt>[];
+  for (final p in members) {
+    if (p.userId == myUserId || !p.canSee(message.createdAt)) continue;
+    final rd = read[p.userId] ?? epoch;
+    final dv = delivered[p.userId] ?? epoch;
+    final ReceiptStatus status;
+    DateTime? at;
+    if (!rd.isBefore(message.createdAt)) {
+      status = ReceiptStatus.read;
+      at = rd;
+    } else if (!dv.isBefore(message.createdAt)) {
+      status = ReceiptStatus.delivered;
+      at = dv;
+    } else {
+      status = ReceiptStatus.sent;
+    }
+    out.add(MessageReceipt(
+        userId: p.userId, name: p.name, avatarUrl: p.avatarUrl, status: status, at: at));
+  }
+  return out;
+}
+
+/// The shared_preferences key for a channel's offline message cache, scoped to
+/// the viewer. The user id is in the key so a shared device never hands one
+/// account's cached history to the next — in particular a newly-added team
+/// member must not be shown, from a previous account's cache, the backlog the
+/// server withholds from them (migration 036).
+String chatCacheKey(String userId, String channelId) =>
+    'chat_cache_${userId}_$channelId';
+
 class ChatController extends ChangeNotifier {
   ChatController({
     required this.token,
@@ -222,9 +293,17 @@ class ChatController extends ChangeNotifier {
     await _loadPinned();
   }
 
-  // Local cache — a single per-channel key holding the newest messages as JSON,
-  // so a reopened room shows history before the socket or REST resolves.
-  String get _cacheKey => 'chat_cache_$channelId';
+  // Local cache — a per-channel, PER-USER key holding the newest messages as
+  // JSON, so a reopened room shows history before the socket or REST resolves.
+  // Scoping to the user is a privacy boundary, not a nicety: the key used to be
+  // channel-only, so on a shared device a newly-added member hydrated the
+  // previous account's cached backlog — the very history the server withholds
+  // (036) — and the merged REST page never removed it.
+  String get _cacheKey => chatCacheKey(myUserId, channelId);
+
+  // The pre-scoping key. Removed on open so one account's cached messages cannot
+  // linger in shared_preferences for whatever account opens the room next.
+  String get _legacyCacheKey => 'chat_cache_$channelId';
 
   // How many of the newest messages are retained offline. Raised from one page
   // (40) so history scrolled through while online survives into an offline reopen
@@ -237,6 +316,9 @@ class ChatController extends ChangeNotifier {
   Future<void> _hydrateFromCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // Drop any pre-scoping blob for this channel before reading: it may hold a
+      // different account's messages and must never be shown or re-persisted.
+      await prefs.remove(_legacyCacheKey);
       final raw = prefs.getString(_cacheKey);
       if (raw == null || raw.isEmpty) return;
       final list = (jsonDecode(raw) as List).whereType<Map>();
@@ -1065,6 +1147,21 @@ class ChatController extends ChangeNotifier {
     if (!minDelivered.isBefore(m.createdAt)) return TickState.delivered;
     return TickState.sent;
   }
+
+  /// Per-recipient delivery/read for one of MY messages — the data behind the
+  /// "Message info" screen. Only members allowed to see the message are counted
+  /// (a later joiner never received it) and the sender is excluded. It reads the
+  /// same live `_read`/`_delivered` watermarks as [tickFor], so the screen always
+  /// agrees with the bubble's ticks and updates as receipts arrive. Returns an
+  /// empty list for a message that is not mine — info is a sender's view.
+  List<MessageReceipt> receiptsFor(ChatMessage m) => computeMessageReceipts(
+        members: _members.values,
+        myUserId: myUserId,
+        read: _read,
+        delivered: _delivered,
+        epoch: _epoch,
+        message: m,
+      );
 
   // Read marking
 

@@ -196,14 +196,21 @@ function conversationalReply(text, audience) {
       || lower.includes('time kya') || lower.includes('kab khel')
       || lower.includes('kab shuru');
     if (isTimeQuestion) {
-      return ['Let us start at 8 PM.', 'Whatever time suits everyone.', 'I will confirm the time shortly.'];
+      return ['Let us start at 8 PM.', 'Give me 10 minutes.', 'I will confirm the time shortly.'];
+    }
+    // "What was the score?" — a result the two captains settle between them before
+    // either submits it, so the natural replies are outcomes, not a topic.
+    if (/\b(score|result|kya\s*bana|kitna\s*bana|kon\s*jeeta|who\s*won)\b/i.test(t)) {
+      return ['We won.', 'Tough game, we lost.', 'It was a draw.'];
     }
     // A yes/no "are you turning up?", guarded against the count question
     // ("kitne log aa rahe hain?") that looks similar but wants a number, not a yes.
+    // The replies are the three things actually said in a match group minutes before
+    // kickoff: a commitment, an arrival ETA, and running late — not another "yes".
     if (/\?/.test(t)
         && !/\b(kitne|kitna|kitni|how\s*many|kaun)\b/i.test(t)
-        && /\b(are\s*you|will\s*you|can\s*you|aao?ge|aa\s*rahe\s*ho|khelo?\s*ge|coming|available|free|ready|interested|joining)\b/i.test(t)) {
-      return ['Yes, I will be there.', 'Not sure yet, I will confirm.', 'Sorry, I can not make it.'];
+        && /\b(are\s*you|will\s*you|can\s*you|aao?ge|aa\s*rahe\s*ho|khelo?\s*ge|coming|reach(ed|ing)?|pohnch|available|free|ready|interested|joining|on\s*your\s*way)\b/i.test(t)) {
+      return ['Yes, I will be there.', 'On my way — 10 minutes.', 'Running late, please start.'];
     }
   }
   return null;
@@ -307,6 +314,24 @@ async function suggestFor(client, { channel, userId, userRole, text, messageId }
   // keyword table, or neither — because the reply text being chosen by a rule does
   // not make a model-classified message any less model-classified.
   const convo = conversationalReply(src.text, audience);
+  // A bare greeting ("hi", "hello") is faster typed than tapped, so suggesting one
+  // back adds nothing — the complaint that the bar "only offers Hi/Hello". It is
+  // suppressed (no suggestions ⇒ the client hides the bar). A salam is the
+  // exception: conversationalReply returns its specific reply (Wa Alaikum Assalam),
+  // so `convo` is set and this branch is skipped.
+  if (!convo && intent === 'greeting') {
+    return {
+      data: {
+        suggestions: [],
+        intent,
+        confidence: nlu && nlu.available ? nlu.confidence : 0,
+        audience,
+        source,
+        modelVersion: (nlu && nlu.modelVersion) || null,
+        advisory: true,
+      },
+    };
+  }
   const picked = convo || (intent && table[intent]) || GENERIC[audience] || GENERIC.player;
 
   return {

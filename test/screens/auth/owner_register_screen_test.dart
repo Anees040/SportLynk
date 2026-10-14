@@ -198,6 +198,11 @@ void main() {
   setUp(() {
     api = FakeApi();
     api.install();
+    // Step 0 now runs an availability precheck before advancing; a clear result is
+    // the default so reachGroundStep exercises the real happy path. Tests that want a
+    // duplicate or a transport failure override this.
+    api.ok('/register/owner/precheck',
+        {'phoneTaken': false, 'emailTaken': false, 'cnicTaken': false});
     // `registerOwner` writes a token through `shared_preferences` when the response
     // carries one; the in-memory store keeps that from being reported as a missing
     // plugin instead of whatever the test was actually about.
@@ -409,6 +414,38 @@ void main() {
 
       expect(find.text('Your Ground'), findsOneWidget);
       expect(find.text('Personal Information'), findsNothing);
+    });
+
+    testWidgets('a duplicate CNIC is caught before the ground step',
+        (tester) async {
+      // The uniqueness check moved to step 0 so an owner is not walked through the
+      // ground and document steps only to be rejected at submit. A known duplicate
+      // stops here; the submit still re-enforces it.
+      api.on(
+          '/register/owner/precheck',
+          FakeResponse.ok(
+              {'phoneTaken': false, 'emailTaken': false, 'cnicTaken': true}));
+      await pumpScreen(tester, const OwnerRegisterScreen());
+      await fillStep0(tester);
+      await verifyPhone(tester);
+      await tapContinue(tester);
+
+      expect(find.text('Your Ground'), findsNothing);
+      expect(find.text('Personal Information'), findsOneWidget);
+      expect(api.to('/register/owner'), isEmpty); // the submit never fired
+    });
+
+    testWidgets('a failed precheck does not trap the owner on the first step',
+        (tester) async {
+      // The precheck is a convenience, not the authority: when it cannot run
+      // (offline, server error) the step advances and submit remains the real guard.
+      api.offline('/register/owner/precheck');
+      await pumpScreen(tester, const OwnerRegisterScreen());
+      await fillStep0(tester);
+      await verifyPhone(tester);
+      await tapContinue(tester);
+
+      expect(find.text('Your Ground'), findsOneWidget);
     });
   });
 
@@ -802,7 +839,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.text('CNIC photos and selfie are required'), findsOneWidget);
-      expect(api.requests, isEmpty);
+      expect(api.to('/register/owner'), isEmpty); // the submit never fired
     });
 
     testWidgets('the step is not left when the application is refused',
@@ -943,6 +980,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('CNIC photos and selfie are required'), findsOneWidget);
-    expect(api.requests, isEmpty);
+    expect(api.to('/register/owner'), isEmpty); // the submit never fired
   });
 }

@@ -43,7 +43,10 @@ const POLL_SQL = `(
              SELECT jsonb_agg(jsonb_build_object(
                       'optionIndex', v.option_index,
                       'userId', v.user_id,
-                      'userName', vu.name))
+                      'userName', vu.name,
+                      'avatar', vu.avatar_url,
+                      'votedAt', v.created_at)
+                      ORDER BY v.created_at)
                FROM chat_poll_votes v
                LEFT JOIN users vu ON vu.id = v.user_id
               WHERE v.poll_id = pl.id), '[]'::jsonb)

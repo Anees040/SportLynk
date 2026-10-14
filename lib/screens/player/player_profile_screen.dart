@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/offline_cache.dart';
+import '../../widgets/app_card.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/network_error_view.dart';
 import '../../widgets/offline_banner.dart';
@@ -367,9 +368,8 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(children: [
-          Container(
-            color: Colors.white,
-            width: double.infinity,
+          const SizedBox(height: 12),
+          AppCard(
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
             child: Column(
               children: [
@@ -411,11 +411,8 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
             ),
           ),
 
-          const SizedBox(height: 12),
-
           // Stats Row
-          Container(
-            color: Colors.white,
+          AppCard(
             padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
               _statItem('⚡', '${_parseNum(_profile!['elo_rating'], 1000).round()}', 'ELO Rating', onTap: () {}),
@@ -433,12 +430,8 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
             ]),
           ),
 
-          const SizedBox(height: 12),
-
           // Interests
-          Container(
-            color: Colors.white,
-            width: double.infinity,
+          AppCard(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -478,7 +471,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
           ),
 
           if (_isEditing) ...[
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: CustomButton(
@@ -489,9 +482,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
             ),
             const SizedBox(height: 40),
           ] else ...[
-            const SizedBox(height: 12),
-            Container(
-              color: Colors.white,
+            AppCard(
               child: SwitchListTile(
                 value: _profile!['is_public'] != false,
                 onChanged: _setVisibility,
@@ -518,9 +509,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Container(
-              color: Colors.white,
+            AppCard(
               child: Column(
                 children: [
                   _actionTile(Icons.lock_outline, 'Change Password', onTap: _showChangePasswordModal),
@@ -533,7 +522,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
                 ],
               ),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 28),
           ]
           ]),
                 ),

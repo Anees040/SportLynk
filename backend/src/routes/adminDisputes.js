@@ -27,6 +27,7 @@ const pool = require('../db/pool');
 const disputes = require('../services/disputeService');
 const bookingDisputes = require('../services/bookingDisputeService');
 const mc = require('../utils/matchCore');
+const { requirePermission } = require('../middleware/permissionMiddleware');
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -42,7 +43,7 @@ function bad(res, status, message) {
  * spend them on the match that moves the most rating, not on whichever arrived
  * last. `status` is `open|resolved|dismissed|all`.
  */
-router.get('/disputes', async (req, res, next) => {
+router.get('/disputes', requirePermission('match_disputes'), async (req, res, next) => {
   try {
     const out = await disputes.queue(pool, {
       status: req.query.status,
@@ -65,7 +66,7 @@ router.get('/disputes', async (req, res, next) => {
  * and the captain-channel chat archive — which is the literal FR10.6 requirement
  * and the reason the chat module was built before this one.
  */
-router.get('/disputes/:id', async (req, res, next) => {
+router.get('/disputes/:id', requirePermission('match_disputes'), async (req, res, next) => {
   const { id } = req.params;
   if (!RE_UUID.test(id)) return bad(res, 400, 'Invalid dispute id');
   try {
@@ -90,7 +91,7 @@ router.get('/disputes/:id', async (req, res, next) => {
  * `match:update` frames. Emitting inside the transaction would tell both apps to
  * re-fetch a match that is not committed yet, and they would read the old one.
  */
-router.patch('/disputes/:id', async (req, res, next) => {
+router.patch('/disputes/:id', requirePermission('match_disputes'), async (req, res, next) => {
   const { id } = req.params;
   if (!RE_UUID.test(id)) return bad(res, 400, 'Invalid dispute id');
 
@@ -173,7 +174,7 @@ function messageFor(out) {
 // belongs behind the same gate rather than a second one that could drift.
 
 /** GET /api/admin/booking-disputes?status=open|upheld|rejected|all */
-router.get('/booking-disputes', async (req, res, next) => {
+router.get('/booking-disputes', requirePermission('booking_disputes'), async (req, res, next) => {
   try {
     const rows = await bookingDisputes.listForAdmin(pool, {
       status: String(req.query.status || 'open'),
@@ -190,7 +191,7 @@ router.get('/booking-disputes', async (req, res, next) => {
  * An upheld dispute on a booking whose escrow is still held refunds it in full through
  * the same escrow helpers cancelBooking uses; a rejected one moves no money.
  */
-router.post('/booking-disputes/:id/resolve', async (req, res, next) => {
+router.post('/booking-disputes/:id/resolve', requirePermission('booking_disputes'), async (req, res, next) => {
   if (!RE_UUID.test(String(req.params.id))) return bad(res, 404, 'That dispute no longer exists.');
   const body = req.body || {};
   if (typeof body.uphold !== 'boolean') {

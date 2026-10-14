@@ -42,25 +42,56 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
   int _openDisputes = 0;
   bool _moreDisputes = false;
 
+  // Permission gating (migration 040). Computed once from the signed-in admin: the
+  // super admin sees every surface, a sub-admin only its granted ones. The backend
+  // enforces the same keys; these only decide what the dashboard offers and which
+  // tabs exist, so a sub-admin is never shown a control that would 403 on use.
+  bool _isSuper = false;
+  bool _canOwner = false;
+  bool _canReview = false;
+  bool _canMatchDisputes = false;
+  bool _canBookingDisputes = false;
+  bool _canUsers = false;
+  bool _canSettings = false;
+  bool _canReports = false;
+
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 5, vsync: this);
-    _tab.addListener(() {
-      if (!_tab.indexIsChanging) {
-        final statuses = ['pending', 'approved', 'rejected'];
-        if (_tab.index > 0 && _tab.index < 4) {
-          _loadList(statuses[_tab.index - 1]);
-        } else if (_tab.index == 4) {
-          _loadVenues();
+    final u = Provider.of<AuthProvider>(context, listen: false).user;
+    bool can(String key) => (u?.isSuperAdmin ?? false) || (u?.permissions.contains(key) ?? false);
+    _isSuper = u?.isSuperAdmin ?? false;
+    _canOwner = can('owner_approvals');
+    _canReview = can('review_moderation');
+    _canMatchDisputes = can('match_disputes');
+    _canBookingDisputes = can('booking_disputes');
+    _canUsers = can('user_management');
+    _canSettings = can('platform_settings');
+    _canReports = can('financial_reports');
+
+    // Only an owner-approvals admin gets the OWNERS/VENUES tabs; every other admin
+    // has the dashboard alone.
+    _tab = TabController(length: _canOwner ? 5 : 1, vsync: this);
+    if (_canOwner) {
+      _tab.addListener(() {
+        if (!_tab.indexIsChanging) {
+          final statuses = ['pending', 'approved', 'rejected'];
+          if (_tab.index > 0 && _tab.index < 4) {
+            _loadList(statuses[_tab.index - 1]);
+          } else if (_tab.index == 4) {
+            _loadVenues();
+          }
         }
-      }
-    });
+      });
+    }
+
     _loadStats();
-    _loadList('pending');
-    _loadVenues();
-    _loadFlags();
-    _loadDisputes();
+    if (_canOwner) {
+      _loadList('pending');
+      _loadVenues();
+    }
+    if (_canReview) _loadFlags();
+    if (_canMatchDisputes) _loadDisputes();
   }
 
   // On reconnect refresh the desk tiles and whichever list the current tab shows,
@@ -68,8 +99,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
   @override
   void onReconnect() {
     _loadStats();
-    _loadFlags();
-    _loadDisputes();
+    if (_canReview) _loadFlags();
+    if (_canMatchDisputes) _loadDisputes();
+    if (!_canOwner) return;
     const statuses = ['pending', 'approved', 'rejected'];
     if (_tab.index >= 1 && _tab.index <= 3) {
       _loadList(statuses[_tab.index - 1]);
@@ -253,9 +285,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     // A back gesture off the Dashboard tab returns to it rather than closing the
     // app; only a back press while already on Dashboard exits.
     return PopScope(
-      canPop: _tab.index == 0,
+      canPop: !_canOwner || _tab.index == 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _tab.index != 0) _tab.animateTo(0);
+        if (!didPop && _canOwner && _tab.index != 0) _tab.animateTo(0);
       },
       child: Scaffold(
       backgroundColor: AppColors.background,
@@ -295,7 +327,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
             padding: EdgeInsets.only(right: 4),
             child: Center(child: NotificationBell()),
           ),
-          _moderationAction(),
+          if (_canReview) _moderationAction(),
           Container(
             margin: const EdgeInsets.only(right: 14),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -314,33 +346,37 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
             },
           ),
         ],
-        bottom: TabBar(
-          controller: _tab,
-          indicatorColor: AppColors.accent,
-          indicatorWeight: 3,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white54,
-          labelStyle:
-              GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600),
-          tabs: const [
-            Tab(text: 'DASHBOARD'),
-            Tab(text: 'OWNERS (P)'),
-            Tab(text: 'OWNERS (A)'),
-            Tab(text: 'OWNERS (R)'),
-            Tab(text: 'VENUES'),
-          ],
-        ),
+        bottom: _canOwner
+            ? TabBar(
+                controller: _tab,
+                indicatorColor: AppColors.accent,
+                indicatorWeight: 3,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white54,
+                labelStyle:
+                    GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600),
+                tabs: const [
+                  Tab(text: 'DASHBOARD'),
+                  Tab(text: 'OWNERS (P)'),
+                  Tab(text: 'OWNERS (A)'),
+                  Tab(text: 'OWNERS (R)'),
+                  Tab(text: 'VENUES'),
+                ],
+              )
+            : null,
       ),
-      body: TabBarView(
-        controller: _tab,
-        children: [
-          _buildDashboard(),
-          _buildList('pending'),
-          _buildList('approved'),
-          _buildList('rejected'),
-          _buildVenueList(),
-        ],
-      ),
+      body: _canOwner
+          ? TabBarView(
+              controller: _tab,
+              children: [
+                _buildDashboard(),
+                _buildList('pending'),
+                _buildList('approved'),
+                _buildList('rejected'),
+                _buildVenueList(),
+              ],
+            )
+          : _buildDashboard(),
       ),
     );
   }
@@ -361,7 +397,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
       color: AppColors.accent,
       onRefresh: () async {
         await _loadStats();
-        await _loadList('pending');
+        if (_canOwner) await _loadList('pending');
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
@@ -431,52 +467,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
               style: GoogleFonts.poppins(
                   fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
           const SizedBox(height: 12),
-          _quickAction(Icons.pending_actions, 'Review Pending Registrations',
-              '${s['pendingRegistrations'] ?? 0} awaiting review',
-              () => _tab.animateTo(1)),
-          const SizedBox(height: 8),
-          _quickAction(Icons.flag_outlined, 'Moderation Queue',
-              _openFlags == 0
-                  ? 'No reviews awaiting moderation'
-                  : '$_openFlags ${_openFlags == 1 ? 'review' : 'reviews'} awaiting moderation',
-              _openModeration),
-          const SizedBox(height: 8),
-          // The admin desk
-          // Disputes first: a disputed match is frozen until someone rules on it, so
-          // it is the only queue here where waiting costs the players something.
-          _quickAction(Icons.gavel_rounded, 'Match Disputes',
-              _openDisputes == 0
-                  ? 'Nothing waiting'
-                  : '$_openDisputes${_moreDisputes ? '+' : ''} '
-                      '${_openDisputes == 1 && !_moreDisputes ? 'match' : 'matches'} '
-                      'waiting on a ruling',
-              () async {
-            await Navigator.pushNamed(context, '/admin-disputes');
-            if (mounted) await _loadDisputes();
-          }),
-          const SizedBox(height: 8),
-          _quickAction(Icons.receipt_long_outlined, 'Booking Disputes',
-              'Players reporting a problem with a booking — uphold to refund',
-              () => Navigator.pushNamed(context, '/admin-booking-disputes')),
-          const SizedBox(height: 8),
-          _quickAction(Icons.manage_accounts_outlined, 'Users',
-              'Search, suspend and reinstate accounts',
-              () => Navigator.pushNamed(context, '/admin-users')),
-          const SizedBox(height: 8),
-          _quickAction(Icons.tune_rounded, 'Platform Settings',
-              'Commission, deposits, Elo, sports -- applies with no restart',
-              () => Navigator.pushNamed(context, '/admin-settings')),
-          const SizedBox(height: 8),
-          _quickAction(Icons.summarize_outlined, 'Platform Report',
-              'Commission earned per owner, exportable as CSV',
-              () => Navigator.pushNamed(context, '/admin-reports')),
-          const SizedBox(height: 8),
-          _quickAction(Icons.refresh_rounded, 'Refresh Stats', 'Pull latest data',
-              () async {
-            await _loadStats();
-            await _loadList('pending');
-            await _loadFlags();
-          }),
+          ..._quickActions(s),
         ]),
       ),
     );
@@ -537,6 +528,73 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
           ),
         ]),
       );
+
+  // The dashboard actions, each gated by the permission its route enforces, so a
+  // sub-admin sees only what it can act on. 'Manage Admins' is the super admin's
+  // alone; 'Refresh Stats' is available to every admin.
+  List<Widget> _quickActions(Map<String, dynamic> s) {
+    final tiles = <Widget>[];
+    void add(Widget w) {
+      if (tiles.isNotEmpty) tiles.add(const SizedBox(height: 8));
+      tiles.add(w);
+    }
+    if (_canOwner) {
+      add(_quickAction(Icons.pending_actions, 'Review Pending Registrations',
+          '${s['pendingRegistrations'] ?? 0} awaiting review', () => _tab.animateTo(1)));
+    }
+    if (_canReview) {
+      add(_quickAction(Icons.flag_outlined, 'Moderation Queue',
+          _openFlags == 0
+              ? 'No reviews awaiting moderation'
+              : '$_openFlags ${_openFlags == 1 ? 'review' : 'reviews'} awaiting moderation',
+          _openModeration));
+    }
+    if (_canMatchDisputes) {
+      // Disputes first among the desk tiles: a disputed match is frozen until someone
+      // rules on it, so waiting costs the players something.
+      add(_quickAction(Icons.gavel_rounded, 'Match Disputes',
+          _openDisputes == 0
+              ? 'Nothing waiting'
+              : '$_openDisputes${_moreDisputes ? '+' : ''} '
+                  '${_openDisputes == 1 && !_moreDisputes ? 'match' : 'matches'} '
+                  'waiting on a ruling',
+          () async {
+        await Navigator.pushNamed(context, '/admin-disputes');
+        if (mounted) await _loadDisputes();
+      }));
+    }
+    if (_canBookingDisputes) {
+      add(_quickAction(Icons.receipt_long_outlined, 'Booking Disputes',
+          'Players reporting a problem with a booking — uphold to refund',
+          () => Navigator.pushNamed(context, '/admin-booking-disputes')));
+    }
+    if (_canUsers) {
+      add(_quickAction(Icons.manage_accounts_outlined, 'Users',
+          'Search, suspend and reinstate accounts',
+          () => Navigator.pushNamed(context, '/admin-users')));
+    }
+    if (_canSettings) {
+      add(_quickAction(Icons.tune_rounded, 'Platform Settings',
+          'Commission, deposits, Elo, sports -- applies with no restart',
+          () => Navigator.pushNamed(context, '/admin-settings')));
+    }
+    if (_canReports) {
+      add(_quickAction(Icons.summarize_outlined, 'Platform Report',
+          'Commission earned per owner, exportable as CSV',
+          () => Navigator.pushNamed(context, '/admin-reports')));
+    }
+    if (_isSuper) {
+      add(_quickAction(Icons.admin_panel_settings_outlined, 'Manage Admins',
+          'Add sub-admins and set what each one can do',
+          () => Navigator.pushNamed(context, '/admin-admins')));
+    }
+    add(_quickAction(Icons.refresh_rounded, 'Refresh Stats', 'Pull latest data', () async {
+      await _loadStats();
+      if (_canOwner) await _loadList('pending');
+      if (_canReview) await _loadFlags();
+    }));
+    return tiles;
+  }
 
   Widget _quickAction(IconData icon, String title, String sub, VoidCallback onTap) =>
       GestureDetector(

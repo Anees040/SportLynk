@@ -28,7 +28,25 @@ class AuthService {
   }
 
   Future<Map<String, dynamic>> registerOwner(Map<String, dynamic> data) async {
-    return _api.post(ApiConstants.registerOwner, data);
+    // A generous budget: owner sign-up is a heavy, one-off submit and the free-tier
+    // backend may have cold-started (~30-50s). Without the override the adaptive
+    // warm timeout (10s after any earlier success) fires a false "took too long".
+    return _api.post(ApiConstants.registerOwner, data,
+        timeout: const Duration(seconds: 60));
+  }
+
+  /// Early uniqueness check for owner sign-up: reports whether the phone, email or
+  /// CNIC is already registered, so the first step can warn before the later steps.
+  /// Advisory only — register/owner re-enforces all three — so a caller treats a
+  /// failed call as "could not check", not as a block.
+  Future<Map<String, dynamic>> ownerPrecheck({
+    required String phone,
+    String? email,
+    required String cnic,
+  }) async {
+    final body = <String, dynamic>{'phone': phone, 'cnicNumber': cnic};
+    if (email != null && email.isNotEmpty) body['email'] = email;
+    return _api.post(ApiConstants.registerOwnerPrecheck, body);
   }
 
   Future<Map<String, dynamic>> login({

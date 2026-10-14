@@ -809,8 +809,8 @@ void main() {
       expect(invited.map((s) => s.userId), ['u-77']);
     });
 
-    // A second invite while one is being minted would create two links.
-    testWidgets('the invite button is dead while an invite is being minted',
+    // A second tap while one invite is in flight would send two invites.
+    testWidgets('the invite button is dead while an invite is in flight',
         (tester) async {
       final invited = await pumpCard(tester, busy: true);
       expect(
@@ -949,13 +949,13 @@ void main() {
       );
     });
 
-    // The platform has no direct player invite, so the button's promise has to be
-    // exactly what it does.
-    testWidgets('the invite button says what it actually mints', (tester) async {
+    // The button sends a direct in-app invite (migration 039), so its promise
+    // has to be exactly what it does — not a link.
+    testWidgets('the invite button says what it actually does', (tester) async {
       await openSheet(tester);
-      expect(find.text('Create invite link'), findsOneWidget);
+      expect(find.text('Invite to team'), findsOneWidget);
       expect(
-        find.textContaining('mints a single-use link you send them yourself.'),
+        find.textContaining('they join the team when they accept'),
         findsOneWidget,
       );
     });
@@ -964,11 +964,11 @@ void main() {
         (tester) async {
       final invited = <PlayerSuggestion>[];
       await openSheet(tester, s: suggestion(userId: 'u-91'), invited: invited);
-      await tester.tap(find.text('Create invite link'));
+      await tester.tap(find.text('Invite to team'));
       await tester.pumpAndSettle();
       expect(invited.map((s) => s.userId), ['u-91']);
-      expect(find.text('Create invite link'), findsNothing,
-          reason: 'the sheet closes before the invite is minted');
+      expect(find.text('Invite to team'), findsNothing,
+          reason: 'the sheet closes before the invite is sent');
     });
 
     testWidgets('while busy the button says so and does nothing', (tester) async {

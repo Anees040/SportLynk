@@ -251,4 +251,81 @@ class AdminService {
   /// Drop the override rows for these keys, back to the documented defaults.
   Future<Map<String, dynamic>> resetSettings(String token, List<String> keys) =>
       _api.post(ApiConstants.adminSettingsReset, {'keys': keys}, token: token);
+
+  // Admin management (super-admin only, migration 040)
+
+  /// The permission catalog the Manage Admins screen renders its checkboxes from.
+  /// Server-owned, so the labels and keys can never drift from what the backend
+  /// enforces. Empty list on a failed read; the screen treats that as an error.
+  Future<List<PermissionDef>> permissionCatalog(String token) async {
+    final r = await _api.get(ApiConstants.adminPermissionsCatalog, token: token);
+    if (r['success'] != true || r['data'] is! Map) return const [];
+    final d = Map<String, dynamic>.from(r['data'] as Map);
+    return (d['permissions'] as List? ?? const [])
+        .whereType<Map>()
+        .map((m) => PermissionDef.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  /// Every admin account, super admin first. `ok:false` on a failed read so the
+  /// screen can show an error with a retry instead of a reassuring empty list.
+  Future<AdminPage<AdminAccount>> admins(String token) async {
+    final r = await _api.get(ApiConstants.adminAdmins, token: token);
+    if (r['success'] != true || r['data'] is! Map) {
+      return const AdminPage<AdminAccount>(items: [], ok: false);
+    }
+    final d = Map<String, dynamic>.from(r['data'] as Map);
+    return AdminPage<AdminAccount>(
+      items: (d['admins'] as List? ?? const [])
+          .whereType<Map>()
+          .map((m) => AdminAccount.fromJson(Map<String, dynamic>.from(m)))
+          .toList(),
+    );
+  }
+
+  /// Create a sub-admin login. Returns the raw envelope so the server's own message
+  /// shows — a taken email, a short password, or an unknown permission key.
+  Future<Map<String, dynamic>> createSubAdmin(
+    String token, {
+    required String name,
+    required String email,
+    required String password,
+    String? phone,
+    required List<String> permissions,
+  }) =>
+      _api.post(
+        ApiConstants.adminAdmins,
+        {
+          'name': name.trim(),
+          'email': email.trim(),
+          'password': password,
+          if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+          'permissions': permissions,
+        },
+        token: token,
+      );
+
+  /// Replace a sub-admin's granted permissions (and optionally rename them).
+  Future<Map<String, dynamic>> updateAdmin(
+    String token,
+    String id, {
+    required List<String> permissions,
+    String? name,
+  }) =>
+      _api.patch(
+        ApiConstants.adminAdmin(id),
+        {
+          'permissions': permissions,
+          if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+        },
+        token: token,
+      );
+
+  /// Remove a sub-admin's access — deactivate and clear their permissions.
+  Future<Map<String, dynamic>> removeAdmin(String token, String id) =>
+      _api.delete(ApiConstants.adminAdmin(id), token: token);
+
+  /// Restore a previously removed sub-admin.
+  Future<Map<String, dynamic>> restoreAdmin(String token, String id) =>
+      _api.post(ApiConstants.adminRestoreAdmin(id), const {}, token: token);
 }

@@ -24,15 +24,14 @@
 // the server, and the confirm dialog names the team and its size — three separate
 // facts a regression can drop independently.
 //
-// The fourth is what this screen does when the fetch fails, which is the finding that
-// motivated most of this file. `TeamService.mine` cannot fail: `ApiClient._send`
-// catches every exception and answers `{success: false}`, and `_teams`
-// (lib/services/team_service.dart:13) maps that to an empty list. So the
-// `s.hasError` branch at :223 is unreachable for every real failure, and a 500, a
-// rejected token or a dropped connection all render the invitation to create a first
-// team. Four tests below pin that as it behaves, with the line numbers, because it is
-// the same defect shape already recorded on Find Venues and it must not be mistaken
-// for a working empty state.
+// The fourth is what this screen does when the fetch fails — the finding that
+// motivated most of this file, now fixed. `TeamService.mineOrNull` returns null on a
+// failed request (where `mine` collapsed every failure to an empty list), the screen
+// caches the last good list to `OfflineCache.myTeams`, and `_load` keeps whatever is
+// on screen when a later fetch fails. So a dropped connection no longer renders the
+// invitation to create a first team: with a cached list it stays put under an offline
+// banner, and with nothing cached it shows an error with a Retry. The tests below pin
+// that corrected behaviour.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -379,56 +378,53 @@ void main() {
   });
 
   group('when the list cannot be read', () {
-    // Pinned as it behaves, not as it should.
-    // lib/screens/player/teams_screen.dart:223 branches on `s.hasError`, but
-    // `TeamService.mine` never completes with an error: `ApiClient._send` catches
-    // every exception and returns `{success: false}`, and `_teams`
-    // (lib/services/team_service.dart:13) turns that into an empty list. So a
-    // server failure renders the invitation to create a first team, with no error
-    // text and no retry. The fix is for `mine` to distinguish a failure from an
-    // empty result the way `rankings` and `suggestedPlayers` already do — both
-    // return null on failure for exactly this reason — after which these tests
-    // should assert the error copy and a retry.
-    testWidgets('a server failure is shown as an empty list', (tester) async {
+    // The finding this group was written for, now fixed.
+    // `TeamService.mineOrNull` returns null on a failed request, the screen caches
+    // the last good list, and `_load` keeps what is on screen when a fetch fails. So
+    // a failure with nothing cached shows an error with a Retry — not the invitation
+    // to create a first team — and a failure over a loaded list keeps the list (the
+    // 'refreshing' group pins that second case).
+    testWidgets('a server failure shows an error with a retry', (tester) async {
       api.fail('/teams/mine', 'Could not reach the teams service.');
 
       await pumpScreen(tester, const TeamsScreen());
       await settleData(tester);
 
-      expect(find.text(kEmptyTeams), findsOneWidget);
-      expect(find.byIcon(Icons.cloud_off), findsNothing);
-      expect(find.text('Could not reach the teams service.'), findsNothing);
+      expect(find.textContaining('Could not load your teams'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text(kEmptyTeams), findsNothing);
     });
 
-    testWidgets('a rejected token is shown as an empty list', (tester) async {
-      // A player whose session expired is told to create a team rather than to
-      // sign in again.
+    testWidgets('a rejected token shows an error, not an empty list',
+        (tester) async {
+      // A player whose session expired is not told to create a team.
       api.fail('/teams/mine', 'Unauthorized', status: 401);
 
       await pumpScreen(tester, const TeamsScreen());
       await settleData(tester);
 
-      expect(find.text(kEmptyTeams), findsOneWidget);
+      expect(find.textContaining('Could not load your teams'), findsOneWidget);
+      expect(find.text(kEmptyTeams), findsNothing);
     });
 
-    testWidgets('a dropped connection is shown as an empty list', (tester) async {
-      // The exact symptom of a missing `adb reverse`, and the reason this defect
-      // matters: the screen states as fact something it has no evidence for.
+    testWidgets('a dropped connection shows an error, not a false empty state',
+        (tester) async {
+      // The exact symptom of a missing `adb reverse`, and the reason this mattered:
+      // the screen used to assert "no teams", which it had no evidence for.
       api.offline('/teams/mine');
 
       await pumpScreen(tester, const TeamsScreen());
       await settleData(tester);
 
-      expect(find.text(kEmptyTeams), findsOneWidget);
-      expect(find.byIcon(Icons.groups_outlined), findsOneWidget);
+      expect(find.textContaining('Could not load your teams'), findsOneWidget);
+      expect(find.text(kEmptyTeams), findsNothing);
     });
 
-    testWidgets('the error copy is reachable only through a malformed row',
+    testWidgets('the error copy is reached through a malformed row too',
         (tester) async {
       // `Team.fromJson` casts `logo_url` with `as String?`, so a non-string column
-      // is the one failure that does reach the FutureBuilder as an error. This test
-      // exists to prove the branch is wired, and to record that the only thing that
-      // can trigger it is bad data rather than a bad connection.
+      // throws inside the mapper; `_load` catches it and shows the same error state
+      // rather than crashing. Bad data, not a bad connection.
       api.ok('/teams/mine', [
         {...teamRow(), 'logo_url': 12},
       ]);
@@ -442,7 +438,7 @@ void main() {
 
     testWidgets('one malformed row costs the whole list', (tester) async {
       // Recorded rather than endorsed: the map in `_teams` has no per-row guard, so
-      // a single bad column hides every good team.
+      // a single bad column hides every good team behind the error state.
       api.ok('/teams/mine', [
         teamRow(id: 't-1', name: 'Lahore Lions'),
         {...teamRow(id: 't-2'), 'logo_url': 12},
@@ -455,18 +451,15 @@ void main() {
       expect(find.textContaining('Could not load your teams'), findsOneWidget);
     });
 
-    testWidgets('a pull is the only way back from a failure', (tester) async {
-      // Both failure views are `ListView`s, which is what keeps the
-      // `RefreshIndicator` usable — a `Center` would have made the screen a dead
-      // end. It is still an undiscoverable retry, since nothing on screen says to
-      // pull.
+    testWidgets('retry after a failure reloads the list', (tester) async {
+      // The error state carries a Retry button, the one action that can fix it.
       api.fail('/teams/mine', 'boom');
 
       await pumpScreen(tester, const TeamsScreen());
       await settleData(tester);
 
       api.ok('/teams/mine', [teamRow(name: 'Lahore Lions')]);
-      await tester.fling(find.byType(ListView), const Offset(0, 320), 1000);
+      await tester.tap(find.text('Retry'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await settleData(tester);
@@ -513,13 +506,11 @@ void main() {
       expect(find.text('Karachi Kings'), findsNothing);
     });
 
-    testWidgets('a failed refresh empties a list that was on screen',
+    testWidgets('a failed refresh keeps the list that was on screen',
         (tester) async {
-      // Pinned as it behaves, not as it should. The same defect as the group above,
-      // seen from its worst angle: `_reload` replaces the future, so a flaky
-      // connection turns a populated list into "create a team" rather than leaving
-      // the last good rows in place. Team Rankings shows the intended shape — it
-      // keeps the stale board and adds a banner.
+      // The headline fix. `_load` leaves `_teams` in place when a refresh fails, so
+      // a flaky connection no longer turns a populated list into "create a team":
+      // the last good rows stay (Team Rankings already behaved this way).
       api.ok('/teams/mine', [teamRow(name: 'Lahore Lions')]);
 
       await pumpScreen(tester, const TeamsScreen());
@@ -531,8 +522,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await settleData(tester);
 
-      expect(find.text('Lahore Lions'), findsNothing);
-      expect(find.text(kEmptyTeams), findsOneWidget);
+      expect(find.text('Lahore Lions'), findsOneWidget);
+      expect(find.text(kEmptyTeams), findsNothing);
     });
   });
 

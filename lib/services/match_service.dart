@@ -120,17 +120,30 @@ class MatchService {
   /// FR5.8 – FR5.12. The server re-reads captaincy, sport, booking ownership and
   /// slot availability inside its transaction, so a stale screen produces a
   /// readable 4xx rather than a bad match.
+  ///
+  /// [alsoInvite] carries extra teams for a multi-invite (migration 041): the same
+  /// booked slot is offered to the primary opponent plus these, and the first to
+  /// accept locks the match while the rest are voided. When it is empty the body
+  /// keeps the original single-`opponentTeam` shape, so the response is the one
+  /// match; with extras the server answers `{ matches, skipped }`.
   Future<Map<String, dynamic>> challenge(
     String token, {
     required String challengerTeam,
     required String opponentTeam,
     required String bookingId,
-  }) =>
-      _api.post(ApiConstants.matchChallenge, {
-        'challengerTeam': challengerTeam,
-        'opponentTeam': opponentTeam,
-        'bookingId': bookingId,
-      }, token: token);
+    List<String> alsoInvite = const [],
+  }) {
+    final body = <String, dynamic>{
+      'challengerTeam': challengerTeam,
+      'bookingId': bookingId,
+    };
+    if (alsoInvite.isEmpty) {
+      body['opponentTeam'] = opponentTeam;
+    } else {
+      body['opponentTeams'] = [opponentTeam, ...alsoInvite];
+    }
+    return _api.post(ApiConstants.matchChallenge, body, token: token);
+  }
 
   /// FE-4 — the opponent captain accepts or rejects. `action` ∈ {accept, reject}.
   Future<Map<String, dynamic>> respond(String token, String id, String action) =>

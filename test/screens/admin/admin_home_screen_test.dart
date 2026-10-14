@@ -71,15 +71,32 @@ Map<String, dynamic> venue({String id = 'v-1', String name = 'Champions Ground'}
       'address': 'Main Boulevard',
     };
 
-/// Mounts the desk as an admin whose token is null, which is what keeps the bell's
-/// bootstrap — socket, push registration, deep-link replay — from starting.
+/// Mounts the desk as the super admin (sees every tab and tile) whose token is null,
+/// which is what keeps the bell's bootstrap — socket, push registration, deep-link
+/// replay — from starting.
 Future<RouteLog> pumpAdmin(WidgetTester tester, FakeApi api,
     {double textScale = 1.0}) {
   return pumpScreen(
     tester,
     const AdminHomeScreen(),
-    auth: FakeAuth(role: 'admin', id: 'admin-1', name: 'Ops', token: null),
+    auth: FakeAuth(
+        role: 'admin', id: 'admin-1', name: 'Ops', token: null, isSuperAdmin: true),
     textScale: textScale,
+  );
+}
+
+/// Mounts the desk as a sub-admin holding exactly [permissions] — for the gating
+/// tests, which assert that a surface it lacks is neither shown nor loaded.
+Future<RouteLog> pumpSub(
+  WidgetTester tester,
+  FakeApi api,
+  List<String> permissions,
+) {
+  return pumpScreen(
+    tester,
+    const AdminHomeScreen(),
+    auth: FakeAuth(
+        role: 'admin', id: 'sub-1', name: 'Helper', token: null, permissions: permissions),
   );
 }
 
@@ -280,6 +297,52 @@ void main() {
       await settleData(tester);
 
       expect(find.text('SportLynk Control Center'), findsOneWidget);
+    });
+  });
+
+  group('permission gating', () {
+    testWidgets('the super admin sees the Manage Admins action', (tester) async {
+      await pumpAdmin(tester, api);
+      await settleData(tester);
+      expect(find.text('Manage Admins'), findsOneWidget);
+    });
+
+    testWidgets('a sub-admin sees only its granted tile and no owner tabs',
+        (tester) async {
+      await pumpSub(tester, api, const ['user_management']);
+      await settleData(tester);
+
+      // The one granted surface is offered...
+      expect(find.text('Users'), findsOneWidget);
+      // ...and nothing it was not granted, including the super-admin-only tile.
+      expect(find.text('Match Disputes'), findsNothing);
+      expect(find.text('Platform Settings'), findsNothing);
+      expect(find.text('Review Pending Registrations'), findsNothing);
+      expect(find.text('Manage Admins'), findsNothing);
+      // Without owner_approvals there are no OWNERS/VENUES tabs.
+      expect(find.text('OWNERS (P)'), findsNothing);
+      expect(find.text('VENUES'), findsNothing);
+      // The dashboard itself still renders.
+      expect(find.text('SportLynk Control Center'), findsOneWidget);
+    });
+
+    testWidgets('a sub-admin without review_moderation has no moderation icon',
+        (tester) async {
+      await pumpSub(tester, api, const ['user_management']);
+      await settleData(tester);
+      expect(find.byTooltip('Moderation queue'), findsNothing);
+    });
+
+    testWidgets('a sub-admin never calls the endpoints it cannot use',
+        (tester) async {
+      await pumpSub(tester, api, const ['user_management']);
+      await settleData(tester);
+      // Stats is open to any admin; the gated reads must not fire.
+      expect(api.countTo('/admin/stats'), 1);
+      expect(api.countTo('/admin/disputes'), 0);
+      expect(api.countTo('/admin/reviews/flagged'), 0);
+      expect(api.countTo('/admin/registrations'), 0);
+      expect(api.countTo('/admin/venues/pending'), 0);
     });
   });
 }

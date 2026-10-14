@@ -2,14 +2,19 @@
  * Auto-decision sweep for pending booking requests (FR4.10)
  *
  * Every 5 minutes:
- *   • pending longer than the owner-decision window, slot still comfortably ahead
+ *   • a near-term slot (within NEAR_TERM_WINDOW) left pending past the short urgent
+ *       window → auto-confirm (the owner stayed silent through the window they had)
+ *   • pending longer than the ordinary owner-decision window, slot still far off
  *       → auto-confirm (owner stayed silent; escrow stays frozen, no money moves)
- *   • pending and slot starts within the short reject lead (or has already started)
+ *   • pending and slot starts within the short reject lead (or has already started),
+ *       and it was too close to kickoff to wait out either confirm window
  *       → auto-reject + full refund: player balance +P, frozen -P, slot freed
  *
- * The reject lead is deliberately short (minutes, not hours): a near-term booking
- * stays pending so the owner can still approve it — and screen the player's trust
- * score — right up to the cut-off, instead of being rejected the moment it is made.
+ * The near-term rule is what closes the lost-revenue gap: a booking made 1–2 hours
+ * before kickoff could never reach the 2-hour auto-confirm, so it was always rejected
+ * at the lead. It now confirms after a short window instead — the owner keeps that
+ * window to approve or reject by hand, and only a booking made too close to kickoff
+ * to wait the window out is refunded.
  *
  * Both paths write a notification row for the player and the owner, and every
  * ledger write happens inside one transaction with FOR UPDATE on the booking
@@ -35,11 +40,21 @@ async function processPendingRequests() {
   _running = true;
   try {
     // slot_date + start_time are PKT wall-clock values → compare with PKT now.
+    // Order matters: the near-term confirm is tried before the reject floor so a
+    // silent owner's near-term booking is kept, not killed; the reject floor then
+    // only catches a still-pending slot too close to kickoff to have waited either
+    // confirm window out.
     const res = await pool.query(
       `SELECT b.id,
               CASE
                 WHEN (b.slot_date::DATE + b.start_time::TIME)
-                     < (NOW() AT TIME ZONE $1) + ($2 || ' minutes')::INTERVAL
+                       <  (NOW() AT TIME ZONE $1) + ($4 || ' minutes')::INTERVAL
+                     AND (b.slot_date::DATE + b.start_time::TIME)
+                       >= (NOW() AT TIME ZONE $1) + ($2 || ' minutes')::INTERVAL
+                     AND b.created_at < NOW() - ($5 || ' minutes')::INTERVAL
+                  THEN 'approve_near'
+                WHEN (b.slot_date::DATE + b.start_time::TIME)
+                       < (NOW() AT TIME ZONE $1) + ($2 || ' minutes')::INTERVAL
                   THEN 'reject'
                 WHEN b.created_at < NOW() - ($3 || ' minutes')::INTERVAL
                   THEN 'approve'
@@ -51,6 +66,8 @@ async function processPendingRequests() {
         POLICY.TIMEZONE,
         String(POLICY.AUTO_REJECT_MIN_LEAD_MINUTES),
         String(POLICY.AUTO_DECIDE_AFTER_MINUTES),
+        String(POLICY.NEAR_TERM_WINDOW_MINUTES),
+        String(POLICY.NEAR_TERM_AUTO_CONFIRM_MINUTES),
       ],
     );
 
@@ -60,8 +77,8 @@ async function processPendingRequests() {
       return;
     }
 
-    const toApprove = due.filter((r) => r.decision === 'approve').length;
-    const toReject = due.length - toApprove;
+    const toReject = due.filter((r) => r.decision === 'reject').length;
+    const toApprove = due.length - toReject;
     console.log(
       `[AutoApproveJob] sweep: ${due.length} due (${toApprove} auto-confirm, ${toReject} auto-reject).`,
     );
@@ -69,9 +86,9 @@ async function processPendingRequests() {
     let done = 0;
     for (const row of due) {
       const ok =
-        row.decision === 'approve'
-          ? await autoConfirm(row.id)
-          : await autoReject(row.id);
+        row.decision === 'reject'
+          ? await autoReject(row.id)
+          : await autoConfirm(row.id, row.decision === 'approve_near');
       if (ok) done++;
     }
     console.log(`[AutoApproveJob] sweep complete: ${done}/${due.length} decided.`);
@@ -99,7 +116,7 @@ async function lockPending(client, bookingId) {
 }
 
 /** Owner never answered but there is still time → confirm. No money moves. */
-async function autoConfirm(bookingId) {
+async function autoConfirm(bookingId, nearTerm = false) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -116,19 +133,22 @@ async function autoConfirm(bookingId) {
       [b.id],
     );
 
+    const window = nearTerm
+      ? POLICY.NEAR_TERM_AUTO_CONFIRM_MINUTES
+      : POLICY.AUTO_DECIDE_AFTER_MINUTES;
     await notify(client, {
       userId: b.player_id,
       bookingId: b.id,
       type: 'booking_auto_confirmed',
       title: 'Booking auto-confirmed',
-      body: `${b.venue_name} did not respond within ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)}, so your booking was confirmed automatically. Show your QR code at the venue.`,
+      body: `${b.venue_name} did not respond within ${describeDelay(window)}, so your booking was confirmed automatically. Show your QR code at the venue.`,
     });
     await notify(client, {
       userId: b.venue_owner_id || b.owner_id,
       bookingId: b.id,
       type: 'booking_auto_confirmed_owner',
       title: 'Request auto-confirmed',
-      body: `${b.player_name}'s request was pending for over ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)} and has been auto-confirmed.`,
+      body: `${b.player_name}'s request was pending for over ${describeDelay(window)} and has been auto-confirmed.`,
     });
 
     // Confirm path #2. Identical call to routes/owner.js so the
@@ -232,7 +252,9 @@ async function autoReject(bookingId) {
 function startAutoApproveJob() {
   console.log(
     `[AutoApproveJob] Started — sweeps every ${POLICY.SWEEP_INTERVAL_MS / 60000} min ` +
-      `(auto-confirm after ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)}, auto-reject inside ${describeDelay(POLICY.AUTO_REJECT_MIN_LEAD_MINUTES)} of slot start).`,
+      `(auto-confirm after ${describeDelay(POLICY.AUTO_DECIDE_AFTER_MINUTES)}, ` +
+      `near-term confirm after ${describeDelay(POLICY.NEAR_TERM_AUTO_CONFIRM_MINUTES)} within ${describeDelay(POLICY.NEAR_TERM_WINDOW_MINUTES)}, ` +
+      `auto-reject inside ${describeDelay(POLICY.AUTO_REJECT_MIN_LEAD_MINUTES)} of slot start).`,
   );
   setTimeout(processPendingRequests, 10000);
   setInterval(processPendingRequests, POLICY.SWEEP_INTERVAL_MS);

@@ -107,17 +107,39 @@ class PollVote {
   final int optionIndex;
   final String userId;
   final String userName;
+
+  /// The voter's profile photo and the moment they cast this vote, carried so the
+  /// votes screen can show a WhatsApp-style row (avatar, name, time). Both may be
+  /// null — a voter with no photo, or an older vote fetched before the backend
+  /// projected the timestamp.
+  final String? avatarUrl;
+  final DateTime? votedAt;
+
   const PollVote(
-      {required this.optionIndex, required this.userId, required this.userName});
+      {required this.optionIndex,
+      required this.userId,
+      required this.userName,
+      this.avatarUrl,
+      this.votedAt});
 
-  factory PollVote.fromJson(Map<String, dynamic> j) => PollVote(
-        optionIndex: asNum(j['optionIndex']).toInt(),
-        userId: '${j['userId']}',
-        userName: '${j['userName'] ?? 'Someone'}',
-      );
+  factory PollVote.fromJson(Map<String, dynamic> j) {
+    final a = (j['avatar'] as String?)?.trim();
+    return PollVote(
+      optionIndex: asNum(j['optionIndex']).toInt(),
+      userId: '${j['userId']}',
+      userName: '${j['userName'] ?? 'Someone'}',
+      avatarUrl: (a == null || a.isEmpty) ? null : a,
+      votedAt: j['votedAt'] == null ? null : DateTime.tryParse('${j['votedAt']}')?.toLocal(),
+    );
+  }
 
-  Map<String, dynamic> toJson() =>
-      {'optionIndex': optionIndex, 'userId': userId, 'userName': userName};
+  Map<String, dynamic> toJson() => {
+        'optionIndex': optionIndex,
+        'userId': userId,
+        'userName': userName,
+        'avatar': avatarUrl,
+        'votedAt': votedAt?.toIso8601String(),
+      };
 }
 
 /// A poll carried by a message of kind [MessageKind.poll]: the question, the
@@ -175,6 +197,11 @@ class ChatPoll {
       .where((v) => v.optionIndex == optionIndex)
       .map((v) => v.userName)
       .toList();
+
+  /// The full votes for one option, in the order they were cast — what the votes
+  /// screen lists as avatar/name/time rows.
+  List<PollVote> votersFor(int optionIndex) =>
+      votes.where((v) => v.optionIndex == optionIndex).toList();
 
   double fraction(int optionIndex) {
     final denom = totalVoters;

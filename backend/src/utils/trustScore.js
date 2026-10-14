@@ -56,6 +56,17 @@ const WEIGHTS = { rating: 35, attendance: 30, disputes: 20, sentiment: 15 };
 // signal lowers a component below its full value. See the cold-start note above.
 const NEUTRAL_PRIOR = 1.0;
 
+// Cancellation-abuse deduction (item 8). The four components above are reputation
+// signals (lose-only, absent→1.0); this is a separate straight deduction so frequent
+// cancelling pulls the aggregate down even for an otherwise-spotless account. A
+// player gets POLICY.FREE_CANCELLATIONS_PER_MONTH free cancellations in a trailing 30
+// days; each one beyond that costs POLICY.CANCELLATION_TRUST_PENALTY points, applied
+// regardless of the 24h refund window. A multi-slot group cancelled in one action is
+// one cancellation (deduped by booking_group_id). Admin-suspension cancellations run
+// through the same cancelBooking path and so count here too — a documented edge, since
+// a suspended account's score is not the concern a reinstated one's reliability is.
+const { POLICY } = require('./escrow');
+
 /** pg returns numeric/bigint as strings; NULL as null. */
 const asNum = (v) => (v === null || v === undefined ? null : Number(v));
 
@@ -105,7 +116,18 @@ async function recomputeTrust(db, userId) {
          JOIN my_matches mm ON mm.id = d.match_id
         WHERE d.raised_by_team IS NOT NULL
           AND d.status <> 'dismissed'
-          AND d.raised_by_team NOT IN (SELECT team_id FROM my_teams))          AS disputes_against
+          AND d.raised_by_team NOT IN (SELECT team_id FROM my_teams))          AS disputes_against,
+      -- cancellation-abuse count: player-initiated cancellations in the trailing 30
+      -- days, deduped so a multi-slot group counts once. to_jsonb(b) tolerates a
+      -- database where booking_group_id (migration 035) is not present.
+      (SELECT count(*) FROM (
+         SELECT COALESCE(to_jsonb(b) ->> 'booking_group_id', b.id::text) AS evt
+           FROM bookings b
+          WHERE b.player_id = $1
+            AND b.cancellation_reason IN ('user_cancelled', 'late_cancellation')
+            AND b.cancelled_at >= NOW() - INTERVAL '30 days'
+          GROUP BY 1
+       ) evts)                                                                 AS recent_cancels
     `,
     [userId],
   );
@@ -116,6 +138,7 @@ async function recomputeTrust(db, userId) {
   const noShows = asNum(raw.no_shows) || 0;
   const played = asNum(raw.played) || 0;
   const disputesAgainst = asNum(raw.disputes_against) || 0;
+  const recentCancels = asNum(raw.recent_cancels) || 0;
 
   // Each component is a real 0..1 value when there is a signal, else null.
   const ratingNorm = nRating > 0 ? clamp01(asNum(raw.avg_rating) / 5) : null;
@@ -131,12 +154,16 @@ async function recomputeTrust(db, userId) {
 
   // The aggregate substitutes the neutral prior for any absent component.
   const p = (x) => (x === null ? NEUTRAL_PRIOR : x);
-  const trustScore = Math.round(
+  const base =
     WEIGHTS.rating * p(ratingNorm)
     + WEIGHTS.attendance * p(attendanceRate)
     + WEIGHTS.disputes * p(disputeFreeRate)
-    + WEIGHTS.sentiment * p(sentimentNorm),
-  );
+    + WEIGHTS.sentiment * p(sentimentNorm);
+  // Then the cancellation-abuse deduction (item 8): nothing for the free allowance,
+  // then a flat penalty per cancellation beyond it.
+  const overLimit = Math.max(0, recentCancels - POLICY.FREE_CANCELLATIONS_PER_MONTH);
+  const cancellationPenalty = overLimit * POLICY.CANCELLATION_TRUST_PENALTY;
+  const trustScore = Math.round(base - cancellationPenalty);
   const clamped = Math.max(0, Math.min(100, trustScore));
 
   // Upsert: every player has a profile (auth.js:53), so this is normally an
@@ -165,6 +192,10 @@ async function recomputeTrust(db, userId) {
       disputes: disputeFreeRate,
       sentiment: sentimentNorm,
     },
+    // Surfaced (not stored as a component) so a caller or a future UI can explain a
+    // score pulled below its reputation base by frequent cancelling.
+    recentCancellations: recentCancels,
+    cancellationPenalty,
   };
 }
 

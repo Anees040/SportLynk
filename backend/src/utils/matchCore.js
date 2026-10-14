@@ -65,9 +65,12 @@ const STATUS = Object.freeze({
 });
 
 /**
- * The statuses that hold a booking. Must match ux_matches_booking_live exactly:
- * if this list and the index disagree, either the pre-check rejects a challenge
- * the database would have accepted, or it waves one through to a raw 23505.
+ * The statuses in which a match EXISTS on a booking — live, not closed. Tells whether
+ * a booking already has any match at all (a challenge out, a fixture in progress).
+ *
+ * Since migration 041 this is NO LONGER what ux_matches_booking_live guards — that is
+ * LOCKED_STATUSES below — because a booking may now carry several challenge_sent
+ * invites at once (first accept wins).
  */
 const LIVE_STATUSES = Object.freeze([
   STATUS.CHALLENGE_SENT, STATUS.ACCEPTED, STATUS.AWAITING_RESULTS,
@@ -76,6 +79,20 @@ const LIVE_STATUSES = Object.freeze([
 
 /** Nothing further can happen to a match in one of these. */
 const CLOSED_STATUSES = Object.freeze([STATUS.REJECTED, STATUS.EXPIRED]);
+
+/**
+ * The statuses that LOCK a booking to one pairing — accepted, or progressed past it.
+ * This is exactly what ux_matches_booking_live guards (migration 041): a booking may
+ * hold many challenge_sent invites, but at most one match in this set, so a slot is
+ * never double-booked. The challenge pre-check and the "slot already taken" tests
+ * compare against THIS, not LIVE_STATUSES — if the two disagree with the index, a
+ * challenge is either rejected the database would have taken, or waved through to a
+ * raw 23505.
+ */
+const LOCKED_STATUSES = Object.freeze([
+  STATUS.ACCEPTED, STATUS.AWAITING_RESULTS, STATUS.AWAITING_OWNER,
+  STATUS.COMPLETED, STATUS.DISPUTED,
+]);
 
 /** Slot dates/times are PKT wall-clock values (same convention as escrow.js). */
 const TIMEZONE = 'Asia/Karachi';
@@ -731,6 +748,7 @@ module.exports = {
   STATUS,
   LIVE_STATUSES,
   CLOSED_STATUSES,
+  LOCKED_STATUSES,
   TIMEZONE,
   MATCH_VIEW_COLUMNS,
   MATCH_VIEW_FROM,

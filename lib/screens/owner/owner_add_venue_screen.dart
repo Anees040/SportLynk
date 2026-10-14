@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -66,6 +67,16 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
   }
 
   Future<XFile?> _pickImg() async => await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1024, imageQuality: 85);
+
+  // Ground photos are chosen several at a time, clamped to the six-photo cap; the
+  // single picker above stays for the document tiles.
+  Future<void> _addGroundPhotos() async {
+    final remaining = 6 - _groundPhotos.length;
+    if (remaining <= 0) return;
+    final picked = await ImagePicker().pickMultiImage(maxWidth: 1024, imageQuality: 85);
+    if (picked.isEmpty || !mounted) return;
+    setState(() => _groundPhotos.addAll(picked.take(remaining)));
+  }
 
   Widget _img(XFile f, {double? w, double? h, BoxFit fit = BoxFit.cover}) {
     if (kIsWeb) return Image.network(f.path, width: w, height: h, fit: fit);
@@ -196,7 +207,7 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
         itemCount: _groundPhotos.length + (_groundPhotos.length < 6 ? 1 : 0),
         itemBuilder: (_, i) {
           if (i == _groundPhotos.length) {
-            return GestureDetector(onTap: () async { if (_groundPhotos.length >= 6) return; final f = await _pickImg(); if (f != null) setState(() => _groundPhotos.add(f)); },
+            return GestureDetector(onTap: _addGroundPhotos,
               child: Container(decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(12), color: AppColors.inputFill),
                 child: const Center(child: Icon(Icons.add_photo_alternate, color: AppColors.accent, size: 28))));
           }
@@ -267,6 +278,16 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
       ]);
 
       final groundUrls = futures[0] as List<String>;
+      // Every image upload failed (offline, or a Cloudinary rejection). Sending the
+      // venue with no real photos — or invented stock ones — would create a listing
+      // the owner cannot recognise, so the submission stops here with a reason rather
+      // than papering over it.
+      if (groundUrls.isEmpty) {
+        if (mounted) {
+          _snack('Could not upload your ground photos. Check your connection and try again.');
+        }
+        return; // the finally below clears the submitting flag
+      }
 
       final data = {
         'businessName': _bizCtrl.text.trim(),
@@ -280,11 +301,7 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
         'operatingHoursTo': _closeCtrl.text,
         'pricePerHour': _priceCtrl.text.trim(),
         'alternateContactPhone': _altPhoneCtrl.text.trim().isEmpty ? null : _altPhoneCtrl.text.trim(),
-        'groundPhotos': groundUrls.isNotEmpty ? groundUrls : [
-          'https://images.unsplash.com/photo-1553778263-73a83bab9b0c?auto=format&fit=crop&w=800',
-          'https://images.unsplash.com/photo-1574629810360-7efbb1924043?auto=format&fit=crop&w=800',
-          'https://images.unsplash.com/photo-1459865264687-595d652de67e?auto=format&fit=crop&w=800'
-        ],
+        'groundPhotos': groundUrls,
       };
 
       if (!mounted) return;
@@ -298,7 +315,7 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
           'Content-Type': 'application/json',
         },
         body: jsonEncode(data),
-      );
+      ).timeout(const Duration(seconds: 60)); // Render free tier can cold-start ~30-50s
 
       final respData = jsonDecode(resp.body);
 
@@ -347,6 +364,10 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
         );
       } else {
         _snack(respData['message'] ?? 'Submission failed');
+      }
+    } on TimeoutException {
+      if (mounted) {
+        _snack('The server took too long to respond. Please try again.');
       }
     } catch (e) {
       if (mounted) {

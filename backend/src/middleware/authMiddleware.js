@@ -80,18 +80,38 @@ async function accountState(id) {
   if (hit && Date.now() - hit.at < TTL_MS) return hit;
 
   try {
-    const { rows } = await pool.query(
-      'SELECT is_active, role FROM users WHERE id = $1',
-      [key]
-    );
+    // The RBAC columns (migration 040) are read alongside the suspension state, so a
+    // permission check costs no extra round trip and shares this cache. They are
+    // tolerated as absent: on a database where 040 has not been applied yet the
+    // SELECT falls back to the legacy two columns, so suspension enforcement never
+    // depends on the newer migration and the apply order cannot wedge the app.
+    let row;
+    try {
+      const r = await pool.query(
+        'SELECT is_active, role, is_super_admin, admin_permissions FROM users WHERE id = $1',
+        [key],
+      );
+      row = r.rows[0];
+    } catch (e) {
+      if (e && e.code === '42703') {
+        const r = await pool.query('SELECT is_active, role FROM users WHERE id = $1', [key]);
+        row = r.rows[0];
+      } else {
+        throw e;
+      }
+    }
+
     // A token for a row that no longer exists. Not cached: there is nothing to
     // re-check, and caching absence would keep answering for a re-created id.
-    if (rows.length === 0) return { missing: true, at: Date.now() };
+    if (!row) return { missing: true, at: Date.now() };
 
     const state = {
       // NULL is_active predates the column's default and means "not suspended".
-      active: rows[0].is_active !== false,
-      role: rows[0].role || null,
+      active: row.is_active !== false,
+      role: row.role || null,
+      // Absent on a pre-040 database: a safe false / empty set until 040 is applied.
+      isSuperAdmin: row.is_super_admin === true,
+      permissions: Array.isArray(row.admin_permissions) ? row.admin_permissions : [],
       at: Date.now(),
     };
     if (cache.size >= MAX_ENTRIES) {
@@ -168,6 +188,12 @@ const authMiddleware = async (req, res, next) => {
     email: decoded.email,
     // The row wins when it is available; the claim is the fallback.
     role: (state && state.role) || decoded.role,
+    // Authorisation for the sub-admin tier. From the row only — never the token —
+    // so a granted or revoked permission takes effect on the next request. Absent
+    // state (DB unreachable, or pre-040) degrades to no powers, which fails closed:
+    // a permission check denies rather than letting a stale claim through.
+    isSuperAdmin: !!(state && state.isSuperAdmin),
+    permissions: (state && Array.isArray(state.permissions)) ? state.permissions : [],
   };
 
   next();

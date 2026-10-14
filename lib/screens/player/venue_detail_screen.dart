@@ -108,7 +108,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   /// The most slots one booking group may cover. Mirrors `MAX_GROUP_SLOTS` in
   /// backend/src/utils/slotGroup.js; the server refuses anything larger, so this
   /// only exists to stop the player reaching that refusal.
-  static const int _maxGroupSlots = 8;
+  static const int _maxGroupSlots = 4;
 
   /// Hands back every hold the run is holding. Used wherever the selection is
   /// abandoned wholesale — a date change, leaving the screen, or Clear.
@@ -384,6 +384,19 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     return status == 'available' || slot['locked_by_me'] == true;
   }
 
+  /// Whether this slot was freed by a near-kickoff cancellation recently enough to
+  /// still carry the "just freed" tag (item 8 re-listing). Only an available slot
+  /// qualifies, and only within 24h of the stamp, so an old `relisted_at` left on a
+  /// slot that has since been booked and freed again never shows a stale tag.
+  bool _isRelisted(Map<String, dynamic> slot) {
+    final raw = slot['relisted_at'];
+    if (raw == null) return false;
+    final at = DateTime.tryParse(raw.toString());
+    if (at == null) return false;
+    if (!_isSelectable(slot)) return false;
+    return DateTime.now().difference(at.toLocal()) < const Duration(hours: 24);
+  }
+
   /// Tap behaviour, in one place because the rule has to be describable to the
   /// player in a single line: tap consecutive slots to add hours, tap a selected
   /// slot to drop it and anything after it.
@@ -427,17 +440,18 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     _refreshQuote();
   }
 
-  /// Takes the checkout hold without blocking the tap. If the slot was already held
-  /// or booked by someone else, this drops it from the run — along with anything
-  /// after it, so what remains is still contiguous — and repaints so the Blue/Amber
-  /// state shows. It never blocks the player from tapping a different slot in the
-  /// meantime.
+  /// Takes the checkout hold without blocking the tap. A slot is dropped from the
+  /// run only when the server says it is *definitively* taken by someone else (409);
+  /// a transient failure (network, 5xx) leaves the selection untouched. The hold is
+  /// only a courtesy so two players do not fill the same form, and createBooking
+  /// re-checks every slot under a row lock, so a blip must never silently deselect
+  /// what the player just tapped — which is what made rapid tapping drop slots.
   Future<void> _acquireHoldInBackground(String slotId) async {
-    final failure = await _lockSlot(slotId);
-    if (!mounted || failure == null) return;
+    final r = await _lockSlot(slotId);
+    if (!mounted || r.ok || !r.taken) return;
     if (_selected.any((s) => s['id'].toString() == slotId)) {
       setState(() => _truncateFrom(slotId));
-      _snack(failure);
+      _snack(r.message ?? 'That slot was just taken by another player.');
       _refreshQuote();
       _load();
     }
@@ -497,19 +511,24 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     }
   }
 
-  /// Holds the slot for 5 minutes. Returns null on success, otherwise the
-  /// server's reason (409 = another player is already in checkout on it).
-  Future<String?> _lockSlot(String slotId) async {
+  /// Holds the slot for 5 minutes. `ok` is true on success; otherwise `taken` is
+  /// true only for a 409 (another player definitively holds or just booked it) and
+  /// false for a transient failure (network, 5xx), which the caller tolerates.
+  Future<({bool ok, bool taken, String? message})> _lockSlot(String slotId) async {
     try {
       final resp = await http.post(
         Uri.parse('${ApiConstants.baseUrl}/slots/$slotId/lock'),
         headers: {'Authorization': 'Bearer $_token'},
       );
       final data = jsonDecode(resp.body);
-      if (data['success'] == true) return null;
-      return (data['message'] ?? 'Could not hold this slot').toString();
+      if (data['success'] == true) return (ok: true, taken: false, message: null);
+      return (
+        ok: false,
+        taken: resp.statusCode == 409,
+        message: (data['message'] ?? 'Could not hold this slot').toString(),
+      );
     } catch (_) {
-      return 'Network error. Please try again.';
+      return (ok: false, taken: false, message: 'Network error. Please try again.');
     }
   }
 
@@ -917,109 +936,9 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
             ),
           ),
 
-          // Amenities section
-          if (_amenities.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE0E7FF),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.checklist_rounded,
-                              color: Color(0xFF6366F1),
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Amenities & Facilities',
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      ..._amenities.entries.map((e) {
-                        final key = e.key.toString();
-                        final val = e.value;
-                        final isBool = val is bool;
-                        final displayKey = key.replaceAll('_', ' ');
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Row(
-                            children: [
-                              Icon(
-                                isBool
-                                    ? (val ? Icons.check_circle : Icons.cancel)
-                                    : Icons.info_outline,
-                                color: isBool
-                                    ? (val ? AppColors.accent : AppColors.error)
-                                    : AppColors.textSecondary,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  displayKey[0].toUpperCase() +
-                                      displayKey.substring(1),
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 13,
-                                    color: AppColors.textPrimary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                isBool ? (val ? 'Yes' : 'No') : val.toString(),
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  color: isBool
-                                      ? (val
-                                            ? AppColors.accent
-                                            : AppColors.error)
-                                      : AppColors.textSecondary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-          // Reviews summary
-          // Sits with the other "about this venue" content, above the date/slot
-          // booking flow. Aggregates are venue-wide; only the top 3 preview here.
-          SliverToBoxAdapter(child: _reviewsSummary()),
+          // About-this-venue content (amenities, reviews) sits BELOW the booking
+          // flow now, so the slot grid is the first thing under the summary. Those
+          // two slivers are added after the grid, lower in this list.
 
           // Date selector
           SliverToBoxAdapter(
@@ -1285,7 +1204,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
             )
           else if (_slots.isNotEmpty)
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               sliver: SliverGrid(
                 delegate: SliverChildBuilderDelegate((_, i) {
                   final slot = _slots[i];
@@ -1300,6 +1219,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                   final time12 = _to12Hour(slot['start_time']);
                   final slotPrice = asNum(slot['price']);
                   final statusColor = _slotStatusColor(status);
+                  final relisted = _isRelisted(slot);
 
                   return GestureDetector(
                     onTap: (selectable || selected)
@@ -1341,42 +1261,72 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                               ]
                             : null,
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: Stack(
+                        clipBehavior: Clip.none,
                         children: [
-                          Text(
-                            time12,
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: selected
-                                  ? Colors.white
-                                  : selectable
-                                  ? AppColors.textPrimary
-                                  : statusColor,
-                              decoration: !selectable
-                                  ? TextDecoration.lineThrough
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          if (selectable)
-                            Text(
-                              'PKR ${slotPrice.toStringAsFixed(0)}',
-                              style: GoogleFonts.poppins(
-                                fontSize: 9,
-                                color: selected
-                                    ? Colors.white70
-                                    : AppColors.textSecondary,
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                time12,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: selected
+                                      ? Colors.white
+                                      : selectable
+                                          ? AppColors.textPrimary
+                                          : statusColor,
+                                  decoration: !selectable
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
                               ),
-                            )
-                          else
-                            Text(
-                              _slotStatusLabel(status),
-                              style: GoogleFonts.poppins(
-                                fontSize: 8,
-                                color: statusColor,
-                                fontWeight: FontWeight.w600,
+                              const SizedBox(height: 2),
+                              if (selectable)
+                                Text(
+                                  'PKR ${slotPrice.toStringAsFixed(0)}',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 9,
+                                    color: selected
+                                        ? Colors.white70
+                                        : AppColors.textSecondary,
+                                  ),
+                                )
+                              else
+                                Text(
+                                  _slotStatusLabel(status),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 8,
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          // Item 8: a slot freed by a near-kickoff cancellation wears a
+                          // small accent tag so a browsing player spots it and can grab
+                          // it before it is gone again.
+                          if (relisted && !selected)
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accent,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'NEW',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 7,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
                               ),
                             ),
                         ],
@@ -1436,6 +1386,14 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                 ),
               ),
             ),
+
+          // About-this-venue content, now BELOW the booking flow so the slot grid
+          // is the first thing under the summary. Amenities collapse to save
+          // vertical space; reviews are a compact snippet linking to the full list.
+          SliverToBoxAdapter(child: _amenitiesCard()),
+          SliverToBoxAdapter(child: _reviewsSummary()),
+          // Clears the floating booking bar at the end of the scroll.
+          const SliverToBoxAdapter(child: SizedBox(height: 90)),
         ],
       ),
     );
@@ -1550,10 +1508,118 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     );
   }
 
+  /// Amenities as a collapsible card so the list does not push the rest of the page
+  /// down; it starts collapsed with the count in the header. Renders nothing when
+  /// the venue lists no amenities.
+  Widget _amenitiesCard() {
+    final entries = _amenities.entries.toList();
+    if (entries.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Theme(
+          // ExpansionTile draws divider lines above and below when open; clearing
+          // them keeps the tile reading as one card.
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            shape: const Border(),
+            collapsedShape: const Border(),
+            tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 2),
+            childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE0E7FF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.checklist_rounded,
+                  color: Color(0xFF6366F1), size: 20),
+            ),
+            title: Text(
+              'Amenities & Facilities',
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            subtitle: Text(
+              '${entries.length} listed',
+              style: GoogleFonts.poppins(
+                fontSize: 11.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            children: entries.map((e) {
+              final key = e.key.toString();
+              final val = e.value;
+              final isBool = val is bool;
+              final displayKey = key.replaceAll('_', ' ');
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    Icon(
+                      isBool
+                          ? (val ? Icons.check_circle : Icons.cancel)
+                          : Icons.info_outline,
+                      color: isBool
+                          ? (val ? AppColors.accent : AppColors.error)
+                          : AppColors.textSecondary,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        displayKey.isEmpty
+                            ? key
+                            : displayKey[0].toUpperCase() +
+                                displayKey.substring(1),
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      isBool ? (val ? 'Yes' : 'No') : val.toString(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: isBool
+                            ? (val ? AppColors.accent : AppColors.error)
+                            : AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A compact reviews snippet: the average with its star, one top review, and a
+  /// link to the full paginated screen. The histogram and the AI-sentiment split
+  /// moved to that screen, so this card stays short beneath the booking flow.
   Widget _reviewsSummary() {
     final r = _reviews;
     final avg = r.avgStars;
-    final preview = r.reviews.take(3).toList();
+    final top = r.reviews.isNotEmpty ? r.reviews.first : null;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -1573,7 +1639,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
+            // Header: title on the left, the average score on the right.
             Row(
               children: [
                 Container(
@@ -1582,11 +1648,8 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                     color: AppColors.accentLight,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
-                    Icons.reviews_outlined,
-                    color: AppColors.accent,
-                    size: 20,
-                  ),
+                  child: const Icon(Icons.reviews_outlined,
+                      color: AppColors.accent, size: 20),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -1601,25 +1664,30 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                     ),
                   ),
                 ),
-                const Spacer(),
-                if (r.total > 0)
-                  Flexible(
-                    child: Text(
-                      '${r.total} ${r.total == 1 ? 'review' : 'reviews'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
+                if (r.total > 0) ...[
+                  const Icon(Icons.star_rounded, size: 18, color: Colors.amber),
+                  const SizedBox(width: 2),
+                  Text(
+                    avg == null ? '—' : avg.toStringAsFixed(1),
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
                     ),
                   ),
+                  Text(
+                    ' (${r.total})',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
               ],
             ),
 
             if (r.total == 0) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Icon(
@@ -1640,70 +1708,11 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                 ],
               ),
             ] else ...[
-              const SizedBox(height: 16),
-              // Average + histogram
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Column(
-                    children: [
-                      Text(
-                        avg == null ? '—' : avg.toStringAsFixed(1),
-                        style: GoogleFonts.poppins(
-                          fontSize: 40,
-                          fontWeight: FontWeight.bold,
-                          height: 1,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      StarsDisplay(rating: avg ?? 0, size: 15),
-                      const SizedBox(height: 4),
-                      Text(
-                        'out of 5',
-                        style: GoogleFonts.poppins(
-                          fontSize: 10.5,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(child: StarsHistogram(counts: r.starCounts)),
-                ],
-              ),
-
-              // AI sentiment split — only once the model has scored something.
-              if (!r.sentiment.isEmpty) ...[
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.auto_awesome,
-                      size: 14,
-                      color: AppColors.accent,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'AI Sentiment',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SentimentSummaryBar(distribution: r.sentiment),
-              ],
-
-              if (preview.isNotEmpty) ...[
-                const Divider(color: AppColors.border, height: 28),
-                ...preview.map((rev) => ReviewCard(review: rev)),
+              if (top != null) ...[
+                const Divider(color: AppColors.border, height: 24),
+                ReviewCard(review: top),
               ] else
-                const SizedBox(height: 16),
-
+                const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(

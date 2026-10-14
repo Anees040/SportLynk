@@ -399,6 +399,10 @@ class SuggestedPlayersRail extends StatelessWidget {
   final Future<void> Function() onRetry;
   final void Function(PlayerSuggestion) onInvite;
 
+  /// User ids already sent a direct invite: their card reads "Invited" and its
+  /// button is spent, so the same player cannot be asked twice.
+  final Set<String> invited;
+
   const SuggestedPlayersRail({
     super.key,
     required this.data,
@@ -407,6 +411,7 @@ class SuggestedPlayersRail extends StatelessWidget {
     this.loading = false,
     this.failed = false,
     this.busy = false,
+    this.invited = const <String>{},
     this.retryLabel,
   });
 
@@ -452,6 +457,7 @@ class SuggestedPlayersRail extends StatelessWidget {
               s: list[i],
               ranking: data.ranking,
               busy: busy,
+              invited: invited.contains(list[i].userId),
               onInvite: () => onInvite(list[i]),
             ),
           ),
@@ -496,12 +502,14 @@ class _SuggestionCard extends StatelessWidget {
   final PlayerSuggestion s;
   final RankingInfo ranking;
   final bool busy;
+  final bool invited;
   final VoidCallback onInvite;
 
   const _SuggestionCard({
     required this.s,
     required this.ranking,
     required this.busy,
+    required this.invited,
     required this.onInvite,
   });
 
@@ -518,7 +526,8 @@ class _SuggestionCard extends StatelessWidget {
             context,
             s: s,
             ranking: ranking,
-            onInvite: busy ? null : onInvite,
+            invited: invited,
+            onInvite: (busy || invited) ? null : onInvite,
           ),
           child: Container(
             padding: const EdgeInsets.all(11),
@@ -592,22 +601,42 @@ class _SuggestionCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   height: 30,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    onPressed: busy ? null : onInvite,
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.link, size: 13),
-                        SizedBox(width: 4),
-                        Text('Invite', style: TextStyle(fontSize: 11.5)),
-                      ],
-                    ),
-                  ),
+                  child: invited
+                      ? Container(
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.inputFill,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check, size: 13, color: AppColors.textSecondary),
+                              SizedBox(width: 4),
+                              Text('Invited',
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textSecondary)),
+                            ],
+                          ),
+                        )
+                      : FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.accent,
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          onPressed: busy ? null : onInvite,
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.person_add_alt_1, size: 13),
+                              SizedBox(width: 4),
+                              Text('Invite', style: TextStyle(fontSize: 11.5)),
+                            ],
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -630,6 +659,7 @@ class PlayerSuggestionSheet {
     BuildContext context, {
     required PlayerSuggestion s,
     required RankingInfo ranking,
+    bool invited = false,
     VoidCallback? onInvite,
   }) {
     final parts = ranking.breakdown(s.components);
@@ -743,10 +773,12 @@ class PlayerSuggestionSheet {
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.accent,
+                    foregroundColor: AppColors.white,
+                    disabledBackgroundColor: AppColors.inputFill,
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                   ),
-                  onPressed: onInvite == null
+                  onPressed: (onInvite == null || invited)
                       ? null
                       : () {
                           Navigator.pop(ctx);
@@ -755,18 +787,25 @@ class PlayerSuggestionSheet {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.link, size: 17),
+                      Icon(invited ? Icons.check : Icons.person_add_alt_1, size: 17),
                       const SizedBox(width: 6),
-                      Text(onInvite == null ? 'Working…' : 'Create invite link'),
+                      Text(invited
+                          ? 'Invited'
+                          : onInvite == null
+                              ? 'Working…'
+                              : 'Invite to team'),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'SportLynk has no direct player invite — this mints a single-use link '
-                'you send them yourself.',
-                style: TextStyle(fontSize: 10.5, height: 1.4, color: AppColors.textSecondary),
+              Text(
+                invited
+                    ? 'They have been invited. It is waiting in their requests, and '
+                        'they join the team when they accept.'
+                    : 'Sends an invite straight to this player. It lands in their '
+                        'requests, and they join the team when they accept.',
+                style: const TextStyle(fontSize: 10.5, height: 1.4, color: AppColors.textSecondary),
               ),
             ],
           ),

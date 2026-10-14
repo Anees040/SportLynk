@@ -58,6 +58,11 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
   bool _suggestLoading = false;
   bool _suggestFailed = false;
 
+  /// User ids this captain has already sent a direct invite (migration 039), so
+  /// the suggested-players rail reads "Invited" and the same player cannot be
+  /// asked twice. Preloaded from the team's pending invites on load.
+  final Set<String> _invitedPlayers = <String>{};
+
   /// These arrive inside the same `GET /teams/:id` payload as the
   /// team, but they cannot live on [Team]: `elo` there is a `num` defaulting to
   /// the 1000 seed, which has no way to say "Unranked" (FR2.6). [TeamStats]
@@ -161,11 +166,15 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     final results = await Future.wait([
       _service.requests(_token, id),
       _service.invitesList(_token, id),
+      _service.sentPlayerInvites(_token, id),
     ]);
     if (!mounted) return;
     setState(() {
       _requests = _listOf(results[0]);
       _invites = _listOf(results[1]);
+      _invitedPlayers
+        ..clear()
+        ..addAll(_pendingInviteeIds(results[2]));
     });
     _loadSuggested();
   }
@@ -208,6 +217,20 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
       }
     }
     return <Map<String, dynamic>>[];
+  }
+
+  /// The user ids with a still-pending direct invite, read from
+  /// `GET /teams/:id/player-invites`, so the suggested-players rail can show
+  /// "Invited" for anyone already asked rather than offering a second ask.
+  Set<String> _pendingInviteeIds(Map<String, dynamic> r) {
+    if (r['success'] != true) return <String>{};
+    final data = r['data'];
+    final list = data is List ? data : const [];
+    return list
+        .whereType<Map>()
+        .map((e) => '${e['user_id'] ?? ''}')
+        .where((s) => s.isNotEmpty)
+        .toSet();
   }
 
   // Writes
@@ -271,13 +294,10 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     }
   }
 
-  // Invite link
-  /// Mint a single-use link. [note] is set only from the suggested-players rail,
-  /// where it tags the link with the player's name so the invites list reads as
-  /// "for that player"; the plain Invite button passes nothing. Same link either
-  /// way — the schema has no per-user invite, so this is always a link the captain
-  /// sends the player themselves.
-  /// Open the directory of recommended players to invite one directly into the team.
+  // Invite
+  /// Open the directory of recommended players to invite one directly into the
+  /// team (migration 039): the invite lands in the player's requests inbox and
+  /// they join on accept — no link, no out-of-band contact required.
   void _openInvitePlayers() {
     Navigator.push(
       context,
@@ -287,6 +307,11 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     );
   }
 
+  /// Mint the team's shareable invite link for people already in contact
+  /// (WhatsApp-style): one active link that onboards anyone who opens it until
+  /// it is revoked or expires. Inviting a specific player goes through
+  /// [_invitePlayerDirect] / [InvitePlayersScreen] instead. [note] is accepted
+  /// for parity with the API and is unused by the current callers.
   Future<void> _createInvite([String? note]) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -361,6 +386,34 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     );
   }
 
+  /// Invite a suggested player straight into the squad (migration 039): the ask
+  /// lands in their requests inbox and they join on accept. This replaces the
+  /// link the rail used to mint — a captain rarely has the out-of-band contact a
+  /// shared link assumed. A 409 (an invite already stands) is treated as success
+  /// so the rail settles on "Invited" either way.
+  Future<void> _invitePlayerDirect(PlayerSuggestion p) async {
+    if (_busy) return;
+    final id = p.userId;
+    if (id.isEmpty || _invitedPlayers.contains(id)) return;
+    setState(() => _busy = true);
+    final r = await _service.invitePlayer(_token, _team!.id, id);
+    if (!mounted) return;
+    final ok = r['success'] == true;
+    final duplicate = !ok && r['statusCode'] == 409;
+    setState(() {
+      _busy = false;
+      if (ok || duplicate) _invitedPlayers.add(id);
+    });
+    if (ok) {
+      SnackbarUtil.showSuccess(context, 'Invite sent to ${p.name}.');
+    } else if (duplicate) {
+      SnackbarUtil.showInfo(context, '${p.name} already has an invite.');
+    } else {
+      SnackbarUtil.showError(
+          context, r['message']?.toString() ?? 'Could not send the invite.');
+    }
+  }
+
   // Edit team (captain)
   Future<void> _editTeam() async {
     final nameCtrl = TextEditingController(text: _team!.name);
@@ -371,6 +424,11 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      // Keeps the sheet below the status bar / camera notch when the keyboard
+      // grows it to full height. Without this the modal removes the top padding,
+      // so the inner SafeArea cannot push the grab handle clear of the notch.
+      useSafeArea: true,
+      backgroundColor: AppColors.cardBg,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
@@ -386,7 +444,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                 child: Container(
                     width: 40, height: 4,
                     decoration: BoxDecoration(
-                        color: AppColors.border,
+                        color: AppColors.disabled,
                         borderRadius: BorderRadius.circular(2))),
               ),
               const SizedBox(height: 16),
@@ -492,8 +550,11 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                 width: double.infinity,
                 child: FilledButton(
                   style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 14)),
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: AppColors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28))),
                   onPressed: () => Navigator.pop(ctx, true),
                   child: const Text('Save changes'),
                 ),
@@ -581,9 +642,10 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                             loading: _suggestLoading,
                             failed: _suggestFailed,
                             busy: _busy,
+                            invited: _invitedPlayers,
                             retryLabel: 'Try again',
                             onRetry: _loadSuggested,
-                            onInvite: (p) => _createInvite('Suggested: ${p.name}'),
+                            onInvite: _invitePlayerDirect,
                           ),
                         ],
                         // Placed below the admin console so a captain's actions stay

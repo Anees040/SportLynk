@@ -48,6 +48,11 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
   List<LinkableBooking> _bookings = const [];
   String? _bookingId;
 
+  // Multi-invite (041): other compatible teams this slot can be offered to at the
+  // same time. The first to accept locks the match; the rest are told it was taken.
+  List<MatchSide> _others = const [];
+  final Set<String> _alsoInvite = {};
+
   @override
   void initState() {
     super.initState();
@@ -69,11 +74,13 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
         opponentTeam: widget.opponent.id,
       ),
       _service.linkableBookings(_token, widget.myTeamId),
+      _service.opponents(_token, widget.myTeamId),
     ]);
     if (!mounted) return;
 
     final raw = results[0] as Map<String, dynamic>;
     final bookings = results[1] as List<LinkableBooking>;
+    final oppList = results[2] as OpponentList;
 
     setState(() {
       _loading = false;
@@ -87,6 +94,12 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
       }
       _bookings = bookings;
       if (_bookings.length == 1) _bookingId = _bookings.first.id;
+      // Every other challengeable team in my sport, minus the one I am already
+      // challenging — the pool for an optional multi-invite on the same slot.
+      _others = oppList.opponents
+          .map((c) => c.team)
+          .where((t) => t.id != widget.opponent.id)
+          .toList();
     });
   }
 
@@ -104,15 +117,18 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
       challengerTeam: widget.myTeamId,
       opponentTeam: widget.opponent.id,
       bookingId: bookingId,
+      alsoInvite: _alsoInvite.toList(),
     );
     if (!mounted) return;
     setState(() => _sending = false);
 
     if (r['success'] == true) {
-      SnackbarUtil.showSuccess(
-        context,
-        'Challenge sent to ${widget.opponent.name}. They have 48 hours to reply.',
-      );
+      // The server's own sentence for a multi-invite reports how many went out and
+      // that the first accept locks the slot; the single case keeps its 48h wording.
+      final msg = _alsoInvite.isEmpty
+          ? 'Challenge sent to ${widget.opponent.name}. They have 48 hours to reply.'
+          : (r['message']?.toString() ?? 'Challenges sent — first to accept locks the slot.');
+      SnackbarUtil.showSuccess(context, msg);
       Navigator.pop(context, true);
     } else {
       SnackbarUtil.showError(
@@ -173,6 +189,7 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
                     ),
                   const SizedBox(height: 20),
                   _bookingPicker(),
+                  _alsoInviteSection(),
                 ],
               ],
             ),
@@ -190,7 +207,11 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
                       )
                     : const Icon(Icons.send_rounded, size: 18),
                 label: Text(
-                  _sending ? 'Sending…' : 'Send challenge',
+                  _sending
+                      ? 'Sending…'
+                      : (_alsoInvite.isEmpty
+                          ? 'Send challenge'
+                          : 'Send ${_alsoInvite.length + 1} challenges'),
                   style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
                 ),
                 style: FilledButton.styleFrom(
@@ -485,6 +506,108 @@ class _MatchChallengeScreenState extends State<MatchChallengeScreen> {
                         ),
                       ],
                     ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Multi-invite (041): offer the same booked slot to more teams at once.
+
+  Widget _alsoInviteSection() {
+    if (_others.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 22),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Text(
+            'ALSO INVITE  ·  OPTIONAL',
+            style: GoogleFonts.poppins(
+              fontSize: 9.5,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: Text(
+            'Offer the same slot to more teams at once. The first to accept locks the '
+            'match; the rest are told it was taken — so a slow reply never leaves you '
+            'without a game.',
+            style: GoogleFonts.poppins(
+              fontSize: 11.5,
+              height: 1.4,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+        ..._others.map(_inviteTile),
+      ],
+    );
+  }
+
+  Widget _inviteTile(MatchSide t) {
+    final on = _alsoInvite.contains(t.id);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Material(
+        color: on ? AppColors.accentLight : AppColors.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => setState(() {
+            if (on) {
+              _alsoInvite.remove(t.id);
+            } else {
+              _alsoInvite.add(t.id);
+            }
+          }),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: on ? AppColors.accent : AppColors.border,
+                width: on ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  on ? Icons.check_box : Icons.check_box_outline_blank,
+                  size: 20,
+                  color: on ? AppColors.accent : AppColors.disabled,
+                ),
+                const SizedBox(width: 10),
+                TeamCrest(logoUrl: t.logoUrl, radius: 16),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    t.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  t.ranked ? 'ELO ${t.elo}' : 'Unranked',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: t.ranked ? AppColors.primary : AppColors.textSecondary,
                   ),
                 ),
               ],

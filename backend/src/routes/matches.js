@@ -72,7 +72,7 @@ const { severityFor } = require('../services/disputeService');
 const router = express.Router();
 router.use(auth);
 
-const { STATUS, LIVE_STATUSES } = mc;
+const { STATUS, LIVE_STATUSES, LOCKED_STATUSES } = mc;
 
 /**
  * Normalise an id from the wire.
@@ -216,6 +216,14 @@ function parseDisputeReason(raw) {
  */
 const MAX_LIVE_CHALLENGES = 10;
 
+/**
+ * How many teams one slot may be offered to in a single multi-invite (migration 041).
+ * The slot is still only playable once, so this is a courtesy ceiling on fan-out, not
+ * a correctness bound; it also keeps one tap from spending the whole MAX_LIVE_CHALLENGES
+ * budget. Eight is more opponents than a short-notice game ever needs.
+ */
+const MAX_INVITES_PER_SLOT = 8;
+
 // Reads
 //
 // Registered before `/:id` — Express matches in registration order, so a literal
@@ -344,6 +352,9 @@ router.get('/linkable-bookings', async (req, res, next) => {
         WHERE b.player_id = $1
           AND b.status = 'confirmed'
           AND (b.slot_date::DATE + b.start_time::TIME) > (NOW() AT TIME ZONE $2)
+          -- Only a LOCKED match hides a booking (041): a booking that merely has
+          -- challenge_sent invites out is still offerable, so the captain can invite
+          -- more teams to it or post it to the open board before one accepts.
           AND NOT EXISTS (
                 SELECT 1 FROM matches m
                  WHERE m.booking_id = b.id AND m.status = ANY($3::text[])
@@ -353,7 +364,7 @@ router.get('/linkable-bookings', async (req, res, next) => {
                OR lower(v.sport_type) = $4)
         ORDER BY b.slot_date, b.start_time
         LIMIT 50`,
-      [req.user.id, mc.TIMEZONE, LIVE_STATUSES, sport],
+      [req.user.id, mc.TIMEZONE, LOCKED_STATUSES, sport],
     );
 
     return ok(res, rows.map((r) => ({
@@ -562,15 +573,34 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /api/matches/challenge          (FR5.8 – FR5.12)
+//
+// One booked slot may be offered to SEVERAL teams at once (migration 041): the first
+// to accept locks the match and the rest are voided (in PATCH /:id/respond). The body
+// carries either a single `opponentTeam` (the original shape, kept so
+// run_match_flow_check and the old client still work) or an `opponentTeams` array.
+// Each invite is its own challenge_sent row on the shared booking; the relaxed
+// ux_matches_booking_live allows that and still forbids a second ACCEPTED match.
 router.post('/challenge', async (req, res, next) => {
   const challengerTeam = uuid(req.body.challengerTeam || req.body.teamId);
-  const opponentTeam = uuid(req.body.opponentTeam);
   const bookingId = uuid(req.body.bookingId);
 
+  // Normalise the opponent list from either shape; dedup, drop blanks and self.
+  const multi = Array.isArray(req.body.opponentTeams);
+  const rawOpponents = multi ? req.body.opponentTeams : [req.body.opponentTeam];
+  const opponents = [...new Set(
+    (Array.isArray(rawOpponents) ? rawOpponents : [])
+      .map((t) => uuid(t))
+      .filter((t) => t && t !== challengerTeam),
+  )];
+
   if (!access.isUuid(challengerTeam)) return fail(res, 400, 'Choose which of your teams is challenging.');
-  if (!access.isUuid(opponentTeam)) return fail(res, 400, 'Choose a team to challenge.');
   if (!access.isUuid(bookingId)) return fail(res, 400, 'Choose one of your confirmed bookings for this match.');
-  if (challengerTeam === opponentTeam) return fail(res, 400, 'A team cannot challenge itself.');
+  if (!opponents.length || !opponents.every(access.isUuid)) {
+    return fail(res, 400, 'Choose at least one team to challenge.');
+  }
+  if (opponents.length > MAX_INVITES_PER_SLOT) {
+    return fail(res, 400, `You can invite up to ${MAX_INVITES_PER_SLOT} teams to one slot.`);
+  }
 
   const client = await pool.connect();
   try {
@@ -581,40 +611,14 @@ router.post('/challenge', async (req, res, next) => {
     const gate = await access.requireRole(client, challengerTeam, req.user.id, 'captain');
     if (gate.error) return bail(client, res, gate.error.status, gate.error.message);
 
-    // 2. Both teams' features, in one query — needed for the sport check, the
-    //    competitiveness score and the preview.
-    const features = await mc.teamFeatures(client, [challengerTeam, opponentTeam]);
+    // 2. Features for the challenger and every candidate opponent, in one query.
+    const features = await mc.teamFeatures(client, [challengerTeam, ...opponents]);
     const challenger = features.get(challengerTeam);
-    const opponent = features.get(opponentTeam);
-    if (!opponent) return bail(client, res, 404, 'That team no longer exists.');
-    if (challenger.sport !== opponent.sport) {
-      return bail(client, res, 400, 'Both teams must play the same sport.');
-    }
-    // A private team is not in the opponent list at all; reaching one by id is
-    // either a stale screen or someone guessing, and both get the same answer.
-    if (opponent.visibility !== 'public'
-        && !(await mc.roleInTeam(client, opponentTeam, req.user.id))) {
-      return bail(client, res, 403, 'That team is not accepting challenges.');
-    }
-    if (!(await mc.captainIdsOf(client, [opponentTeam])).get(opponentTeam)?.length) {
-      return bail(client, res, 409, 'That team has no captain to accept a challenge right now.');
-    }
+    if (!challenger) return bail(client, res, 404, 'Your team no longer exists.');
 
-    // 3. Spam ceiling (see MAX_LIVE_CHALLENGES).
-    const { rows: liveRows } = await client.query(
-      `SELECT count(*)::int AS n FROM matches
-        WHERE challenger_team = $1 AND status = $2 AND challenge_expires_at > now()`,
-      [challengerTeam, STATUS.CHALLENGE_SENT],
-    );
-    if (liveRows[0].n >= MAX_LIVE_CHALLENGES) {
-      return bail(client, res, 429,
-        `You already have ${MAX_LIVE_CHALLENGES} challenges waiting for a reply.`);
-    }
-
-    // 4. The booking (FR5.11). Every condition is in the WHERE clause so a
-    //    booking that fails any of them is indistinguishable from one that does
-    //    not exist — a caller must not learn about other people's bookings by
-    //    probing ids and reading which error comes back.
+    // 3. The booking (FR5.11), validated ONCE — every invite shares it. Every
+    //    condition is in the WHERE clause so a booking that fails any of them is
+    //    indistinguishable from one that does not exist.
     const { rows: bRows } = await client.query(
       `SELECT b.id, b.slot_date, b.start_time, b.end_time, b.status::text AS status,
               v.name AS venue_name, v.city AS venue_city, lower(v.sport_type) AS venue_sport,
@@ -637,88 +641,159 @@ router.post('/challenge', async (req, res, next) => {
       return bail(client, res, 400, 'That venue is not for this sport.');
     }
 
-    // 5. Friendly version of what ux_matches_booking_live enforces. The index is
-    //    what holds under a double tap; this exists so the ordinary case
-    //    reads as a sentence instead of a constraint name.
-    const { rows: taken } = await client.query(
+    // 4. The slot must not already be LOCKED to a pairing. challenge_sent invites do
+    //    NOT lock it — several may coexist — so this tests the locked set only.
+    const { rows: locked } = await client.query(
       `SELECT 1 FROM matches WHERE booking_id = $1 AND status = ANY($2::text[]) LIMIT 1`,
-      [bookingId, LIVE_STATUSES],
+      [bookingId, LOCKED_STATUSES],
     );
-    if (taken.length) {
-      return bail(client, res, 409, 'You already have a match on that slot.');
+    if (locked.length) {
+      return bail(client, res, 409, 'That slot is already locked to a match.');
     }
 
-    // 6. The two snapshots (FR5.4, FR5.10). Seeded on the three ids rather than
-    //    the match id, which does not exist yet — same inputs always produce the
-    //    same sentence, which is what makes it storable.
-    const { competitiveness, previewText } = mc.deriveCompAndPreview({
-      challenger, opponent, seed: `${challengerTeam}:${opponentTeam}:${bookingId}`,
-    });
+    // 5. Who is already invited on this slot, so a re-send does not double-invite.
+    const { rows: existing } = await client.query(
+      `SELECT opponent_team FROM matches
+        WHERE booking_id = $1 AND challenger_team = $2 AND status = $3`,
+      [bookingId, challengerTeam, STATUS.CHALLENGE_SENT],
+    );
+    const alreadyInvited = new Set(existing.map((r) => String(r.opponent_team)));
+
+    // 6. Spam ceiling (see MAX_LIVE_CHALLENGES): the team's existing live challenges
+    //    bound how many of the new invites can go out.
+    const { rows: liveRows } = await client.query(
+      `SELECT count(*)::int AS n FROM matches
+        WHERE challenger_team = $1 AND status = $2 AND challenge_expires_at > now()`,
+      [challengerTeam, STATUS.CHALLENGE_SENT],
+    );
+    let budget = MAX_LIVE_CHALLENGES - liveRows[0].n;
 
     const { challengeTtlHours } = await settings.match({ client });
 
-    // 7. Insert. The deadline is the earlier of "now + TTL" and kickoff: a
-    //    challenge that outlives the slot it is for cannot be accepted usefully,
-    //    and would keep the booking pinned past the point of no return.
-    const { rows: ins } = await client.query(
-      `INSERT INTO matches
-         (challenger_team, opponent_team, booking_id, sport, status,
-          challenge_expires_at, competitiveness, preview_text, created_by, updated_at)
-       SELECT $1, $2, $3, $4, $5,
-              LEAST(now() + ($6 || ' hours')::interval,
-                    ((b.slot_date::DATE + b.start_time::TIME) AT TIME ZONE $7)),
-              $8, $9, $10, now()
-         FROM bookings b WHERE b.id = $3
-       RETURNING id, challenge_expires_at`,
-      [
-        challengerTeam, opponentTeam, bookingId, challenger.sport, STATUS.CHALLENGE_SENT,
-        String(challengeTtlHours), mc.TIMEZONE,
-        competitiveness, previewText, req.user.id,
-      ],
-    );
-    const matchId = ins[0].id;
+    // 7. Validate each opponent and insert the ones that pass. A bad team in the list
+    //    is skipped WITH A REASON rather than failing every other invite — a list of
+    //    teams is a convenience, not a transaction the user thinks of as atomic. The
+    //    two snapshots (FR5.4, FR5.10) are seeded per pairing. The deadline is the
+    //    earlier of now+TTL and kickoff, so an invite never outlives its slot.
+    const created = [];
+    const skipped = [];
+    for (const oppId of opponents) {
+      const opp = features.get(oppId);
+      const name = opp?.name || 'That team';
+      if (!opp) { skipped.push({ teamId: oppId, name, reason: 'no longer exists' }); continue; }
+      if (opp.sport !== challenger.sport) {
+        skipped.push({ teamId: oppId, name, reason: 'plays a different sport' }); continue;
+      }
+      if (alreadyInvited.has(oppId)) {
+        skipped.push({ teamId: oppId, name, reason: 'already invited to this slot' }); continue;
+      }
+      if (opp.visibility !== 'public' && !(await mc.roleInTeam(client, oppId, req.user.id))) {
+        skipped.push({ teamId: oppId, name, reason: 'is not accepting challenges' }); continue;
+      }
+      if (!(await mc.captainIdsOf(client, [oppId])).get(oppId)?.length) {
+        skipped.push({ teamId: oppId, name, reason: 'has no captain right now' }); continue;
+      }
+      if (budget <= 0) {
+        skipped.push({ teamId: oppId, name, reason: 'challenge limit reached' }); continue;
+      }
 
-    // 8. Fan out. The two teams get different sentences on purpose — "you
-    //    challenged them" and "they challenged you" are different facts.
+      const { competitiveness, previewText } = mc.deriveCompAndPreview({
+        challenger, opponent: opp, seed: `${challengerTeam}:${oppId}:${bookingId}`,
+      });
+      const { rows: ins } = await client.query(
+        `INSERT INTO matches
+           (challenger_team, opponent_team, booking_id, sport, status,
+            challenge_expires_at, competitiveness, preview_text, created_by, updated_at)
+         SELECT $1, $2, $3, $4, $5,
+                LEAST(now() + ($6 || ' hours')::interval,
+                      ((b.slot_date::DATE + b.start_time::TIME) AT TIME ZONE $7)),
+                $8, $9, $10, now()
+           FROM bookings b WHERE b.id = $3
+         RETURNING id`,
+        [challengerTeam, oppId, bookingId, challenger.sport, STATUS.CHALLENGE_SENT,
+          String(challengeTtlHours), mc.TIMEZONE, competitiveness, previewText, req.user.id],
+      );
+      created.push({ matchId: ins[0].id, opponent: opp, competitiveness });
+      alreadyInvited.add(oppId);
+      budget -= 1;
+    }
+
+    if (!created.length) {
+      // Nothing could be sent — answer with the first concrete reason.
+      const s = skipped[0];
+      return bail(client, res, 409,
+        s ? `Could not challenge ${s.name} — ${s.reason}.` : 'No eligible team to challenge.');
+    }
+
+    // 8. Fan out per created invite — the opponent is notified, the challenger's team
+    //    room logs that the invite went out. Emits are collected and flushed only
+    //    after COMMIT (socket + chat pills must point at durable rows).
     const actorName = await nameOf(client, req.user.id);
     const when = `${booking.slot_date instanceof Date
       ? booking.slot_date.toISOString().slice(0, 10)
       : String(booking.slot_date).slice(0, 10)} at ${String(booking.start_time).slice(0, 5)}`;
-    const { pills, memberIds } = await mc.fanOut(client, {
-      matchId,
-      sides: [
-        {
-          teamId: challengerTeam,
-          event: 'match_challenge_sent',
-          actorId: req.user.id,
-          actorName,
-          otherTeamName: opponent.name,
-        },
-        {
-          teamId: opponentTeam,
-          event: 'match_challenge_received',
-          otherTeamName: challenger.name,
-          notify: {
-            type: 'match_challenge',
-            title: `${challenger.name} challenged ${opponent.name}`,
-            body: `${booking.venue_name || 'A venue'}, ${when}. Reply within `
-              + `${Math.round(challengeTtlHours)}h.`,
-            extra: { competitiveness, opponentTeam: challengerTeam },
+    const emits = [];
+    for (const c of created) {
+      const { pills, memberIds } = await mc.fanOut(client, {
+        matchId: c.matchId,
+        sides: [
+          {
+            teamId: challengerTeam,
+            event: 'match_challenge_sent',
+            actorId: req.user.id,
+            actorName,
+            otherTeamName: c.opponent.name,
           },
-        },
-      ],
-    });
+          {
+            teamId: c.opponent.id,
+            event: 'match_challenge_received',
+            otherTeamName: challenger.name,
+            notify: {
+              type: 'match_challenge',
+              title: `${challenger.name} challenged ${c.opponent.name}`,
+              body: `${booking.venue_name || 'A venue'}, ${when}. Reply within `
+                + `${Math.round(challengeTtlHours)}h.`,
+              extra: { competitiveness: c.competitiveness, opponentTeam: challengerTeam },
+            },
+          },
+        ],
+      });
+      emits.push({ matchId: c.matchId, pills, memberIds });
+    }
 
     await client.query('COMMIT');
-    await mc.emitAfterCommit(client, { matchId, pills, memberIds, extra: { event: 'challenge' } });
+    for (const e of emits) {
+      await mc.emitAfterCommit(client, {
+        matchId: e.matchId, pills: e.pills, memberIds: e.memberIds, extra: { event: 'challenge' },
+      });
+    }
 
     const { base } = await settings.elo();
-    const view = await mc.fetchMatchView(pool, matchId);
-    return ok(
-      res,
-      mc.shapeMatch(view, { viewerTeamIds: [challengerTeam], viewerUserId: req.user.id, base }),
-      'Challenge sent.',
-    );
+
+    // Back-compat: a single-opponent request (the original shape) gets the original
+    // response — the one match view — so run_match_flow_check and the old client are
+    // untouched. A multi-opponent request gets the list plus any skips.
+    if (!multi) {
+      const view = await mc.fetchMatchView(pool, created[0].matchId);
+      return ok(
+        res,
+        mc.shapeMatch(view, { viewerTeamIds: [challengerTeam], viewerUserId: req.user.id, base }),
+        'Challenge sent.',
+      );
+    }
+
+    const views = [];
+    for (const c of created) {
+      const view = await mc.fetchMatchView(pool, c.matchId);
+      views.push(mc.shapeMatch(view, { viewerTeamIds: [challengerTeam], viewerUserId: req.user.id, base }));
+    }
+    const msg = created.length === 1
+      ? `Challenge sent to ${created[0].opponent.name}.`
+      : `Challenge sent to ${created.length} teams — first to accept locks the slot.`;
+    return ok(res, {
+      matches: views,
+      skipped: skipped.map((s) => ({ teamId: s.teamId, name: s.name, reason: s.reason })),
+    }, msg);
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     const f = friendlyDbError(e);
@@ -851,6 +926,49 @@ router.patch('/:id/respond', async (req, res, next) => {
       [id, accepted ? STATUS.ACCEPTED : STATUS.REJECTED],
     );
 
+    // 041 — first accept locks the slot. Void every OTHER open invite on this booking
+    // (the losing teams see the challenge close) and cancel any open-board offer, so a
+    // slot can never be claimed twice. The accept UPDATE above is itself guarded by
+    // ux_matches_booking_live — if two accepts race, the second raises 23505 and the
+    // catch maps it to "That slot already has a match on it."
+    const siblingEmits = [];
+    if (accepted) {
+      const { rows: voided } = await client.query(
+        `UPDATE matches SET status = $3, updated_at = now()
+          WHERE booking_id = $1 AND status = $2 AND id <> $4
+          RETURNING id, opponent_team`,
+        [m.booking_id, STATUS.CHALLENGE_SENT, STATUS.EXPIRED, id],
+      );
+      for (const v of voided) {
+        const fan = await mc.fanOut(client, {
+          matchId: v.id,
+          sides: [{
+            teamId: v.opponent_team,
+            event: 'match_expired',
+            otherTeamName: challengerName,
+            notify: {
+              type: 'match_rejected',
+              title: 'Slot taken',
+              body: 'The slot you were challenged for was taken by another team. '
+                + 'This challenge has closed.',
+              extra: {},
+            },
+          }],
+        });
+        siblingEmits.push({ matchId: v.id, pills: fan.pills, memberIds: fan.memberIds });
+      }
+      // Cancel any open-board offer on this slot. Guarded with to_regclass so an
+      // un-migrated database (open_challenges absent) still accepts challenges.
+      const { rows: [ocTbl] } = await client.query("SELECT to_regclass('public.open_challenges') AS t");
+      if (ocTbl.t) {
+        await client.query(
+          `UPDATE open_challenges SET status = 'cancelled', decided_at = now()
+            WHERE booking_id = $1 AND status = 'open'`,
+          [m.booking_id],
+        );
+      }
+    }
+
     const event = accepted ? 'match_accepted' : 'match_rejected';
     const title = accepted
       ? `${opponentName} accepted your challenge`
@@ -912,6 +1030,12 @@ router.patch('/:id/respond', async (req, res, next) => {
     await mc.emitAfterCommit(client, {
       matchId: id, pills, memberIds, extra: { event: accepted ? 'accepted' : 'rejected' },
     });
+    // The voided siblings' pills + "slot taken" pings, flushed after the same commit.
+    for (const e of siblingEmits) {
+      await mc.emitAfterCommit(client, {
+        matchId: e.matchId, pills: e.pills, memberIds: e.memberIds, extra: { event: 'expired' },
+      });
+    }
 
     const { base } = await settings.elo();
     const view = await mc.fetchMatchView(pool, id);

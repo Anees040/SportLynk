@@ -39,6 +39,11 @@ const settings = require('../utils/globalSettings');
 const catalog = require('../utils/settingsCatalog');
 const escrow = require('../utils/escrow');
 const { audit, ACTIONS } = require('../utils/adminAudit');
+const { requirePermission } = require('../middleware/permissionMiddleware');
+
+// requirePermission('platform_settings') is applied per-route below, not as a
+// router-level `use`: this sub-router is mounted at '/' in admin.js, so a `router.use`
+// gate would run for every admin request that falls through it, not only /settings.
 
 /** Uniform failure, per the golden rule: every error is `{success:false,message}`. */
 function bad(res, status, message, extra = {}) {
@@ -103,7 +108,7 @@ async function futureBookingsBySport(db, sports) {
  * booking will use — so an admin reading this screen is reading the
  * platform, not a table.
  */
-router.get('/settings', async (req, res, next) => {
+router.get('/settings', requirePermission('platform_settings'), async (req, res, next) => {
   try {
     const raw = await rawRows();
     const sections = catalog.describe(raw);
@@ -137,7 +142,7 @@ router.get('/settings', async (req, res, next) => {
  *      would let a concurrent read cache the old value for another 60 s, which is
  *      the one ordering mistake that turns "applies immediately" back into a lie.
  */
-router.put('/settings', async (req, res, next) => {
+router.put('/settings', requirePermission('platform_settings'), async (req, res, next) => {
   const body = req.body || {};
   const patch = body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings)
     ? body.settings
@@ -258,7 +263,7 @@ router.put('/settings', async (req, res, next) => {
  * A row holding an object is only deleted when every field in it is being reset;
  * otherwise the remaining overrides are merged back and the row stays.
  */
-router.post('/settings/reset', async (req, res, next) => {
+router.post('/settings/reset', requirePermission('platform_settings'), async (req, res, next) => {
   const body = req.body || {};
   const all = body.all === true;
   const keys = all

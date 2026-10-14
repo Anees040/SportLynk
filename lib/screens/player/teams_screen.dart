@@ -8,11 +8,14 @@ import '../../constants/colors.dart';
 import '../../models/team.dart';
 import '../../models/tournament.dart' show TeamTournamentRecord;
 import '../../providers/auth_provider.dart';
+import '../../providers/connectivity_provider.dart';
+import '../../services/offline_cache.dart';
 import '../../services/realtime_service.dart';
 import '../../services/team_service.dart';
 import '../../utils/reconnect_refresh.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/network_error_view.dart';
+import '../../widgets/offline_banner.dart';
 import '../../widgets/tournament_widgets.dart' show TeamRecordLine;
 import '../shared/chat_thread_screen.dart';
 import 'create_team_screen.dart';
@@ -33,16 +36,18 @@ class TeamsScreen extends StatefulWidget {
 class _TeamsScreenState extends State<TeamsScreen>
     with ReconnectRefresh<TeamsScreen> {
   final _service = TeamService();
-  late Future<List<Team>> _future;
   StreamSubscription? _sub;
 
-  String get _token => context.read<AuthProvider>().token ?? '';
+  // null while the first load is still running; a list (possibly empty) once a load
+  // or the cache has produced one. An empty list means "no teams"; null after
+  // loading means the load failed with nothing cached — a different screen.
+  List<Team>? _teams;
+  bool _loading = true;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _future = _service.mine(_token);
-  }
+  /// Set while the teams on screen were restored from disk, for the offline banner.
+  DateTime? _cachedAt;
+
+  String get _token => context.read<AuthProvider>().token ?? '';
 
   @override
   void initState() {
@@ -52,6 +57,10 @@ class _TeamsScreenState extends State<TeamsScreen>
     _sub = RealtimeService().teamUpdates.listen((_) {
       if (mounted) _reload();
     });
+    // Concurrent, not chained: the cache paints immediately when the network is slow
+    // or down, and a successful fetch replaces it. Mirrors chats_screen.
+    _load();
+    _hydrateFromCache();
   }
 
   // The list I missed while offline fills itself in the moment the socket returns.
@@ -64,11 +73,53 @@ class _TeamsScreenState extends State<TeamsScreen>
     super.dispose();
   }
 
-  Future<void> _reload() {
+  /// Draw the last known teams if they arrive before the network does. Skipped once
+  /// a network load has produced any result (empty included), so a slow disk read
+  /// never overwrites a fresh "you have no teams".
+  Future<void> _hydrateFromCache() async {
+    final cached = await OfflineCache.read(OfflineCache.myTeams);
+    if (!mounted || cached == null || _teams != null) return;
+    final rows = cached.asRows();
+    if (rows.isEmpty) return;
     setState(() {
-      _future = _service.mine(_token);
+      _teams = rows.map(Team.fromJson).toList();
+      _cachedAt = cached.at;
+      _loading = false;
     });
-    return _future;
+  }
+
+  Future<void> _reload() => _load();
+
+  Future<void> _load() async {
+    List<Team>? teams;
+    var threw = false;
+    try {
+      teams = await _service.mineOrNull(_token);
+    } catch (_) {
+      // A malformed row (e.g. a non-string logo_url) throws inside Team.fromJson.
+      // The old FutureBuilder surfaced that as its error state; treat it the same
+      // way — a failed load — rather than letting it crash the screen. The server
+      // did respond, so this is bad data, not a dead network.
+      threw = true;
+    }
+    if (!mounted) return;
+    if (teams == null) {
+      // The load produced nothing usable. Keep whatever is on screen (cache, or a
+      // prior load); only the no-cache case falls through to the error-with-retry
+      // state in [_body]. A failed request means offline (so the banner explains the
+      // staleness); a parse throw does not, since the server answered.
+      setState(() => _loading = false);
+      if (!threw) context.read<ConnectivityProvider>().markUnreachable();
+      return;
+    }
+    setState(() {
+      _teams = teams;
+      _cachedAt = null;
+      _loading = false;
+    });
+    context.read<ConnectivityProvider>().markReachable();
+    await OfflineCache.write(
+        OfflineCache.myTeams, teams.map((t) => t.toJson()).toList());
   }
 
   Future<void> _openChat(Team t) async {
@@ -194,7 +245,10 @@ class _TeamsScreenState extends State<TeamsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      // White body, not the grey scaffold: this list has no section headers, so it
+      // reads as one clean WhatsApp-style surface (white rows parted by a hairline)
+      // all the way down rather than cards floating on grey.
+      backgroundColor: AppColors.cardBg,
       appBar: AppBar(
         title: const Text('Teams'),
         backgroundColor: AppColors.primary,
@@ -231,39 +285,47 @@ class _TeamsScreenState extends State<TeamsScreen>
           _reload();
         },
       ),
-      body: RefreshIndicator(
-        onRefresh: _reload,
-        child: FutureBuilder<List<Team>>(
-          future: _future,
-          builder: (context, s) {
-            if (s.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            // A failed load used to borrow the empty-state layout — a muted icon
-            // and a sentence, with no way back other than a pull the user had no
-            // reason to try. The error state now carries its own Retry, which is
-            // the one action that can fix it.
-            if (s.hasError) {
-              return NetworkErrorView(
-                message: 'Could not load your teams. Check your connection and try again.',
-                onRetry: _reload,
-              );
-            }
-            final teams = s.data ?? [];
-            if (teams.isEmpty) {
-              return _empty(
-                  'Create a team to start competing and chatting together.\n\nGot an invite link? Tap the link icon above.',
-                  Icons.groups_outlined);
-            }
-            return ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: teams.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (_, i) => _card(teams[i]),
-            );
-          },
-        ),
+      body: Column(
+        children: [
+          // Self-hides when online; when offline over cached teams it reads
+          // "Offline — saved N ago" so a stale roster is legible as such.
+          OfflineBanner(cachedAt: _cachedAt),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _reload,
+              child: _body(),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _body() {
+    if (_loading && _teams == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    // Loaded, but the request failed and nothing was cached. Offer a retry rather
+    // than the "create a team" empty state, which would misread a dropped
+    // connection as an account with no teams — the bug this screen used to have.
+    if (_teams == null) {
+      return NetworkErrorView(
+        message: 'Could not load your teams. Check your connection and try again.',
+        onRetry: _reload,
+      );
+    }
+    final teams = _teams!;
+    if (teams.isEmpty) {
+      return _empty(
+          'Create a team to start competing and chatting together.\n\nGot an invite link? Tap the link icon above.',
+          Icons.groups_outlined);
+    }
+    return ListView.builder(
+      // Edge to edge, no inter-row gaps: rows part on a hairline like the chat inbox.
+      // The bottom inset clears the extended FAB so the last team is never hidden.
+      padding: const EdgeInsets.only(bottom: 96),
+      itemCount: teams.length,
+      itemBuilder: (_, i) => _row(teams[i]),
     );
   }
 
@@ -282,13 +344,19 @@ class _TeamsScreenState extends State<TeamsScreen>
         ],
       );
 
-  Widget _card(Team t) => Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+  // A flat, full-bleed white row parted from the next by a hairline, mirroring the
+  // chat inbox rather than floating as a card on grey. The [Material] stays on top of
+  // the white surface so the tap keeps a visible ripple.
+  Widget _row(Team t) => Material(
+        color: AppColors.cardBg,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
           onTap: () => _openChat(t),
-          child: Padding(
+          child: Container(
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.divider, width: 0.6),
+              ),
+            ),
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [

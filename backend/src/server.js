@@ -52,6 +52,7 @@ const teamRoutes = require("./routes/teams");
 const chatRoutes = require("./routes/chat");
 const requestRoutes = require("./routes/requests");
 const matchRoutes = require("./routes/matches");
+const openChallengeRoutes = require("./routes/openChallenges");
 const reviewRoutes = require("./routes/reviews");
 const internalRoutes = require("./routes/internal");
 const assistantRoutes = require("./routes/assistant");
@@ -96,6 +97,10 @@ app.use("/api/requests", requestRoutes);
 // declaration-order reason as tournaments below.
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/matches", matchRoutes);
+// Open Challenges — the Live Challenge Feed (item 9): a captain posts a confirmed
+// booking to a public board any team can claim. Claiming creates an accepted match
+// through the same matchCore path a direct challenge uses.
+app.use("/api/open-challenges", openChallengeRoutes);
 // Tournaments. routes/tournaments.js declares /mine and /preview
 // before /:id — Express matches in declaration order, so the reverse would send
 // GET /api/tournaments/mine to the detail handler as id="mine".

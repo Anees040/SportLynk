@@ -12,6 +12,7 @@ const {
   logTxn,
   commissionSplit,
   supportsCommissionTxn,
+  checkinWindow,
 } = require("../utils/escrow");
 const { notify } = require("../utils/notify");
 const { recomputeTrust } = require("../utils/trustScore");
@@ -1123,12 +1124,13 @@ router.post("/scan-qr", async (req, res, next) => {
     const scanRes = await client.query(
       `
       SELECT b.id, b.status, v.owner_id,
-             to_jsonb(b) ->> 'booking_group_id' AS booking_group_id
+             to_jsonb(b) ->> 'booking_group_id' AS booking_group_id,
+             to_char((NOW() AT TIME ZONE $2), 'YYYY-MM-DD"T"HH24:MI:SS') AS pkt_now
       FROM bookings b
       JOIN venues v ON b.venue_id=v.id
       WHERE b.qr_code=$1 FOR UPDATE OF b
     `,
-      [qrCode],
+      [qrCode, POLICY.TIMEZONE],
     );
 
     if (!scanRes.rows.length) {
@@ -1201,6 +1203,25 @@ router.post("/scan-qr", async (req, res, next) => {
       return res
         .status(409)
         .json({ success: false, message: "Player already checked in." });
+    }
+
+    // The time gate. A confirmed booking's QR is a non-expiring token, so without
+    // this an owner could scan it days early (releasing the player's escrow and
+    // closing the 24h cancellation window before the slot) or long after it. The
+    // check-in window spans the whole group's run, and `pkt_now` comes from the
+    // scan query above so the comparison is correct whatever timezone the server
+    // process runs in.
+    const window = checkinWindow(
+      targets.map((t) => ({
+        slotDate: t.slot_date,
+        startTime: t.start_time,
+        endTime: t.end_time,
+      })),
+      scanned.pkt_now,
+    );
+    if (!window.ok) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: window.message });
     }
 
     // FR10.9. The platform's commission, taken here and nowhere else, read once for

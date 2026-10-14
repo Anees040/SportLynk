@@ -10,8 +10,6 @@ class TickIcon extends StatelessWidget {
   final Color mutedColor;
   const TickIcon(this.state, {this.mutedColor = AppColors.textSecondary, super.key});
 
-  static const Color _readBlue = Color(0xFF34B7F1); // WhatsApp read-tick blue
-
   @override
   Widget build(BuildContext context) {
     switch (state) {
@@ -22,7 +20,7 @@ class TickIcon extends StatelessWidget {
       case TickState.delivered:
         return Icon(Icons.done_all, size: 16, color: mutedColor);
       case TickState.read:
-        return const Icon(Icons.done_all, size: 16, color: _readBlue);
+        return const Icon(Icons.done_all, size: 16, color: AppColors.readTick);
     }
   }
 }

@@ -20,7 +20,17 @@ class AuthGuard extends StatelessWidget {
   final Widget child;
   final String? requiredRole;
 
-  const AuthGuard({required this.child, this.requiredRole, super.key});
+  /// When set, the route is the super admin's alone (the Manage Admins surface).
+  /// A plain admin who reaches it is bounced to their own home, the same way a wrong
+  /// role is — defense in depth behind the tile only the super admin is shown.
+  final bool requireSuperAdmin;
+
+  const AuthGuard({
+    required this.child,
+    this.requiredRole,
+    this.requireSuperAdmin = false,
+    super.key,
+  });
 
   /// The one splash every blocked state returns. Identical tree to the three copies it
   /// replaces, and `const` so it is allocated once rather than per build.
@@ -51,6 +61,12 @@ class AuthGuard extends StatelessWidget {
 
         // Authenticated as the wrong role — to that role's own home.
         if (requiredRole != null && auth.userRole != requiredRole) {
+          _redirect(context, homeRouteFor(auth.userRole));
+          return _splash;
+        }
+
+        // A super-admin-only route reached by a plain admin — back to the admin home.
+        if (requireSuperAdmin && !(auth.user?.isSuperAdmin ?? false)) {
           _redirect(context, homeRouteFor(auth.userRole));
           return _splash;
         }

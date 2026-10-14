@@ -497,12 +497,16 @@ class FakeAuth extends AuthProvider {
     String id = 'u-1',
     String name = 'Bilal Ahmed',
     String? token = 'test-token',
+    bool isSuperAdmin = false,
+    List<String> permissions = const [],
   })  : _user = User(
           id: id,
           name: name,
           email: 'bilal@example.com',
           phone: '+923001234567',
           role: role,
+          isSuperAdmin: isSuperAdmin,
+          permissions: permissions,
         ),
         _token = token {
     // Screens that go through `ApiClient` read the token off the static rather than

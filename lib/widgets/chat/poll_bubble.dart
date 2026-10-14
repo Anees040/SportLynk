@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../constants/colors.dart';
 import '../../models/chat_message.dart';
+import '../../screens/shared/poll_votes_screen.dart';
 
 /// The body of a poll message: the question, each option as a tappable bar that
 /// fills to its share of the vote and shows a count, and a line that totals the
@@ -80,38 +81,13 @@ class PollBubble extends StatelessWidget {
         onTap: () => onVote(i),
       );
 
+  /// Open the full voter list (a screen with a back button), rather than a
+  /// cramped sheet: a lopsided poll can have more voters than a sheet can show,
+  /// and each voter now carries an avatar and a time.
   void _showVoters(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(poll.question,
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-              const SizedBox(height: 12),
-              for (var i = 0; i < poll.options.length; i++) ...[
-                Text('${poll.options[i]} · ${poll.countFor(i)}',
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary)),
-                const SizedBox(height: 2),
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 10),
-                  child: Text(
-                    poll.voterNames(i).isEmpty ? 'No votes' : poll.voterNames(i).join(', '),
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PollVotesScreen(poll: poll, myUserId: myUserId),
       ),
     );
   }

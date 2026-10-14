@@ -64,11 +64,13 @@ const {
   setDepositPercent,
   penaltySplit,
   isLateCancellation,
+  hoursUntilSlot,
   lockWallet,
   applyWallet,
   logTxn,
 } = require('../utils/escrow');
 const { notify } = require('../utils/notify');
+const { recomputeTrust } = require('../utils/trustScore');
 const settings = require('../utils/globalSettings');
 const chat = require('../utils/chatCore');
 const group = require('../utils/slotGroup');
@@ -116,6 +118,24 @@ async function hasGroupColumns(client) {
   );
   groupColumnsPresent = rows[0].c === 2;
   return groupColumnsPresent;
+}
+
+/**
+ * Is `slots.relisted_at` (migration 042) present? Guards the item-8 re-listing stamp
+ * so a cancellation still succeeds on a database where 042 has not been applied yet —
+ * the badge simply does not appear until it is. Cached true-only, like the group probe.
+ */
+let relistColumnPresent = false;
+
+async function hasRelistColumn(client) {
+  if (relistColumnPresent) return true;
+  const { rows } = await client.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'slots'
+        AND column_name = 'relisted_at' LIMIT 1`,
+  );
+  relistColumnPresent = rows.length > 0;
+  return relistColumnPresent;
 }
 
 // CREATE
@@ -584,6 +604,24 @@ async function cancelBooking(client, { userId, bookingId }) {
     `UPDATE slots SET status='available', locked_by=null, locked_until=null WHERE id=$1`,
     [booking.slot_id],
   );
+
+  // Item 8 re-listing: a cancellation close to kickoff frees a prime, hard-to-refill
+  // slot. Stamp it so browsing players see a "just freed" badge and can take it
+  // quickly. Only inside the window — a cancellation days out needs no help being
+  // noticed — and only when migration 041 is applied, so a cancellation still works
+  // without it (the badge just does not appear).
+  if (
+    booking.slot_id
+    && hoursUntilSlot(booking.slot_date, booking.start_time) < POLICY.RELIST_WINDOW_HOURS
+    && await hasRelistColumn(client)
+  ) {
+    await client.query('UPDATE slots SET relisted_at = NOW() WHERE id = $1', [booking.slot_id]);
+  }
+
+  // Item 8 cancellation-abuse: recompute the player's Trust Score in the same
+  // transaction so a frequent canceller's score reflects this cancellation at once
+  // (trustScore.js applies the free monthly allowance, then the per-cancel penalty).
+  await recomputeTrust(client, playerId);
 
   const message = lateCancel
     ? `Booking cancelled within ${POLICY.CANCELLATION_WINDOW_HOURS} hours — PKR ${refund} refunded, PKR ${penalty} deposit forfeited to the venue.`

@@ -50,6 +50,19 @@ class TeamMember {
         joinedAt: _parseDate(json['joined_at']),
         lastSeenAt: _parseDate(json['last_seen_at']),
       );
+
+  /// The inverse of [fromJson], used to cache a roster to disk. Keys match the ones
+  /// [fromJson] reads so a value round-trips through the offline cache unchanged.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'role': role,
+        'avatar_url': avatarUrl,
+        'player_elo': elo,
+        'trust_score': trustScore,
+        'joined_at': joinedAt?.toIso8601String(),
+        'last_seen_at': lastSeenAt?.toIso8601String(),
+      };
 }
 
 class Team {
@@ -137,6 +150,34 @@ class Team {
         finalsReached: asNum(j['finals_reached']).round(),
         titles: asNum(j['titles']).round(),
       );
+
+  /// The inverse of [fromJson], for caching the "my teams" list to disk so the
+  /// Teams tab can paint offline instead of reverting to its empty state. Keys
+  /// match the snake_case ones [fromJson] reads so a team round-trips unchanged.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'sport': sport,
+        'visibility': visibility,
+        'bio': bio,
+        'logo_url': logoUrl,
+        'city': city,
+        'elo': elo,
+        'wins': wins,
+        'losses': losses,
+        'draws': draws,
+        'role': role,
+        'channel_id': channelId,
+        'captain_id': captainId,
+        'member_count': memberCount,
+        'pending_request': pendingRequest,
+        'created_at': createdAt?.toIso8601String(),
+        'roster': roster.map((m) => m.toJson()).toList(),
+        'tournament_played': tournamentPlayed,
+        'tournament_wins': tournamentWins,
+        'finals_reached': finalsReached,
+        'titles': titles,
+      };
 }
 
 DateTime? _parseDate(dynamic v) {

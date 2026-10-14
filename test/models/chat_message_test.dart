@@ -222,4 +222,45 @@ void main() {
       expect(m.canSee(DateTime.utc(2026, 10, 4, 10, 1)), isTrue);
     });
   });
+
+  group('ChatPoll and PollVote', () {
+    test('a vote carries the voter avatar and time when the server sends them', () {
+      final v = PollVote.fromJson({
+        'optionIndex': 1,
+        'userId': 'u7',
+        'userName': 'Sara',
+        'avatar': 'https://cdn/x.png',
+        'votedAt': '2026-10-12T09:30:00Z',
+      });
+      expect(v.optionIndex, 1);
+      expect(v.userId, 'u7');
+      expect(v.userName, 'Sara');
+      expect(v.avatarUrl, 'https://cdn/x.png');
+      expect(v.votedAt, isNotNull);
+    });
+
+    test('an absent or empty avatar reads as no avatar, never the text "null"', () {
+      expect(PollVote.fromJson({'optionIndex': 0, 'userId': 'u1'}).avatarUrl, isNull);
+      expect(
+          PollVote.fromJson({'optionIndex': 0, 'userId': 'u1', 'avatar': '  '}).avatarUrl,
+          isNull);
+    });
+
+    test('votersFor returns the votes for one option in order', () {
+      final poll = ChatPoll.fromJson({
+        'id': 'p1',
+        'question': 'When?',
+        'options': ['Sat', 'Sun'],
+        'votes': [
+          {'optionIndex': 0, 'userId': 'a', 'userName': 'A'},
+          {'optionIndex': 0, 'userId': 'b', 'userName': 'B'},
+          {'optionIndex': 1, 'userId': 'c', 'userName': 'C'},
+        ],
+      });
+      expect(poll.votersFor(0).map((v) => v.userId), ['a', 'b']);
+      expect(poll.votersFor(1).map((v) => v.userId), ['c']);
+      expect(poll.countFor(0), 2);
+      expect(poll.totalVoters, 3);
+    });
+  });
 }

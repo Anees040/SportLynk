@@ -1001,3 +1001,63 @@ class SettingsChange {
         to: j['to'],
       );
 }
+
+// Admin management (super-admin only, migration 040)
+
+/// One grantable permission, exactly as `GET /api/admin/permissions` describes it.
+/// The screen renders a checkbox per entry from this; there is no Dart copy of the
+/// catalog, the same reason the settings fields are server-described.
+class PermissionDef {
+  final String key;
+  final String label;
+  final String description;
+
+  const PermissionDef({
+    required this.key,
+    required this.label,
+    this.description = '',
+  });
+
+  factory PermissionDef.fromJson(Map<String, dynamic> j) => PermissionDef(
+        key: '${j['key'] ?? ''}',
+        label: _str(j['label']) ?? '${j['key'] ?? ''}',
+        description: _str(j['description']) ?? '',
+      );
+}
+
+/// One admin account as `GET /api/admin/admins` lists it. `active` is derived
+/// server-side from `is_active`; `permissions` is empty for the super admin, who
+/// passes every check implicitly rather than carrying the keys.
+class AdminAccount {
+  final String id;
+  final String name;
+  final String? email;
+  final String? phone;
+  final bool isSuperAdmin;
+  final List<String> permissions;
+  final bool active;
+  final DateTime? createdAt;
+
+  const AdminAccount({
+    required this.id,
+    required this.name,
+    this.email,
+    this.phone,
+    this.isSuperAdmin = false,
+    this.permissions = const [],
+    this.active = true,
+    this.createdAt,
+  });
+
+  factory AdminAccount.fromJson(Map<String, dynamic> j) => AdminAccount(
+        id: '${j['id'] ?? ''}',
+        name: _str(j['name']) ?? 'Admin',
+        email: _str(j['email']),
+        phone: _str(j['phone']),
+        isSuperAdmin: j['isSuperAdmin'] == true,
+        permissions:
+            (j['permissions'] as List? ?? const []).map((e) => '$e').toList(),
+        active: j['active'] != false,
+        createdAt: _date(j['createdAt']),
+      );
+}

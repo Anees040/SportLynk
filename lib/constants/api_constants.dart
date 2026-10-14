@@ -25,6 +25,7 @@ class ApiConstants {
   // Auth
   static const String registerPlayer = '/auth/register/player';
   static const String registerOwner = '/auth/register/owner';
+  static const String registerOwnerPrecheck = '/auth/register/owner/precheck';
   static const String login = '/auth/login';
   static const String verifyPhone = '/auth/verify-phone';
   static const String forgotPasswordSendOtp = '/auth/forgot-password/send-otp';
@@ -166,6 +167,13 @@ class ApiConstants {
   static String matchVerify(String id) => '/matches/$id/verify';
   static String matchDispute(String id) => '/matches/$id/dispute';
 
+  // Open Challenges — the Live Challenge Feed (item 9). A captain posts a confirmed
+  // booking to the public board (POST), anyone browses it (GET), a captain claims a
+  // card to lock a match (claim), or the poster withdraws it (DELETE openChallenge).
+  static const String openChallenges = '/open-challenges';
+  static String openChallengeClaim(String id) => '/open-challenges/$id/claim';
+  static String openChallenge(String id) => '/open-challenges/$id';
+
   // Reviews & Trust 2.0
   /// Reviews mount at the bare `/api` root (not under a `/reviews` collection for
   /// the reads): the write is `POST /api/reviews`, but a venue's reviews hang off
@@ -255,6 +263,13 @@ class ApiConstants {
   static String adminReinstateUser(String id) => '/admin/users/$id/reinstate';
   static const String adminSettings = '/admin/settings';
   static const String adminSettingsReset = '/admin/settings/reset';
+
+  // Admin management (super-admin only, migration 040). The permission catalog is
+  // served by the backend so the Manage Admins screen never holds its own copy.
+  static const String adminPermissionsCatalog = '/admin/permissions';
+  static const String adminAdmins = '/admin/admins';
+  static String adminAdmin(String id) => '/admin/admins/$id';
+  static String adminRestoreAdmin(String id) => '/admin/admins/$id/restore';
 
   // Financial export (FR4.16)
   /// One generator, two scopes. `?from&to` are required `YYYY-MM-DD` and the span

@@ -277,6 +277,15 @@ test('19e — coordination turns stay out of a booking room', () => {
   assert.ok(qr.conversationalReply('salam', 'owner'));
 });
 
+test('19f — captain coordination offers results and an arrival ETA, not another yes', () => {
+  const score = qr.conversationalReply('what was the final score?', 'captain');
+  assert.ok(Array.isArray(score) && score.length === 3, 'a score question is answered with outcomes');
+  const coming = qr.conversationalReply('are you coming?', 'captain');
+  assert.match(coming[0], /yes/i, 'still leads with a commitment');
+  assert.ok(coming.some((s) => /on my way|running late/i.test(s)),
+    'but now also offers an arrival ETA / running-late, which is what a match group actually says');
+});
+
 // 4 — the inbox subtitle: a wall clock that must never be re-zoned
 //
 // `bookings.slot_date` and `start_time` are PKT wall clock, not instants. The same

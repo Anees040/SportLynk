@@ -23,6 +23,10 @@ enum ChatPattern {
   /// Sparse rings and plus marks — the original, kept because it is the quietest.
   doodle,
 
+  /// A dense field of small outline motifs with filler specks — the WhatsApp-style
+  /// doodle wallpaper: varied and tightly packed rather than sparse.
+  icons,
+
   /// Balls, goalposts and pennants: the on-brand one for a sports app.
   sport,
 
@@ -61,7 +65,8 @@ enum ChatPattern {
 /// A background the user can pick: a ground colour plus the pattern drawn over
 /// it, and whether that pattern uses the stronger tint.
 enum ChatBgPreset {
-  doodle('Doodle', AppColors.chatBackground, ChatPattern.doodle),
+  icons('Doodle', AppColors.chatBackground, ChatPattern.icons, strong: true),
+  doodle('Minimal', AppColors.chatBgPlain, ChatPattern.doodle),
   sport('Sport', AppColors.chatBgSand, ChatPattern.sport, strong: true),
   cricket('Cricket', AppColors.chatBgSand, ChatPattern.cricket, strong: true),
   pitch('Pitch', AppColors.chatBgMint, ChatPattern.pitch, strong: true),
@@ -84,14 +89,15 @@ enum ChatBgPreset {
 
   static const _prefsKey = 'chat_bg_preset';
 
-  /// The saved preset, or [doodle] when nothing has been chosen or the stored
-  /// value no longer maps to a preset (a name dropped in a later version).
+  /// The saved preset, or [icons] (the WhatsApp-style doodle) when nothing has
+  /// been chosen or the stored value no longer maps to a preset (a name dropped
+  /// in a later version).
   static Future<ChatBgPreset> load() async {
     final prefs = await SharedPreferences.getInstance();
     final name = prefs.getString(_prefsKey);
     return ChatBgPreset.values.firstWhere(
       (p) => p.name == name,
-      orElse: () => ChatBgPreset.doodle,
+      orElse: () => ChatBgPreset.icons,
     );
   }
 
@@ -154,6 +160,8 @@ class _ChatPatternPainter extends CustomPainter {
         return;
       case ChatPattern.doodle:
         _doodle(canvas, size, stroke);
+      case ChatPattern.icons:
+        _icons(canvas, size, stroke, fill);
       case ChatPattern.sport:
         _sport(canvas, size, stroke);
       case ChatPattern.honeycomb:
@@ -195,6 +203,111 @@ class _ChatPatternPainter extends CustomPainter {
         canvas.drawLine(centre - const Offset(0, 4), centre + const Offset(0, 4), p);
       }
     });
+  }
+
+  /// A dense, WhatsApp-style doodle field. One small outline motif per jittered
+  /// grid cell, rotated a little and chosen from the cell's own seed, with a few
+  /// filler specks between them so the ground reads as a packed pattern rather
+  /// than the sparse marks of [_doodle].
+  void _icons(Canvas canvas, Size size, Paint stroke, Paint fill) {
+    const cell = 50.0;
+    _forEachCell(size, cell, (r, c, origin) {
+      final rnd = _cellRandom(r, c);
+      final centre = origin +
+          Offset(8 + rnd.nextDouble() * (cell - 16), 8 + rnd.nextDouble() * (cell - 16));
+      canvas.save();
+      canvas.translate(centre.dx, centre.dy);
+      canvas.rotate((rnd.nextDouble() - 0.5) * 0.6);
+      _motif(canvas, rnd.nextInt(14), stroke, fill);
+      canvas.restore();
+      // A speck or two in the cell closes the gaps the way the reference art does.
+      for (var k = rnd.nextInt(3); k > 0; k--) {
+        canvas.drawCircle(
+            origin + Offset(rnd.nextDouble() * cell, rnd.nextDouble() * cell), 1.1, fill);
+      }
+    });
+  }
+
+  /// Draws motif [kind] centred on the current canvas origin, within about a
+  /// 20-pixel box. Simple primitives only, so the whole field stays cheap to
+  /// paint on every frame.
+  void _motif(Canvas canvas, int kind, Paint s, Paint f) {
+    switch (kind) {
+      case 0: // football: a circle with two seams
+        canvas.drawCircle(Offset.zero, 7, s);
+        canvas.drawArc(Rect.fromCircle(center: const Offset(-5, 0), radius: 8), -0.9, 1.8, false, s);
+        canvas.drawArc(Rect.fromCircle(center: const Offset(5, 0), radius: 8), math.pi - 0.9, 1.8, false, s);
+      case 1: // heart
+        canvas.drawPath(
+          Path()
+            ..moveTo(0, 7)
+            ..cubicTo(-10, -2, -5, -9, 0, -3)
+            ..cubicTo(5, -9, 10, -2, 0, 7)
+            ..close(),
+          s,
+        );
+      case 2: // chat bubble with a tail
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(const Rect.fromLTWH(-9, -8, 18, 13), const Radius.circular(4)), s);
+        canvas.drawLine(const Offset(-3, 5), const Offset(-6, 9), s);
+      case 3: // smiley
+        canvas.drawCircle(Offset.zero, 8, s);
+        canvas.drawCircle(const Offset(-3, -2), 0.9, f);
+        canvas.drawCircle(const Offset(3, -2), 0.9, f);
+        canvas.drawArc(Rect.fromCircle(center: const Offset(0, 1), radius: 4), 0.3, 2.5, false, s);
+      case 4: // lightning bolt
+        canvas.drawPath(
+          Path()
+            ..moveTo(2, -9)
+            ..lineTo(-5, 1)
+            ..lineTo(0, 1)
+            ..lineTo(-2, 9)
+            ..lineTo(5, -2)
+            ..lineTo(0, -2)
+            ..close(),
+          s,
+        );
+      case 5: // music note
+        canvas.drawLine(const Offset(5, -9), const Offset(5, 4), s);
+        canvas.drawOval(Rect.fromCenter(center: const Offset(2, 5), width: 7, height: 5), s);
+        canvas.drawLine(const Offset(5, -9), const Offset(10, -7), s);
+      case 6: // trophy cup
+        canvas.drawPath(
+            Path()..moveTo(-6, -8)..lineTo(6, -8)..lineTo(4, 1)..lineTo(-4, 1)..close(), s);
+        canvas.drawLine(const Offset(0, 1), const Offset(0, 6), s);
+        canvas.drawLine(const Offset(-5, 8), const Offset(5, 8), s);
+      case 7: // sun
+        canvas.drawCircle(Offset.zero, 4.5, s);
+        for (var a = 0; a < 8; a++) {
+          final t = a * math.pi / 4;
+          canvas.drawLine(Offset(math.cos(t) * 7, math.sin(t) * 7),
+              Offset(math.cos(t) * 10, math.sin(t) * 10), s);
+        }
+      case 8: // pennant on a pole
+        canvas.drawLine(const Offset(-6, 9), const Offset(-6, -8), s);
+        canvas.drawPath(Path()..moveTo(-6, -8)..lineTo(8, -4)..lineTo(-6, 0)..close(), s);
+      case 9: // ring
+        canvas.drawCircle(Offset.zero, 7, s);
+        canvas.drawCircle(Offset.zero, 3, s);
+      case 10: // diamond
+        canvas.drawPath(
+            Path()..moveTo(0, -8)..lineTo(7, 0)..lineTo(0, 8)..lineTo(-7, 0)..close(), s);
+      case 11: // paper plane
+        canvas.drawPath(
+            Path()..moveTo(-8, -6)..lineTo(9, 0)..lineTo(-8, 6)..lineTo(-4, 0)..close(), s);
+        canvas.drawLine(const Offset(-4, 0), const Offset(9, 0), s);
+      case 12: // sparkle
+        canvas.drawLine(const Offset(0, -8), const Offset(0, 8), s);
+        canvas.drawLine(const Offset(-8, 0), const Offset(8, 0), s);
+        canvas.drawLine(const Offset(-5, -5), const Offset(5, 5), s);
+        canvas.drawLine(const Offset(-5, 5), const Offset(5, -5), s);
+      case 13: // flower
+        for (var i = 0; i < 6; i++) {
+          final t = i * math.pi / 3;
+          canvas.drawCircle(Offset(math.cos(t) * 5, math.sin(t) * 5), 2.4, s);
+        }
+        canvas.drawCircle(Offset.zero, 1.8, f);
+    }
   }
 
   /// Sports marks on a jittered grid, rotated a little so the field does not look

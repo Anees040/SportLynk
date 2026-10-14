@@ -6,6 +6,7 @@ import '../../models/team.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/team_service.dart';
 import '../../utils/snackbar_util.dart';
+import '../../widgets/app_card.dart';
 
 /// Browse PUBLIC teams and ask to join one.
 ///
@@ -228,13 +229,9 @@ class _DiscoverTeamsScreenState extends State<DiscoverTeamsScreen> {
     final played = (t.wins + t.losses + t.draws).toInt();
     final record = played == 0 ? 'No matches yet' : '${t.wins}W · ${t.losses}L · ${t.draws}D';
     final members = '${t.memberCount} member${t.memberCount == 1 ? '' : 's'}';
-    return Container(
+    return AppCard(
+      margin: EdgeInsets.zero,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

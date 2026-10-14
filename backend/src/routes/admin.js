@@ -3,20 +3,24 @@ const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const checkRole = require('../middleware/roleMiddleware');
+const { requirePermission } = require('../middleware/permissionMiddleware');
 const { recomputeTrust } = require('../utils/trustScore');
 const slotService = require('../services/slotService');
 
 // All admin routes require authentication + admin role
 router.use(auth, checkRole('admin'));
 
-// The four admin surfaces are separate files but the same router, mounted here and
+// The admin surfaces are separate files but the same router, mounted here and
 // therefore behind the single `auth + checkRole('admin')` line above. Splitting
 // them by concern keeps each one reviewable; mounting them here means a new admin
 // screen cannot accidentally ship without an authorisation check, which is the
-// mistake this arrangement exists to make impossible.
+// mistake this arrangement exists to make impossible. Each surface narrows that gate
+// further with `requirePermission(...)` (super admin passes everything); adminAdmins
+// is super-admin-only on its own.
 router.use(require('./adminUsers'));
 router.use(require('./adminDisputes'));
 router.use(require('./adminSettings'));
+router.use(require('./adminAdmins'));
 router.use(require('./reports').platformReports);
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,7 +51,7 @@ async function refreshVenueAggregate(client, venueId) {
 // GET /api/admin/registrations
 // List all owner registration submissions, filtered by status
 // Query param: ?status=pending|approved|rejected  (default: pending)
-router.get('/registrations', async (req, res, next) => {
+router.get('/registrations', requirePermission('owner_approvals'), async (req, res, next) => {
   try {
     const status = req.query.status || 'pending';
     const result = await pool.query(`
@@ -89,7 +93,7 @@ router.get('/registrations', async (req, res, next) => {
 
 // PATCH /api/admin/registrations/:id/approve
 // Approve a pending owner registration, create their venue + 14-day slots
-router.patch('/registrations/:id/approve', async (req, res, next) => {
+router.patch('/registrations/:id/approve', requirePermission('owner_approvals'), async (req, res, next) => {
   const client = await pool.connect();
   try {
     const { id } = req.params; // owner_profiles.id
@@ -186,7 +190,7 @@ router.patch('/registrations/:id/approve', async (req, res, next) => {
 
 // PATCH /api/admin/registrations/:id/reject
 // Reject a pending owner registration with a reason
-router.patch('/registrations/:id/reject', async (req, res, next) => {
+router.patch('/registrations/:id/reject', requirePermission('owner_approvals'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -249,7 +253,7 @@ router.get('/stats', async (req, res, next) => {
 
 // GET /api/admin/venues/pending
 // List venues pending approval
-router.get('/venues/pending', async (req, res, next) => {
+router.get('/venues/pending', requirePermission('owner_approvals'), async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT v.id, v.name, v.sport_type, v.city, v.address, v.created_at, u.name as owner_name
@@ -264,7 +268,7 @@ router.get('/venues/pending', async (req, res, next) => {
 
 // PATCH /api/admin/venues/:id/approve
 // Approve a pending venue
-router.patch('/venues/:id/approve', async (req, res, next) => {
+router.patch('/venues/:id/approve', requirePermission('owner_approvals'), async (req, res, next) => {
   try {
     const result = await pool.query(
       `UPDATE venues SET is_active = true WHERE id = $1 RETURNING id`,
@@ -286,7 +290,7 @@ router.patch('/venues/:id/approve', async (req, res, next) => {
 // So the queue is `flagged = true OR hidden = true`, not just open flags — else the
 // auto-escalated abusive review the demo hinges on would never appear. Already-hidden
 // reviews are included so an admin can Restore one; they sort last (actioned already).
-router.get('/reviews/flagged', async (req, res, next) => {
+router.get('/reviews/flagged', requirePermission('review_moderation'), async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -351,7 +355,7 @@ router.get('/reviews/flagged', async (req, res, next) => {
 //   dismiss → reject the flag, keep the review visible: flagged=false, flags
 //             dismissed. Aggregates already ignore `flagged`, so no recompute.
 // Everything runs in one transaction with the review row locked (golden rule 4).
-router.patch('/reviews/:id', async (req, res, next) => {
+router.patch('/reviews/:id', requirePermission('review_moderation'), async (req, res, next) => {
   const reviewId = String(req.params.id || '').trim().toLowerCase();
   const action = String(req.body?.action || '').trim().toLowerCase();
 

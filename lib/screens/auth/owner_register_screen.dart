@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart' show TapGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../shared/circle_crop_screen.dart';
 import 'dart:io';
 import '../../services/cloudinary_service.dart';
+import '../../services/auth_service.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/sport_text_field.dart';
@@ -15,6 +18,7 @@ import '../../widgets/password_strength_bar.dart';
 import '../../widgets/custom_button.dart';
 import '../../utils/snackbar_util.dart';
 import '../../utils/maps_link.dart';
+import '../../utils/maps_link_resolver.dart';
 
 class OwnerRegisterScreen extends StatefulWidget {
   const OwnerRegisterScreen({super.key});
@@ -36,6 +40,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
   final _cnicCtrl = TextEditingController();
   bool _phoneVerified = false;
   String? _firebaseUid;
+  bool _checkingStep0 = false;
   bool _obscurePass = true;
   bool _obscureConfirm = true;
   XFile? _avatar;
@@ -57,11 +62,18 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
   // Coordinates parsed from the location field below. Discovery and the "near me"
   // ranking need a real point, so a venue cannot be submitted without one.
   LatLng? _groundCoords;
+  // Debounces resolving a shortened Maps link (one network hop) so a paste is
+  // followed once rather than on every keystroke; true while that hop is in flight.
+  Timer? _resolveDebounce;
+  bool _resolvingLink = false;
 
   // Step 2
   XFile? _cnicFront, _cnicBack, _selfie, _utilityBill, _ownershipProof;
   final List<XFile> _groundPhotos = [];
   bool _agreedToTerms = false;
+  // Opens the terms dialog from the "Terms of Service" span in the consent row.
+  // Held as a field and disposed so the tap target does not leak on each rebuild.
+  late final TapGestureRecognizer _termsTap;
 
   @override
   void initState() {
@@ -69,22 +81,106 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
     _passCtrl.addListener(() => setState(() => _pwText = _passCtrl.text));
     _confirmCtrl.addListener(() => setState(() {}));
     _mapsCtrl.addListener(_onLocationChanged);
+    _termsTap = TapGestureRecognizer()..onTap = _showTerms;
   }
 
-  // Re-parse coordinates whenever the location field changes. Parsing is a pure
-  // string operation, so it is cheap enough to run on every keystroke.
+  // Re-read coordinates whenever the location field changes. A bare pair or a full
+  // URL parses instantly and offline; a shortened share link or a typed address is
+  // resolved over the network after a short pause (debounced, because typing and
+  // pasting fire several change events in quick succession).
   void _onLocationChanged() {
-    final parsed = parseLatLng(_mapsCtrl.text);
-    if (parsed?.lat == _groundCoords?.lat && parsed?.lng == _groundCoords?.lng) {
+    final text = _mapsCtrl.text;
+    _resolveDebounce?.cancel();
+
+    final parsed = parseLatLng(text);
+    if (parsed != null) {
+      if (parsed.lat != _groundCoords?.lat || parsed.lng != _groundCoords?.lng) {
+        setState(() {
+          _groundCoords = parsed;
+          _resolvingLink = false;
+        });
+      }
       return;
     }
-    setState(() => _groundCoords = parsed);
+
+    // Nothing parseable in the text itself. Drop any stale point, then resolve a
+    // short link or a typed address once the typing settles.
+    if (_groundCoords != null || _resolvingLink) {
+      setState(() {
+        _groundCoords = null;
+        _resolvingLink = false;
+      });
+    }
+    if (isShortMapsLink(text) || looksLikeAddress(text)) {
+      _resolveDebounce = Timer(
+          const Duration(milliseconds: 600), () => _resolveLocation(text));
+    }
+  }
+
+  Future<void> _resolveLocation(String text) async {
+    if (!mounted) return;
+    setState(() => _resolvingLink = true);
+    final coords = await resolveLocationText(text);
+    // Ignore a result for text the owner has since changed.
+    if (!mounted || _mapsCtrl.text != text) return;
+    setState(() {
+      _resolvingLink = false;
+      _groundCoords = coords;
+    });
   }
 
   @override
   void dispose() {
+    _resolveDebounce?.cancel();
+    _termsTap.dispose();
     for (var c in [_nameCtrl,_phoneCtrl,_emailCtrl,_passCtrl,_confirmCtrl,_cnicCtrl,_bizCtrl,_addrCtrl,_mapsCtrl,_priceCtrl,_altPhoneCtrl,_openCtrl,_closeCtrl]) { c.dispose(); }
     super.dispose();
+  }
+
+  // The owner terms, shown in full so ticking the consent box means something. The
+  // points are the platform's real rules (admin verification, escrow and the
+  // commission taken at check-in, the 24-hour cancellation window, conduct and
+  // suspension), not placeholder copy.
+  void _showTerms() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Owner Terms of Service',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                _TermItem('1. Accurate information',
+                    'You confirm that the business, ground and identity details you provide are true, and that you are authorised to list and manage this venue.'),
+                _TermItem('2. Verification',
+                    'Your CNIC, selfie and ownership documents are reviewed by SportLynk admins before your venue goes live. They are stored securely and used only for verification.'),
+                _TermItem('3. Payments and commission',
+                    'A player\'s payment is held in escrow when they book and released to you when they check in at your ground via the QR code. SportLynk deducts its platform commission at that point.'),
+                _TermItem('4. Cancellations',
+                    'Players may cancel up to 24 hours before a slot for a full refund. Within 24 hours, part of the deposit is forfeited to you. You must honour every confirmed booking.'),
+                _TermItem('5. Conduct and suspension',
+                    'Accounts that provide false information, fail to honour bookings, or abuse the platform may be suspended. Suspension cancels and refunds affected bookings and hides your venues.'),
+                _TermItem('6. Data',
+                    'Your contact and venue details are shown to players so they can find and book your ground. You remain responsible for keeping them current.'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Close',
+                style: GoogleFonts.poppins(
+                    color: AppColors.accent, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _snack(String msg, {Color bg = AppColors.error}) {
@@ -96,6 +192,17 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
   }
 
   Future<XFile?> _pickImg() async => await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1024, imageQuality: 85);
+
+  // Ground photos are chosen several at a time; the single picker above stays for the
+  // document tiles, which are one image each. The pick is clamped to the six-photo
+  // cap so selecting more than the remaining slots quietly keeps the first that fit.
+  Future<void> _addGroundPhotos() async {
+    final remaining = 6 - _groundPhotos.length;
+    if (remaining <= 0) return;
+    final picked = await ImagePicker().pickMultiImage(maxWidth: 1024, imageQuality: 85);
+    if (picked.isEmpty || !mounted) return;
+    setState(() => _groundPhotos.addAll(picked.take(remaining)));
+  }
 
   Widget _img(XFile f, {double? w, double? h, BoxFit fit = BoxFit.cover}) {
     if (kIsWeb) return Image.network(f.path, width: w, height: h, fit: fit);
@@ -121,6 +228,46 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
         ]);
       })),
     );
+  }
+
+  // Step-0 "Continue": validate, require a verified phone, then run an early
+  // uniqueness check so a duplicate phone, email or CNIC is caught here rather than
+  // after the documents step. The check is advisory — register/owner re-enforces all
+  // three at submit — so a failed call (offline, server error) advances rather than
+  // trapping the owner on the first step.
+  Future<void> _continueFromStep0() async {
+    if (!_formKey0.currentState!.validate()) return;
+    if (!_phoneVerified) {
+      _snack('Please verify your phone first', bg: AppColors.warning);
+      return;
+    }
+    if (_checkingStep0) return;
+
+    setState(() => _checkingStep0 = true);
+    final r = await AuthService().ownerPrecheck(
+      phone: _phoneCtrl.text.trim(),
+      email: _emailCtrl.text.trim(),
+      cnic: _cnicCtrl.text.trim(),
+    );
+    if (!mounted) return;
+    setState(() => _checkingStep0 = false);
+
+    if (r['success'] == true && r['data'] is Map) {
+      final d = Map<String, dynamic>.from(r['data'] as Map);
+      if (d['phoneTaken'] == true) {
+        _snack('This phone number is already registered. Try logging in instead.');
+        return;
+      }
+      if (d['emailTaken'] == true) {
+        _snack('This email is already registered. Use a different email or log in.');
+        return;
+      }
+      if (d['cnicTaken'] == true) {
+        _snack('This CNIC is already registered to another owner.');
+        return;
+      }
+    }
+    setState(() => _step = 1);
   }
 
   // Step 0
@@ -182,11 +329,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
           return null;
         }),
       const SizedBox(height: 32),
-      CustomButton(text: 'Continue →', onPressed: () {
-        if (!_formKey0.currentState!.validate()) return;
-        if (!_phoneVerified) { _snack('Please verify your phone first', bg: AppColors.warning); return; }
-        setState(() => _step = 1);
-      }),
+      CustomButton(text: 'Continue →', isLoading: _checkingStep0, onPressed: _continueFromStep0),
     ]));
   }
 
@@ -196,10 +339,14 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
     if (_mapsCtrl.text.trim().isEmpty) {
       return _statusRow(Icons.location_searching, 'No location set yet', AppColors.textSecondary);
     }
+    if (_resolvingLink) {
+      return _statusRow(Icons.sync, 'Finding that location…', AppColors.textSecondary);
+    }
     final c = _groundCoords;
     if (c == null) {
       return _statusRow(Icons.error_outline,
-        "Couldn't read a location. Paste a full Google Maps link, or long-press your ground and copy the coordinates.",
+        "Couldn't find that location. Type the ground's address, paste a Google Maps "
+        "link, or long-press your ground in Maps and copy the coordinates.",
         AppColors.error);
     }
     if (!isWithinPakistan(c)) {
@@ -265,10 +412,10 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
       const SizedBox(height: 16),
       SportTextField(
         label: 'Ground Location *',
-        hint: 'Paste a Maps link or "24.8607, 67.0011"',
+        hint: 'Address, Maps link, or "24.8607, 67.0011"',
         prefixIcon: Icons.map_outlined,
         controller: _mapsCtrl,
-        helperText: 'In Google Maps, long-press your ground, then copy the coordinates or use Share → Copy link.',
+        helperText: 'Type the ground\'s address, paste a Google Maps link, or long-press your ground in Maps and copy the coordinates — any of these works.',
       ),
       const SizedBox(height: 8),
       _locationStatus(),
@@ -336,7 +483,7 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
         itemCount: _groundPhotos.length + (_groundPhotos.length < 6 ? 1 : 0),
         itemBuilder: (_, i) {
           if (i == _groundPhotos.length) {
-            return GestureDetector(onTap: () async { if (_groundPhotos.length >= 6) return; final f = await _pickImg(); if (f != null) setState(() => _groundPhotos.add(f)); },
+            return GestureDetector(onTap: _addGroundPhotos,
               child: Container(decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(12), color: AppColors.inputFill),
                 child: const Center(child: Icon(Icons.add_photo_alternate, color: AppColors.accent, size: 28))));
           }
@@ -367,9 +514,26 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
               onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
             )),
             const SizedBox(width: 12),
-            Expanded(child: Text(
-              'I confirm the information provided is accurate, and I agree to the Terms of Service and consent to verification of my submitted documents.',
-              style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+            Expanded(child: Text.rich(
+              TextSpan(
+                style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+                children: [
+                  const TextSpan(text: 'I confirm the information provided is accurate, and I agree to the '),
+                  TextSpan(
+                    text: 'Terms of Service',
+                    recognizer: _termsTap,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: AppColors.accent,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                      decorationColor: AppColors.accent,
+                    ),
+                  ),
+                  const TextSpan(text: ' and consent to verification of my submitted documents.'),
+                ],
+              ),
             )),
           ]),
         ),
@@ -571,6 +735,35 @@ class _OwnerRegisterScreenState extends State<OwnerRegisterScreen> {
             child: _step == 0 ? _buildStep0() : _step == 1 ? _buildStep1() : _buildStep2(),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// One numbered clause in the owner Terms of Service dialog: a bold heading over its
+/// explanation. Kept small and const so the dialog's list stays declarative.
+class _TermItem extends StatelessWidget {
+  final String title;
+  final String body;
+  const _TermItem(this.title, this.body);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary)),
+          const SizedBox(height: 4),
+          Text(body,
+              style: GoogleFonts.poppins(
+                  fontSize: 12, height: 1.45, color: AppColors.textSecondary)),
+        ],
       ),
     );
   }

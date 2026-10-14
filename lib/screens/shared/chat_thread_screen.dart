@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'camera_capture_screen.dart';
 import 'chat_media_screen.dart';
 import 'image_caption_screen.dart';
+import 'message_info_screen.dart';
 import 'package:provider/provider.dart';
 
 import '../../constants/colors.dart';
@@ -967,6 +968,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     final canDeleteAny = msgs.any((m) => !m.isSystem);
     final canForward = msgs.any((m) =>
         !m.isDeleted && !m.pending && !m.failed && m.kind != MessageKind.system);
+    final overflow = _selectionOverflowItems(single, c);
     return AppBar(
       backgroundColor: AppColors.primary,
       foregroundColor: Colors.white,
@@ -977,13 +979,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
       ),
       title: Text('$count'),
       actions: [
-        if (single != null &&
-            single.kind == MessageKind.text &&
-            (single.body ?? '').isNotEmpty)
-          IconButton(
-              icon: const Icon(Icons.copy_outlined),
-              tooltip: 'Copy',
-              onPressed: () => _copySelected(single)),
         if (single != null && !single.isDeleted && !single.pending && !single.failed)
           IconButton(
               icon: const Icon(Icons.reply_outlined),
@@ -997,17 +992,71 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
               icon: const Icon(Icons.forward_outlined),
               tooltip: 'Forward',
               onPressed: _forwardSelected),
-        if (single != null && c != null && c.canPin(single))
-          IconButton(
-              icon: Icon(c.isPinned(single.id) ? Icons.push_pin : Icons.push_pin_outlined),
-              tooltip: c.isPinned(single.id) ? 'Unpin' : 'Pin',
-              onPressed: () => _pinSelected(single)),
         if (canDeleteAny)
           IconButton(
               icon: const Icon(Icons.delete_outline),
               tooltip: 'Delete',
               onPressed: _deleteSelected),
+        // Info (my messages only), Copy and Pin live under the overflow, the way
+        // WhatsApp keeps its message menu off the one-tap row.
+        if (overflow.isNotEmpty)
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'More',
+            onSelected: (v) => _onSelectionMenu(v, single!),
+            itemBuilder: (_) => overflow,
+          ),
       ],
+    );
+  }
+
+  /// The single-message overflow actions: Info (who received and read it — my
+  /// own messages only, as WhatsApp does), Copy (text only) and Pin/Unpin. Empty
+  /// when nothing applies (a multi-selection, or a message none of these fit), so
+  /// the caller can drop the three-dot button entirely rather than open an empty
+  /// menu.
+  List<PopupMenuEntry<String>> _selectionOverflowItems(
+      ChatMessage? single, ChatController? c) {
+    if (single == null) return const [];
+    return [
+      if (single.senderId == _myId &&
+          single.kind != MessageKind.system &&
+          !single.isDeleted &&
+          !single.pending &&
+          !single.failed)
+        const PopupMenuItem(value: 'info', child: Text('Info')),
+      if (single.kind == MessageKind.text && (single.body ?? '').isNotEmpty)
+        const PopupMenuItem(value: 'copy', child: Text('Copy')),
+      if (c != null && c.canPin(single))
+        PopupMenuItem(value: 'pin', child: Text(c.isPinned(single.id) ? 'Unpin' : 'Pin')),
+    ];
+  }
+
+  void _onSelectionMenu(String value, ChatMessage single) {
+    switch (value) {
+      case 'info':
+        _openMessageInfo(single);
+      case 'copy':
+        _copySelected(single);
+      case 'pin':
+        _pinSelected(single);
+    }
+  }
+
+  /// Open WhatsApp-style "Message info" for one of my own messages: the delivered
+  /// and read lists, computed live by the controller from the tick watermarks.
+  void _openMessageInfo(ChatMessage m) {
+    final c = _controller;
+    if (c == null) return;
+    _clearSelection();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MessageInfoScreen(
+          listenable: c,
+          receiptsOf: () => c.receiptsFor(m),
+          message: m,
+        ),
+      ),
     );
   }
 

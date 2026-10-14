@@ -112,6 +112,10 @@ class DiscoverPlayer {
   final int bookings30d;
   final bool playsSport;
 
+  /// The player's home area, derived server-side from the city they book in most.
+  /// Null when they have never booked — the card then shows no area, never a guess.
+  final String? homeCity;
+
   /// False when this player keeps their profile private. Discovery now excludes
   /// private accounts server-side, so this reads true for every discover row; the
   /// field stays because the shared model is also read in non-discovery contexts.
@@ -135,6 +139,7 @@ class DiscoverPlayer {
     this.trustScore,
     this.bookings30d = 0,
     this.playsSport = false,
+    this.homeCity,
     this.isPublic = true,
     this.pendingRequest = false,
     this.connected = false,
@@ -149,6 +154,7 @@ class DiscoverPlayer {
         trustScore: j['trustScore'] == null ? null : asNum(j['trustScore']),
         bookings30d: asNum(j['bookings30d']).toInt(),
         playsSport: j['playsSport'] == true,
+        homeCity: j['homeCity'] as String?,
         isPublic: j['isPublic'] != false,
         pendingRequest: j['pendingRequest'] == true,
         connected: j['connected'] == true,

@@ -93,12 +93,14 @@ class ApiClient {
     String endpoint,
     Map<String, dynamic> body, {
     String? token,
+    Duration? timeout,
   }) {
     return _send(
       'POST',
       endpoint,
       (uri, headers) => http.post(uri, headers: headers, body: jsonEncode(body)),
       token: token,
+      timeout: timeout,
     );
   }
 
@@ -157,11 +159,12 @@ class ApiClient {
     Future<http.Response> Function(Uri uri, Map<String, String> headers) call, {
     String? token,
     Map<String, String>? queryParams,
+    Duration? timeout,
   }) async {
     final uri = _uri(endpoint, queryParams);
     try {
       final response =
-          await call(uri, _headers(token: token)).timeout(_timeout);
+          await call(uri, _headers(token: token)).timeout(timeout ?? _timeout);
 
       // Any answer at all — even a 500 — proves the container is awake.
       _warmed = true;

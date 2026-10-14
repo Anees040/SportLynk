@@ -52,6 +52,7 @@ import '../screens/admin/admin_home_screen.dart';
 import '../screens/admin/admin_moderation_screen.dart';
 import '../screens/admin/admin_settings_screen.dart';
 import '../screens/admin/admin_users_screen.dart';
+import '../screens/admin/admin_manage_admins_screen.dart';
 
 // Shared (chat + notifications)
 import '../screens/shared/chat_thread_screen.dart';
@@ -321,6 +322,13 @@ class AppRoutes {
         const AuthGuard(requiredRole: 'admin', child: AdminUsersScreen()),
     '/admin-settings': (_) =>
         const AuthGuard(requiredRole: 'admin', child: AdminSettingsScreen()),
+    // Super-admin only: creating admins and granting powers is not a delegable
+    // permission, so the guard requires it beyond the admin role.
+    '/admin-admins': (_) => const AuthGuard(
+          requiredRole: 'admin',
+          requireSuperAdmin: true,
+          child: AdminManageAdminsScreen(),
+        ),
     // One screen, two scopes: the owner's own venues, and the platform-wide
     // report with commission per owner. The route decides the scope rather than
     // the screen reading the signed-in role, because an admin who also owns

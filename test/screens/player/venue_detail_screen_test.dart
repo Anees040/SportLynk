@@ -167,7 +167,9 @@ void main() {
       await settleData(tester);
 
       expect(find.text('Player Reviews'), findsOneWidget);
-      expect(find.text('2 reviews'), findsOneWidget);
+      // The compact snippet carries the count on its "view all" action (the full
+      // histogram and per-star counts moved to the dedicated reviews screen).
+      expect(find.text('View all 2 reviews'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
     });

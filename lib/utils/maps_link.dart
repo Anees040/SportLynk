@@ -28,10 +28,17 @@ const double _pkMaxLng = 77.9;
 ///
 /// Recognised forms, tried from most to least specific so a place pin is
 /// preferred over the viewport centre:
-///   - `...!3d24.8607!4d67.0011...`   the place-detail encoding (the actual pin)
+///   - `...!3d24.8607!4d67.0011...`   the place-detail encoding (the actual pin),
+///                                    including the `/data=…!3d…!4d…` segment
 ///   - `.../@24.8607,67.0011,17z`     the URL Maps shows for a place (viewport)
 ///   - `...?q=24.8607,67.0011`        `q`, `query` or `ll` query parameters
-///   - `24.8607, 67.0011`            a bare pair, the long-press copy format
+///   - `geo:24.8607,67.0011`          the Android share URI
+///   - `24.8607, 67.0011`            a bare pair, the long-press copy format,
+///                                    separated by a comma, a space, or both
+///
+/// A shortened link (`maps.app.goo.gl`, `goo.gl/maps`) carries no coordinates in its
+/// text and returns null here; resolving it needs a network hop and lives in
+/// maps_link_resolver.dart so this stays pure.
 LatLng? parseLatLng(String input) {
   final s = input.trim();
   if (s.isEmpty) return null;
@@ -52,10 +59,17 @@ LatLng? parseLatLng(String input) {
   final fromParam = _build(param?.group(1), param?.group(2));
   if (fromParam != null) return fromParam;
 
-  // A bare "lat, lng". Anchored to the whole string so a stray number inside a
-  // URL is never mistaken for coordinates.
+  // The Android "geo:" share URI: geo:LAT,LNG (a ?q= label or zoom may follow).
+  final geo = RegExp(r'^geo:(-?\d+\.\d+),(-?\d+\.\d+)').firstMatch(s);
+  final fromGeo = _build(geo?.group(1), geo?.group(2));
+  if (fromGeo != null) return fromGeo;
+
+  // A bare "lat lng". Anchored to the whole string so a stray number inside a URL is
+  // never mistaken for coordinates; the separator may be a comma, a space, or both,
+  // so the long-press copy ("24.8607, 67.0011"), "24.86,67.00" and "24.86 67.00" all
+  // read.
   final bare =
-      RegExp(r'^(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$').firstMatch(s);
+      RegExp(r'^(-?\d{1,2}\.\d+)\s*[, ]\s*(-?\d{1,3}\.\d+)$').firstMatch(s);
   return _build(bare?.group(1), bare?.group(2));
 }
 

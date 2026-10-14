@@ -18,9 +18,14 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const authMiddleware = require('../middleware/authMiddleware');
+const { requirePermission } = require('../middleware/permissionMiddleware');
 const suspension = require('../services/suspensionService');
 const chat = require('../utils/chatCore');
 const mc = require('../utils/matchCore');
+
+// requirePermission is applied per-route below, never as a router-level `use`: this
+// sub-router is mounted at '/' in admin.js, so a `router.use` gate would run for every
+// admin request that falls through this router, not only its own /users routes.
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE_MAX = 50;
@@ -38,7 +43,7 @@ function bad(res, status, message) {
  * the app, and the reason there is no OFFSET here: an admin suspending accounts
  * while paging would otherwise see rows shift under them.
  */
-router.get('/users', async (req, res, next) => {
+router.get('/users', requirePermission('user_management'), async (req, res, next) => {
   try {
     const q = String(req.query.q || '').trim().slice(0, 80);
     const role = String(req.query.role || '').trim();
@@ -137,7 +142,7 @@ function shapeUser(u) {
  *   3. the match fan-outs, so both apps redraw the cancelled challenges.
  * None of the three can fail the suspension — it is already durable.
  */
-router.patch('/users/:id/suspend', async (req, res, next) => {
+router.patch('/users/:id/suspend', requirePermission('user_management'), async (req, res, next) => {
   const { id } = req.params;
   if (!RE_UUID.test(id)) return bad(res, 400, 'Invalid user id');
 
@@ -174,7 +179,7 @@ router.patch('/users/:id/suspend', async (req, res, next) => {
  * its audit row — see the service). Nothing else is restored, because a refunded
  * booking cannot be un-refunded.
  */
-router.patch('/users/:id/reinstate', async (req, res, next) => {
+router.patch('/users/:id/reinstate', requirePermission('user_management'), async (req, res, next) => {
   const { id } = req.params;
   if (!RE_UUID.test(id)) return bad(res, 400, 'Invalid user id');
 
