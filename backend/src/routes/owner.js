@@ -49,6 +49,54 @@ const priceCache = new TtlCache({ name: "owner-price", ttlMs: ONE_HOUR_MS, maxEn
 const forecastCache = new TtlCache({ name: "owner-forecast", ttlMs: ONE_HOUR_MS, maxEntries: 200 });
 
 /**
+ * The most photos one ground may hold.
+ *
+ * Enforced here and not only in the app, because the two client screens that upload
+ * (register a venue, edit its library) are separate code paths and a third would
+ * otherwise be free to exceed it. The venue detail gallery, the owner's photo
+ * library and this number have to agree about how many images a ground has.
+ */
+const MAX_VENUE_PHOTOS = 5;
+
+/**
+ * Normalise an amenities map for `venues.amenities` (JSONB, migration 003).
+ *
+ * The keys are what the player's venue page renders as labels and what Scout reads
+ * in `assistantActions`, so they are stored lowercase with underscores — the same
+ * shape `seed_venues.js` wrote by hand (`{ lights: true, parking: true }`) and the
+ * same shape `settingsCatalog.coerce` imposes on sport names, for the same reason:
+ * an unconstrained key is a key that later stops matching.
+ *
+ * Values are coerced to booleans rather than trusted, so a client that sends
+ * `"yes"` cannot store a string the detail screen would then render as a value
+ * instead of a tick. A custom amenity is therefore always `true` — the owner is
+ * declaring it present, which is the only thing this column expresses.
+ *
+ * Returns `{ok, value}` or `{ok:false, message}`; the caller maps the failure to a
+ * 400 naming the key that was refused, rather than dropping it silently.
+ */
+function normaliseAmenities(raw) {
+  if (raw === undefined) return { ok: true, value: undefined };
+  if (raw === null) return { ok: true, value: {} };
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, message: 'Amenities must be a map of name → on/off.' };
+  }
+  const out = {};
+  for (const [key, v] of Object.entries(raw)) {
+    const name = String(key).trim().toLowerCase().replace(/\s+/g, '_');
+    if (!name) continue;
+    if (!/^[a-z][a-z0-9_-]{1,29}$/.test(name)) {
+      return { ok: false, message: `"${key}" is not a usable amenity name.` };
+    }
+    // Present means true. A `false` entry is dropped rather than stored: the venue
+    // page lists amenities the ground HAS, so a stored false would render an
+    // "available: No" row for a facility the owner simply did not tick.
+    if (v !== false && v !== 'false') out[name] = true;
+  }
+  return { ok: true, value: out };
+}
+
+/**
  * `YYYY-MM-DDTHH` in PKT — part of every cache key.
  *
  * Both ML answers depend on the current clock: a price suggestion's `lead_days` is
@@ -482,6 +530,14 @@ router.get("/venues", async (req, res, next) => {
               -- would 500 the owner's whole venue list. Absent reads as NULL, which
               -- the management screen shows as the 60-minute default.
               to_jsonb(v) ->> 'slot_duration_minutes' AS slot_duration_minutes,
+              -- Same treatment for migration 043's two columns, on the same reasoning:
+              -- the management screen needs to show the owner their current deposit
+              -- and whether AI pricing is on, and neither the list nor the screen may
+              -- break on a database where 043 has not been applied yet. Absent means
+              -- "inherit the platform setting" and "AI on", which is the pre-043
+              -- behaviour for every venue.
+              to_jsonb(v) ->> 'deposit_pct'        AS deposit_pct,
+              to_jsonb(v) ->> 'ai_pricing_enabled' AS ai_pricing_enabled,
               (SELECT COUNT(*) FROM bookings b WHERE b.venue_id = v.id AND b.status='pending') AS pending_bookings,
               (SELECT COUNT(*) FROM bookings b WHERE b.venue_id = v.id AND b.slot_date = CURRENT_DATE AND b.status IN ('confirmed','checked_in')) AS todays_bookings
        FROM venues v
@@ -507,7 +563,8 @@ router.post("/venues", async (req, res, next) => {
       pricePerHour,
       operatingHoursFrom,
       operatingHoursTo,
-      groundPhotos
+      groundPhotos,
+      amenities,
     } = req.body;
 
     const sportType = sportTypes && sportTypes.length > 0 ? sportTypes[0].toLowerCase() : 'football';
@@ -526,12 +583,30 @@ router.post("/venues", async (req, res, next) => {
       });
     }
 
+    const amen = normaliseAmenities(amenities);
+    if (!amen.ok) return res.status(400).json({ success: false, message: amen.message });
+
+    // The registration screen requires at least three ground photos and the app
+    // caps the set at MAX_VENUE_PHOTOS. Both are re-checked here rather than trusted
+    // from the body, because this insert is the only thing standing between a
+    // malformed request and a listing with no photos at all — which the gallery
+    // would then render as a bare gradient placeholder with no way to tell it apart
+    // from a venue whose images failed to load.
+    const photos = Array.isArray(groundPhotos) ? groundPhotos.filter(Boolean) : [];
+    if (photos.length > MAX_VENUE_PHOTOS) {
+      return res.status(400).json({
+        success: false,
+        message: `A ground can have at most ${MAX_VENUE_PHOTOS} photos.`,
+      });
+    }
+
     // Set is_active = false so it requires admin approval
     const vRes = await pool.query(
-      `INSERT INTO venues (owner_id, name, description, sport_type, city, address, base_price, price_per_hour, upfront_percent, venue_photos, operating_hours_from, operating_hours_to, is_active, rating, total_reviews)
-       VALUES ($1, $2, 'Venue added via owner dashboard', $3, $4, $5, $6, $6, 20, $7, $8, $9, false, 0, 0)
+      `INSERT INTO venues (owner_id, name, description, sport_type, city, address, base_price, price_per_hour, upfront_percent, venue_photos, amenities, operating_hours_from, operating_hours_to, is_active, rating, total_reviews)
+       VALUES ($1, $2, 'Venue added via owner dashboard', $3, $4, $5, $6, $6, 20, $7, $8::jsonb, $9, $10, false, 0, 0)
        RETURNING id`,
-      [ownerId, groundName, sportType, city, fullAddress, pricePerHour, groundPhotos || [], operatingHoursFrom, operatingHoursTo]
+      [ownerId, groundName, sportType, city, fullAddress, pricePerHour, photos,
+        JSON.stringify(amen.value ?? {}), operatingHoursFrom, operatingHoursTo]
     );
 
     const venueId = vRes.rows[0].id;
@@ -585,6 +660,9 @@ router.patch("/venues/:id", async (req, res, next) => {
       operating_hours_from,
       operating_hours_to,
       slot_duration_minutes,
+      amenities,
+      deposit_pct,
+      ai_pricing_enabled,
     } = req.body;
 
     const vCheck = await client.query(
@@ -621,6 +699,46 @@ router.patch("/venues/:id", async (req, res, next) => {
       });
     }
 
+    // The photo library is replaced wholesale by this field, so the cap is checked
+    // on the array being written rather than on the delta. Without it a client could
+    // upload past the gallery's design limit and the detail screen's counter would
+    // read "6/5".
+    if (venue_photos !== undefined) {
+      if (!Array.isArray(venue_photos)) {
+        return res.status(400).json({ success: false, message: 'Photos must be a list of image URLs.' });
+      }
+      if (venue_photos.filter(Boolean).length > MAX_VENUE_PHOTOS) {
+        return res.status(400).json({
+          success: false,
+          message: `A ground can have at most ${MAX_VENUE_PHOTOS} photos.`,
+        });
+      }
+    }
+
+    const amen = normaliseAmenities(amenities);
+    if (!amen.ok) return res.status(400).json({ success: false, message: amen.message });
+
+    // The at-risk deposit is the venue's own policy. It is validated against the
+    // same 0..100 the column's CHECK enforces so the owner hears it from the route
+    // rather than from a constraint violation reported as a 500. An explicit null is
+    // meaningful and is kept: it means "inherit the platform setting", which is what
+    // a venue gets before its owner ever opens this screen.
+    if (deposit_pct !== undefined && deposit_pct !== null && deposit_pct !== '') {
+      const pct = Number(deposit_pct);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'The deposit must be a percentage between 0 and 100.',
+        });
+      }
+    }
+    if (ai_pricing_enabled !== undefined && typeof ai_pricing_enabled !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'AI pricing is either on or off.',
+      });
+    }
+
     if (reshapes) {
       const prospective = slotService.resolveWindow({
         operating_hours_from: operating_hours_from !== undefined
@@ -643,8 +761,11 @@ router.patch("/venues/:id", async (req, res, next) => {
       updates.push(`description=$${i++}`);
       values.push(description);
     }
-    // upfront_percent is deliberately not accepted from the client: the deposit is
-    // a platform policy (POLICY.DEPOSIT_PERCENT) computed server-side only.
+    // upfront_percent is still deliberately not accepted from the client. Migration
+    // 010 retired it from money math and normalised every row to 20, so writing it
+    // would put a number on screen that nothing charges. The deposit owner policy now
+    // lives on `deposit_pct` (migration 043), which is authoritative, per-venue, and
+    // read by bookingService.
     if (price_per_hour !== undefined) {
       updates.push(`price_per_hour=$${i++}`);
       values.push(price_per_hour);
@@ -654,7 +775,28 @@ router.patch("/venues/:id", async (req, res, next) => {
     }
     if (venue_photos !== undefined) {
       updates.push(`venue_photos=$${i++}`);
-      values.push(venue_photos);
+      values.push(venue_photos.filter(Boolean));
+    }
+    if (amen.value !== undefined) {
+      // Merged rather than replaced: an owner editing their deposit must not wipe
+      // the amenities they ticked last time, because the app sends only the fields
+      // the owner actually touched.
+      updates.push(`amenities = COALESCE(amenities, '{}'::jsonb) || $${i++}::jsonb`);
+      values.push(JSON.stringify(amen.value));
+    }
+    if (deposit_pct !== undefined) {
+      // '' and null both mean "go back to inheriting the platform setting", which is
+      // a real choice this screen offers, so the column is set to NULL rather than
+      // skipped as though the owner had sent nothing.
+      const pct = deposit_pct === null || deposit_pct === ''
+        ? null
+        : Math.round(Number(deposit_pct));
+      updates.push(`deposit_pct=$${i++}`);
+      values.push(pct);
+    }
+    if (ai_pricing_enabled !== undefined) {
+      updates.push(`ai_pricing_enabled=$${i++}`);
+      values.push(ai_pricing_enabled);
     }
     if (operating_hours_from !== undefined) {
       updates.push(`operating_hours_from=$${i++}`);
@@ -691,6 +833,16 @@ router.patch("/venues/:id", async (req, res, next) => {
           message: 'Slot length cannot be saved yet — migration 034 has not been applied to this database.',
         });
       }
+      // Same treatment for migration 043. An owner whose deposit control 500s with no
+      // explanation has no way to tell a broken screen from an unapplied migration.
+      if ((deposit_pct !== undefined || ai_pricing_enabled !== undefined)
+        && /deposit_pct|ai_pricing_enabled/.test(e.message)) {
+        return res.status(409).json({
+          success: false,
+          message: 'Deposit and AI pricing settings cannot be saved yet — migration 043 '
+            + 'has not been applied to this database.',
+        });
+      }
       throw e;
     }
 
@@ -699,6 +851,17 @@ router.patch("/venues/:id", async (req, res, next) => {
       // network round trip must not be held open across a DB client or made to block
       // the owner's save.
       slotService.repriceVenueSlots(pool, { venueId: id }).catch(() => {});
+    }
+
+    // Switching AI pricing off has to take effect on the slots that are already
+    // priced, not only on the next sweep — an owner who turns it off and still sees
+    // the model's numbers in their calendar has been told the switch does nothing.
+    // This rewrites only the model's own prices (price_source <> 'owner' among the
+    // future available slots) back to the venue's flat rate, which it reads from the
+    // row, so an edit to the price and the switch in one request stay consistent.
+    // Outside the transaction for the same reason the reprice above is.
+    if (ai_pricing_enabled === false) {
+      slotService.returnSlotsToBasePrice(pool, { venueId: id }).catch(() => {});
     }
 
     const parts = ['Venue updated successfully'];

@@ -116,6 +116,12 @@ class DiscoverPlayer {
   /// Null when they have never booked — the card then shows no area, never a guess.
   final String? homeCity;
 
+  /// The ELO of the player's best RANKED team (highest, across their teams that have
+  /// played ≥1 verified match). SportLynk rates teams, not players, so this is a
+  /// team-standing signal shown as context — never a fabricated per-player rating.
+  /// Null when the player is on no ranked team (teamless or all teams unplayed).
+  final int? topElo;
+
   /// False when this player keeps their profile private. Discovery now excludes
   /// private accounts server-side, so this reads true for every discover row; the
   /// field stays because the shared model is also read in non-discovery contexts.
@@ -140,6 +146,7 @@ class DiscoverPlayer {
     this.bookings30d = 0,
     this.playsSport = false,
     this.homeCity,
+    this.topElo,
     this.isPublic = true,
     this.pendingRequest = false,
     this.connected = false,
@@ -155,6 +162,7 @@ class DiscoverPlayer {
         bookings30d: asNum(j['bookings30d']).toInt(),
         playsSport: j['playsSport'] == true,
         homeCity: j['homeCity'] as String?,
+        topElo: j['topElo'] == null ? null : asNum(j['topElo']).toInt(),
         isPublic: j['isPublic'] != false,
         pendingRequest: j['pendingRequest'] == true,
         connected: j['connected'] == true,

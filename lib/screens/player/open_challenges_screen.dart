@@ -47,6 +47,19 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
 
   final Set<String> _busy = {}; // open-challenge ids with an action in flight
 
+  /// True while a post is in flight, so the FAB can acknowledge the tap at once.
+  /// Posting walks a chain of awaits (pick a team, read linkable bookings, pick a
+  /// booking, POST) and the first of those can sit on a cold-start budget for up to
+  /// 45s; without this the FAB looked frozen for the whole time.
+  bool _posting = false;
+
+  /// Set when a post is refused with the board's own "not available yet" (503,
+  /// migration 041 not applied). The board itself answers an empty list in that
+  /// case rather than an error, so without this flag an unavailable board and a
+  /// genuinely empty one read identically. It is cleared on any successful load,
+  /// since a load proves the board is reachable.
+  bool _boardUnavailable = false;
+
   @override
   void initState() {
     super.initState();
@@ -76,7 +89,12 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
     setState(() {
       _loading = false;
       _failed = cards == null;
-      if (cards != null) _cards = cards;
+      if (cards != null) {
+        _cards = cards;
+        // A load that came back proves the board is reachable, so a stale "not
+        // available yet" from an earlier post attempt no longer applies.
+        _boardUnavailable = false;
+      }
     });
   }
 
@@ -146,6 +164,7 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
   // Post a slot
 
   Future<void> _post() async {
+    if (_posting) return;
     final captained = _myTeams.where((t) => t.role == 'captain').toList();
     if (captained.isEmpty) {
       SnackbarUtil.showInfo(context,
@@ -157,26 +176,39 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
         : await _pickTeam('Post as which team?', captained);
     if (team == null || !mounted) return;
 
-    final bookings = await _matches.linkableBookings(_token, team.id);
-    if (!mounted) return;
-    if (bookings.isEmpty) {
-      SnackbarUtil.showInfo(context,
-          'No confirmed upcoming booking to post. Book a slot for ${team.name} first, '
-          'then offer it here.');
-      return;
-    }
-    final booking = await _pickBooking(bookings);
-    if (booking == null || !mounted) return;
+    // The FAB shows its busy state for the whole chain from here — reading the
+    // linkable bookings is the slow step and it must not look frozen.
+    setState(() => _posting = true);
+    try {
+      final bookings = await _matches.linkableBookings(_token, team.id);
+      if (!mounted) return;
+      if (bookings.isEmpty) {
+        SnackbarUtil.showInfo(context,
+            'No confirmed upcoming booking to post. Book a slot for ${team.name} first, '
+            'then offer it here.');
+        return;
+      }
+      final booking = await _pickBooking(bookings);
+      if (booking == null || !mounted) return;
 
-    final r = await _svc.post(_token, teamId: team.id, bookingId: booking.id);
-    if (!mounted) return;
-    if (r['success'] == true) {
-      SnackbarUtil.showSuccess(context,
-          r['message']?.toString() ?? 'Your slot is on the open board.');
-      _load();
-    } else {
-      SnackbarUtil.showError(
-          context, r['message']?.toString() ?? 'Could not post this slot.');
+      final r = await _svc.post(_token, teamId: team.id, bookingId: booking.id);
+      if (!mounted) return;
+      if (r['success'] == true) {
+        SnackbarUtil.showSuccess(context,
+            r['message']?.toString() ?? 'Your slot is on the open board.');
+        _load();
+      } else {
+        // 503 / not_available is the board itself being off (migration 041 not
+        // applied). The board read answers an empty list for the same cause, so
+        // record it to tell the empty state from a genuinely empty board.
+        if (r['statusCode'] == 503 || r['code'] == 'not_available') {
+          setState(() => _boardUnavailable = true);
+        }
+        SnackbarUtil.showError(
+            context, r['message']?.toString() ?? 'Could not post this slot.');
+      }
+    } finally {
+      if (mounted) setState(() => _posting = false);
     }
   }
 
@@ -253,11 +285,17 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
         elevation: 0,
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.accent,
+        backgroundColor: _posting ? AppColors.disabled : AppColors.accent,
         foregroundColor: Colors.white,
-        icon: const Icon(Icons.campaign_outlined),
-        label: const Text('Post a slot'),
-        onPressed: _post,
+        icon: _posting
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              )
+            : const Icon(Icons.campaign_outlined),
+        label: Text(_posting ? 'Posting…' : 'Post a slot'),
+        onPressed: _posting ? null : _post,
       ),
       body: _body(),
     );
@@ -275,12 +313,20 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
     }
     final cards = _cards ?? const [];
     if (cards.isEmpty) {
+      // Two empty states that must not read alike. The board answers an empty list
+      // both when nothing is posted and when the feature is not available yet
+      // (migration 041), so a post attempt that came back "not available" is what
+      // tells them apart — a player should not be invited to "Post a slot" onto a
+      // board the server will refuse.
       return RefreshIndicator(
         onRefresh: _load,
-        child: const MatchEmptyState(
-          icon: Icons.sports_kabaddi,
-          text: 'No open challenges right now.\n\nPost one of your confirmed slots with '
-              '"Post a slot", or check back — the first team to accept locks the match.',
+        child: MatchEmptyState(
+          icon: _boardUnavailable ? Icons.cloud_off_outlined : Icons.sports_kabaddi,
+          text: _boardUnavailable
+              ? 'The open challenge board is not available yet. It is being set up — '
+                  'pull down to check again shortly.'
+              : 'No open challenges right now.\n\nPost one of your confirmed slots with '
+                  '"Post a slot", or check back — the first team to accept locks the match.',
         ),
       );
     }
@@ -353,6 +399,26 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
               [c.booking.venueName, c.booking.venueCity].where((e) => (e ?? '').isNotEmpty).join(', ')),
           const SizedBox(height: 6),
           _infoRow(Icons.schedule, when.isEmpty ? 'Upcoming slot' : when),
+          // How long is left to be claimed. A card expires at its slot start, so
+          // this is also exactly how long the poster is exposed — stated on the card
+          // so the exposure is visible rather than discovered when the slot passes.
+          if (_closesIn(c.expiresAt) case final String left) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.timer_outlined, size: 15, color: AppColors.accent),
+                const SizedBox(width: 8),
+                Text(
+                  left,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.accent,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
@@ -406,8 +472,7 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.poppins(fontSize: 12.5, color: AppColors.textPrimary)),
           ),
-        ],
-      );
+        ],      );
 
   String _to12(String t) {
     final parts = t.split(':');
@@ -421,6 +486,23 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
       h -= 12;
     }
     return '$h:$m $ampm';
+  }
+
+  /// How long until this card closes, as a short human phrase, or null once the
+  /// slot has started (the board filters expired cards server-side, so a past
+  /// value is only ever a seconds-wide race and reads better as nothing than as
+  /// "0m"). Not a live ticker: it recomputes on each rebuild and pull-to-refresh,
+  /// which is honest for a window measured in hours.
+  String? _closesIn(DateTime? expiresAt) {
+    if (expiresAt == null) return null;
+    final left = expiresAt.difference(DateTime.now());
+    if (left.inMinutes < 1) return null;
+    if (left.inHours >= 1) {
+      final h = left.inHours;
+      final m = left.inMinutes % 60;
+      return m == 0 ? 'Closes in ${h}h' : 'Closes in ${h}h ${m}m';
+    }
+    return 'Closes in ${left.inMinutes}m';
   }
 }
 

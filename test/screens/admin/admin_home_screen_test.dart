@@ -100,8 +100,12 @@ Future<RouteLog> pumpSub(
   );
 }
 
-/// Switches to a named tab and lets the tab animation and the list load settle.
+/// Opens a sidebar destination and lets the drawer close and the list load settle.
+/// The five-tab header became a navigation drawer, so a destination is reached by
+/// opening the drawer and tapping its row rather than tapping a tab.
 Future<void> openTab(WidgetTester tester, String label) async {
+  await tester.tap(find.byTooltip('Open navigation menu'));
+  await tester.pumpAndSettle();
   await tester.tap(find.text(label));
   await tester.pumpAndSettle();
 }
@@ -170,15 +174,19 @@ void main() {
       expect(find.text('Refresh Stats'), findsOneWidget);
     });
 
-    testWidgets('the five tabs are labelled', (tester) async {
+    testWidgets('the sidebar lists the owner destinations', (tester) async {
       await pumpAdmin(tester, api);
       await settleData(tester);
 
-      expect(find.text('DASHBOARD'), findsOneWidget);
-      expect(find.text('OWNERS (P)'), findsOneWidget);
-      expect(find.text('OWNERS (A)'), findsOneWidget);
-      expect(find.text('OWNERS (R)'), findsOneWidget);
-      expect(find.text('VENUES'), findsOneWidget);
+      // The destinations live in the navigation drawer now, not a tab bar.
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dashboard'), findsOneWidget);
+      expect(find.text('Owners · Pending'), findsOneWidget);
+      expect(find.text('Owners · Approved'), findsOneWidget);
+      expect(find.text('Owners · Rejected'), findsOneWidget);
+      expect(find.text('Venues'), findsOneWidget);
     });
   });
 
@@ -203,7 +211,7 @@ void main() {
         (tester) async {
       await pumpAdmin(tester, api);
       await settleData(tester);
-      await openTab(tester, 'OWNERS (P)');
+      await openTab(tester, 'Owners · Pending');
 
       expect(find.text('Bilal Traders'), findsOneWidget);
       expect(find.text('Green Turf Arena'), findsOneWidget);
@@ -218,7 +226,7 @@ void main() {
       api.ok(kRegs, <dynamic>[]);
       await pumpAdmin(tester, api);
       await settleData(tester);
-      await openTab(tester, 'OWNERS (P)');
+      await openTab(tester, 'Owners · Pending');
 
       expect(find.text('No pending registrations'), findsOneWidget);
     });
@@ -228,7 +236,7 @@ void main() {
     testWidgets('an empty venue queue says so', (tester) async {
       await pumpAdmin(tester, api);
       await settleData(tester);
-      await openTab(tester, 'VENUES');
+      await openTab(tester, 'Venues');
 
       expect(find.text('No pending venues'), findsOneWidget);
     });
@@ -239,7 +247,7 @@ void main() {
       api.ok('/admin/venues/v-1/approve', <String, dynamic>{});
       await pumpAdmin(tester, api);
       await settleData(tester);
-      await openTab(tester, 'VENUES');
+      await openTab(tester, 'Venues');
 
       expect(find.text('Champions Ground'), findsOneWidget);
       await tapVisible(tester, find.text('Approve Venue'));
@@ -281,10 +289,17 @@ void main() {
       await pumpAdmin(tester, api);
       await settleData(tester);
 
-      // Icon-only controls in the app bar name themselves for a screen reader.
+      // Icon-only controls in the app bar name themselves for a screen reader. Log
+      // out moved into the navigation drawer, so the bar carries the notification
+      // bell, the moderation queue and the drawer's own menu button.
       expect(find.byTooltip('Notifications'), findsOneWidget);
       expect(find.byTooltip('Moderation queue'), findsOneWidget);
-      expect(find.byTooltip('Log out'), findsOneWidget);
+      expect(find.byTooltip('Open navigation menu'), findsOneWidget);
+
+      // Log out is reachable from the drawer.
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+      expect(find.text('Log out'), findsOneWidget);
     });
 
     testWidgets('a doubled text scale keeps the desk heading present',
@@ -319,11 +334,14 @@ void main() {
       expect(find.text('Platform Settings'), findsNothing);
       expect(find.text('Review Pending Registrations'), findsNothing);
       expect(find.text('Manage Admins'), findsNothing);
-      // Without owner_approvals there are no OWNERS/VENUES tabs.
-      expect(find.text('OWNERS (P)'), findsNothing);
-      expect(find.text('VENUES'), findsNothing);
       // The dashboard itself still renders.
       expect(find.text('SportLynk Control Center'), findsOneWidget);
+
+      // Without owner_approvals the sidebar offers no owner destinations either.
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+      expect(find.text('Owners · Pending'), findsNothing);
+      expect(find.text('Venues'), findsNothing);
     });
 
     testWidgets('a sub-admin without review_moderation has no moderation icon',

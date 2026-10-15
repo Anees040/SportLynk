@@ -8,6 +8,7 @@ import 'dart:io';
 import '../../services/cloudinary_service.dart';
 import '../../constants/colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/amenities_picker.dart';
 import '../../widgets/offline_banner.dart';
 import '../../widgets/sport_text_field.dart';
 import '../../widgets/custom_button.dart';
@@ -43,6 +44,10 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
   final _cities = ['Islamabad','Rawalpindi','Lahore','Karachi','Peshawar','Quetta','Multan','Faisalabad'];
   final _sportOpts = ['Football','Cricket'];
 
+  /// Amenities the owner ticks (and any custom ones), as a key→true map sent to
+  /// the server verbatim. Optional: a ground with none simply stores an empty map.
+  Map<String, bool> _amenities = {};
+
   // Step 2
   XFile? _utilityBill, _ownershipProof;
   final List<XFile> _groundPhotos = [];
@@ -68,10 +73,15 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
 
   Future<XFile?> _pickImg() async => await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1024, imageQuality: 85);
 
-  // Ground photos are chosen several at a time, clamped to the six-photo cap; the
+  /// The most ground photos one listing may hold. Mirrors the server's
+  /// MAX_VENUE_PHOTOS (owner.js), which refuses more; the detail gallery and its
+  /// counter are built around the same number, so the three must agree.
+  static const int _maxPhotos = 5;
+
+  // Ground photos are chosen several at a time, clamped to the photo cap; the
   // single picker above stays for the document tiles.
   Future<void> _addGroundPhotos() async {
-    final remaining = 6 - _groundPhotos.length;
+    final remaining = _maxPhotos - _groundPhotos.length;
     if (remaining <= 0) return;
     final picked = await ImagePicker().pickMultiImage(maxWidth: 1024, imageQuality: 85);
     if (picked.isEmpty || !mounted) return;
@@ -174,6 +184,8 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
       const SizedBox(height: 16),
       SportTextField(label: 'Alternate Contact (optional)', hint: '03XXXXXXXXX', prefixIcon: Icons.phone, controller: _altPhoneCtrl, keyboardType: TextInputType.phone,
         validator: (v) { if (v == null || v.trim().isEmpty) return null; if (!RegExp(r'^03\d{9}$').hasMatch(v.trim())) return 'Invalid phone'; return null; }),
+      const SizedBox(height: 20),
+      AmenitiesPicker(onChanged: (m) => _amenities = m),
       const SizedBox(height: 32),
       Row(children: [
         Expanded(child: CustomButton(text: 'Continue →', onPressed: () {
@@ -200,11 +212,11 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
       Text('Ground Photos * (min 3)', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
       Text('Field view, entrance, facilities', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
       const SizedBox(height: 8),
-      Text('${_groundPhotos.length}/6 photos added', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.accent, fontWeight: FontWeight.w600)),
+      Text('${_groundPhotos.length}/$_maxPhotos photos added', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.accent, fontWeight: FontWeight.w600)),
       const SizedBox(height: 8),
       GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8),
-        itemCount: _groundPhotos.length + (_groundPhotos.length < 6 ? 1 : 0),
+        itemCount: _groundPhotos.length + (_groundPhotos.length < _maxPhotos ? 1 : 0),
         itemBuilder: (_, i) {
           if (i == _groundPhotos.length) {
             return GestureDetector(onTap: _addGroundPhotos,
@@ -302,6 +314,7 @@ class _OwnerAddVenueScreenState extends State<OwnerAddVenueScreen> {
         'pricePerHour': _priceCtrl.text.trim(),
         'alternateContactPhone': _altPhoneCtrl.text.trim().isEmpty ? null : _altPhoneCtrl.text.trim(),
         'groundPhotos': groundUrls,
+        'amenities': _amenities,
       };
 
       if (!mounted) return;

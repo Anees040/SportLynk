@@ -37,7 +37,7 @@ Map<String, dynamic> forecast() => {
 };
 
 Finder field(String label) {
-  final index = label == 'Venue Description & Amenities' ? 0 : 1;
+  final index = label == 'Venue Description' ? 0 : 1;
   return find.byType(TextFormField).at(index);
 }
 
@@ -127,7 +127,7 @@ void main() {
       await settleManagement(tester);
 
       await tester.enterText(
-        field('Venue Description & Amenities'),
+        field('Venue Description'),
         'New floodlights',
       );
       await tester.enterText(field('Price Per Hour'), '2500');

@@ -347,79 +347,89 @@ class _TeamsScreenState extends State<TeamsScreen>
   // A flat, full-bleed white row parted from the next by a hairline, mirroring the
   // chat inbox rather than floating as a card on grey. The [Material] stays on top of
   // the white surface so the tap keeps a visible ripple.
+  //
+  // The divider is WhatsApp-style: indented to the text's left edge so the avatar
+  // column sits un-bordered, rather than a full-width line cutting under the avatar.
+  // It is a separate inset line at the foot of the row rather than a bottom border on
+  // the whole tile, because a border tracks the container edge and cannot be indented.
   Widget _row(Team t) => Material(
         color: AppColors.cardBg,
         child: InkWell(
           onTap: () => _openChat(t),
-          child: Container(
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: AppColors.divider, width: 0.6),
-              ),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 27,
-                  backgroundColor: AppColors.inputFill,
-                  backgroundImage: (t.logoUrl != null && t.logoUrl!.isNotEmpty)
-                      ? CachedNetworkImageProvider(t.logoUrl!)
-                      : null,
-                  child: (t.logoUrl == null || t.logoUrl!.isEmpty)
-                      ? const Icon(Icons.shield_outlined, color: AppColors.primary)
-                      : null,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(t.name,
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                      const SizedBox(height: 4),
-                      Text(
-                          '${t.sport.toUpperCase()}  •  ${t.role?.replaceAll('_', ' ') ?? 'member'}',
-                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        Expanded(child: _stat('ELO', t.elo)),
-                        Expanded(child: _stat('W', t.wins)),
-                        Expanded(child: _stat('L', t.losses)),
-                        Expanded(child: _stat('D', t.draws)),
-                      ]),
-                      // Counted achievements rather than a second rating: a
-                      // tournament match moves this same ELO harder (K 40–56)
-                      // instead of feeding a separate ladder, so "2 titles" is
-                      // what distinguishes a cup squad. The line hides
-                      // itself for a team that has never entered one.
-                      if (!t.tournamentRecord.isEmpty) ...[
-                        const SizedBox(height: 6),
-                        TeamRecordLine(t.tournamentRecord, dense: true),
-                      ],
-                    ],
-                  ),
-                ),
-                Icon(Icons.chat_bubble_outline, color: AppColors.accent.withValues(alpha: 0.8)),
-                // Matches are per-team, so the way in is from a team — not a
-                // global tab that would have to ask which one every time.
-                IconButton(
-                  tooltip: 'Match Center',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.sports_kabaddi, color: AppColors.primary),
-                  onPressed: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            MatchCenterScreen(teamId: t.id, teamName: t.name),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 27,
+                      backgroundColor: AppColors.inputFill,
+                      backgroundImage: (t.logoUrl != null && t.logoUrl!.isNotEmpty)
+                          ? CachedNetworkImageProvider(t.logoUrl!)
+                          : null,
+                      child: (t.logoUrl == null || t.logoUrl!.isEmpty)
+                          ? const Icon(Icons.shield_outlined, color: AppColors.primary)
+                          : null,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(t.name,
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                          const SizedBox(height: 4),
+                          Text(
+                              '${t.sport.toUpperCase()}  •  ${t.role?.replaceAll('_', ' ') ?? 'member'}',
+                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: _stat('ELO', t.elo)),
+                            Expanded(child: _stat('W', t.wins)),
+                            Expanded(child: _stat('L', t.losses)),
+                            Expanded(child: _stat('D', t.draws)),
+                          ]),
+                          // Counted achievements rather than a second rating: a
+                          // tournament match moves this same ELO harder (K 40–56)
+                          // instead of feeding a separate ladder, so "2 titles" is
+                          // what distinguishes a cup squad. The line hides
+                          // itself for a team that has never entered one.
+                          if (!t.tournamentRecord.isEmpty) ...[
+                            const SizedBox(height: 6),
+                            TeamRecordLine(t.tournamentRecord, dense: true),
+                          ],
+                        ],
                       ),
-                    );
-                    _reload();
-                  },
+                    ),
+                    Icon(Icons.chat_bubble_outline, color: AppColors.accent.withValues(alpha: 0.8)),
+                    // Matches are per-team, so the way in is from a team — not a
+                    // global tab that would have to ask which one every time.
+                    IconButton(
+                      tooltip: 'Match Center',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.sports_kabaddi, color: AppColors.primary),
+                      onPressed: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                MatchCenterScreen(teamId: t.id, teamName: t.name),
+                          ),
+                        );
+                        _reload();
+                      },
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              // Indented to the text column (16 gutter + 54 avatar + 14 gap), so the
+              // hairline aligns with the title and the avatar is un-bordered.
+              const Padding(
+                padding: EdgeInsets.only(left: 84),
+                child: Divider(height: 0.6, thickness: 0.6, color: AppColors.divider),
+              ),
+            ],
           ),
         ),
       );

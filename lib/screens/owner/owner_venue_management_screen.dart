@@ -2,11 +2,14 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/cloudinary_service.dart';
 import '../../services/pricing_service.dart';
+import '../../widgets/amenities_picker.dart';
 import '../../widgets/pricing_widgets.dart';
 import 'owner_venue_reviews_screen.dart';
 
@@ -68,6 +71,30 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
   DemandForecast? _forecast;
   bool _forecastLoading = true;
 
+  /// Pricing authority (migration 043). AI pricing on means the model reprices the
+  /// venue's future available slots on each sweep; off leaves the owner's own price
+  /// standing. Seeded from the venue, defaulting to on (the column's own default and
+  /// the behaviour before it existed).
+  bool _aiPricing = true;
+
+  /// At-risk deposit as a percentage of the slot price, or null to inherit the
+  /// platform setting (the admin's global). The four presets are the business
+  /// policies the requirement names; "Platform default" is null.
+  int? _depositPct;
+  static const List<int> _depositPresets = [20, 40, 50, 100];
+
+  /// The ground's photo library, edited in place. Seeded from the venue's
+  /// `venue_photos`; the owner may remove any and add up to [_maxPhotos] in total.
+  /// Sent as `venue_photos` on save, which replaces the set server-side.
+  final List<String> _photos = [];
+  bool _photosDirty = false;
+  bool _uploadingPhoto = false;
+  static const int _maxPhotos = 5;
+
+  /// Amenities as a key→true map, seeded from the venue and sent on save.
+  Map<String, bool> _amenities = {};
+  bool _amenitiesDirty = false;
+
   @override
   void initState() {
     super.initState();
@@ -77,6 +104,24 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
     _close = _parseTime(widget.venue['operating_hours_to']) ?? _close;
     final d = int.tryParse(widget.venue['slot_duration_minutes']?.toString() ?? '');
     if (d != null && _slotLengths.contains(d)) _slotMinutes = d;
+    // ai_pricing_enabled is absent on a pre-043 database; absent reads as on.
+    _aiPricing = widget.venue['ai_pricing_enabled'] != false;
+    final rawDeposit = widget.venue['deposit_pct'];
+    if (rawDeposit != null) {
+      final parsed = _parseNum(rawDeposit).round();
+      if (parsed >= 0 && parsed <= 100) _depositPct = parsed;
+    }
+    final rawPhotos = widget.venue['venue_photos'];
+    if (rawPhotos is List) {
+      _photos.addAll(rawPhotos.map((e) => e.toString()).where((s) => s.isNotEmpty));
+    }
+    final rawAmen = widget.venue['amenities'];
+    if (rawAmen is Map) {
+      _amenities = {
+        for (final e in rawAmen.entries)
+          if (e.value == true || e.value == 'true') '${e.key}': true,
+      };
+    }
     _loadForecast();
     _loadTiers();
   }
@@ -283,12 +328,21 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
       final body = <String, dynamic>{
         'description': _descCtrl.text.trim(),
         'price_per_hour': double.parse(_priceCtrl.text.trim()),
+        // Always sent: these have no "dirty window" cost (they do not reshape the
+        // grid), and sending the current value is harmless and keeps the owner's
+        // choice authoritative on every save.
+        'ai_pricing_enabled': _aiPricing,
+        'deposit_pct': _depositPct, // null means inherit the platform setting
       };
       if (_hoursDirty) {
         body['operating_hours_from'] = _hhmm(_open);
         body['operating_hours_to'] = _hhmm(_close);
       }
       if (_durationDirty) body['slot_duration_minutes'] = _slotMinutes;
+      // Only sent when touched, so a description edit does not rewrite the photo
+      // set or re-merge amenities the owner did not open.
+      if (_photosDirty) body['venue_photos'] = _photos;
+      if (_amenitiesDirty) body['amenities'] = _amenities;
 
       final req = await http.patch(
         Uri.parse('${ApiConstants.baseUrl}/owner/venues/${widget.venue['id']}'),
@@ -636,8 +690,13 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildField('Venue Description & Amenities', _descCtrl, maxLines: 4),
+              _buildField('Venue Description', _descCtrl, maxLines: 4),
               _buildField('Price Per Hour', _priceCtrl, isNumber: true, suffixText: 'PKR'),
+
+              // Who sets the prices: the model, or the owner. Directly under the
+              // price field because turning AI pricing off is what makes the number
+              // just typed a flat rate the sweep will stop overriding.
+              _buildPricingAuthoritySection(),
 
               // Above the forecast: the hours decide which slots exist at all, and
               // the forecast is advice about what to charge for them.
@@ -648,35 +707,27 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
               _buildDiscountSection(),
 
               // Sits directly under the price field on purpose: this is the evidence
-              // for the number the owner is about to type. Above the escrow note,
-              // which is policy they cannot change.
+              // for the number the owner is about to type.
               DemandForecastSection(
                 forecast: _forecast,
                 loading: _forecastLoading,
                 onRetry: _loadForecast,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
-              // Deposit policy is platform-wide and computed server-side — read only.
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.accentLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Icon(Icons.lock_outline, color: AppColors.accent, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Escrow policy (set by SportLynk): the full slot price is held when a '
-                      'player books and released to you at QR check-in. On a late '
-                      'cancellation or no-show you keep the 20% deposit.',
-                      style: GoogleFonts.poppins(fontSize: 11, color: AppColors.primary),
-                    ),
-                  ),
-                ]),
+              _buildPhotosSection(),
+              const SizedBox(height: 20),
+
+              AmenitiesPicker(
+                initial: _amenities,
+                onChanged: (m) => setState(() {
+                  _amenities = m;
+                  _amenitiesDirty = true;
+                }),
               ),
+              const SizedBox(height: 20),
+
+              _buildDepositSection(),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -696,6 +747,227 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
           ),
         ),
       ),
+    );
+  }
+
+  /// AI-assisted pricing on/off (migration 043, FR owner-1). Off means the owner's
+  /// own prices stand and the repricing sweep leaves the venue alone; the flat rate
+  /// is the Price Per Hour above, and per-slot overrides are set from the Schedule
+  /// screen. The copy states both the on and the off behaviour so the switch is not
+  /// a mystery toggle.
+  Widget _buildPricingAuthoritySection() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('AI-assisted pricing',
+                        style: GoogleFonts.poppins(
+                            fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                    const SizedBox(height: 2),
+                    Text(
+                      _aiPricing
+                          ? 'The model sets each slot\'s price by demand — evenings cost more. '
+                              'Your per-slot overrides are always kept.'
+                          : 'Off: the Price Per Hour above is a flat rate across all slots. '
+                              'Set premium evening prices from the Schedule screen.',
+                      style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary, height: 1.3),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Switch(
+                value: _aiPricing,
+                activeThumbColor: AppColors.accent,
+                onChanged: _isSaving ? null : (v) => setState(() => _aiPricing = v),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The ground's photo library (owner item 3): the current photos with a remove
+  /// control each, and an add tile up to [_maxPhotos]. The set is replaced wholesale
+  /// on save (the PATCH sends `venue_photos`), so a removed photo is gone once saved.
+  Widget _buildPhotosSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Ground Photos',
+                style: GoogleFonts.poppins(
+                    fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+            const Spacer(),
+            Text('${_photos.length}/$_maxPhotos',
+                style: GoogleFonts.poppins(fontSize: 12, color: AppColors.accent, fontWeight: FontWeight.w600)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text('These are what players see first. Changes save with the button below.',
+            style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary)),
+        const SizedBox(height: 10),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8),
+          itemCount: _photos.length + (_photos.length < _maxPhotos ? 1 : 0),
+          itemBuilder: (_, i) {
+            if (i == _photos.length) {
+              return GestureDetector(
+                onTap: _uploadingPhoto ? null : _addPhoto,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.border),
+                    borderRadius: BorderRadius.circular(12),
+                    color: AppColors.inputFill,
+                  ),
+                  child: Center(
+                    child: _uploadingPhoto
+                        ? const SizedBox(
+                            width: 22, height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))
+                        : const Icon(Icons.add_photo_alternate, color: AppColors.accent, size: 28),
+                  ),
+                ),
+              );
+            }
+            return Stack(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: double.infinity,
+                  child: Image.network(_photos[i], fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                            color: AppColors.inputFill,
+                            child: const Icon(Icons.broken_image_outlined, color: AppColors.disabled),
+                          )),
+                ),
+              ),
+              Positioned(
+                top: 4, right: 4,
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _photos.removeAt(i);
+                    _photosDirty = true;
+                  }),
+                  child: const CircleAvatar(
+                    radius: 12,
+                    backgroundColor: AppColors.error,
+                    child: Icon(Icons.close, size: 14, color: Colors.white),
+                  ),
+                ),
+              ),
+            ]);
+          },
+        ),
+      ],
+    );
+  }
+
+  /// Add one photo, uploaded to Cloudinary before it joins the library — the PATCH
+  /// stores URLs, so an un-uploaded local path would save a broken image. Errors are
+  /// surfaced rather than swallowed; a failed upload leaves the library unchanged.
+  Future<void> _addPhoto() async {
+    if (_photos.length >= _maxPhotos) return;
+    final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery, maxWidth: 1024, imageQuality: 85);
+    if (picked == null || !mounted) return;
+    setState(() => _uploadingPhoto = true);
+    try {
+      final url = await CloudinaryService().uploadImage(picked.path, folder: 'venues');
+      if (!mounted) return;
+      if (url == null || url.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not upload that photo. Check your connection and try again.'),
+          backgroundColor: AppColors.error,
+        ));
+        return;
+      }
+      setState(() {
+        _photos.add(url);
+        _photosDirty = true;
+      });
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
+  /// The at-risk deposit this venue charges (owner item 2 / migration 043). The
+  /// owner picks a preset or inherits the platform default (null). The escrow
+  /// mechanics are explained because they are platform policy the owner cannot
+  /// change — only the percentage is theirs.
+  Widget _buildDepositSection() {
+    Widget chip(String label, int? value) {
+      final on = _depositPct == value;
+      return ChoiceChip(
+        label: Text(label,
+            style: GoogleFonts.poppins(
+              fontSize: 12.5,
+              fontWeight: on ? FontWeight.w600 : FontWeight.normal,
+              color: on ? Colors.white : AppColors.textPrimary,
+            )),
+        selected: on,
+        selectedColor: AppColors.accent,
+        backgroundColor: AppColors.inputFill,
+        showCheckmark: false,
+        onSelected: _isSaving ? null : (_) => setState(() => _depositPct = value),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Upfront Deposit',
+            style: GoogleFonts.poppins(
+                fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+        const SizedBox(height: 4),
+        Text(
+          'The share of the slot price a player forfeits on a late cancellation or '
+          'no-show. The rest is refunded. Applies to new bookings only.',
+          style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary, height: 1.3),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            chip('Platform default', null),
+            for (final p in _depositPresets) chip('$p%', p),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.accentLight,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.lock_outline, color: AppColors.accent, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Escrow (set by SportLynk): the full slot price is held when a player '
+                'books and released to you at QR check-in. The deposit above is the '
+                'part the player loses to you on a late cancellation or no-show.',
+                style: GoogleFonts.poppins(fontSize: 11, color: AppColors.primary),
+              ),
+            ),
+          ]),
+        ),
+      ],
     );
   }
 }

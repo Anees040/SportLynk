@@ -326,7 +326,19 @@ async function discoverPlayers(client, { userId, sport = null, limit = 40 } = {}
               WHERE b2.player_id = u.id AND v.city IS NOT NULL AND v.city <> ''
               GROUP BY v.city
               ORDER BY count(*) DESC, max(b2.created_at) DESC
-              LIMIT 1) AS home_city
+              LIMIT 1) AS home_city,
+            -- The ELO of the player's best RANKED team — one that has played >=1
+            -- verified match (elo.isRanked). SportLynk rates TEAMS, not players, so
+            -- this is a team-standing signal surfaced as context, never a per-player
+            -- rating. NULL when the player is on no ranked team (teamless, or every
+            -- team still unplayed) — the UI then shows no rating rather than a 1000.
+            (SELECT round(t.elo)::int
+               FROM team_members tm
+               JOIN teams t ON t.id = tm.team_id
+              WHERE tm.user_id = u.id
+                AND (t.wins + t.losses + t.draws) >= 1
+              ORDER BY t.elo DESC
+              LIMIT 1) AS top_elo
        FROM users u
        JOIN player_profiles pp ON pp.user_id = u.id
        LEFT JOIN LATERAL (
@@ -353,6 +365,8 @@ async function discoverPlayers(client, { userId, sport = null, limit = 40 } = {}
     playsSport: !!r.plays_sport,
     // Derived home area (see the subquery); null when the player has never booked.
     homeCity: r.home_city ? String(r.home_city) : null,
+    // Best ranked team's ELO (team standing, not a player rating); null when none.
+    topElo: r.top_elo == null ? null : Number(r.top_elo),
     pendingRequest: !!r.pending_request,
     // A direct room between the two already exists — they are connected, so the card
     // offers Message instead of a redundant Request.

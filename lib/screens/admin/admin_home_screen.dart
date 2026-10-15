@@ -21,8 +21,11 @@ class AdminHomeScreen extends StatefulWidget {
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen>
-    with SingleTickerProviderStateMixin, ReconnectRefresh<AdminHomeScreen> {
-  late TabController _tab;
+    with ReconnectRefresh<AdminHomeScreen> {
+  /// The selected in-body destination: 0 Dashboard, 1 Owners-Pending,
+  /// 2 Owners-Approved, 3 Owners-Rejected, 4 Venues. Replaces the old TabController
+  /// — the cramped five-tab header became a sidebar drawer.
+  int _navIndex = 0;
   Map<String, dynamic>? _stats;
   List<Map<String, dynamic>> _pending = [];
   List<Map<String, dynamic>> _approved = [];
@@ -69,22 +72,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     _canSettings = can('platform_settings');
     _canReports = can('financial_reports');
 
-    // Only an owner-approvals admin gets the OWNERS/VENUES tabs; every other admin
-    // has the dashboard alone.
-    _tab = TabController(length: _canOwner ? 5 : 1, vsync: this);
-    if (_canOwner) {
-      _tab.addListener(() {
-        if (!_tab.indexIsChanging) {
-          final statuses = ['pending', 'approved', 'rejected'];
-          if (_tab.index > 0 && _tab.index < 4) {
-            _loadList(statuses[_tab.index - 1]);
-          } else if (_tab.index == 4) {
-            _loadVenues();
-          }
-        }
-      });
-    }
-
+    // Only an owner-approvals admin gets the owner lists / venues destinations;
+    // every other admin has the dashboard alone. The in-body destinations are now
+    // driven by [_navIndex] and the sidebar rather than a TabController.
     _loadStats();
     if (_canOwner) {
       _loadList('pending');
@@ -94,8 +84,22 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     if (_canMatchDisputes) _loadDisputes();
   }
 
-  // On reconnect refresh the desk tiles and whichever list the current tab shows,
-  // so an admin who was offline sees the real queue without a manual pull.
+  /// Select one of the IN-BODY destinations (0 Dashboard, 1 Owners-Pending,
+  /// 2 Owners-Approved, 3 Owners-Rejected, 4 Venues) and refresh what it shows.
+  /// External pages (disputes, users, settings…) open via Navigator from the
+  /// drawer instead; they are not part of this index.
+  void _selectNav(int i) {
+    setState(() => _navIndex = i);
+    const statuses = ['pending', 'approved', 'rejected'];
+    if (i >= 1 && i <= 3) {
+      _loadList(statuses[i - 1]);
+    } else if (i == 4) {
+      _loadVenues();
+    }
+  }
+
+  // On reconnect refresh the desk tiles and whichever list the current destination
+  // shows, so an admin who was offline sees the real queue without a manual pull.
   @override
   void onReconnect() {
     _loadStats();
@@ -103,19 +107,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     if (_canMatchDisputes) _loadDisputes();
     if (!_canOwner) return;
     const statuses = ['pending', 'approved', 'rejected'];
-    if (_tab.index >= 1 && _tab.index <= 3) {
-      _loadList(statuses[_tab.index - 1]);
-    } else if (_tab.index == 4) {
+    if (_navIndex >= 1 && _navIndex <= 3) {
+      _loadList(statuses[_navIndex - 1]);
+    } else if (_navIndex == 4) {
       _loadVenues();
     } else {
       _loadList('pending');
     }
-  }
-
-  @override
-  void dispose() {
-    _tab.dispose();
-    super.dispose();
   }
 
   String get _base => ApiConstants.baseUrl;
@@ -282,18 +280,19 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    // A back gesture off the Dashboard tab returns to it rather than closing the
-    // app; only a back press while already on Dashboard exits.
+    // A back gesture off the Dashboard returns to it rather than closing the app;
+    // only a back press while already on Dashboard exits.
     return PopScope(
-      canPop: !_canOwner || _tab.index == 0,
+      canPop: !_canOwner || _navIndex == 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _canOwner && _tab.index != 0) _tab.animateTo(0);
+        if (!didPop && _canOwner && _navIndex != 0) _selectNav(0);
       },
       child: Scaffold(
       backgroundColor: AppColors.background,
+      drawer: _buildDrawer(),
       appBar: AppBar(
         backgroundColor: AppColors.primary,
-        automaticallyImplyLeading: false,
+        iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -310,7 +309,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
             Flexible(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text('Admin Panel',
+                child: Text(_navTitle,
                     style: GoogleFonts.poppins(
                         color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
               ),
@@ -337,37 +336,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
                 style: GoogleFonts.poppins(
                     color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
           ),
-          IconButton(
-            tooltip: 'Log out',
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).logout();
-              Navigator.pushNamedAndRemoveUntil(context, '/welcome', (r) => false);
-            },
-          ),
         ],
-        bottom: _canOwner
-            ? TabBar(
-                controller: _tab,
-                indicatorColor: AppColors.accent,
-                indicatorWeight: 3,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white54,
-                labelStyle:
-                    GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600),
-                tabs: const [
-                  Tab(text: 'DASHBOARD'),
-                  Tab(text: 'OWNERS (P)'),
-                  Tab(text: 'OWNERS (A)'),
-                  Tab(text: 'OWNERS (R)'),
-                  Tab(text: 'VENUES'),
-                ],
-              )
-            : null,
       ),
+      // The in-body destinations keep their state across switches (IndexedStack
+      // rather than swapping widgets), so returning to a half-scrolled list does
+      // not reset it. Non-owner admins have only the dashboard.
       body: _canOwner
-          ? TabBarView(
-              controller: _tab,
+          ? IndexedStack(
+              index: _navIndex,
               children: [
                 _buildDashboard(),
                 _buildList('pending'),
@@ -381,7 +357,154 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     );
   }
 
-  // Dashboard tab
+  /// The title names the current in-body destination, so the sidebar selection is
+  /// echoed in the bar after the drawer closes.
+  String get _navTitle {
+    if (!_canOwner) return 'Admin Panel';
+    switch (_navIndex) {
+      case 1:
+        return 'Owners · Pending';
+      case 2:
+        return 'Owners · Approved';
+      case 3:
+        return 'Owners · Rejected';
+      case 4:
+        return 'Venues';
+      default:
+        return 'Admin Panel';
+    }
+  }
+
+  /// The sidebar that replaced the cramped five-tab header. It lists every surface
+  /// the signed-in admin may use — the in-body destinations an owner-approvals
+  /// admin has, plus the external pages, each gated by the SAME permission flag the
+  /// dashboard quick action and the route guard use, so a sub-admin never sees an
+  /// entry that would 403.
+  Widget _buildDrawer() {
+    final logout = Provider.of<AuthProvider>(context, listen: false);
+    return Drawer(
+      backgroundColor: Colors.white,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF0A1F13), Color(0xFF166534)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.admin_panel_settings, color: Colors.white, size: 32),
+                  const SizedBox(height: 10),
+                  Text('SportLynk Admin',
+                      style: GoogleFonts.poppins(
+                          color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(_isSuper ? 'Super admin' : 'Administrator',
+                      style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  _navItem(Icons.dashboard_outlined, 'Dashboard', selected: _navIndex == 0,
+                      onTap: () => _goNav(0)),
+                  if (_canOwner) ...[
+                    _navItem(Icons.pending_actions_outlined, 'Owners · Pending',
+                        selected: _navIndex == 1, onTap: () => _goNav(1)),
+                    _navItem(Icons.verified_outlined, 'Owners · Approved',
+                        selected: _navIndex == 2, onTap: () => _goNav(2)),
+                    _navItem(Icons.cancel_outlined, 'Owners · Rejected',
+                        selected: _navIndex == 3, onTap: () => _goNav(3)),
+                    _navItem(Icons.stadium_outlined, 'Venues',
+                        selected: _navIndex == 4, onTap: () => _goNav(4)),
+                  ],
+                  if (_canReview || _canMatchDisputes || _canBookingDisputes ||
+                      _canUsers || _canSettings || _canReports || _isSuper)
+                    const Divider(height: 16),
+                  if (_canReview)
+                    _navItem(Icons.flag_outlined, 'Moderation Queue',
+                        onTap: () { Navigator.pop(context); _openModeration(); }),
+                  if (_canMatchDisputes)
+                    _navItem(Icons.gavel_rounded, 'Match Disputes', onTap: () async {
+                      Navigator.pop(context);
+                      await Navigator.pushNamed(context, '/admin-disputes');
+                      if (mounted) await _loadDisputes();
+                    }),
+                  if (_canBookingDisputes)
+                    _navItem(Icons.receipt_long_outlined, 'Booking Disputes',
+                        onTap: () => _pushRoute('/admin-booking-disputes')),
+                  if (_canUsers)
+                    _navItem(Icons.manage_accounts_outlined, 'Users',
+                        onTap: () => _pushRoute('/admin-users')),
+                  if (_canSettings)
+                    _navItem(Icons.tune_rounded, 'Platform Settings',
+                        onTap: () => _pushRoute('/admin-settings')),
+                  if (_canReports)
+                    _navItem(Icons.summarize_outlined, 'Platform Report',
+                        onTap: () => _pushRoute('/admin-reports')),
+                  if (_isSuper)
+                    _navItem(Icons.admin_panel_settings_outlined, 'Manage Admins',
+                        onTap: () => _pushRoute('/admin-admins')),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            _navItem(Icons.logout, 'Log out', danger: true, onTap: () {
+              logout.logout();
+              Navigator.pushNamedAndRemoveUntil(context, '/welcome', (r) => false);
+            }),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Switch to an in-body destination and close the drawer.
+  void _goNav(int i) {
+    Navigator.pop(context);
+    _selectNav(i);
+  }
+
+  /// Close the drawer, then open an external admin page.
+  void _pushRoute(String route) {
+    Navigator.pop(context);
+    Navigator.pushNamed(context, route);
+  }
+
+  Widget _navItem(IconData icon, String label,
+      {required VoidCallback onTap, bool selected = false, bool danger = false}) {
+    final color = danger
+        ? AppColors.error
+        : selected
+            ? AppColors.accent
+            : AppColors.textPrimary;
+    return Material(
+      color: selected ? AppColors.accentLight : Colors.transparent,
+      child: ListTile(
+        leading: Icon(icon, color: color, size: 22),
+        title: Text(label,
+            style: GoogleFonts.poppins(
+                fontSize: 13.5,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: color)),
+        onTap: onTap,
+        dense: true,
+        minLeadingWidth: 24,
+      ),
+    );
+  }
+
+  // Dashboard
   Widget _buildDashboard() {
     if (_loadingStats) {
       return const Center(child: CircularProgressIndicator(color: AppColors.accent));
@@ -540,7 +663,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen>
     }
     if (_canOwner) {
       add(_quickAction(Icons.pending_actions, 'Review Pending Registrations',
-          '${s['pendingRegistrations'] ?? 0} awaiting review', () => _tab.animateTo(1)));
+          '${s['pendingRegistrations'] ?? 0} awaiting review', () => _selectNav(1)));
     }
     if (_canReview) {
       add(_quickAction(Icons.flag_outlined, 'Moderation Queue',

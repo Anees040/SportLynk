@@ -40,9 +40,30 @@ function localDateStr(v) {
 }
 
 /**
+ * The shortest notice a slot may be posted with. A card lives only until its slot
+ * starts (`expires_at`), so posting one that begins in minutes would offer an
+ * opponent a slot they cannot realistically accept, travel to and play. Refusing it
+ * here rather than letting the poster learn from an empty card is the difference
+ * between a rule and a guess.
+ *
+ * It is deliberately the ONLY new constraint in this file. The claim window changes
+ * nothing about which bookings are postable beyond this floor, so a poster's
+ * exposure stays exactly what it was: their own confirmed booking, cancellable
+ * under the ordinary policy until an opponent claims it.
+ */
+const MIN_NOTICE_HOURS = 2;
+
+/**
  * Is the open_challenges table present (migration 041)? Guard the whole feature so
  * it degrades to a clean 503 rather than a raw 42P01 on a database where the
- * concurrent session's migration has not been applied yet. Cached true-only.
+ * concurrent session's migration has not been applied yet.
+ *
+ * A POSITIVE answer is cached for the life of the process, because a table cannot
+ * disappear. A NEGATIVE answer is not, because it can become stale: the API is
+ * routinely left running (`npm run dev`) while a migration is applied underneath it,
+ * and caching the miss would park the whole feature behind a "not available yet"
+ * until someone happened to restart the server. `slotService.venueColumns` handles
+ * the same problem the same way.
  */
 let tablePresent = false;
 async function hasTable(client) {
@@ -77,7 +98,10 @@ async function postChallenge(client, { userId, teamId, bookingId }) {
   const { rows: bRows } = await client.query(
     `SELECT b.id, b.slot_date, b.start_time, b.status::text AS status,
             lower(v.sport_type) AS venue_sport,
-            ((b.slot_date::DATE + b.start_time::TIME) > (NOW() AT TIME ZONE $3)) AS is_future
+            ((b.slot_date::DATE + b.start_time::TIME) > (NOW() AT TIME ZONE $3)) AS is_future,
+            (EXTRACT(EPOCH FROM
+               (((b.slot_date::DATE + b.start_time::TIME) AT TIME ZONE $3) - NOW())
+             ) / 3600.0) AS hours_until
        FROM bookings b
        JOIN venues v ON v.id = b.venue_id
       WHERE b.id = $1 AND b.player_id = $2`,
@@ -90,6 +114,13 @@ async function postChallenge(client, { userId, teamId, bookingId }) {
   }
   if (booking.is_future !== true) {
     return fail(409, 'slot_past', 'That slot has already started. Pick an upcoming booking.');
+  }
+  // This is also the exact notice the board's `expires_at` gives the card, so the
+  // floor is not an extra rule bolted on: it is the same number read back.
+  if (Number(booking.hours_until) < MIN_NOTICE_HOURS) {
+    return fail(409, 'too_soon',
+      `That slot starts in under ${MIN_NOTICE_HOURS} hours, which is not enough notice for `
+      + 'another team to accept it. Pick a later booking.');
   }
   if (['football', 'cricket'].includes(booking.venue_sport)
       && booking.venue_sport !== team.sport) {
@@ -368,6 +399,7 @@ const claimChallengeTx = (input) => runInTx((c) => claimChallenge(c, input));
 const cancelChallengeTx = (input) => runInTx((c) => cancelChallenge(c, input));
 
 module.exports = {
+  MIN_NOTICE_HOURS,
   postChallenge,
   postChallengeTx,
   listBoard,

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/colors.dart';
-import '../models/chat_channel.dart' show ChatChannelType;
 import '../models/play_request.dart';
 import '../providers/auth_provider.dart';
 import '../services/request_service.dart';
@@ -31,7 +30,7 @@ class DiscoverPlayersList extends StatefulWidget {
   State<DiscoverPlayersList> createState() => _DiscoverPlayersListState();
 }
 
-enum _Sort { active, trust }
+enum _Sort { active, trust, rating }
 
 class _DiscoverPlayersListState extends State<DiscoverPlayersList>
     with ReconnectRefresh<DiscoverPlayersList> {
@@ -131,19 +130,6 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
     );
   }
 
-  // The 1:1 room the viewer already shares with a connected player. Same named-route
-  // the requests inbox uses to open an accepted request's room.
-  void _openChat(DiscoverPlayer p) {
-    final id = p.channelId;
-    if (id == null || id.isEmpty) return;
-    Navigator.pushNamed(context, '/chat-thread', arguments: {
-      'channelId': id,
-      'type': ChatChannelType.direct.wire,
-      'title': p.name,
-      'imageUrl': p.avatarUrl,
-    });
-  }
-
   // The distinct sports and areas actually present in the loaded list — the filter
   // only ever offers a value some player can be found under.
   List<String> get _sportsPresent {
@@ -169,6 +155,10 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
   List<DiscoverPlayer> get _visible {
     final q = _query.trim().toLowerCase();
     final out = (_players ?? const <DiscoverPlayer>[]).where((p) {
+      // A player the viewer already matched with (an accepted request opened a DM)
+      // has no place in the scout list — they live in the chat inbox now. Hiding
+      // them keeps this list to people the viewer can still send a request to.
+      if (p.connected) return false;
       if (q.isNotEmpty && !p.name.toLowerCase().contains(q)) return false;
       if (_sport != null && !p.sports.map((s) => s.toLowerCase()).contains(_sport)) {
         return false;
@@ -180,10 +170,18 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
         (b.trustScore ?? -1).compareTo(a.trustScore ?? -1);
     int byActivity(DiscoverPlayer a, DiscoverPlayer b) =>
         b.bookings30d.compareTo(a.bookings30d);
+    int byRating(DiscoverPlayer a, DiscoverPlayer b) =>
+        (b.topElo ?? -1).compareTo(a.topElo ?? -1);
     out.sort((a, b) {
-      final primary = _sort == _Sort.trust ? byTrust(a, b) : byActivity(a, b);
+      final primary = switch (_sort) {
+        _Sort.rating => byRating(a, b),
+        _Sort.trust => byTrust(a, b),
+        _Sort.active => byActivity(a, b),
+      };
       if (primary != 0) return primary;
-      return _sort == _Sort.trust ? byActivity(a, b) : byTrust(a, b);
+      // A sensible, stable tiebreak so equal-primary rows do not jump around.
+      final t = byTrust(a, b);
+      return t != 0 ? t : byActivity(a, b);
     });
     return out;
   }
@@ -319,6 +317,7 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
                   items: const {
                     _Sort.active: 'Most active',
                     _Sort.trust: 'Highest trust',
+                    _Sort.rating: 'Top rating',
                   },
                   onChanged: (v) => setState(() => _sort = v),
                 ),
@@ -495,7 +494,13 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
                       runSpacing: 4,
                       children: [
                         if (p.trustScore != null) _trustChip(p.trustScore!),
-                        if (p.bookings30d > 0)
+                        // The skill signal: the player's best ranked TEAM's standing
+                        // (players have no ELO of their own). Falls back to recent
+                        // activity when they are on no ranked team, so the row is
+                        // never more than two chips.
+                        if (p.topElo != null)
+                          _metaChip(Icons.emoji_events_outlined, '${p.topElo}')
+                        else if (p.bookings30d > 0)
                           _metaChip(Icons.bolt, '${p.bookings30d}'),
                       ],
                     ),
@@ -599,31 +604,8 @@ class _DiscoverPlayersListState extends State<DiscoverPlayersList>
         ),
       );
     }
-    // Already connected (an accepted request opened a DM) — offer the chat, not a
-    // second Request. The server also refuses a fresh ask to a connected player.
-    if (p.connected) {
-      return SizedBox(
-        width: double.infinity,
-        height: 36,
-        child: OutlinedButton(
-          onPressed: () => _openChat(p),
-          style: OutlinedButton.styleFrom(
-            padding: EdgeInsets.zero,
-            foregroundColor: AppColors.primary,
-            side: const BorderSide(color: AppColors.primary),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.chat_bubble_outline, size: 14),
-              SizedBox(width: 4),
-              Text('Message', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ),
-      );
-    }
+    // Already connected players are filtered out of the list entirely (see
+    // _visible), so a card here is always someone the viewer can still ask.
     if (asked) {
       return const SizedBox(
         height: 36,

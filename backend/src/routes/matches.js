@@ -346,7 +346,14 @@ router.get('/linkable-bookings', async (req, res, next) => {
       `SELECT b.id, b.slot_date, b.start_time, b.end_time, b.total_amount,
               b.status::text AS status,
               v.id AS venue_id, v.name AS venue_name, v.city AS venue_city,
-              v.sport_type
+              v.sport_type,
+              -- How much notice this slot has left. The open-challenge board refuses
+              -- a post under its own minimum notice, and the client reads this to
+              -- grey out a booking it would only be refused for, rather than
+              -- offering a choice that cannot be taken.
+              (EXTRACT(EPOCH FROM
+                 (((b.slot_date::DATE + b.start_time::TIME) AT TIME ZONE $2) - NOW())
+               ) / 3600.0) AS hours_until
          FROM bookings b
          JOIN venues v ON v.id = b.venue_id
         WHERE b.player_id = $1
@@ -378,6 +385,7 @@ router.get('/linkable-bookings', async (req, res, next) => {
       venueName: r.venue_name,
       venueCity: r.venue_city,
       venueSport: r.sport_type,
+      hoursUntil: r.hours_until == null ? null : Number(r.hours_until),
     })));
   } catch (e) {
     const f = friendlyDbError(e);

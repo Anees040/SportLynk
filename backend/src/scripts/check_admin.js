@@ -484,9 +484,13 @@ function block1Refusals() {
   check(!cm.ok, 'a 60% commission is refused (the accessor stops at 50)');
   eq(msg(cm, 'commission_pct'), 'Must be between 0% and 50%.', 'and the message carries the unit');
 
-  const both = bad({ commission_pct: 50, deposit_pct: 60 });
-  check(!both.ok, 'commission + deposit over 100% of the slot price is refused');
-  has(msg(both, 'commission_pct'), 'cannot exceed 100%', 'and says why (nobody has that money)');
+  // The deposit is no longer an admin field (it is per-venue, migration 043), so a
+  // patch that names it is rejected as unknown rather than bounds-checked here —
+  // which is the point: the admin configures platform fees, not a venue's deposit.
+  const depGone = bad({ deposit_pct: 60 });
+  check(!depGone.ok, 'deposit_pct is no longer an admin setting');
+  eq(msg(depGone, 'deposit_pct'), 'Unknown setting.',
+    'the admin screen does not offer a venue deposit control');
 
   const split = bad({ 'tournament.winner_percent': 80 });
   check(!split.ok, 'a half-finished prize split (80 with the stored 30) is refused');

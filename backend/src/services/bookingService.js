@@ -121,6 +121,27 @@ async function hasGroupColumns(client) {
 }
 
 /**
+ * The deposit percent one booking is priced at: the venue's own when it has set one,
+ * otherwise the platform's.
+ *
+ * `null` and `undefined` both mean "inherit". NULL is what `venues.deposit_pct`
+ * holds for a venue whose owner has not chosen (migration 043), and `undefined` is
+ * what the property is on a database where that migration has not been applied —
+ * the two are the same decision made in different places and are answered the same
+ * way. A value outside 0–100 is treated as unset rather than clamped: the column
+ * carries a CHECK, so a number outside it did not come from the app, and silently
+ * turning 500 into 100 would put a fabricated deposit on a real booking.
+ *
+ * 0 is a real choice, not a falsy miss — an owner may decide their ground takes no
+ * deposit — so the test is `Number.isFinite`, not truthiness.
+ */
+function venueDepositPct(venuePct, platformPct) {
+  const v = Number(venuePct);
+  if (venuePct != null && Number.isFinite(v) && v >= 0 && v <= 100) return v;
+  return platformPct;
+}
+
+/**
  * Is `slots.relisted_at` (migration 042) present? Guards the item-8 re-listing stamp
  * so a cancellation still succeeds on a database where 042 has not been applied yet —
  * the badge simply does not appear until it is. Cached true-only, like the group probe.
@@ -173,6 +194,13 @@ async function createBooking(client, {
   //    players don't both fill in the same form (SRS ER1.5).
   const slotRes = await client.query(
     `SELECT s.*, v.name as venue_name, v.price_per_hour, v.owner_id, v.sport_type AS venue_sport,
+            -- Read through to_jsonb, not as a named column: venues.deposit_pct
+            -- arrives with migration 043, and this is the live booking path, so
+            -- naming the column before the migration is applied would throw
+            -- "column does not exist" and break every booking. Absent reads as
+            -- NULL, which venueDepositPct() treats as "inherit the platform rate" —
+            -- exactly the behaviour from before the column existed.
+            (to_jsonb(v) ->> 'deposit_pct')::numeric AS venue_deposit_pct,
             (s.locked_until IS NOT NULL AND s.locked_until > NOW()) AS is_held
        FROM slots s JOIN venues v ON v.id = s.venue_id
       WHERE s.id=$1 AND s.venue_id=$2
@@ -204,17 +232,26 @@ async function createBooking(client, {
       `${slot.venue_sport} bookings are paused on SportLynk right now.`);
   }
 
-  // Escrow = full slot price. Deposit = the admin-configured percent of it, read
-  // inside this transaction and stamped onto the row below.
+  // Escrow = full slot price. Deposit = the venue's own percent when it has one,
+  // otherwise the admin's platform-wide setting. Both are read inside this
+  // transaction and stamped onto the row below.
+  //
+  // A venue's `deposit_pct` (migration 043) is nullable and NULL is the normal case:
+  // it means "inherit the platform setting". It is read as `venue_deposit_pct` in the
+  // slot query above (through to_jsonb, so a database without the column reads NULL
+  // rather than throwing), and venueDepositPct() then falls back to the platform
+  // rate — the behaviour that shipped before the column existed.
   //
   // Why the value is also pushed into `POLICY`
   // ~30 places describe the policy in synchronous copy ("20% is at risk") off
   // `POLICY.DEPOSIT_PERCENT`. Syncing it here means the sentence a player read on
   // the quote screen and the amount this row holds are the same number even in a
-  // process that booted before the admin changed it. What is held is this column;
-  // every refund reads `bookings.deposit_amount`, so a later change cannot rewrite
-  // a deal a player already agreed to.
-  const depositPct = await settings.deposit({ client });
+  // process that booted before the admin changed it — and, now that the number can
+  // vary per venue, the same mechanism is what keeps that copy honest for a venue
+  // whose owner set 100%. What is held is this column; every refund reads
+  // `bookings.deposit_amount`, so a later change cannot rewrite a deal a player
+  // already agreed to.
+  const depositPct = venueDepositPct(slot.venue_deposit_pct, await settings.deposit({ client }));
   setDepositPercent(depositPct, 'booking');
   // The discount is applied to the slot price BEFORE escrow and deposit are
   // derived, so every downstream figure — what is frozen, what is at risk, what a
@@ -969,4 +1006,5 @@ module.exports = {
   listCancellable,
   listMyBookings,
   runInTx,
+  venueDepositPct,
 };

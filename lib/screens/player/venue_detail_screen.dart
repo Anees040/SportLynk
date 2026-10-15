@@ -401,10 +401,11 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   /// player in a single line: tap consecutive slots to add hours, tap a selected
   /// slot to drop it and anything after it.
   ///
-  /// A tap on a slot that does not touch either end of the run replaces the
-  /// selection with that slot alone. That is a deliberate choice over showing an
-  /// error: a player tapping a distant hour means "that one instead", and a
-  /// selection the server would refuse should never be reachable.
+  /// A tap on a slot that does not touch either end of the run: with 0–1 slots held
+  /// it switches the pick to that slot; once a multi-slot run is being built (2+) the
+  /// run is KEPT, with a hint, rather than wiped. Losing a half-built run to a tap on
+  /// a non-adjacent hour — which happens when a booked/held slot sits between two that
+  /// look adjacent in the grid — read as a glitch, so it no longer clears silently.
   Future<void> _onSlotTap(
     Map<String, dynamic> slot,
     bool isCurrentlySelected,
@@ -431,6 +432,15 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     // slot under a row lock, so a selection that loses a hold still fails safely
     // at confirm time rather than letting the player pay twice.
     final extends_ = _extendsRun(slot);
+    // Never silently wipe a run the player has already built. A non-adjacent tap once
+    // 2+ slots are held almost always means a booked/held hour sits between the two
+    // (the grid shows it, un-tappable, but it breaks the back-to-back rule the server
+    // requires) — clearing everything then read as a glitch. Keep the run and say how.
+    if (!extends_ && _selected.length >= 2) {
+      _snack('A single booking must be back-to-back slots. Tap one right next to your '
+          'selection, or tap a selected slot to drop it.');
+      return;
+    }
     setState(() {
       if (!extends_) _clearSelection();
       _selected.add(slot);
@@ -640,8 +650,17 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
         physics: const BouncingScrollPhysics(),
         slivers: [
           // Hero gallery
+          //
+          // The rating and photo-count badges used to sit ON the image, at top:90
+          // inside the same Stack as a gradient that covers the lower 70% and a
+          // venue name pinned to the bottom. On a 412-wide phone the three collided:
+          // the name block ran up into the badge row and the page dots sat under the
+          // gradient's densest band. They are moved BELOW the media container
+          // instead, which fixes the overlap without changing what either one means
+          // — and leaves the photo band itself uncluttered, which is the point of
+          // having a gallery.
           SliverAppBar(
-            expandedHeight: 280,
+            expandedHeight: 320,
             pinned: true,
             backgroundColor: AppColors.primary,
             iconTheme: const IconThemeData(color: Colors.white),
@@ -653,28 +672,42 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                       controller: _galleryCtrl,
                       itemCount: images.length,
                       onPageChanged: (i) => setState(() => _galleryPage = i),
-                      itemBuilder: (_, i) => Image.network(
-                        images[i],
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        errorBuilder: (_, e, st) =>
-                            _gradientPlaceholder(sportType),
+                      itemBuilder: (_, i) => Semantics(
+                        // Each page announces where it is in the set, so the carousel
+                        // is not a silent swipe for a screen reader.
+                        label: 'Photo ${i + 1} of ${images.length}',
+                        image: true,
+                        child: Image.network(
+                          images[i],
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          errorBuilder: (_, e, st) =>
+                              _gradientPlaceholder(sportType),
+                        ),
                       ),
                     )
                   else
                     _gradientPlaceholder(sportType),
                   // Gradient overlay at bottom
+                  //
+                  // Only the lower band is darkened now that the badges have moved
+                  // off the image. The old stop at 0.3 threw a near-opaque black over
+                  // 70% of every photo to make two small pills legible; with the
+                  // photography carrying the page, the gradient's only remaining job
+                  // is keeping the venue name readable over a bright pitch.
                   Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          stops: const [0.3, 1.0],
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.85),
-                          ],
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            stops: const [0.55, 1.0],
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.82),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -682,7 +715,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                   // Page indicator dots
                   if (images.length > 1)
                     Positioned(
-                      bottom: 90,
+                      bottom: 76,
                       left: 0,
                       right: 0,
                       child: Row(
@@ -704,87 +737,9 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                         ),
                       ),
                     ),
-                  // Photo count badge
-                  if (images.length > 1)
-                    Positioned(
-                      top: 90,
-                      right: 16,
-                      child: SafeArea(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.photo_library_outlined,
-                                color: Colors.white,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${_galleryPage + 1}/${images.length}',
-                                style: GoogleFonts.poppins(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  // Rating badge
-                  Positioned(
-                    top: 90,
-                    left: 16,
-                    child: SafeArea(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black45,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.star_rounded,
-                              color: Colors.amber,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${_venue!['rating'] ?? '0.0'}',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              ' (${_venue!['total_reviews'] ?? 0})',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white70,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Venue name at bottom of hero
+                  // Venue name at bottom of hero. The rating and photo-count badges
+                  // that used to share this band are rendered below the image by
+                  // _galleryMetaRow.
                   Positioned(
                     bottom: 16,
                     left: 16,
@@ -827,6 +782,10 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
               ),
             ),
           ),
+
+          // The rating and photo count, directly under the media container rather
+          // than floating on top of it. See the gallery comment above for why.
+          SliverToBoxAdapter(child: _galleryMetaRow(images.length)),
 
           // VENUE INFO card
           SliverToBoxAdapter(
@@ -1214,131 +1173,19 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                               slot['status'] ??
                               'available')
                           .toString();
-                  final selectable = _isSelectable(slot);
-                  final selected = _isSelected(slot);
-                  final time12 = _to12Hour(slot['start_time']);
-                  final slotPrice = asNum(slot['price']);
-                  final statusColor = _slotStatusColor(status);
-                  final relisted = _isRelisted(slot);
-
-                  return GestureDetector(
-                    onTap: (selectable || selected)
-                        ? () => _onSlotTap(slot, selected)
-                        : null,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      decoration: BoxDecoration(
-                        gradient: selected
-                            ? const LinearGradient(
-                                colors: [Color(0xFF0A1F13), Color(0xFF166534)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              )
-                            : null,
-                        color: selected
-                            ? null
-                            : selectable
-                            ? Colors.white
-                            : statusColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: selected
-                              ? AppColors.primary
-                              : selectable
-                              ? AppColors.border
-                              : statusColor.withValues(alpha: 0.3),
-                          width: selected ? 2 : 1,
-                        ),
-                        boxShadow: selected
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.25,
-                                  ),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                time12,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: selected
-                                      ? Colors.white
-                                      : selectable
-                                          ? AppColors.textPrimary
-                                          : statusColor,
-                                  decoration: !selectable
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              if (selectable)
-                                Text(
-                                  'PKR ${slotPrice.toStringAsFixed(0)}',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 9,
-                                    color: selected
-                                        ? Colors.white70
-                                        : AppColors.textSecondary,
-                                  ),
-                                )
-                              else
-                                Text(
-                                  _slotStatusLabel(status),
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 8,
-                                    color: statusColor,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          // Item 8: a slot freed by a near-kickoff cancellation wears a
-                          // small accent tag so a browsing player spots it and can grab
-                          // it before it is gone again.
-                          if (relisted && !selected)
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 5, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: AppColors.accent,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'NEW',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 7,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
+                  return _slotCell(slot, status);
                 }, childCount: _slots.length),
+                // Two across with a fixed row height, rather than three across at a
+                // 2:1 ratio. Three columns gave each cell about 120x60 logical
+                // pixels, which is one line of 12px text and a second line of 9px —
+                // and the price and the state label were fighting for that second
+                // line, so the only thing telling "Booked" from "Blocked" was a hue.
+                // Two columns at a set height lets the state be a real row of its own.
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                  crossAxisCount: 2,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
-                  childAspectRatio: 2.0,
+                  mainAxisExtent: 84,
                 ),
               ),
             ),
@@ -1395,6 +1242,230 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           // Clears the floating booking bar at the end of the scroll.
           const SliverToBoxAdapter(child: SizedBox(height: 90)),
         ],
+      ),
+    );
+  }
+
+  /// The rating and the photo position, on their own row under the gallery.
+  ///
+  /// Both used to be pills stacked on the hero image, where a gradient overlay and
+  /// the venue name competed with them for the same 280 pixels. Moving them here
+  /// costs a 44-pixel strip of the page and buys a photo that is not covered, a
+  /// count that cannot collide with the title, and a rating that sits next to the
+  /// price rather than on top of the venue a player is deciding about.
+  ///
+  /// The row always renders, even with one photo and no reviews, so the layout does
+  /// not shift between venues — an unrated ground shows "New" where a rated one
+  /// shows its score, which is a fact about the venue rather than an empty slot.
+  Widget _galleryMetaRow(int imageCount) {
+    final rating = asNum(_venue!['rating']);
+    final reviews = asNum(_venue!['total_reviews']).toInt();
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: Row(
+        children: [
+          const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
+          const SizedBox(width: 5),
+          Text(
+            reviews == 0 ? 'New' : rating.toStringAsFixed(1),
+            style: GoogleFonts.poppins(
+              fontSize: 13.5,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          if (reviews > 0) ...[
+            const SizedBox(width: 3),
+            Text(
+              '($reviews ${reviews == 1 ? 'review' : 'reviews'})',
+              style: GoogleFonts.poppins(
+                fontSize: 11.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+          const Spacer(),
+          if (imageCount > 1) ...[
+            const Icon(Icons.photo_library_outlined,
+                size: 15, color: AppColors.textSecondary),
+            const SizedBox(width: 5),
+            Text(
+              '${_galleryPage + 1} of $imageCount',
+              style: GoogleFonts.poppins(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// One slot cell, in one of four visible states that differ by SHAPE and not
+  /// only by colour, so the grid is legible to a player who cannot separate the
+  /// SRS green/amber/red/blue by hue:
+  ///
+  ///   - available  — white fill, hairline border, centred time over its price;
+  ///   - selected   — the dark-green gradient with a check mark, so a chosen slot
+  ///                  reads at a glance and survives a colour-blind test;
+  ///   - held       — blue tint; a hold this player owns stays tappable and says
+  ///                  "YOURS", one held by someone else is struck through;
+  ///   - booked /   — flat grey fill, the time struck through and the state spelled
+  ///     blocked      out in words, with no price (there is nothing to buy).
+  ///
+  /// The time is centred rather than left-aligned (the old 3-across cell left it
+  /// hard against the edge), and the price sits on its own line beneath it rather
+  /// than sharing a slot with the state label.
+  Widget _slotCell(Map<String, dynamic> slot, String status) {
+    final selectable = _isSelectable(slot);
+    final selected = _isSelected(slot);
+    final mineHold = slot['locked_by_me'] == true;
+    final time12 = _to12Hour(slot['start_time']);
+    final slotPrice = asNum(slot['price']);
+    final statusColor = _slotStatusColor(status);
+    final relisted = _isRelisted(slot);
+
+    final Color fill;
+    final Color borderColor;
+    final double borderWidth;
+    if (selected) {
+      fill = Colors.transparent; // the gradient below paints it
+      borderColor = AppColors.primary;
+      borderWidth = 2;
+    } else if (selectable) {
+      fill = Colors.white;
+      borderColor = AppColors.border;
+      borderWidth = 1;
+    } else {
+      fill = statusColor.withValues(alpha: 0.08);
+      borderColor = statusColor.withValues(alpha: 0.35);
+      borderWidth = 1;
+    }
+
+    // The second line: a price when there is something to buy, the state in words
+    // otherwise. "YOURS" for the player's own hold, which is still bookable.
+    final Widget secondLine = selectable
+        ? Text(
+            'PKR ${slotPrice.toStringAsFixed(0)}',
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : AppColors.accent,
+            ),
+          )
+        : Text(
+            mineHold ? 'YOURS' : _slotStatusLabel(status),
+            style: GoogleFonts.poppins(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: statusColor,
+            ),
+          );
+
+    return Semantics(
+      button: selectable || selected,
+      label: selectable || selected
+          ? '$time12, PKR ${slotPrice.toStringAsFixed(0)}${selected ? ', selected' : ''}'
+          : '$time12, ${mineHold ? 'held by you' : _slotStatusLabel(status).toLowerCase()}',
+      child: GestureDetector(
+        onTap: (selectable || selected) ? () => _onSlotTap(slot, selected) : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            gradient: selected
+                ? const LinearGradient(
+                    colors: [Color(0xFF0A1F13), Color(0xFF166534)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: fill,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderColor, width: borderWidth),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (selected) ...[
+                          const Icon(Icons.check_circle,
+                              size: 14, color: Colors.white),
+                          const SizedBox(width: 4),
+                        ],
+                        Flexible(
+                          child: Text(
+                            time12,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.bold,
+                              color: selected
+                                  ? Colors.white
+                                  : selectable
+                                      ? AppColors.textPrimary
+                                      : statusColor,
+                              decoration: (!selectable && !mineHold)
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    secondLine,
+                  ],
+                ),
+              ),
+              // Item 8: a slot freed by a near-kickoff cancellation wears a small
+              // accent tag so a browsing player spots it before it is gone again.
+              if (relisted && !selected)
+                Positioned(
+                  top: 5,
+                  right: 5,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'NEW',
+                      style: GoogleFonts.poppins(
+                        fontSize: 7,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

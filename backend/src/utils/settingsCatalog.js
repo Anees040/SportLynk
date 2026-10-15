@@ -41,7 +41,7 @@ const { DEFAULTS } = require('./globalSettings');
 
 /** Section order, exactly as the admin screen shows it. */
 const SECTIONS = [
-  { key: 'money', label: 'Commission & deposits', hint: 'The platform’s cut, and how much a player puts at risk.' },
+  { key: 'money', label: 'Commission', hint: 'The platform’s cut of a booked slot. The at-risk deposit is set per venue by its owner.' },
   { key: 'sports', label: 'Sports', hint: 'Switch a sport off to stop new venues and new bookings for it.' },
   { key: 'elo', label: 'Ratings (ELO)', hint: 'How far one match can move a team’s rating.' },
   { key: 'match', label: 'Matches & disputes', hint: 'Challenge windows, result deadlines, and when a rating freezes.' },
@@ -65,12 +65,12 @@ const FIELDS = {
     label: 'Platform commission',
     description: 'Taken from the venue owner’s earnings when a booking is checked in. The player never pays it, and it is 0 by default.',
   },
-  deposit_pct: {
-    row: 'deposit_pct', path: null, section: 'money',
-    type: 'number', min: 0, max: 100, step: 5, unit: '%', readClamp: [0, 100],
-    label: 'At-risk deposit',
-    description: 'The share of the slot price a player forfeits on a no-show. Applies to NEW bookings only — an existing booking keeps the amount it was created with.',
-  },
+  // The at-risk deposit is no longer an admin setting. It is a per-venue policy the
+  // owner sets (venues.deposit_pct, migration 043), falling back to the
+  // global_settings.deposit_pct row when a venue has not set one. The row and the
+  // `settings.deposit()` accessor remain as that fallback; it is simply not exposed
+  // here, because the admin configures platform fees — commission and tournament —
+  // not a venue's deposit. (FR owner-2 / admin fee scope.)
   sports_enabled: {
     row: 'sports_enabled', path: null, section: 'sports',
     type: 'sports', readClamp: null,
@@ -410,17 +410,10 @@ function validate(patch, rawByRow) {
   // Checked against `next`, so they hold for the state after the save whether or
   // not the admin sent both halves in this request.
 
-  // The platform cannot take more than exists. Commission comes out of the owner's
-  // earnings and the deposit out of the player's escrow, so together over 100% of
-  // the slot price means one of them is being paid with money nobody has.
-  const comm = Number(next.commission_pct);
-  const dep = Number(next.deposit_pct);
-  if (Number.isFinite(comm) && Number.isFinite(dep) && comm + dep > 100) {
-    errors.push({
-      key: 'commission_pct',
-      message: `Commission (${comm}%) plus the deposit (${dep}%) comes to ${Math.round((comm + dep) * 100) / 100}% of the slot price. Together they cannot exceed 100%.`,
-    });
-  }
+  // The commission + deposit <= 100 rule is gone: the deposit is no longer an admin
+  // field (it is per-venue, migration 043), so the admin has only the commission to
+  // set here and there is no second share to add it to. The per-venue deposit is
+  // bounded 0..100 by its own column CHECK and the owner route.
 
   // `globalSettings.tournament()` silently reverts both to 70/30 when they do not
   // total 100. Rejecting here is the difference between an error and a lie.

@@ -15,7 +15,6 @@ import 'services/push_service.dart';
 import 'utils/deep_link.dart';
 
 /// Entry point and nothing else.
-///
 /// The three things that used to live here now live where they belong:
 ///   • the named-route table  → `routes/app_routes.dart`
 ///   • the theme + scroll behaviour → `constants/app_theme.dart`

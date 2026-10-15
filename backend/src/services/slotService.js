@@ -42,37 +42,45 @@ const VENUE_COLUMNS = `id, name, city, sport_type, rating, price_per_hour, base_
                        operating_hours_from, operating_hours_to`;
 
 /**
- * `venues.slot_duration_minutes` arrives with migration 034, and this service runs
- * against a database where that migration may not be applied yet. Naming the
- * column in a SELECT before it exists would throw `column does not exist` and take
- * every slot generation path down with it — a venue create, the hourly sweep and
- * the owner's generate button — so its presence is probed once and the column list
- * is assembled from the answer. Until the migration runs, every venue is read as
- * having no stated duration and `grid.durationOf` returns the 60-minute default,
- * which is exactly the behaviour that shipped before.
+ * `venues.slot_duration_minutes` arrives with migration 034 and
+ * `venues.ai_pricing_enabled` with 043, and this service runs against a database
+ * where either migration may not be applied yet. Naming a column in a SELECT before
+ * it exists would throw `column does not exist` and take every slot generation path
+ * down with it — a venue create, the hourly sweep and the owner's generate button —
+ * so each optional column's presence is probed once and the list is assembled from
+ * the answer.
+ *
+ * Until 034 runs, every venue is read as having no stated duration and
+ * `grid.durationOf` returns the 60-minute default. Until 043 runs, every venue is
+ * read as AI-priced, which is what the column's own default says and what the
+ * behaviour was before it existed.
  *
  * A positive answer is cached for the life of the process because a column cannot
- * disappear. A negative answer is not cached, so applying the migration takes
- * effect on the next call rather than requiring a restart.
+ * disappear. A negative answer is not, so applying a migration takes effect on the
+ * next call rather than requiring a restart.
  */
-let durationColumnPresent = false;
+const OPTIONAL_VENUE_COLUMNS = ['slot_duration_minutes', 'ai_pricing_enabled'];
+const optionalVenueColumnsPresent = new Set();
 
 async function venueColumns(db) {
-  if (durationColumnPresent) return `${VENUE_COLUMNS}, slot_duration_minutes`;
-  try {
-    const { rows } = await db.query(
-      `SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'venues'
-          AND column_name = 'slot_duration_minutes'`,
-    );
-    durationColumnPresent = rows.length === 1;
-  } catch {
-    // An unreadable catalogue is not a reason to stop generating slots at the
-    // default duration; the next call probes again.
-    durationColumnPresent = false;
+  const missing = OPTIONAL_VENUE_COLUMNS.filter((c) => !optionalVenueColumnsPresent.has(c));
+  if (missing.length) {
+    try {
+      const { rows } = await db.query(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'venues'
+            AND column_name = ANY($1::text[])`,
+        [missing],
+      );
+      for (const r of rows) optionalVenueColumnsPresent.add(r.column_name);
+    } catch {
+      // An unreadable catalogue is not a reason to stop generating slots. The next
+      // call probes again; until then the generator runs on the defaults.
+    }
   }
-  return durationColumnPresent ? `${VENUE_COLUMNS}, slot_duration_minutes` : VENUE_COLUMNS;
+  const extra = OPTIONAL_VENUE_COLUMNS.filter((c) => optionalVenueColumnsPresent.has(c));
+  return extra.length ? `${VENUE_COLUMNS}, ${extra.join(', ')}` : VENUE_COLUMNS;
 }
 
 /**
@@ -366,6 +374,15 @@ async function repriceVenueSlots(runner, { venueId, venue = null, dryRun = false
     const r = await db.query(`SELECT ${await venueColumns(db)} FROM venues WHERE id = $1`, [id]);
     if (!r.rows.length) return { ok: false, repriced: 0, reason: 'venue not found' };
     row = r.rows[0];
+  }
+
+  // The owner switched AI pricing off for this venue (migration 043). Their price
+  // stands until they change it, and a maintenance sweep must not be the thing that
+  // quietly overrides a business decision. Read as `!== false` so a database without
+  // the column — where the property is undefined — keeps repricing exactly as it did
+  // before the column existed.
+  if (row.ai_pricing_enabled === false) {
+    return { ok: true, repriced: 0, reason: 'ai pricing disabled by owner', bySource: { model: 0, heuristic: 0 } };
   }
 
   const win = grid.resolveWindow(row);

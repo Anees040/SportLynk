@@ -768,32 +768,32 @@ class _ChatRow extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        decoration: const BoxDecoration(
-          color: AppColors.cardBg,
-          border: Border(bottom: BorderSide(color: AppColors.divider, width: 0.6)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        color: AppColors.cardBg,
+        child: Column(
           children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: AppColors.accentLight,
-              backgroundImage: hasImg ? CachedNetworkImageProvider(img) : null,
-              child: hasImg
-                  ? null
-                  : Icon(_fallbackIcon, size: 22, color: AppColors.primary),
-            ),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Column(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          channel.title,
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: AppColors.accentLight,
+                    backgroundImage: hasImg ? CachedNetworkImageProvider(img) : null,
+                    child: hasImg
+                        ? null
+                        : Icon(_fallbackIcon, size: 22, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                channel.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -872,8 +872,18 @@ class _ChatRow extends StatelessWidget {
                       ),
                     ),
                   ],
+                      ],
+                    ),
+                  ),
                 ],
               ),
+            ),
+            // Indented to the text column (16 gutter + 48 avatar + 13 gap), so the
+            // hairline aligns with the title and the avatar is un-bordered —
+            // matching the WhatsApp-style inset used by the Teams list.
+            const Padding(
+              padding: EdgeInsets.only(left: 77),
+              child: Divider(height: 0.6, thickness: 0.6, color: AppColors.divider),
             ),
           ],
         ),
