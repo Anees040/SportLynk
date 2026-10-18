@@ -36,6 +36,18 @@
  */
 const MAX_GROUP_SLOTS = 4;
 
+/**
+ * The most slots one checkout may cover.
+ *
+ * MAX_GROUP_SLOTS bounds one BOOKING — a single unbroken run. This bounds one
+ * SELECTION, which may be several disjoint runs booked together: 09:00-11:00 and
+ * then 18:00-20:00 is two bookings from one selection. The two numbers coincide
+ * today, but they are different rules and a caller must not read one as the other:
+ * raising the selection ceiling would otherwise silently permit a longer run, and
+ * lowering the group ceiling would otherwise cap a checkout.
+ */
+const MAX_SELECTION_SLOTS = 4;
+
 /** Mirrors the CHECK on venue_slot_discounts.percent (migration 035). */
 const MAX_DISCOUNT_PERCENT = 50;
 
@@ -109,19 +121,30 @@ function daysBetween(a, b) {
  * Anything else is a gap, an overlap, or a different day, and is refused. The
  * reason is returned rather than thrown so a route can quote it to the player.
  */
+/**
+ * Does `next` begin exactly where `prev` ends?
+ *
+ * The single statement of the adjacency rule, shared by `checkConsecutive` and
+ * `partitionRuns`. Two copies would eventually disagree about the midnight seam,
+ * and the disagreement would land as a selection the app accepted being split one
+ * way and refused another.
+ */
+function areAdjacent(prev, next) {
+  const gap = daysBetween(prev.date, next.date);
+  if (gap === 0) return prev.end === next.start;
+  return gap === 1 && prev.end === END_OF_DAY && next.start === START_OF_DAY;
+}
+
 function checkConsecutive(slots) {
   const rows = sortSlots(slots);
   for (let i = 1; i < rows.length; i += 1) {
     const prev = rows[i - 1];
     const next = rows[i];
+    if (areAdjacent(prev, next)) continue;
     const gap = daysBetween(prev.date, next.date);
     if (gap === 0) {
-      if (prev.end !== next.start) {
-        return { ok: false, reason: `there is a gap between ${prev.end.slice(0, 5)} and ${next.start.slice(0, 5)}` };
-      }
-      continue;
+      return { ok: false, reason: `there is a gap between ${prev.end.slice(0, 5)} and ${next.start.slice(0, 5)}` };
     }
-    if (gap === 1 && prev.end === END_OF_DAY && next.start === START_OF_DAY) continue;
     if (gap === null) return { ok: false, reason: 'one of those slots has an unreadable date' };
     return { ok: false, reason: 'those slots are not on the same day' };
   }
@@ -224,6 +247,94 @@ function validateGroupRequest(ids) {
 }
 
 /**
+ * Split an already-valid selection into maximal contiguous runs.
+ *
+ * A player picks up to MAX_SELECTION_SLOTS hours and they need not touch: 09:00
+ * and 10:00 followed by 18:00 and 19:00 is a perfectly ordinary evening out, and
+ * so is four unrelated singles. Each run is one booking, because a booking is a
+ * single unbroken session — its escrow, its deposit, its refund window and its QR
+ * all describe one arrival. Two runs therefore mean two bookings and two QRs,
+ * which is the honest representation: the player turns up twice.
+ *
+ * Contiguity uses `checkConsecutive`'s own rule, including the midnight seam, so
+ * the split and the per-run validation can never disagree about where a run ends.
+ * Splitting happens on the already-sorted rows, so the output order is
+ * chronological and the lock order downstream stays chronological too.
+ *
+ * Returns `[]` for an empty input rather than a single empty run.
+ */
+function partitionRuns(slots) {
+  const rows = sortSlots(slots || []);
+  const runs = [];
+  let current = [];
+  for (const row of rows) {
+    if (current.length === 0) {
+      current.push(row);
+      continue;
+    }
+    if (areAdjacent(current[current.length - 1], row)) {
+      current.push(row);
+    } else {
+      runs.push(current);
+      current = [row];
+    }
+  }
+  if (current.length) runs.push(current);
+  return runs;
+}
+
+/**
+ * The whole checkout's totals, summed from its runs.
+ *
+ * The discount is per run, never per selection: an owner's ladder is a reward for
+ * booking more hours in one sitting, and paying for 09:00-11:00 does not earn a
+ * discount on an unrelated 18:00. Summing the runs' own quotes keeps the number
+ * shown equal to the sum of the rows the booking will create.
+ *
+ * `total` is the sum of the rounded run totals and not a re-rounding of them, for
+ * the same reason `quoteGroup` sums rounded per-slot prices.
+ */
+function quoteSelection(runQuotes) {
+  const runs = Array.isArray(runQuotes) ? runQuotes : [];
+  const total = round2(runs.reduce((sum, r) => sum + Number(r.total || 0), 0));
+  const listTotal = round2(runs.reduce((sum, r) => sum + Number(r.listTotal || 0), 0));
+  return {
+    runs,
+    runCount: runs.length,
+    slotCount: runs.reduce((n, r) => n + Number(r.count || 0), 0),
+    listTotal,
+    total,
+    saved: round2(listTotal - total),
+  };
+}
+
+/**
+ * Validate a checkout selection: one to MAX_SELECTION_SLOTS slots, in any
+ * arrangement.
+ *
+ * This replaced a "must be back to back" rule on the whole selection. That rule
+ * was right about what a BOOKING is and wrong about what a SELECTION is: it made
+ * the grid refuse an ordinary choice and, worse, forced the client to undo earlier
+ * taps to keep the whole thing contiguous. Contiguity is now enforced per run by
+ * `partitionRuns` + `checkConsecutive`, where it belongs.
+ */
+function validateSelection(ids) {
+  const unique = [...new Set((ids || []).map((v) => String(v == null ? '' : v).trim()).filter(Boolean))];
+  if (unique.length === 0) {
+    return { ok: false, code: 'empty_selection', message: 'Select at least one slot.', ids: unique };
+  }
+  if (unique.length > MAX_SELECTION_SLOTS) {
+    return {
+      ok: false,
+      code: 'selection_too_large',
+      message: `You can book at most ${MAX_SELECTION_SLOTS} slots at a time.`,
+      ids: unique,
+    };
+  }
+  return { ok: true, code: 'ok', message: null, ids: unique };
+}
+
+/**
  * Validate a set of owner discount tiers as a whole before any of it is written.
  *
  * Checked here rather than only by the database so the owner is told which rule is
@@ -255,6 +366,7 @@ function validateTiers(tiers) {
 
 module.exports = {
   MAX_GROUP_SLOTS,
+  MAX_SELECTION_SLOTS,
   MAX_DISCOUNT_PERCENT,
   MIN_DISCOUNT_SLOTS,
   MAX_DISCOUNT_SLOTS,
@@ -269,6 +381,9 @@ module.exports = {
   pickDiscountPercent,
   discountedPrice,
   quoteGroup,
+  quoteSelection,
+  partitionRuns,
+  validateSelection,
   validateGroupRequest,
   validateTiers,
 };
