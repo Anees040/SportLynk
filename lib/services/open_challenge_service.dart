@@ -8,22 +8,43 @@ import 'api_service.dart';
 class OpenChallengeService {
   final ApiClient _api = ApiClient();
 
-  /// The public board. **null means the request failed** (so the screen can show an
-  /// error with retry); an empty list means the board is genuinely empty — the two
-  /// need different states, the same distinction TeamService.rankings draws.
-  Future<List<OpenChallenge>?> board(String token, {String? sport}) async {
+  /// The public board.
+  ///
+  /// Returns the whole envelope rather than a bare list, because a caller has three
+  /// states to tell apart and a list cannot express them: loaded (a list, possibly
+  /// empty), unavailable (503 — migration 041 not applied), and failed (any other
+  /// refusal, carrying the server's own sentence). Collapsing a refusal into `null`
+  /// is what made every failure read as "check your connection", including the ones
+  /// that had nothing to do with the network.
+  Future<({bool ok, int status, String? message, List<OpenChallenge> cards})> board(
+    String token, {
+    String? sport,
+  }) async {
     final r = await _api.get(
       ApiConstants.openChallenges,
       token: token,
       queryParams: (sport != null && sport.isNotEmpty) ? {'sport': sport} : null,
     );
-    if (r['success'] != true) return null;
+    final status = (r['statusCode'] as num?)?.toInt() ?? 0;
+    if (r['success'] != true) {
+      return (
+        ok: false,
+        status: status,
+        message: r['message']?.toString(),
+        cards: const <OpenChallenge>[],
+      );
+    }
     final data = r['data'];
     final list = (data is Map ? data['challenges'] : null) as List? ?? const [];
-    return list
-        .whereType<Map>()
-        .map((e) => OpenChallenge.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
+    return (
+      ok: true,
+      status: status,
+      message: null,
+      cards: list
+          .whereType<Map>()
+          .map((e) => OpenChallenge.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
+    );
   }
 
   /// Post one of the caller's confirmed bookings to the board on behalf of [teamId].
