@@ -166,6 +166,9 @@ void main() {
       await pumpVenue(tester, api);
       await settleData(tester);
 
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
+      await tester.pumpAndSettle();
+
       expect(find.text('Player Reviews'), findsOneWidget);
       // The compact snippet carries the count on its "view all" action (the full
       // histogram and per-star counts moved to the dedicated reviews screen).
@@ -276,27 +279,33 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('selecting a slot is instant — Book Now lights up before the hold resolves', (
-      tester,
-    ) async {
-      api.ok(kVenue, venue(slots: [slot(id: 's-1', start: '18:00:00')]));
-      await pumpVenue(tester, api);
-      await settleData(tester);
+    testWidgets(
+      'selecting a slot is instant — Book Now lights up before the hold resolves',
+      (tester) async {
+        api.ok(
+          kVenue,
+          venue(
+            slots: [slot(id: 's-1', start: '18:00:00')],
+          ),
+        );
+        await pumpVenue(tester, api);
+        await settleData(tester);
 
-      await tester.ensureVisible(find.text('6:00 PM', skipOffstage: false));
-      await tester.pump();
-      await tester.tap(find.text('6:00 PM'));
-      // A single frame — no network settle. The optimistic selection must have
-      // enabled Book Now without waiting on the background lock round-trip.
-      await tester.pump();
-      final book = tester.widget<ElevatedButton>(
-        find.widgetWithText(ElevatedButton, 'Book Now'),
-      );
-      expect(book.onPressed, isNotNull);
+        await tester.ensureVisible(find.text('6:00 PM', skipOffstage: false));
+        await tester.pump();
+        await tester.tap(find.text('6:00 PM'));
+        // A single frame — no network settle. The optimistic selection must have
+        // enabled Book Now without waiting on the background lock round-trip.
+        await tester.pump();
+        final book = tester.widget<ElevatedButton>(
+          find.widgetWithText(ElevatedButton, 'Book Now'),
+        );
+        expect(book.onPressed, isNotNull);
 
-      await settleData(tester); // let the background hold complete
-      await tester.pumpWidget(const SizedBox.shrink());
-    });
+        await settleData(tester); // let the background hold complete
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
   });
 
   group('the date rail', () {
