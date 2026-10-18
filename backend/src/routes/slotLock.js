@@ -21,6 +21,17 @@ const checkRole = require('../middleware/roleMiddleware');
  */
 const LOCK_TTL_MINUTES = 5;
 
+/**
+ * How many slots one player may hold at one venue at once.
+ *
+ * Mirrors MAX_SELECTION_SLOTS in utils/slotGroup.js: the grid lets a player pick
+ * up to four hours, and every one of them takes a hold so the price they are
+ * looking at is held while they check out. It was 1 when a booking was always a
+ * single slot; keeping it at 1 after multi-slot selection shipped is what made a
+ * selection undo itself, because each new tap released the hold taken by the last.
+ */
+const MAX_HOLDS = 4;
+
 /** True while a hold is still live. Expired holds are indistinguishable from free. */
 const HOLD_IS_LIVE = `(locked_until IS NOT NULL AND locked_until > NOW())`;
 
@@ -65,13 +76,28 @@ router.post('/:id/lock', authMiddleware, checkRole('player'), async (req, res, n
       });
     }
 
-    // One hold per player per venue — moving to a different slot drops the old
-    // hold instead of letting one player sit on the whole grid.
+    // A player may hold several slots at one venue — a selection can be up to
+    // MAX_HOLDS hours — but not an unbounded number, so one player cannot sit on
+    // the whole grid. When the cap is reached the OLDEST hold is dropped, not the
+    // one just taken: dropping the new one would make the tap that hit the cap
+    // silently do nothing.
+    //
+    // Releasing exactly the overflow rows, rather than everything of this
+    // player's, is the whole fix: the previous version cleared every hold this
+    // player had at the venue on each new lock, so selecting the second hour
+    // released the first and the grid's next refresh deselected it.
     await client.query(
-      `UPDATE slots
+      `WITH mine AS (
+         SELECT id, row_number() OVER (ORDER BY locked_until DESC NULLS LAST, id) AS rn
+           FROM slots
+          WHERE venue_id = $1 AND locked_by = $2 AND id <> $3
+       )
+       UPDATE slots s
           SET locked_by = NULL, locked_until = NULL
-        WHERE venue_id = $1 AND locked_by = $2 AND id <> $3`,
-      [slot.venue_id, req.user.id, slot.id],
+         FROM mine
+        WHERE s.id = mine.id
+          AND mine.rn > $4`,
+      [slot.venue_id, req.user.id, slot.id, MAX_HOLDS - 1],
     );
 
     const updated = await client.query(
