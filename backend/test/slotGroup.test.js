@@ -334,3 +334,117 @@ test('the module ceilings match the constraints migration 035 writes', () => {
   assert.equal(group.MAX_DISCOUNT_SLOTS, 12);
   assert.ok(group.MAX_GROUP_SLOTS >= group.MIN_DISCOUNT_SLOTS);
 });
+
+// ── Selection → runs (the multi-booking split) ───────────────────────────────
+//
+// A selection is what the player tapped; a run is one unbroken session and so one
+// booking, one QR. These cases pin the split, because getting it wrong either
+// merges two visits into a booking the player cannot check in twice, or splits one
+// session into two bookings an owner then verifies as separate matches.
+
+test('partitionRuns keeps an unbroken selection as one run', () => {
+  const runs = group.partitionRuns([
+    slot(D, '18:00:00', '19:00:00'),
+    slot(D, '19:00:00', '20:00:00'),
+  ].map(group.normaliseSlot));
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].length, 2);
+});
+
+test('partitionRuns splits a gapped selection into one run per block', () => {
+  // 09:00-11:00 and 18:00-20:00: two trips, so two bookings and two QR codes.
+  const runs = group.partitionRuns([
+    slot(D, '09:00:00', '10:00:00'),
+    slot(D, '10:00:00', '11:00:00'),
+    slot(D, '18:00:00', '19:00:00'),
+    slot(D, '19:00:00', '20:00:00'),
+  ].map(group.normaliseSlot));
+  assert.equal(runs.length, 2);
+  assert.deepEqual(runs.map((r) => r.length), [2, 2]);
+  assert.equal(runs[0][0].start, '09:00:00');
+  assert.equal(runs[1][0].start, '18:00:00');
+});
+
+test('partitionRuns gives four unrelated hours four runs', () => {
+  const runs = group.partitionRuns([
+    slot(D, '09:00:00', '10:00:00'),
+    slot(D, '13:00:00', '14:00:00'),
+    slot(D, '18:00:00', '19:00:00'),
+    slot(D, '22:00:00', '23:00:00'),
+  ].map(group.normaliseSlot));
+  assert.equal(runs.length, 4);
+  assert.ok(runs.every((r) => r.length === 1));
+});
+
+test('partitionRuns joins the midnight seam, which makes 11 PM + 12 AM one booking', () => {
+  // A venue open past midnight sells a 23:00 hour ending at the 24:00:00 marker and
+  // a 00:00 hour on the NEXT date. They are back to back and must not be split.
+  const runs = group.partitionRuns([
+    slot(D, '23:00:00', '24:00:00'),
+    slot(D2, '00:00:00', '01:00:00'),
+  ].map(group.normaliseSlot));
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].length, 2);
+});
+
+test('partitionRuns sorts before splitting, so tap order cannot change the runs', () => {
+  const runs = group.partitionRuns([
+    slot(D, '19:00:00', '20:00:00'),
+    slot(D, '09:00:00', '10:00:00'),
+    slot(D, '18:00:00', '19:00:00'),
+  ].map(group.normaliseSlot));
+  assert.equal(runs.length, 2);
+  assert.deepEqual(runs.map((r) => r[0].start), ['09:00:00', '18:00:00']);
+});
+
+test('partitionRuns returns no runs for an empty selection', () => {
+  assert.deepEqual(group.partitionRuns([]), []);
+});
+
+test('a selection is any arrangement of one to MAX_SELECTION_SLOTS slots', () => {
+  assert.equal(group.validateSelection(['a']).ok, true, 'a single slot is valid');
+
+  const gapped = group.validateSelection(['a', 'b', 'c']);
+  assert.equal(gapped.ok, true, 'gaps are the split\'s problem, not the selection\'s');
+
+  const many = Array.from({ length: group.MAX_SELECTION_SLOTS + 1 }, (_, i) => `s${i}`);
+  const over = group.validateSelection(many);
+  assert.equal(over.ok, false);
+  assert.equal(over.code, 'selection_too_large');
+  assert.match(over.message, new RegExp(String(group.MAX_SELECTION_SLOTS)));
+
+  const atCap = group.validateSelection(many.slice(0, group.MAX_SELECTION_SLOTS));
+  assert.equal(atCap.ok, true, 'exactly at the cap is allowed');
+});
+
+test('a selection refuses empties and collapses duplicates', () => {
+  assert.equal(group.validateSelection([]).ok, false);
+  assert.equal(group.validateSelection(['', '   ', null]).ok, false);
+
+  const dup = group.validateSelection(['a', 'a', ' b ']);
+  assert.equal(dup.ok, true);
+  assert.deepEqual(dup.ids, ['a', 'b']);
+});
+
+test('the selection total is the sum of the runs, discounted per run', () => {
+  // The ladder is a reward for one longer sitting. Two hours in the morning must
+  // not discount two hours in the evening, so a 2-slot tier applies to each run
+  // rather than to the four-slot selection.
+  const tiers = [{ min_slots: 2, percent: 10 }];
+  const quotes = [
+    group.quoteGroup([
+      group.normaliseSlot(slot(D, '09:00:00', '10:00:00', 1000)),
+      group.normaliseSlot(slot(D, '10:00:00', '11:00:00', 1000)),
+    ], tiers),
+    group.quoteGroup([
+      group.normaliseSlot(slot(D, '18:00:00', '19:00:00', 1000)),
+      group.normaliseSlot(slot(D, '19:00:00', '20:00:00', 1000)),
+    ], tiers),
+  ];
+  const sel = group.quoteSelection(quotes);
+  assert.equal(sel.runCount, 2);
+  assert.equal(sel.slotCount, 4);
+  assert.equal(sel.total, 3600, '2 x (2 hours at 10% off 2000)');
+  assert.equal(sel.listTotal, 4000);
+  assert.equal(sel.saved, 400);
+});
