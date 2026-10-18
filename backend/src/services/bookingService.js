@@ -347,9 +347,15 @@ async function tiersFor(runner, venueId) {
 }
 
 /**
- * Quote a group of consecutive slots without booking any of them. New, and new
- * for the same reason previewCancellation is: the player has to be shown what N
- * hours will cost — and what the discount saved — before agreeing to it.
+ * Quote a selection without booking any of it. New, and new for the same reason
+ * previewCancellation is: the player has to be shown what N hours will cost — and
+ * what the discount saved — before agreeing to it.
+ *
+ * The selection is split into runs exactly as createBookingGroup will split it, and
+ * each run is quoted against the owner's ladder on its own, so the number shown is
+ * the sum of the rows the booking will create. `runs` carries the per-run figures
+ * as well as the selection totals, because the confirm screen names how many
+ * separate bookings the selection becomes.
  *
  * Deliberately a plain read with no FOR UPDATE. A quote must not hold row locks
  * while a human decides. Availability is therefore advisory here and authoritative
@@ -359,7 +365,7 @@ async function tiersFor(runner, venueId) {
  */
 async function previewGroup(client, { userId, venueId, slotIds }) {
   const runner = client || pool;
-  const request = group.validateGroupRequest(slotIds);
+  const request = group.validateSelection(slotIds);
   if (!request.ok) return fail(400, request.code, request.message);
 
   const { rows } = await runner.query(
@@ -381,39 +387,46 @@ async function previewGroup(client, { userId, venueId, slotIds }) {
       `${unavailable.length} of those slots ${unavailable.length === 1 ? 'is' : 'are'} no longer free.`);
   }
 
-  const run = group.checkConsecutive(rows.map(group.normaliseSlot));
-  if (!run.ok) {
-    return fail(400, 'not_consecutive', `Those slots are not back to back — ${run.reason}.`);
-  }
-
-  const quote = group.quoteGroup(rows, await tiersFor(runner, venueId));
-  return done(200, quote);
+  const tiers = await tiersFor(runner, venueId);
+  const runQuotes = group.partitionRuns(rows)
+    .map((runSlots) => group.quoteGroup(runSlots, tiers));
+  return done(200, group.quoteSelection(runQuotes));
 }
 
 /**
- * Book a run of consecutive slots as one group.
+ * Book a selection as one or more runs.
  *
- * Each slot becomes its own `bookings` row through createBooking above — the same
- * escrow, the same deposit, the same ledger entries, the same QR — and the rows
- * share a `booking_group_id` so the player's screens can render them as one card.
- * No money primitive is written here; this function decides which slots and at
- * what discount, and createBooking moves everything (FR8.15).
+ * A selection is what the player tapped — up to MAX_SELECTION_SLOTS hours, which
+ * need not touch. A run is one unbroken session. `partitionRuns` splits the first
+ * into the second, and each run becomes its own `booking_group_id`: 09:00 and
+ * 10:00 plus 18:00 and 19:00 is two groups, two cards, two QR codes, because the
+ * player makes two trips to the ground.
  *
- * Lock order is chronological, always. Two players selecting overlapping runs in
- * opposite directions would otherwise take the same two row locks in opposite
- * orders and deadlock; sorting first means the second transaction blocks on the
- * first slot and then fails cleanly with `slot_taken`.
+ * Each slot within a run becomes its own `bookings` row through createBooking —
+ * the same escrow, the same deposit, the same ledger entries, the same QR — and
+ * the rows of one run share a group id so the player's screens can render that
+ * session as one card. No money primitive is written here; this function decides
+ * which slots and at what discount, and createBooking moves everything (FR8.15).
  *
- * The first failing slot aborts the group. A partially booked run is worse than
- * none: the player asked for two hours of play, and one hour plus a refund is not
- * a smaller version of that.
+ * The discount is picked per run, never across the selection: the ladder rewards
+ * one longer sitting, and hours booked in the evening must not discount the
+ * morning.
+ *
+ * Lock order is chronological across the WHOLE selection, not per run. Two players
+ * selecting overlapping slots in opposite orders would otherwise take the same row
+ * locks in opposite directions and deadlock; sorting first means the second
+ * transaction blocks on the first slot and then fails cleanly with `slot_taken`.
+ *
+ * The first failing slot aborts everything. A partially booked selection is worse
+ * than none: the player asked for a particular set of hours, and half of it plus a
+ * refund is not a smaller version of that.
  *
  * Caller must already be inside a transaction.
  */
 async function createBookingGroup(client, { userId, venueId, slotIds, notes = null }) {
   if (!venueId) return fail(400, 'missing_args', 'venueId required');
 
-  const request = group.validateGroupRequest(slotIds);
+  const request = group.validateSelection(slotIds);
   if (!request.ok) return fail(400, request.code, request.message);
 
   if (!(await hasGroupColumns(client))) {
@@ -421,9 +434,9 @@ async function createBookingGroup(client, { userId, venueId, slotIds, notes = nu
       'Multi-slot bookings are not available yet — migration 035 has not been applied to this database.');
   }
 
-  // Read the shape of the run before locking anything, so an invalid selection
-  // costs no lock. Availability read here is advisory; createBooking re-reads
-  // every one of these rows under FOR UPDATE and is the only authority on it.
+  // Read the shape of the selection before locking anything, so an invalid
+  // selection costs no lock. Availability read here is advisory; createBooking
+  // re-reads every one of these rows under FOR UPDATE and is the only authority.
   const shape = await client.query(
     `SELECT s.id, s.slot_date, s.start_time, s.end_time, s.price, s.status
        FROM slots s
@@ -436,54 +449,84 @@ async function createBookingGroup(client, { userId, venueId, slotIds, notes = nu
   }
 
   const ordered = group.sortSlots(shape.rows.map(group.normaliseSlot));
-  const run = group.checkConsecutive(ordered);
-  if (!run.ok) {
-    return fail(400, 'not_consecutive', `Those slots are not back to back — ${run.reason}.`);
-  }
+  const runs = group.partitionRuns(ordered);
 
   const tiers = await tiersFor(client, venueId);
-  const percent = group.pickDiscountPercent(tiers, ordered.length);
-  const groupId = crypto.randomUUID();
+  const createdRuns = [];
 
-  const created = [];
-  for (const slot of ordered) {
-    const one = await createBooking(client, {
-      userId,
-      venueId,
-      slotId: slot.id,
-      notes,
-      discountPercent: percent,
+  for (const runSlots of runs) {
+    const percent = group.pickDiscountPercent(tiers, runSlots.length);
+    const groupId = crypto.randomUUID();
+    const created = [];
+    for (const slot of runSlots) {
+      const one = await createBooking(client, {
+        userId,
+        venueId,
+        slotId: slot.id,
+        notes,
+        discountPercent: percent,
+        groupId,
+      });
+      // The first refusal is the whole checkout's refusal, and its own code and
+      // message are carried out unchanged so the player is told which rule
+      // stopped it — `slot_taken`, `insufficient_funds`, `sport_disabled` —
+      // rather than a generic "could not book".
+      if (!one.ok) return one;
+      created.push(one.data);
+    }
+
+    const total = round2(created.reduce((sum, b) => sum + asNum(b.total_amount), 0));
+    const listTotal = round2(created.reduce((sum, b) => sum + asNum(b.base_price), 0)
+      * (percent > 0 ? 100 / (100 - percent) : 1));
+    createdRuns.push({
       groupId,
+      bookings: created,
+      count: created.length,
+      discountPercent: percent,
+      total,
+      // What this run would have cost at list price, derived from the discount
+      // actually applied rather than re-read from `slots` — the slot rows are now
+      // 'booked' and their price is no longer the quote the player accepted.
+      saved: percent > 0 ? round2(listTotal - total) : 0,
+      from: created[0].start_time,
+      to: created[created.length - 1].end_time,
     });
-    // The first refusal is the group's refusal, and its own code and message are
-    // carried out unchanged so the player is told which rule stopped it —
-    // `slot_taken`, `insufficient_funds`, `sport_disabled` — rather than a generic
-    // "could not book".
-    if (!one.ok) return one;
-    created.push(one.data);
   }
 
-  const total = round2(created.reduce((sum, b) => sum + asNum(b.total_amount), 0));
-  const listTotal = round2(created.reduce((sum, b) => sum + asNum(b.base_price), 0)
-    * (percent > 0 ? 100 / (100 - percent) : 1));
+  const bookings = createdRuns.flatMap((r) => r.bookings);
+  const total = round2(createdRuns.reduce((sum, r) => sum + r.total, 0));
+  const saved = round2(createdRuns.reduce((sum, r) => sum + r.saved, 0));
+  const anyPercent = createdRuns.some((r) => r.discountPercent > 0);
 
   return done(201, {
-    groupId,
-    bookings: created,
-    count: created.length,
-    discountPercent: percent,
+    // The first run's group id keeps every existing single-run caller working:
+    // a selection that is one run is one group and this IS that group.
+    groupId: createdRuns[0].groupId,
+    groups: createdRuns.map((r) => ({
+      groupId: r.groupId,
+      count: r.count,
+      discountPercent: r.discountPercent,
+      total: r.total,
+      saved: r.saved,
+      from: r.from,
+      to: r.to,
+      bookingIds: r.bookings.map((b) => b.id),
+    })),
+    bookings,
+    count: bookings.length,
+    groupCount: createdRuns.length,
+    discountPercent: createdRuns.length === 1 ? createdRuns[0].discountPercent : 0,
     total,
-    // What the same run would have cost at list price, derived from the discount
-    // actually applied rather than re-read from `slots` — the slot rows are now
-    // 'booked' and their price is no longer the quote the player accepted.
-    saved: percent > 0 ? round2(listTotal - total) : 0,
-    venueName: created[0].venue_name,
-    slotDate: localDateStr(created[0].slot_date),
-    from: created[0].start_time,
-    to: created[created.length - 1].end_time,
-  }, percent > 0
-    ? `${created.length} slots booked — ${percent}% multi-slot discount applied.`
-    : `${created.length} slots booked.`);
+    saved,
+    venueName: bookings[0].venue_name,
+    slotDate: localDateStr(bookings[0].slot_date),
+    from: bookings[0].start_time,
+    to: bookings[bookings.length - 1].end_time,
+  }, anyPercent
+    ? `${bookings.length} slot${bookings.length === 1 ? '' : 's'} booked across `
+      + `${createdRuns.length} booking${createdRuns.length === 1 ? '' : 's'} — multi-slot discount applied.`
+    : `${bookings.length} slot${bookings.length === 1 ? '' : 's'} booked across `
+      + `${createdRuns.length} booking${createdRuns.length === 1 ? '' : 's'}.`);
 }
 
 // Cancel — preview, then execute
