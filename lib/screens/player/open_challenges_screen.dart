@@ -41,6 +41,11 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
   bool _loading = true;
   bool _failed = false;
 
+  /// The server's own sentence for a failed load, shown instead of a generic
+  /// connection message. A 401, a 500 and a genuinely unreachable API are three
+  /// different problems and only one of them is fixed by checking the connection.
+  String? _loadError;
+
   /// The viewer's teams, loaded once to decide which cards they can accept and
   /// whether they can post. Only teams they captain can act.
   List<Team> _myTeams = const [];
@@ -80,20 +85,42 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
   }
 
   Future<void> _load() async {
+    final token = _token;
+    // Signed out mid-session: the request would carry no Authorization header and
+    // come back 401, which would be reported as a server fault rather than as the
+    // sign-in problem it is.
+    if (token.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _failed = true;
+        _loadError = 'Please sign in again to see the open challenge board.';
+      });
+      return;
+    }
     setState(() {
       _loading = _cards == null;
       _failed = false;
+      _loadError = null;
     });
-    final cards = await _svc.board(_token);
+    final r = await _svc.board(token);
     if (!mounted) return;
     setState(() {
       _loading = false;
-      _failed = cards == null;
-      if (cards != null) {
-        _cards = cards;
+      _failed = !r.ok;
+      if (r.ok) {
+        _cards = r.cards;
+        _loadError = null;
         // A load that came back proves the board is reachable, so a stale "not
         // available yet" from an earlier post attempt no longer applies.
         _boardUnavailable = false;
+      } else {
+        // A 503 is the board itself being off; that state already has its own,
+        // kinder explanation in the empty view, so it does not need the error page.
+        _boardUnavailable = r.status == 503;
+        _loadError = r.message?.isNotEmpty == true
+            ? r.message
+            : 'The board could not be loaded (HTTP ${r.status}).';
       }
     });
   }
@@ -165,6 +192,10 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
 
   Future<void> _post() async {
     if (_posting) return;
+    if (_token.isEmpty) {
+      SnackbarUtil.showInfo(context, 'Please sign in again to post a slot.');
+      return;
+    }
     final captained = _myTeams.where((t) => t.role == 'captain').toList();
     if (captained.isEmpty) {
       SnackbarUtil.showInfo(context,
@@ -212,31 +243,55 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
     }
   }
 
+  /// Pick one of the caller's teams for an action.
+  ///
+  /// Scrollable and height-bounded on purpose. This was a plain `Column` in a
+  /// modal sheet with no height constraint, so a captain with more teams than fit
+  /// on screen overflowed the sheet and the modal barrier stayed up with no visible
+  /// content — the app looked frozen and the only way out was Back. The list scrolls
+  /// now, and the sheet is capped so a long list cannot cover the whole screen.
   Future<Team?> _pickTeam(String title, List<Team> teams) {
     return showModalBottomSheet<Team>(
       context: context,
       backgroundColor: Colors.white,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(title,
-                  style: GoogleFonts.poppins(
-                      fontSize: 15, fontWeight: FontWeight.bold)),
-            ),
-            ...teams.map((t) => ListTile(
-                  leading: TeamCrest(logoUrl: t.logoUrl, radius: 18),
-                  title: Text(t.name, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                  subtitle: Text('${t.sport.toUpperCase()} · ELO ${t.elo}',
-                      style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-                  onTap: () => Navigator.pop(context, t),
-                )),
-            const SizedBox(height: 8),
-          ],
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(ctx).height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(title,
+                    style: GoogleFonts.poppins(
+                        fontSize: 15, fontWeight: FontWeight.bold)),
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  children: teams
+                      .map((t) => ListTile(
+                            leading: TeamCrest(logoUrl: t.logoUrl, radius: 18),
+                            title: Text(t.name,
+                                style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600)),
+                            subtitle: Text('${t.sport.toUpperCase()} · ELO ${t.elo}',
+                                style: GoogleFonts.poppins(
+                                    fontSize: 12, color: AppColors.textSecondary)),
+                            onTap: () => Navigator.pop(ctx, t),
+                          ))
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
@@ -246,28 +301,47 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
     return showModalBottomSheet<LinkableBooking>(
       context: context,
       backgroundColor: Colors.white,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Which booking do you want to offer?',
-                  style: GoogleFonts.poppins(
-                      fontSize: 15, fontWeight: FontWeight.bold)),
-            ),
-            ...bookings.map((b) => ListTile(
-                  leading: const Icon(Icons.event_available, color: AppColors.accent),
-                  title: Text(b.venueName ?? 'Venue',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                  subtitle: Text('${b.prettyDate}  ·  ${b.timeRange}',
-                      style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary)),
-                  onTap: () => Navigator.pop(context, b),
-                )),
-            const SizedBox(height: 8),
-          ],
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(ctx).height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text('Which booking do you want to offer?',
+                    style: GoogleFonts.poppins(
+                        fontSize: 15, fontWeight: FontWeight.bold)),
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  children: bookings
+                      .map((b) => ListTile(
+                            leading: const Icon(Icons.event_available,
+                                color: AppColors.accent),
+                            title: Text(b.venueName ?? 'Venue',
+                                style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600)),
+                            subtitle: Text(
+                                '${b.prettyDate}  ·  ${b.timeRange}',
+                                style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary)),
+                            onTap: () => Navigator.pop(ctx, b),
+                          ))
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
@@ -305,9 +379,11 @@ class _OpenChallengesScreenState extends State<OpenChallengesScreen>
     if (_loading && _cards == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_failed && _cards == null) {
+    if (_failed && _cards == null && !_boardUnavailable) {
       return NetworkErrorView(
-        message: 'Could not load the open challenge board. Check your connection and try again.',
+        title: 'Could not load the board',
+        message: _loadError ??
+            'Could not load the open challenge board. Check your connection and try again.',
         onRetry: _load,
       );
     }
