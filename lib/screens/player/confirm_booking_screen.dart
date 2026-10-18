@@ -56,7 +56,13 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   static const int _depositPercent = 20;
   static const int _cancellationWindowHours = 24;
 
-  /// The slots being booked, first to last. One element is the ordinary case.
+  /// The slots being booked, in playing order. One element is the ordinary case.
+  ///
+  /// More than one element now routes through the group endpoints even when the
+  /// slots do not touch: the server splits the selection into contiguous runs and
+  /// creates one booking per run, so a selection of four unrelated hours produces
+  /// four bookings and four QR codes. See `partitionRuns` in
+  /// backend/src/utils/slotGroup.js.
   List<Map<String, dynamic>> get _run =>
       (widget.slots == null || widget.slots!.isEmpty) ? [widget.slot] : widget.slots!;
 
@@ -75,7 +81,21 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     return _listTotal;
   }
 
-  double get _discountPercent => _quote == null ? 0 : asNum(_quote!['discountPercent']);
+  /// The discount percentage to name, or 0 when naming one would be untrue.
+  ///
+  /// A selection of several runs is quoted per run, so two runs can carry
+  /// different percentages. Printing either over a mixed total would misstate the
+  /// saving, so only a single-run selection names a percentage; a multi-run one
+  /// states the amount saved instead. Mirrors the same rule on the venue screen.
+  double get _discountPercent {
+    final q = _quote;
+    if (q == null) return 0;
+    final runs = q['runs'];
+    if (runs is! List || runs.length != 1) return 0;
+    final only = runs.first;
+    return only is Map ? asNum(only['discountPercent']) : 0;
+  }
+
   double get _saved => _quote == null ? 0 : asNum(_quote!['saved']);
 
   @override
@@ -206,17 +226,22 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
       if (mounted) {
         setState(() => _loading = false);
         if (data['success'] == true) {
-          // The group response carries `bookings`; the single response is the
-          // booking itself. The success screen shows the first one's code, because
-          // each slot in a group has its own QR and the player checks in per hour.
+          // The group response carries `bookings` and `groups`; the single response
+          // is the booking itself.
           final payload = data['data'];
-          final first = _isGroup && payload is Map && payload['bookings'] is List
-              ? Map<String, dynamic>.from((payload['bookings'] as List).first as Map)
-              : Map<String, dynamic>.from(payload as Map);
+          final bookings = _isGroup && payload is Map && payload['bookings'] is List
+              ? (payload['bookings'] as List)
+                  .whereType<Map>()
+                  .map((b) => Map<String, dynamic>.from(b))
+                  .toList()
+              : [Map<String, dynamic>.from(payload as Map)];
+          final groups = _isGroup && payload['groups'] is List
+              ? (payload['groups'] as List).length
+              : 1;
           // A new booking changes the upcoming list, the home dashboard and the
           // frozen wallet balance; announce it so all three refresh.
           context.read<DataSyncProvider>().bookingsChanged();
-          _showSuccessScreen(first);
+          _showSuccessScreen(bookings, groups);
         } else {
           SnackbarUtil.showError(context, data['message'] ?? 'Booking failed');
         }
@@ -229,13 +254,26 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     }
   }
 
-  /// Navigate to a full success screen instead of a dialog to avoid render issues
-  void _showSuccessScreen(Map<String, dynamic> booking) {
-    final bookingId = (booking['id'] ?? booking['qr_code'] ?? 'UNKNOWN')
-        .toString();
+  /// Navigate to a full success screen instead of a dialog to avoid render issues.
+  ///
+  /// [bookings] is every row the server created, and [groups] is how many separate
+  /// bookings they form. A selection of 09:00-11:00 and 18:00-20:00 is four rows in
+  /// two groups: the player turns up twice, checks in twice, and therefore needs two
+  /// QR codes, so the screen names both rather than presenting one as if it covered
+  /// the day.
+  void _showSuccessScreen(List<Map<String, dynamic>> bookings, int groups) {
+    final first = bookings.first;
+    final bookingId = (first['id'] ?? first['qr_code'] ?? 'UNKNOWN').toString();
     final manualCode = bookingId.length >= 6
         ? bookingId.substring(0, 6).toUpperCase()
         : bookingId.toUpperCase();
+
+    // A single run is one continuous span; several runs are not, and printing
+    // "09:00 – 19:00" would claim hours the player did not buy. A multi-run
+    // selection names the count instead.
+    final timeLabel = groups > 1
+        ? '${_run.length} slots in $groups bookings'
+        : '${_safeTime(_run.first['start_time'])} – ${_safeTime(_run.last['end_time'])}';
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
@@ -244,11 +282,9 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           manualCode: manualCode,
           venueName: widget.venue['name'] ?? '',
           date: _fmtDate(widget.selectedDate),
-          // The whole run, not just the first slot: a player who booked three
-          // hours has to see three hours confirmed.
-          time:
-              '${_safeTime(_run.first['start_time'])} – ${_safeTime(_run.last['end_time'])}',
+          time: timeLabel,
           slotCount: _run.length,
+          bookingCount: groups,
         ),
       ),
       // Tells the venue screen underneath that the booking completed, so its slot-
@@ -810,10 +846,14 @@ class _BookingSuccessScreen extends StatelessWidget {
   final String date;
   final String time;
 
-  /// How many slots were booked. 1 for an ordinary booking; a group says so,
-  /// because the code shown here belongs to the first slot only and the player
-  /// needs to know the others are in their bookings list.
+  /// How many slots were booked. 1 for an ordinary booking.
   final int slotCount;
+
+  /// How many separate bookings those slots form — one per contiguous run, so a
+  /// selection of two consecutive hours is 1 and two unrelated hours are 2. Named
+  /// on this screen because the player checks in once per booking, not once per
+  /// hour, and will otherwise arrive expecting a single QR.
+  final int bookingCount;
 
   const _BookingSuccessScreen({
     required this.bookingId,
@@ -822,6 +862,7 @@ class _BookingSuccessScreen extends StatelessWidget {
     required this.date,
     required this.time,
     this.slotCount = 1,
+    this.bookingCount = 1,
   });
 
   @override
@@ -938,8 +979,11 @@ class _BookingSuccessScreen extends StatelessWidget {
                           const SizedBox(height: 8),
                           _infoRow(
                             Icons.layers_outlined,
-                            '$slotCount slots booked together — each has its own '
-                            'QR code in My Bookings',
+                            bookingCount > 1
+                                ? '$slotCount slots in $bookingCount separate bookings — '
+                                    'one QR check-in code each, in My Bookings'
+                                : '$slotCount slots booked together — each has its own '
+                                    'QR code in My Bookings',
                           ),
                         ],
                         const SizedBox(height: 16),
