@@ -163,7 +163,7 @@ async function listBoard(clientOrPool, { userId, sport = null, limit = 50 } = {}
   const runner = clientOrPool || pool;
   if (!(await hasTable(runner))) return done(200, { challenges: [] });
 
-  const params = [TZ, userId];
+  const params = [userId];
   let sportFilter = '';
   if (sport && String(sport).trim()) {
     params.push(String(sport).toLowerCase());
@@ -178,7 +178,7 @@ async function listBoard(clientOrPool, { userId, sport = null, limit = 50 } = {}
             b.slot_date, b.start_time, b.end_time,
             v.name AS venue_name, v.city AS venue_city,
             EXISTS (SELECT 1 FROM team_members tm
-                     WHERE tm.team_id = oc.challenger_team AND tm.user_id = $2) AS mine
+                     WHERE tm.team_id = oc.challenger_team AND tm.user_id = $1) AS mine
        FROM open_challenges oc
        JOIN teams t    ON t.id = oc.challenger_team
        JOIN bookings b ON b.id = oc.booking_id
