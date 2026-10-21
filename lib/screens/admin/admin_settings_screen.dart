@@ -18,6 +18,7 @@
 // shares must total exactly 100. Everything else is the server's refusal to make,
 // including the 409 that names the sport whose future bookings block a switch-off.
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -236,10 +237,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                     icon: Icons.tune,
                   ),
                 )
-              : RefreshIndicator(
+              : StableRefreshIndicator(
                   color: AppColors.accent,
                   onRefresh: _load,
                   child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
                     children: [
                       _banner(),

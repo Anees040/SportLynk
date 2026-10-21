@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -144,7 +145,7 @@ class _AdminDisputesScreenState extends State<AdminDisputesScreen> {
               children: [
                 _filterBar(),
                 Expanded(
-                  child: RefreshIndicator(
+                  child: StableRefreshIndicator(
                     color: AppColors.accent,
                     onRefresh: _load,
                     child: _error != null && _rows.isEmpty
@@ -158,7 +159,7 @@ class _AdminDisputesScreenState extends State<AdminDisputesScreen> {
                           )
                         : ListView.builder(
                             physics: const AlwaysScrollableScrollPhysics(
-                                parent: BouncingScrollPhysics()),
+                                parent: ClampingScrollPhysics()),
                             padding: const EdgeInsets.all(16),
                             itemCount: _rows.length + (_hasMore ? 1 : 0),
                             itemBuilder: (_, i) =>

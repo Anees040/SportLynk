@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -171,8 +172,10 @@ class _AdminRegistrationDetailScreenState
         elevation: 0,
       ),
       bottomNavigationBar: isPending ? _buildActionBar() : null,
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
+      body: ScrollConfiguration(
+        behavior: stableScrollBehavior(context),
+        child: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           // Status Banner
@@ -262,6 +265,7 @@ class _AdminRegistrationDetailScreenState
           ]),
           const SizedBox(height: 80),
         ]),
+        ),
       ),
     );
   }

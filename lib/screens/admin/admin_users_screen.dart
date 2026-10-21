@@ -18,6 +18,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -144,10 +145,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                           icon: Icons.person_search_outlined,
                         ),
                       )
-                    : RefreshIndicator(
+                    : StableRefreshIndicator(
                         color: AppColors.accent,
                         onRefresh: _load,
                         child: ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                           itemCount: _rows.length + (_hasMore ? 1 : 0),
                           separatorBuilder: (_, _) => const SizedBox(height: 10),

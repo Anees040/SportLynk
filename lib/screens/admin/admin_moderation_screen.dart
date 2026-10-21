@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -115,7 +116,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
               children: [
                 _filterBar(),
                 Expanded(
-                  child: RefreshIndicator(
+                  child: StableRefreshIndicator(
                     color: AppColors.accent,
                     onRefresh: _load,
                     child: list.isEmpty
@@ -126,7 +127,7 @@ class _AdminModerationScreenState extends State<AdminModerationScreen> {
                                 : 'Nothing in this filter.',
                           )
                         : ListView.builder(
-                            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                            physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
                             padding: const EdgeInsets.all(16),
                             itemCount: list.length,
                             itemBuilder: (_, i) => _card(list[i]),

@@ -17,6 +17,7 @@
 // captains and stored in `admin_audit`, so the dialog asks for it rather than
 // letting the admin discover the 400.
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -90,7 +91,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
                     icon: Icons.gavel_outlined,
                   ),
                 )
-              : RefreshIndicator(
+              : StableRefreshIndicator(
                   color: AppColors.accent,
                   onRefresh: _load,
                   child: _body(c),
@@ -101,6 +102,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
 
   Widget _body(DisputeCase c) {
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
         _headerCard(c),

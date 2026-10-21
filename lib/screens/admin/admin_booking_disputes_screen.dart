@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -181,9 +182,9 @@ class _AdminBookingDisputesScreenState extends State<AdminBookingDisputesScreen>
       return const Center(child: CircularProgressIndicator(color: AppColors.accent));
     }
     if (rows.isEmpty) {
-      return RefreshIndicator(
+      return StableRefreshIndicator(
         onRefresh: _load,
-        child: ListView(children: [
+        child: ListView(physics: const AlwaysScrollableScrollPhysics(), children: [
           const SizedBox(height: 140),
           _centered(_status == 'open'
               ? 'No disputes are waiting on a ruling.'
@@ -191,9 +192,10 @@ class _AdminBookingDisputesScreenState extends State<AdminBookingDisputesScreen>
         ]),
       );
     }
-    return RefreshIndicator(
+    return StableRefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         itemCount: rows.length,
         separatorBuilder: (_, _) => const SizedBox(height: 12),

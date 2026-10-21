@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -174,11 +175,11 @@ class _AdminManageAdminsScreenState extends State<AdminManageAdminsScreen> {
     }
 
     final subs = _admins.where((a) => !a.isSuperAdmin).toList();
-    return RefreshIndicator(
+    return StableRefreshIndicator(
       color: AppColors.accent,
       onRefresh: _load,
       child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
         children: [
           _sectionLabel('SUPER ADMIN'),
