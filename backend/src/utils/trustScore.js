@@ -6,8 +6,8 @@
  * flat "trust_score − 10 per no-show" decrement, which could only ever fall and
  * said nothing about why.
  *
- *   trust = round( 35·rating_norm + 30·attendance_rate
- *                + 20·dispute_free_rate + 15·sentiment_norm )
+ *   trust = round(35·rating + 30·attendance + 20·disputes + 15·sentiment
+ *                 - cancellationPenalty - repeatedNoShowPenalty)
  *
  * The four components, each normalised to 0..1:
  *
@@ -15,6 +15,11 @@
  *   attendance_rate   checked_in / (checked_in + no_show) — the user's bookings
  *   dispute_free_rate 1 − disputes_against / matches      — a proxy (see below)
  *   sentiment_norm    (avg(sentiment_score) + 1) / 2      — model score on review text
+ *
+ * Each observed component is smoothed with three positive prior observations:
+ * (3 + count * raw_component) / (3 + count). Attendance groups adjacent slots
+ * into one booking event. A first no-show alone scores 93, two score 84 and three
+ * score 73. Later attendance improves the component and reduces the extra penalty.
  *
  * Cold start. A brand-new user has no reviews, no bookings, no matches — every
  * component is absent. Trust here is a reputation to keep, not one to earn: an
@@ -55,6 +60,49 @@ const WEIGHTS = { rating: 35, attendance: 30, disputes: 20, sentiment: 15 };
 // 1.0 a zero-signal user scores 100 and trust is lose-only: only a real negative
 // signal lowers a component below its full value. See the cold-start note above.
 const NEUTRAL_PRIOR = 1.0;
+const EVIDENCE_PRIOR = 3;
+
+function calculateTrust(raw) {
+  const nRating = asNum(raw.n_rating) || 0;
+  const nSentiment = asNum(raw.n_sentiment) || 0;
+  const checkedIn = asNum(raw.checked_in) || 0;
+  const noShows = asNum(raw.no_shows) || 0;
+  const played = asNum(raw.played) || 0;
+  const disputesAgainst = asNum(raw.disputes_against) || 0;
+  const recentCancels = asNum(raw.recent_cancels) || 0;
+  const smooth = (value, count) => count > 0
+    ? clamp01((EVIDENCE_PRIOR + value * count) / (EVIDENCE_PRIOR + count))
+    : null;
+  const ratingNorm = smooth(clamp01(asNum(raw.avg_rating) / 5), nRating);
+  const attendanceRate = checkedIn + noShows > 0
+    ? checkedIn / (checkedIn + noShows) : null;
+  const attendance = smooth(attendanceRate, checkedIn + noShows);
+  const disputes = smooth(clamp01(1 - disputesAgainst / Math.max(1, played)), played);
+  const sentiment = smooth(clamp01((asNum(raw.avg_sentiment) + 1) / 2), nSentiment);
+  const prior = (value) => value === null ? NEUTRAL_PRIOR : value;
+  const base = WEIGHTS.rating * prior(ratingNorm)
+    + WEIGHTS.attendance * prior(attendance)
+    + WEIGHTS.disputes * prior(disputes)
+    + WEIGHTS.sentiment * prior(sentiment);
+  const cancellationPenalty = Math.max(0, recentCancels - POLICY.FREE_CANCELLATIONS_PER_MONTH)
+    * POLICY.CANCELLATION_TRUST_PENALTY;
+  const repeatedNoShowPenalty = attendanceRate === null ? 0
+    : Math.min(12, 2 * noShows * Math.max(0, noShows - 1)) * (1 - attendanceRate);
+  return {
+    trustScore: Math.max(0, Math.min(100, Math.round(base - cancellationPenalty - repeatedNoShowPenalty))),
+    components: { rating: ratingNorm, attendance, disputes, sentiment },
+    attendanceRate,
+    checkedIn,
+    noShows,
+    recentCancellations: recentCancels,
+    cancellationPenalty,
+    repeatedNoShowPenalty,
+  };
+}
+
+function emitTrustUpdate(userId) {
+  require('../realtime/bus').emitToUsers(userId, 'trust:update', { userId });
+}
 
 // Cancellation-abuse deduction (item 8). The four components above are reputation
 // signals (lose-only, absent→1.0); this is a separate straight deduction so frequent
@@ -80,6 +128,21 @@ const clamp01 = (x) => Math.max(0, Math.min(1, x));
  * @returns {Promise<{trustScore:number, components:object}>}
  */
 async function recomputeTrust(db, userId) {
+  if (typeof db.totalCount === 'number' && typeof db.connect === 'function') {
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await recomputeTrust(client, userId);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  await db.query('SELECT user_id FROM player_profiles WHERE user_id = $1 FOR UPDATE', [userId]);
   // One round-trip gathers every raw aggregate the four components need.
   const { rows: [raw] } = await db.query(
     `
@@ -105,10 +168,15 @@ async function recomputeTrust(db, userId) {
       (SELECT count(sentiment_score) FROM reviews
          WHERE reviewed_user_id = $1 AND hidden = false)                       AS n_sentiment,
       -- attendance over the user's OWN bookings
-      (SELECT count(*) FILTER (WHERE status = 'checked_in') FROM bookings
-         WHERE player_id = $1)                                                 AS checked_in,
-      (SELECT count(*) FILTER (WHERE status = 'no_show')    FROM bookings
-         WHERE player_id = $1)                                                 AS no_shows,
+      (SELECT count(DISTINCT COALESCE(to_jsonb(b) ->> 'booking_group_id', b.id::text))
+         FROM bookings b WHERE player_id = $1 AND status = 'checked_in')        AS checked_in,
+      (SELECT count(DISTINCT COALESCE(to_jsonb(b) ->> 'booking_group_id', b.id::text))
+         FROM bookings b WHERE player_id = $1 AND status = 'no_show'
+           AND NOT EXISTS (
+             SELECT 1 FROM bookings attended
+              WHERE attended.player_id = $1 AND attended.status = 'checked_in'
+                AND to_jsonb(attended) ->> 'booking_group_id' = to_jsonb(b) ->> 'booking_group_id'
+           ))                                                                  AS no_shows,
       -- dispute proxy: matches the user's teams played, and disputes the OTHER
       -- side filed on them (not dismissed)
       (SELECT count(*) FROM my_matches)                                        AS played,
@@ -132,39 +200,8 @@ async function recomputeTrust(db, userId) {
     [userId],
   );
 
-  const nRating = asNum(raw.n_rating) || 0;
-  const nSentiment = asNum(raw.n_sentiment) || 0;
-  const checkedIn = asNum(raw.checked_in) || 0;
-  const noShows = asNum(raw.no_shows) || 0;
-  const played = asNum(raw.played) || 0;
-  const disputesAgainst = asNum(raw.disputes_against) || 0;
-  const recentCancels = asNum(raw.recent_cancels) || 0;
-
-  // Each component is a real 0..1 value when there is a signal, else null.
-  const ratingNorm = nRating > 0 ? clamp01(asNum(raw.avg_rating) / 5) : null;
-  const attendanceRate = (checkedIn + noShows) > 0
-    ? clamp01(checkedIn / (checkedIn + noShows))
-    : null;
-  const disputeFreeRate = played > 0
-    ? clamp01(1 - disputesAgainst / played)
-    : null;
-  const sentimentNorm = nSentiment > 0
-    ? clamp01((asNum(raw.avg_sentiment) + 1) / 2)
-    : null;
-
-  // The aggregate substitutes the neutral prior for any absent component.
-  const p = (x) => (x === null ? NEUTRAL_PRIOR : x);
-  const base =
-    WEIGHTS.rating * p(ratingNorm)
-    + WEIGHTS.attendance * p(attendanceRate)
-    + WEIGHTS.disputes * p(disputeFreeRate)
-    + WEIGHTS.sentiment * p(sentimentNorm);
-  // Then the cancellation-abuse deduction (item 8): nothing for the free allowance,
-  // then a flat penalty per cancellation beyond it.
-  const overLimit = Math.max(0, recentCancels - POLICY.FREE_CANCELLATIONS_PER_MONTH);
-  const cancellationPenalty = overLimit * POLICY.CANCELLATION_TRUST_PENALTY;
-  const trustScore = Math.round(base - cancellationPenalty);
-  const clamped = Math.max(0, Math.min(100, trustScore));
+  const result = calculateTrust(raw);
+  const { rating, attendance, disputes, sentiment } = result.components;
 
   // Upsert: every player has a profile (auth.js:53), so this is normally an
   // UPDATE; the INSERT arm is a safety net if a profile is somehow missing.
@@ -181,22 +218,10 @@ async function recomputeTrust(db, userId) {
       trust_disputes   = EXCLUDED.trust_disputes,
       trust_sentiment  = EXCLUDED.trust_sentiment
     `,
-    [userId, clamped, ratingNorm, attendanceRate, disputeFreeRate, sentimentNorm],
+    [userId, result.trustScore, rating, attendance, disputes, sentiment],
   );
 
-  return {
-    trustScore: clamped,
-    components: {
-      rating: ratingNorm,
-      attendance: attendanceRate,
-      disputes: disputeFreeRate,
-      sentiment: sentimentNorm,
-    },
-    // Surfaced (not stored as a component) so a caller or a future UI can explain a
-    // score pulled below its reputation base by frequent cancelling.
-    recentCancellations: recentCancels,
-    cancellationPenalty,
-  };
+  return result;
 }
 
 /**
@@ -246,12 +271,16 @@ async function recomputeForMatch(db, matchId) {
     if (!uid || seen.has(String(uid))) continue;
     seen.add(String(uid));
     await recomputeTrust(db, uid);
+    emitTrustUpdate(uid);
     done.push(uid);
   }
   return done;
 }
 
 module.exports = {
+  calculateTrust,
+  emitTrustUpdate,
+  EVIDENCE_PRIOR,
   recomputeTrust,
   recomputeForMatch,
   representativeCaptain,
