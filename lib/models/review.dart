@@ -221,6 +221,11 @@ List<int> _starCounts(dynamic raw) {
 /// only so a tile can show "contributes N pts", never to recompute the score — the
 /// server owns the arithmetic.
 class TrustBreakdown {
+  final double? attendanceRate;
+  final int? checkedIn;
+  final int? noShows;
+  final double? repeatedNoShowPenalty;
+  final double? cancellationPenalty;
   final int? score; // 0..100, or null for a profile with no player_profiles row
   final double? rating; // avg star rating, normalised 0..1
   final double? attendance; // check-in rate 0..1
@@ -228,6 +233,11 @@ class TrustBreakdown {
   final double? sentiment; // avg review sentiment, normalised 0..1
 
   const TrustBreakdown({
+    this.attendanceRate,
+    this.checkedIn,
+    this.noShows,
+    this.repeatedNoShowPenalty,
+    this.cancellationPenalty,
     this.score,
     this.rating,
     this.attendance,
@@ -236,6 +246,11 @@ class TrustBreakdown {
   });
 
   factory TrustBreakdown.fromJson(Map<String, dynamic> j) => TrustBreakdown(
+        attendanceRate: asNumOrNull(j['attendanceRate']),
+        checkedIn: j['checkedIn'] == null ? null : asInt(j['checkedIn']),
+        noShows: j['noShows'] == null ? null : asInt(j['noShows']),
+        repeatedNoShowPenalty: asNumOrNull(j['repeatedNoShowPenalty']),
+        cancellationPenalty: asNumOrNull(j['cancellationPenalty']),
         score: j['score'] == null ? null : asInt(j['score']),
         rating: asNumOrNull(j['rating']),
         attendance: asNumOrNull(j['attendance']),

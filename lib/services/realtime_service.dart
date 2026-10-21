@@ -37,6 +37,12 @@ class RealtimeService {
   final _notifications = StreamController<Map<String, dynamic>>.broadcast();
   final _pinned = StreamController<Map<String, dynamic>>.broadcast();
   final _connection = StreamController<bool>.broadcast();
+  final _trustUpdates = StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get trustUpdates => _trustUpdates.stream;
+
+  @visibleForTesting
+  void emitTrustUpdateForTest(String userId) => _trustUpdates.add({'userId': userId});
 
   /// A newly persisted (or re-emitted) message — the client upserts by id, so
   /// this same event also carries reaction changes and delete tombstones.
@@ -150,6 +156,7 @@ class RealtimeService {
     s.on('team:update', (d) => _push(_teamUpdates, d));
     s.on('team:request', (d) => _push(_teamRequests, d));
     s.on('match:update', (d) => _push(_matchUpdates, d));
+    s.on('trust:update', (d) => _push(_trustUpdates, d));
     s.on('notification:new', (d) => _push(_notifications, d));
     s.on('chat:pinned', (d) => _push(_pinned, d));
   }
