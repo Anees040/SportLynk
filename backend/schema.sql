@@ -149,6 +149,11 @@ CREATE INDEX IF NOT EXISTS idx_slots_venue_date ON slots(venue_id, slot_date, st
 -- -- Bookings -----------------------------------------------
 CREATE TABLE IF NOT EXISTS bookings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  booking_number bigint GENERATED ALWAYS AS IDENTITY,
+  checkin_code text GENERATED ALWAYS AS (
+    'BK' || upper(lpad(to_hex(booking_number),
+      greatest(6, length(to_hex(booking_number))), '0'))
+  ) STORED,
   player_id UUID REFERENCES users(id),
   venue_id UUID REFERENCES venues(id),
   slot_id UUID REFERENCES slots(id),
@@ -168,6 +173,7 @@ CREATE TABLE IF NOT EXISTS bookings (
 );
 CREATE INDEX IF NOT EXISTS idx_bookings_player ON bookings(player_id, status);
 CREATE INDEX IF NOT EXISTS idx_bookings_venue ON bookings(venue_id, slot_date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_checkin_code ON bookings(checkin_code);
 
 -- -- Transactions --------------------------------------------
 CREATE TABLE IF NOT EXISTS transactions (

@@ -388,7 +388,7 @@ async function previewGroup(client, { userId, venueId, slotIds }) {
   }
 
   const tiers = await tiersFor(runner, venueId);
-  const runQuotes = group.partitionRuns(rows)
+  const runQuotes = group.partitionRuns(rows.map(group.normaliseSlot))
     .map((runSlots) => group.quoteGroup(runSlots, tiers));
   return done(200, group.quoteSelection(runQuotes));
 }

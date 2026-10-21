@@ -382,7 +382,10 @@ async function repriceVenueSlots(runner, { venueId, venue = null, dryRun = false
   // the column — where the property is undefined — keeps repricing exactly as it did
   // before the column existed.
   if (row.ai_pricing_enabled === false) {
-    return { ok: true, repriced: 0, reason: 'ai pricing disabled by owner', bySource: { model: 0, heuristic: 0 } };
+    // Reconcile slots released from checkout holds and settings saved by older
+    // servers that could disable AI without restoring the existing prices.
+    const restored = dryRun ? { repriced: 0 } : await returnSlotsToBasePrice(db, { venueId: id });
+    return { ok: true, repriced: restored.repriced, reason: 'ai pricing disabled by owner', bySource: { model: 0, heuristic: 0 } };
   }
 
   const win = grid.resolveWindow(row);
@@ -435,6 +438,17 @@ async function repriceVenueSlots(runner, { venueId, venue = null, dryRun = false
   }
 }
 
+/** Restore the venue's hourly rate, prorated for each slot's actual duration.
+ * Safe inside the venue-save transaction: no model calls or swallowed errors.
+ */
+async function returnSlotsToBasePrice(runner, { venueId } = {}) {
+  const db = runner || pool;
+  const id = String(venueId == null ? '' : venueId).trim();
+  if (!id) throw new Error('returnSlotsToBasePrice requires a venueId');
+  const result = await db.query(grid.RETURN_TO_BASE_PRICE_SQL, [id]);
+  return { ok: true, repriced: result.rowCount };
+}
+
 /** Reprice every active venue — what the maintenance sweep calls after ensuring slots. */
 async function repriceActiveVenues({ venueId = null, dryRun = false, runner = null } = {}) {
   const db = runner || pool;
@@ -471,6 +485,7 @@ module.exports = {
   ensureActiveVenueSlots,
   reshapeVenueSlots,
   repriceVenueSlots,
+  returnSlotsToBasePrice,
   repriceActiveVenues,
   countBookable,
   // Re-exported so a caller can state the window without importing both modules.

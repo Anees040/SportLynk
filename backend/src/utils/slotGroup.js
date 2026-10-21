@@ -78,15 +78,15 @@ function timeStr(value) {
 /**
  * One slot row reduced to the four fields these rules read.
  *
- * Accepts the row shape the slots table returns, so a caller passes query rows
- * straight in rather than mapping them first and getting the field names wrong.
+ * Accepts database rows and already-normalized slots, since quoting a partitioned
+ * run normalizes the same slots a second time.
  */
 function normaliseSlot(row = {}) {
   return {
     id: String(row.id == null ? '' : row.id),
-    date: dateStr(row.slot_date),
-    start: timeStr(row.start_time),
-    end: timeStr(row.end_time),
+    date: dateStr(row.slot_date ?? row.date),
+    start: timeStr(row.start_time ?? row.start),
+    end: timeStr(row.end_time ?? row.end),
     price: Number(row.price),
     status: row.status == null ? null : String(row.status),
   };

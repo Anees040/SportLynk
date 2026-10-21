@@ -27,6 +27,9 @@ import '../player/trust_score_screen.dart';
 class PublicProfileScreen extends StatefulWidget {
   final String userId;
 
+  /// Owner views resolve the player through an authorized booking lookup.
+  final String? ownerBookingId;
+
   /// Optional, so the header can paint from what the caller already knows while the
   /// full profile loads — the same trick the chat room uses for its title.
   final String? name;
@@ -35,6 +38,7 @@ class PublicProfileScreen extends StatefulWidget {
   const PublicProfileScreen({
     super.key,
     required this.userId,
+    this.ownerBookingId,
     this.name,
     this.avatarUrl,
   });
@@ -50,6 +54,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
   PublicProfile? _profile;
   bool _loading = true;
   bool _failed = false;
+  String? _error;
 
   String get _token => context.read<AuthProvider>().token ?? '';
 
@@ -67,12 +72,13 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
 
   Future<void> _load() async {
     if (mounted && _profile == null) setState(() => _loading = true);
-    final p = await _service.publicProfile(_token, widget.userId);
+    final result = await _service.publicProfile(_token, widget.userId, ownerBookingId: widget.ownerBookingId);
     if (!mounted) return;
     setState(() {
       _loading = false;
-      _failed = p == null;
-      _profile = p;
+      _failed = result.profile == null;
+      _profile = result.profile;
+      _error = result.error;
     });
   }
 
@@ -81,7 +87,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text('Profile',
+        title: Text(widget.ownerBookingId == null ? 'Profile' : 'Player profile',
             style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -101,7 +107,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
         onRefresh: _load,
         child: NetworkErrorView(
           title: 'Could not load profile',
-          message: 'Check your connection and try again.',
+          message: _error ?? 'The profile could not be loaded. Please try again.',
           onRetry: _load,
         ),
       );
@@ -196,7 +202,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen>
           // The trust number is always shown; the full breakdown (individual
           // reviews) is detail, so it is only reachable on a profile whose detail is
           // visible — never for a private stranger.
-          _stat('🛡️', trust, 'Trust', onTap: p.isDetailVisible ? () => _openTrust(p) : null),
+          _stat('🛡️', widget.ownerBookingId == null || p.trustScore == null ? trust : '$trust/100',
+              widget.ownerBookingId == null ? 'Trust' : 'Trust score',
+              onTap: p.isDetailVisible ? () => _openTrust(p) : null),
           if (p.isDetailVisible && p.bookings30d != null) ...[
             _divider(),
             _stat('📅', '${p.bookings30d}', 'This month'),

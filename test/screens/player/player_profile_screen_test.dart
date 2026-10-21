@@ -183,11 +183,11 @@ void main() {
     testWidgets('a doubled text scale keeps the identity present', (
       tester,
     ) async {
-      ignoreOverflow();
       await pumpProfile(tester, api, textScale: 2.0);
       await settleData(tester);
 
       expect(find.text('Bilal Ahmed'), findsOneWidget);
+      expectNoOverflow(tester);
     });
   });
 }

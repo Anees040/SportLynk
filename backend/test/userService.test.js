@@ -18,6 +18,7 @@ const svc = require('../src/services/userService');
 
 const V = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'; // a viewer
 const U = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'; // the player being viewed
+const B = 'cccccccc-cccc-cccc-cccc-cccccccccccc'; // their booking
 
 function mkClient(responder) {
   const calls = [];
@@ -48,6 +49,53 @@ function baseResponder(row, { teams = [], bookings = 0 } = {}) {
     return null;
   };
 }
+
+test('booking profile resolves the player through the authenticated venue owner', async () => {
+  const c = mkClient((sql, params) => {
+    if (sql.includes('v.owner_id')) {
+      assert.deepEqual(params, [B, V]);
+      assert.ok(!sql.includes('status'), 'pending, confirmed and rejected bookings are all reviewable');
+      return { rows: [{ player_id: U }] };
+    }
+    return baseResponder(playerRow({ trust_score: '88' }))(sql);
+  });
+  const r = await svc.bookingPlayerProfile(c, { ownerId: V, bookingId: B });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.id, U);
+  assert.equal(r.data.isSelf, false);
+  assert.equal(r.data.trustScore, 88);
+  assert.equal(r.data.bio, 'Left winger.');
+  assert.ok(c.calls.every(({ sql }) => /^\s*SELECT\b/.test(sql)), 'profile viewing is read only');
+});
+
+test('an unrelated owner or missing booking cannot read its player profile', async () => {
+  const c = mkClient();
+  const r = await svc.bookingPlayerProfile(c, { ownerId: V, bookingId: B });
+  assert.equal(r.status, 404);
+  assert.equal(r.data, null);
+  assert.equal(c.calls.length, 1);
+  assert.match(c.calls[0].sql, /WHERE b\.id = \$1 AND v\.owner_id = \$2/);
+});
+
+test('invalid booking IDs are refused before querying', async () => {
+  const c = mkClient();
+  const r = await svc.bookingPlayerProfile(c, { ownerId: V, bookingId: 'invalid' });
+  assert.equal(r.status, 404);
+  assert.equal(c.calls.length, 0);
+});
+
+test('owners see a private booking player identity and trust without hidden profile details', async () => {
+  const c = mkClient(sql => sql.includes('v.owner_id')
+    ? { rows: [{ player_id: U }] }
+    : baseResponder(playerRow({ is_public: false }))(sql));
+  const r = await svc.bookingPlayerProfile(c, { ownerId: V, bookingId: B });
+  assert.equal(r.data.id, U);
+  assert.equal(r.data.trustScore, 88);
+  assert.equal(r.data.isSelf, false);
+  assert.ok(!('bio' in r.data));
+  assert.ok(!('teams' in r.data));
+  assert.equal(c.calls.length, 2);
+});
 
 // ── guards ──────────────────────────────────────────────────────────────────────
 

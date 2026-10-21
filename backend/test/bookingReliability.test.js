@@ -78,7 +78,7 @@ test('manual check-in resolves the booking ID; QR scans still resolve the separa
 });
 
 test('invalid input releases the connection once without opening a transaction', async () => {
-  for (const body of [{}, { bookingId: 'not-a-uuid' }, { qrCode: {} }]) {
+  for (const body of [{}, { bookingId: 'not-a-uuid' }, { bookingId: 'BK123' }, { bookingId: 'BK00012G' }, { qrCode: {} }]) {
     const app = setup();
     const response = await app.invoke('/scan-qr', body);
     assert.ifError(response.error);
@@ -88,12 +88,26 @@ test('invalid input releases the connection once without opening a transaction',
   }
 });
 
-test('manual check-in preserves ownership and duplicate-check-in protection', async () => {
-  for (const [options, expected] of [[{ owner: 'another-owner' }, 403], [{ status: 'checked_in' }, 409], [{ status: 'cancelled' }, 409]]) {
-    const app = setup(options);
+test('short manual codes accept lowercase and separators and use the indexed code lookup', async () => {
+  for (const bookingId of ['BK00012A', ' bk00-012a ', 'BK00 012A']) {
+    const app = setup();
     const response = await app.invoke('/scan-qr', { bookingId });
-    assert.equal(response.status, expected);
-    assert.ok(!app.events.some(e => e.sql === 'COMMIT' || e.sql === 'emit'));
+    assert.ifError(response.error);
+    assert.equal(response.result.success, true);
+    const lookup = app.events.find(e => e.sql.includes('AS pkt_now'));
+    assert.match(lookup.sql, /b\.checkin_code=\$1/);
+    assert.equal(lookup.params[0], 'BK00012A');
+  }
+});
+
+test('manual check-in preserves ownership and duplicate-check-in protection', async () => {
+  for (const identifier of [bookingId, 'BK00012A']) {
+    for (const [options, expected] of [[{ owner: 'another-owner' }, 403], [{ status: 'checked_in' }, 409], [{ status: 'cancelled' }, 409]]) {
+      const app = setup(options);
+      const response = await app.invoke('/scan-qr', { bookingId: identifier });
+      assert.equal(response.status, expected);
+      assert.ok(!app.events.some(e => e.sql === 'COMMIT' || e.sql === 'emit'));
+    }
   }
 });
 

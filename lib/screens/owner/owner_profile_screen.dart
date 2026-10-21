@@ -599,6 +599,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const _OwnerChangePasswordSheet(),
     );
@@ -797,222 +798,227 @@ class _OwnerChangePasswordSheetState extends State<_OwnerChangePasswordSheet> {
     final strength = _getStrength(_newCtrl.text);
     final match = _confCtrl.text.isNotEmpty && _newCtrl.text == _confCtrl.text;
 
-    return SingleChildScrollView(
-      physics: const ClampingScrollPhysics(),
+    // Keep the scroll viewport above the keyboard as validation adds content.
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
-        padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 24,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        ),
+        clipBehavior: Clip.antiAlias,
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            24 + MediaQuery.paddingOf(context).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Change Password',
-              style: GoogleFonts.poppins(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+              const SizedBox(height: 20),
+              Text(
+                'Change Password',
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Secure your account by updating your password.',
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            TextField(
-              controller: _curCtrl,
-              obscureText: _obsCur,
-              onChanged: (_) => setState(() => _errorMsg = null),
-              style: GoogleFonts.poppins(fontSize: 14),
-              decoration: InputDecoration(
-                labelText: 'Current Password',
-                labelStyle: GoogleFonts.poppins(
+              const SizedBox(height: 8),
+              Text(
+                'Secure your account by updating your password.',
+                style: GoogleFonts.poppins(
                   fontSize: 13,
                   color: AppColors.textSecondary,
                 ),
-                prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obsCur ? Icons.visibility_off : Icons.visibility,
-                    size: 20,
-                  ),
-                  onPressed: () => setState(() => _obsCur = !_obsCur),
-                ),
-                filled: true,
-                fillColor: AppColors.inputFill,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 24),
 
-            TextField(
-              controller: _newCtrl,
-              obscureText: _obsNew,
-              onChanged: (_) => setState(() => _errorMsg = null),
-              style: GoogleFonts.poppins(fontSize: 14),
-              decoration: InputDecoration(
-                labelText: 'New Password',
-                labelStyle: GoogleFonts.poppins(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                ),
-                prefixIcon: const Icon(Icons.vpn_key_outlined, size: 20),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obsNew ? Icons.visibility_off : Icons.visibility,
-                    size: 20,
+              TextField(
+                controller: _curCtrl,
+                obscureText: _obsCur,
+                onChanged: (_) => setState(() => _errorMsg = null),
+                style: GoogleFonts.poppins(fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Current Password',
+                  labelStyle: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
                   ),
-                  onPressed: () => setState(() => _obsNew = !_obsNew),
-                ),
-                filled: true,
-                fillColor: AppColors.inputFill,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Strength Bar
-            Row(
-              children: List.generate(
-                4,
-                (i) => Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: strength > (i * 0.25)
-                          ? _getStrengthColor(strength)
-                          : AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
+                  prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obsCur ? Icons.visibility_off : Icons.visibility,
+                      size: 20,
                     ),
+                    onPressed: () => setState(() => _obsCur = !_obsCur),
+                  ),
+                  filled: true,
+                  fillColor: AppColors.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            if (_errorMsg != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: AppColors.error.withValues(alpha: 0.3),
+              const SizedBox(height: 16),
+
+              TextField(
+                controller: _newCtrl,
+                obscureText: _obsNew,
+                onChanged: (_) => setState(() => _errorMsg = null),
+                style: GoogleFonts.poppins(fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'New Password',
+                  labelStyle: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                  prefixIcon: const Icon(Icons.vpn_key_outlined, size: 20),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obsNew ? Icons.visibility_off : Icons.visibility,
+                      size: 20,
+                    ),
+                    onPressed: () => setState(() => _obsNew = !_obsNew),
+                  ),
+                  filled: true,
+                  fillColor: AppColors.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
                   ),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: AppColors.error,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _errorMsg!,
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.error,
-                        ),
+              ),
+              const SizedBox(height: 8),
+              // Strength Bar
+              Row(
+                children: List.generate(
+                  4,
+                  (i) => Expanded(
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: strength > (i * 0.25)
+                            ? _getStrengthColor(strength)
+                            : AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                  ],
-                ),
-              ),
-
-            TextField(
-              controller: _confCtrl,
-              obscureText: true,
-              onChanged: (_) => setState(() => _errorMsg = null),
-              style: GoogleFonts.poppins(fontSize: 14),
-              decoration: InputDecoration(
-                labelText: 'Confirm Password',
-                labelStyle: GoogleFonts.poppins(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                ),
-                prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                suffixIcon: match
-                    ? const Icon(
-                        Icons.check_circle,
-                        color: AppColors.success,
-                        size: 20,
-                      )
-                    : null,
-                filled: true,
-                fillColor: AppColors.inputFill,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _saving ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                child: _saving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Text(
-                        'Update Password',
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+              ),
+              const SizedBox(height: 16),
+              if (_errorMsg != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.error.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: AppColors.error,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _errorMsg!,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: AppColors.error,
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+
+              TextField(
+                controller: _confCtrl,
+                obscureText: true,
+                onChanged: (_) => setState(() => _errorMsg = null),
+                style: GoogleFonts.poppins(fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Confirm Password',
+                  labelStyle: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                  prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                  suffixIcon: match
+                      ? const Icon(
+                          Icons.check_circle,
+                          color: AppColors.success,
+                          size: 20,
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: AppColors.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _saving ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          'Update Password',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:mobile_scanner/src/mobile_scanner_view_attributes.dart';
@@ -62,7 +63,7 @@ void main() {
   late FakeApi api;
   setUp(() { api = FakeApi()..install(); });
 
-  testWidgets('manual check-in sends the booking ID and renders string balances without a red screen', (tester) async {
+  testWidgets('manual check-in sends the short code and renders string balances without a red screen', (tester) async {
     final previous = MobileScannerPlatform.instance;
     MobileScannerPlatform.instance = _Camera();
     addTearDown(() => MobileScannerPlatform.instance = previous);
@@ -72,16 +73,33 @@ void main() {
     await mount(tester, const OwnerQrScannerScreen(), role: 'owner');
     await tester.tap(find.text('Or enter Booking ID manually'));
     await tester.pump();
-    await tester.enterText(find.byType(TextField), bookingId);
+    await tester.enterText(find.byType(TextField), 'BK00012A');
     await tester.tap(find.text('Verify'));
     await settleData(tester);
-    expect(jsonDecode(api.to('/owner/scan-qr').single.body!), {'bookingId': bookingId});
+    expect(jsonDecode(api.to('/owner/scan-qr').single.body!), {'bookingId': 'BK00012A'});
     expect(find.text('Check-in Successful!'), findsOneWidget);
     expect(find.text('PKR 12000'), findsOneWidget);
     expect(find.text('PKR 1800'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
+  });
+
+  testWidgets('the short booking code is shown and copied instead of the UUID', (tester) async {
+    api.ok(bookingPath, {...booking(), 'checkin_code': 'BK00012A'});
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String;
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await mount(tester, const PlayerBookingDetailScreen(bookingId: bookingId));
+    expect(find.text('BK00012A'), findsOneWidget);
+    expect(find.text(bookingId), findsNothing);
+    await tester.ensureVisible(find.text('Copy booking ID'));
+    await tester.tap(find.text('Copy booking ID'));
+    await tester.pump();
+    expect(copied, 'BK00012A');
   });
 
   testWidgets('the full manual ID is available even when the QR payload is missing', (tester) async {

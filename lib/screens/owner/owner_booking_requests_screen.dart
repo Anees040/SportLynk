@@ -351,6 +351,17 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
     );
   }
 
+  Future<void> _openPlayerProfile(Map<String, dynamic> booking) async {
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => PublicProfileScreen(
+        userId: booking['player_id']?.toString() ?? '',
+        ownerBookingId: booking['id'].toString(),
+        name: booking['player_name']?.toString(),
+      ),
+    ));
+    if (mounted) await _loadAll();
+  }
+
   Widget _bookingCard(Map<String, dynamic> b, String status) {
     final trust = asInt(b['trust_score'], fallback: 100);
     final isPending = status == 'pending';
@@ -414,21 +425,30 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
           ]),
         ),
 
-        // Auto-approve notice (pending only)
-        if (b['player_id'] != null)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(
-                builder: (_) => PublicProfileScreen(
-                  userId: b['player_id'].toString(),
-                  name: name.toString(),
+        // Review the player before deciding whether to approve their booking.
+        if (b['id'] != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _openPlayerProfile(b),
+                icon: const Icon(Icons.person_outline, size: 18),
+                label: Text(
+                  'View player profile',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
                 ),
-              )),
-              icon: const Icon(Icons.person_outline, size: 18),
-              label: const Text('View player profile'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  backgroundColor: AppColors.accentLight,
+                  side: const BorderSide(color: AppColors.primary),
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ),
           ),
+        // Auto-approve notice (pending only)
         if (isPending)
           Container(
             margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -515,7 +535,24 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
         if (isConfirmed)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-            child: Row(children: [
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.qr_code_scanner, size: 20),
+                label: Text(
+                  'Scan QR to check in',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                onPressed: () => Navigator.pushNamed(context, '/owner-scan-qr'),
+              ),
+              const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: () => _openChat(b),
                 icon: const Icon(Icons.chat_bubble_outline, size: 16),
@@ -528,22 +565,6 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
                   side: const BorderSide(color: AppColors.accent),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.qr_code_scanner, size: 18),
-                  label: Text(
-                    'Scan QR to Check In',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onPressed: () => Navigator.pushNamed(context, '/owner-scan-qr'),
                 ),
               ),
             ]),

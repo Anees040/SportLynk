@@ -18,6 +18,7 @@ const { notify } = require("../utils/notify");
 const { recomputeTrust, emitTrustUpdate } = require("../utils/trustScore");
 const chat = require("../utils/chatCore");
 const bookingService = require("../services/bookingService");
+const userService = require("../services/userService");
 const mlClient = require("../services/mlClient");
 const settings = require("../utils/globalSettings");
 const { TtlCache, ONE_HOUR_MS } = require("../utils/ttlCache");
@@ -541,7 +542,7 @@ router.get("/venues", async (req, res, next) => {
               -- "inherit the platform setting" and "AI on", which is the pre-043
               -- behaviour for every venue.
               to_jsonb(v) ->> 'deposit_pct'        AS deposit_pct,
-              to_jsonb(v) ->> 'ai_pricing_enabled' AS ai_pricing_enabled,
+              to_jsonb(v) -> 'ai_pricing_enabled' AS ai_pricing_enabled,
               (SELECT COUNT(*) FROM bookings b WHERE b.venue_id = v.id AND b.status='pending') AS pending_bookings,
               (SELECT COUNT(*) FROM bookings b WHERE b.venue_id = v.id AND b.slot_date = CURRENT_DATE AND b.status IN ('confirmed','checked_in')) AS todays_bookings
        FROM venues v
@@ -825,6 +826,12 @@ router.patch("/venues/:id", async (req, res, next) => {
       // Same transaction as the write: an owner whose hours saved but whose grid did
       // not move would be selling the old window with no sign of it.
       if (reshapes) shape = await slotService.reshapeVenueSlots(client, { venueId: id });
+      // This is local SQL, so finish it in the same transaction as the setting.
+      // It also refreshes the flat rate when AI was already off and only the
+      // hourly price changed. The query checks the saved pricing mode itself.
+      if (ai_pricing_enabled === false || price_per_hour !== undefined || reshapes) {
+        await slotService.returnSlotsToBasePrice(client, { venueId: id });
+      }
       await client.query('COMMIT');
     } catch (e) {
       await client.query('ROLLBACK');
@@ -850,22 +857,12 @@ router.patch("/venues/:id", async (req, res, next) => {
       throw e;
     }
 
-    if (reshapes) {
+    if (ai_pricing_enabled !== false
+      && (reshapes || ai_pricing_enabled === true || price_per_hour !== undefined)) {
       // Outside the transaction and never awaited: repricing calls ml-service, and a
       // network round trip must not be held open across a DB client or made to block
       // the owner's save.
       slotService.repriceVenueSlots(pool, { venueId: id }).catch(() => {});
-    }
-
-    // Switching AI pricing off has to take effect on the slots that are already
-    // priced, not only on the next sweep — an owner who turns it off and still sees
-    // the model's numbers in their calendar has been told the switch does nothing.
-    // This rewrites only the model's own prices (price_source <> 'owner' among the
-    // future available slots) back to the venue's flat rate, which it reads from the
-    // row, so an edit to the price and the switch in one request stay consistent.
-    // Outside the transaction for the same reason the reprice above is.
-    if (ai_pricing_enabled === false) {
-      slotService.returnSlotsToBasePrice(pool, { venueId: id }).catch(() => {});
     }
 
     const parts = ['Venue updated successfully'];
@@ -996,7 +993,7 @@ router.get("/bookings", async (req, res, next) => {
 
     const result = await pool.query(
       `
-      SELECT b.id, b.status, b.total_amount, b.security_deposit, b.deposit_amount,
+      SELECT b.id, b.player_id, b.status, b.total_amount, b.security_deposit, b.deposit_amount,
              b.slot_date, b.start_time, b.end_time, b.created_at, b.notes,
              u.name AS player_name, u.phone AS player_phone,
              COALESCE(pp.trust_score,100) AS trust_score,
@@ -1013,6 +1010,22 @@ router.get("/bookings", async (req, res, next) => {
     );
 
     res.json({ success: true, data: result.rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /api/owner/bookings/:id/player-profile — review a booking's player.
+router.get("/bookings/:id/player-profile", async (req, res, next) => {
+  try {
+    const result = await userService.bookingPlayerProfile(pool, {
+      ownerId: req.user.id,
+      bookingId: req.params.id,
+    });
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, message: result.message });
+    }
+    res.json({ success: true, data: result.data });
   } catch (e) {
     next(e);
   }
@@ -1277,8 +1290,11 @@ router.post("/scan-qr", async (req, res, next) => {
     const { qrCode, bookingId } = req.body;
     const manual = bookingId !== undefined;
     const identifier = manual ? bookingId : qrCode;
+    const trimmed = typeof identifier === 'string' ? identifier.trim() : '';
+    const legacyId = manual && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
+    const shortCode = manual ? trimmed.replace(/[\s-]/g, '').toUpperCase() : '';
     if (typeof identifier !== 'string' || !identifier.trim()
-        || (manual && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier.trim()))) {
+        || (manual && !legacyId && !/^BK[0-9A-F]{6,16}$/.test(shortCode))) {
       return res
         .status(400)
         .json({ success: false, message: "Enter a valid booking ID or scan a QR code." });
@@ -1297,9 +1313,9 @@ router.post("/scan-qr", async (req, res, next) => {
              to_char((NOW() AT TIME ZONE $2), 'YYYY-MM-DD"T"HH24:MI:SS') AS pkt_now
       FROM bookings b
       JOIN venues v ON b.venue_id=v.id
-      WHERE ${manual ? 'b.id=$1::uuid' : 'b.qr_code=$1'} FOR UPDATE OF b
+      WHERE ${manual ? (legacyId ? 'b.id=$1::uuid' : 'b.checkin_code=$1') : 'b.qr_code=$1'} FOR UPDATE OF b
     `,
-      [identifier.trim(), POLICY.TIMEZONE],
+      [manual && !legacyId ? shortCode : trimmed, POLICY.TIMEZONE],
     );
 
     if (!scanRes.rows.length) {

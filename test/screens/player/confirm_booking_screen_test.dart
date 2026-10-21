@@ -189,6 +189,33 @@ void main() {
   });
 
   group('confirming the booking', () {
+    testWidgets('multi-slot quote enables payment and submits both slots', (tester) async {
+      final selected = [
+        slot(id: 's-1', price: 1600, startTime: '17:00:00', endTime: '18:00:00'),
+        slot(id: 's-2', price: 1600, startTime: '18:00:00', endTime: '19:00:00'),
+      ];
+      api.ok('/bookings/group/quote', {
+        'total': 3200, 'listTotal': 3200, 'saved': 0,
+        'runCount': 1, 'slotCount': 2, 'runs': [{'discountPercent': 0}],
+      });
+      api.ok('/bookings/group', {
+        'bookings': [{'id': 'bk-1', 'checkin_code': 'BK00012A'}, {'id': 'bk-2'}],
+        'groups': [{'groupId': 'group-1'}],
+      });
+      await pumpScreen(tester, ConfirmBookingScreen(
+        venue: venue(), slot: selected.first, slots: selected,
+        selectedDate: DateTime(2026, 10, 21),
+      ));
+      await settleData(tester);
+      expect(find.text('Price unavailable'), findsNothing);
+      expect(tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Pay PKR 3200')).onPressed, isNotNull);
+      await tester.tap(find.text('Pay PKR 3200'));
+      await tester.pumpAndSettle();
+      final request = api.to('/bookings/group').single;
+      expect(jsonDecode(request.body!), {'venueId': 'v-1', 'slotIds': ['s-1', 's-2']});
+      expect(find.text('PENDING OWNER APPROVAL'), findsOneWidget);
+    });
+
     testWidgets(
       'a successful booking posts the slot and venue, then confirms',
       (tester) async {

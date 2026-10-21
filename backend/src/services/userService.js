@@ -124,4 +124,20 @@ async function publicProfile(client, { viewerId, targetId }) {
   };
 }
 
-module.exports = { publicProfile, BOOKED_STATUSES };
+/** Read-only player profile for a booking at one of this owner's venues.
+ * Resolve the player on the server so older cached booking lists need no player ID.
+ * All booking statuses are reviewable; the normal profile visibility rules apply.
+ */
+async function bookingPlayerProfile(client, { ownerId, bookingId }) {
+  if (!access.isUuid(bookingId)) return err(404, 'not_found', 'Booking not found.');
+  const { rows } = await client.query(
+    `SELECT b.player_id FROM bookings b
+       JOIN venues v ON v.id = b.venue_id
+      WHERE b.id = $1 AND v.owner_id = $2`,
+    [bookingId, ownerId],
+  );
+  if (!rows.length) return err(404, 'not_found', 'Booking not found.');
+  return publicProfile(client, { viewerId: ownerId, targetId: rows[0].player_id });
+}
+
+module.exports = { publicProfile, bookingPlayerProfile, BOOKED_STATUSES };

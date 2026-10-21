@@ -273,9 +273,12 @@ class _OwnerQrScannerScreenState extends State<OwnerQrScannerScreen> {
                   const SizedBox(height: 16),
                   TextField(
                     controller: _manualCtrl,
+                    textCapitalization: TextCapitalization.characters,
+                    autocorrect: false,
+                    enableSuggestions: false,
                     style: GoogleFonts.poppins(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Paste or type the booking ID',
+                      hintText: 'Booking ID, e.g. BK00012A',
                       hintStyle: GoogleFonts.poppins(color: Colors.white54),
                       filled: true,
                       fillColor: Colors.white12,

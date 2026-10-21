@@ -50,10 +50,11 @@ Future<RouteLog> pumpManagement(
   WidgetTester tester,
   FakeApi api, {
   double textScale = 1.0,
+  Map<String, dynamic>? venueData,
 }) {
   return pumpScreen(
     tester,
-    OwnerVenueManagementScreen(venue: venue()),
+    OwnerVenueManagementScreen(venue: venueData ?? venue()),
     auth: FakeAuth(
       role: 'owner',
       id: 'o-1',
@@ -113,6 +114,48 @@ void main() {
   });
 
   group('saving and navigation', () {
+    for (final savedValue in [false, 'false']) {
+      testWidgets('reopening preserves AI pricing off from $savedValue (${savedValue.runtimeType})', (tester) async {
+        api.ok(kUpdate, venue());
+        await pumpManagement(tester, api,
+          venueData: {...venue(), 'ai_pricing_enabled': savedValue});
+        await settleManagement(tester);
+        expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+
+        final save = find.widgetWithText(ElevatedButton, 'Save Changes');
+        await tester.ensureVisible(save);
+        await tester.pump();
+        await tester.tap(save);
+        await tester.pump(const Duration(milliseconds: 300));
+        final body = jsonDecode(api.to(kUpdate).single.body!) as Map;
+        expect(body['ai_pricing_enabled'], isFalse);
+        expect(body['price_per_hour'], 2000);
+      });
+    }
+
+    testWidgets('turning AI pricing off saves the owner rate and boolean false', (tester) async {
+      api.ok(kUpdate, venue());
+      await pumpManagement(tester, api);
+      await settleManagement(tester);
+      await tester.enterText(field('Price Per Hour'), '2800');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.ensureVisible(find.byType(Switch));
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(find.textContaining('Off: the Price Per Hour'), findsOneWidget);
+
+      final save = find.widgetWithText(ElevatedButton, 'Save Changes');
+      await tester.ensureVisible(save);
+      await tester.pump();
+      await tester.tap(save);
+      await tester.pump(const Duration(milliseconds: 300));
+      final body = jsonDecode(api.to(kUpdate).single.body!) as Map;
+      expect(body['ai_pricing_enabled'], isFalse);
+      expect(body['price_per_hour'], 2800);
+    });
+
     testWidgets('a price-only save preserves the loaded description', (tester) async {
       api.ok(kUpdate, venue());
       await pumpManagement(tester, api);

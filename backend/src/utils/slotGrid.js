@@ -481,14 +481,51 @@ const BOOKABLE_COUNT_SQL = `
  * $1 venue, $2 hours int[], $3 prices numeric[], $4 sources text[].
  */
 const REPRICE_SQL = `
+  WITH pricing_venue AS MATERIALIZED (
+    SELECT v.id FROM venues v
+     WHERE v.id = $1::uuid
+       AND COALESCE((to_jsonb(v) ->> 'ai_pricing_enabled')::boolean, true)
+     FOR NO KEY UPDATE
+  )
   UPDATE slots s
      SET price = p.price,
          price_source = p.src
-    FROM unnest($2::int[], $3::numeric[], $4::text[]) AS p(hour, price, src)
+    FROM pricing_venue v,
+         unnest($2::int[], $3::numeric[], $4::text[]) AS p(hour, price, src)
    WHERE s.venue_id = $1::uuid
+     AND s.venue_id = v.id
      AND EXTRACT(HOUR FROM s.start_time)::int = p.hour
      AND s.status = 'available'
+     AND (s.locked_until IS NULL OR s.locked_until <= NOW())
      AND (s.price_source IS NULL OR s.price_source <> 'owner')
+     AND (s.slot_date > ${PKT_TODAY}
+      OR (s.slot_date = ${PKT_TODAY} AND s.start_time > ${PKT_NOW_TIME}))`;
+
+// Lock the venue before touching slots, just as the save route does. Both price
+// writers check the current mode under that lock, so an in-flight model request
+// cannot put dynamic prices back after the owner's switch-off has committed.
+// NULL is the existing source marker for the venue's flat rate; explicit owner
+// overrides retain their prices. Active checkouts and sold slots also keep theirs.
+const RETURN_TO_BASE_PRICE_SQL = `
+  WITH pricing_venue AS MATERIALIZED (
+    SELECT v.id, COALESCE(NULLIF(v.price_per_hour, 0), v.base_price) AS hourly_rate
+      FROM venues v
+     WHERE v.id = $1::uuid
+       AND (to_jsonb(v) ->> 'ai_pricing_enabled')::boolean = false
+     FOR NO KEY UPDATE
+  )
+  UPDATE slots s
+     SET price = ROUND(v.hourly_rate * EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 3600, 2),
+         price_source = NULL
+    FROM pricing_venue v
+   WHERE s.venue_id = v.id
+     AND v.hourly_rate > 0
+     AND s.end_time > s.start_time
+     AND s.status = 'available'
+     AND (s.locked_until IS NULL OR s.locked_until <= NOW())
+     AND (s.price_source IS NULL OR s.price_source <> 'owner')
+     AND (s.price_source IS NOT NULL OR s.price IS DISTINCT FROM
+          ROUND(v.hourly_rate * EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 3600, 2))
      AND (s.slot_date > ${PKT_TODAY}
       OR (s.slot_date = ${PKT_TODAY} AND s.start_time > ${PKT_NOW_TIME}))`;
 
@@ -510,6 +547,7 @@ module.exports = {
   KEPT_OUTSIDE_SQL,
   BOOKABLE_COUNT_SQL,
   REPRICE_SQL,
+  RETURN_TO_BASE_PRICE_SQL,
   HORIZON_DAYS,
   MAX_HORIZON_DAYS,
   FALLBACK_FROM_HOUR,

@@ -105,8 +105,9 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
     _close = _parseTime(widget.venue['operating_hours_to']) ?? _close;
     final d = int.tryParse(widget.venue['slot_duration_minutes']?.toString() ?? '');
     if (d != null && _slotLengths.contains(d)) _slotMinutes = d;
-    // ai_pricing_enabled is absent on a pre-043 database; absent reads as on.
-    _aiPricing = widget.venue['ai_pricing_enabled'] != false;
+    // Older servers returned this JSON boolean as text. Preserve either form
+    // when reopening the screen; an absent setting keeps the default of on.
+    _aiPricing = widget.venue['ai_pricing_enabled']?.toString().toLowerCase() != 'false';
     final rawDeposit = widget.venue['deposit_pct'];
     if (rawDeposit != null) {
       final parsed = _parseNum(rawDeposit);

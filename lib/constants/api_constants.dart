@@ -46,6 +46,7 @@ class ApiConstants {
   static String ownerVenueSlots(String venueId) => '/owner/venues/$venueId/slots';
   static const String ownerBookings = '/owner/bookings';
   static String approveBooking(String id) => '/owner/bookings/$id/approve';
+  static String ownerBookingPlayerProfile(String id) => '/owner/bookings/$id/player-profile';
   static String rejectBooking(String id) => '/owner/bookings/$id/reject';
   static const String checkin = '/owner/checkin';
   static const String checkinDecide = '/owner/checkin/decide';

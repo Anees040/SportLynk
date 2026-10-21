@@ -338,6 +338,7 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
 
     final status = (_booking!['status'] as String?) ?? '';
     final qrCode = _booking!['qr_code'] as String?;
+    final manualCode = _booking!['checkin_code'] as String? ?? widget.bookingId;
     final isConfirmed = status == 'confirmed';
     final isCheckedIn = status == 'checked_in';
     final isPending = status == 'pending';
@@ -436,10 +437,14 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
                 child: Column(children: [
                   Text('Manual Booking ID', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
-                  SelectableText(widget.bookingId, textAlign: TextAlign.center),
+                  SelectableText(
+                    manualCode,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 2),
+                  ),
                   TextButton.icon(
                     onPressed: () async {
-                      await Clipboard.setData(ClipboardData(text: widget.bookingId));
+                      await Clipboard.setData(ClipboardData(text: manualCode));
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Booking ID copied')),
