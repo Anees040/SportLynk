@@ -51,6 +51,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
   TournamentDetail _detail = TournamentDetail.empty;
   bool _loading = true;
   String? _error;
+  bool _notFound = false;
 
   /// Ids of in-flight actions. One membership test guards every button, so a second
   /// tap on Approve cannot fire a second refund while the first is still travelling.
@@ -82,6 +83,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
     final ok = raw['success'] == true && raw['data'] is Map;
     setState(() {
       _loading = false;
+      _notFound = !ok &&
+          (raw['statusCode'] == 404 || raw['code'] == 'not_found');
       _error = ok
           ? null
           : '${raw['message'] ?? 'Could not load this tournament'}';
@@ -530,11 +533,20 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen>
           ? const CustomLoader()
           : t == null
           ? TournamentEmpty(
-              icon: Icons.search_off,
-              title: 'Tournament not found',
+              icon: _notFound ? Icons.search_off : Icons.cloud_off_outlined,
+              title: _notFound
+                  ? 'Tournament not found'
+                  : 'Could not load tournament',
               message:
                   _error ??
-                  'It may have been cancelled, or the link is out of date.',
+                  'Please try again in a moment.',
+              action: _notFound
+                  ? null
+                  : FilledButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
             )
           : TabBarView(
               controller: _tabs,

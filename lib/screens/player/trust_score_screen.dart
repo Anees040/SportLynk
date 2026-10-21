@@ -7,6 +7,7 @@ import '../../models/review.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/review_service.dart';
 import '../../widgets/trust_widgets.dart';
+import '../../utils/trust_refresh.dart';
 
 /// M25 — Trust Profile. The human-readable face of Trust Score 2.0.
 ///
@@ -43,12 +44,17 @@ class TrustScoreScreen extends StatefulWidget {
   State<TrustScoreScreen> createState() => _TrustScoreScreenState();
 }
 
-class _TrustScoreScreenState extends State<TrustScoreScreen> {
+class _TrustScoreScreenState extends State<TrustScoreScreen>
+    with WidgetsBindingObserver, TrustRefresh<TrustScoreScreen> {
   final ReviewService _service = ReviewService();
 
   UserReviews _data = UserReviews.empty;
   bool _loading = true;
+  int _loadVersion = 0;
   String? _userId;
+
+  @override
+  void refreshTrust() => _load();
 
   @override
   void initState() {
@@ -74,6 +80,7 @@ class _TrustScoreScreenState extends State<TrustScoreScreen> {
   }
 
   Future<void> _load() async {
+    final version = ++_loadVersion;
     final id = _userId;
     if (id == null) {
       setState(() => _loading = false);
@@ -84,11 +91,11 @@ class _TrustScoreScreenState extends State<TrustScoreScreen> {
       setState(() => _loading = false);
       return;
     }
-    setState(() => _loading = true);
+    if (identical(_data, UserReviews.empty)) setState(() => _loading = true);
     final res = await _service.userReviews(token, id);
-    if (!mounted) return;
+    if (!mounted || version != _loadVersion) return;
     setState(() {
-      _data = res;
+      if (!identical(res, UserReviews.empty)) _data = res;
       _loading = false;
     });
   }
@@ -138,6 +145,30 @@ class _TrustScoreScreenState extends State<TrustScoreScreen> {
                     _sectionTitle('Score Breakdown'),
                     const SizedBox(height: 12),
                     _tiles(trust),
+                    const SizedBox(height: 12),
+                    Text(
+                      'A small starting allowance keeps one incident from dominating '
+                      'your score. Repeated no-shows carry an '
+                      'extra penalty; attending future bookings helps your score recover.',
+                      style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
+                    ),
+                    if (trust.noShows != null)
+                      Text(
+                        '${trust.checkedIn ?? 0} attended bookings, ${trust.noShows} no-shows',
+                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                    if (trust.attendanceRate != null)
+                      Text(
+                        'Actual attendance: ${(trust.attendanceRate! * 100).round()}%',
+                        style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                    if ((trust.repeatedNoShowPenalty ?? 0) > 0 || (trust.cancellationPenalty ?? 0) > 0)
+                      Text(
+                        'Additional deductions: repeated no-shows '
+                        '${(trust.repeatedNoShowPenalty ?? 0).toStringAsFixed(1)} pts, '
+                        'frequent cancellations ${(trust.cancellationPenalty ?? 0).toStringAsFixed(1)} pts',
+                        style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
+                      ),
                     const SizedBox(height: 12),
                     _formulaNote(),
                     const SizedBox(height: 24),
@@ -260,7 +291,7 @@ class _TrustScoreScreenState extends State<TrustScoreScreen> {
         emoji: '📅',
         label: 'Attendance',
         fraction: t.attendance,
-        valueText: t.attendance != null ? '${(t.attendance! * 100).round()}%' : null,
+        valueText: t.attendance != null ? '${(t.attendance! * 100).round()}% reliability' : null,
         weight: TrustBreakdown.wAttendance,
       ),
       TrustMetricTile(
@@ -307,6 +338,8 @@ class _TrustScoreScreenState extends State<TrustScoreScreen> {
           Expanded(
             child: Text(
               'Trust = 35% rating + 30% attendance + 20% dispute-free + 15% sentiment. '
+              'Components include a starting allowance of three positive observations. '
+              'Repeated no-shows and frequent cancellations add deductions. '
               'Components with no data yet don\'t count against you.',
               style: GoogleFonts.poppins(fontSize: 11.5, height: 1.45, color: AppColors.textSecondary),
             ),

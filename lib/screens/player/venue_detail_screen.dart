@@ -10,6 +10,7 @@ import '../../models/review.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/review_service.dart';
 import '../../utils/num_util.dart';
+import '../../utils/deposit_policy.dart';
 
 import '../../widgets/custom_loader.dart';
 import '../../widgets/network_error_view.dart';
@@ -958,6 +959,12 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                       ],
                     ),
                     const Divider(color: AppColors.border, height: 24),
+                    _infoRow(
+                      Icons.shield_outlined,
+                      'Upfront deposit: ${formatPercent(venueDepositPercent(_venue!))}% '
+                      '(late cancellation or no-show)',
+                    ),
+                    const SizedBox(height: 8),
                     // Location
                     _infoRow(
                       Icons.location_on_outlined,

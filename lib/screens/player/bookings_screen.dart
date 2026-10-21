@@ -221,16 +221,17 @@ class BookingsScreenState extends State<BookingsScreen>
         style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
       // Previously this promised "a full refund" unconditionally, which is only
       // true at least 24 hours before the slot: inside that window the policy
-      // keeps 20% for the venue. The amount is stated by the server once the
+      // keeps the agreed deposit for the venue. The amount is stated by the server once the
       // cancellation has actually been performed.
       content: Text(
         many
             ? 'All ${bookingIds.length} slots will be cancelled. Each one is '
               'refunded by its own cancellation window — at least 24 hours before '
               'the slot is a full refund; inside that window the venue keeps the '
-              '20% deposit.'
+              'deposit agreed when booking.'
             : 'At least 24 hours before the slot this is a full refund. Inside '
-              'that window the venue keeps the 20% deposit.',
+              'that window the venue keeps the deposit agreed when booking. '
+              'You can see the deposit percentage in your booking details.',
         style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false),
@@ -316,7 +317,8 @@ class BookingsScreenState extends State<BookingsScreen>
       content: Text(
         'All $count slots in this booking will be cancelled together. Each one is '
         'refunded by its own window — at least 24 hours before the slot is a full '
-        'refund; inside that window the venue keeps that slot\'s 20% deposit.',
+        'refund; inside that window the venue keeps that slot\'s agreed deposit. '
+        'You can see the deposit percentage in your booking details.',
         style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false),

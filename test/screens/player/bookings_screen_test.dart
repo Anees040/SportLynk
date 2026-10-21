@@ -583,14 +583,14 @@ void main() {
       expect(find.text('Cancel Booking?'), findsOneWidget);
       // The dialog used to promise "a full refund" unconditionally, which is only
       // true at least 24 hours before the slot — inside that window the policy
-      // keeps the 20% deposit for the venue. What is asserted now is that both
+      // keeps the agreed deposit for the venue. What is asserted now is that both
       // halves of the rule are stated before the player commits.
       expect(
         find.textContaining('At least 24 hours before the slot this is a full refund'),
         findsOneWidget,
       );
       expect(
-        find.textContaining('the venue keeps the 20% deposit'),
+        find.textContaining('the venue keeps the deposit agreed when booking'),
         findsOneWidget,
       );
       expect(api.countTo('/cancel'), 0,

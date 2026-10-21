@@ -15,6 +15,7 @@ import '../../widgets/offline_banner.dart';
 import '../../services/cloudinary_service.dart';
 import 'trust_score_screen.dart';
 import '../../utils/reconnect_refresh.dart';
+import '../../utils/trust_refresh.dart';
 import '../../utils/snackbar_util.dart';
 import 'help_support_screen.dart';
 import '../shared/circle_crop_screen.dart';
@@ -26,10 +27,11 @@ class PlayerProfileScreen extends StatefulWidget {
 }
 
 class _PlayerProfileScreenState extends State<PlayerProfileScreen>
-    with ReconnectRefresh<PlayerProfileScreen> {
+    with WidgetsBindingObserver, ReconnectRefresh<PlayerProfileScreen>, TrustRefresh<PlayerProfileScreen> {
   final _api = ApiClient();
 
   Map<String, dynamic>? _profile;
+  int _loadVersion = 0;
   bool _loading = true, _saving = false;
   bool _isEditing = false;
   // The human-readable reason the last load failed, or null when it succeeded.
@@ -70,6 +72,9 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
   }
 
   @override
+  void refreshTrust() => _load();
+
+  @override
   void dispose() {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
@@ -97,6 +102,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
   }
 
   Future<void> _load() async {
+    final version = ++_loadVersion;
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final token = auth.token;
     if (token == null || token.isEmpty) {
@@ -113,7 +119,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
     // server comes back as {success: false, message: <sentence>}, which becomes
     // the retry view rather than a fabricated set of stats.
     final resp = await _api.get('/users/me/player', token: token);
-    if (!mounted) return;
+    if (!mounted || version != _loadVersion) return;
     if (resp['success'] == true && resp['data'] is Map) {
       final d = Map<String, dynamic>.from(resp['data'] as Map);
       _networkAnswered = true;
@@ -121,12 +127,16 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen>
         _profile = d;
         _cachedAt = null;  // on screen is now this session's data, not a saved copy
         _error = null;
-        _nameCtrl.text = d['name'] ?? '';
-        _emailCtrl.text = d['email'] ?? '';
-        final prefs = d['sport_preferences'];
-        _sports = prefs is List
-            ? prefs.map((e) => e.toString()).where((s) => _allowedSports.contains(s)).toList()
-            : [];
+        // Trust can refresh while the player is typing. Update the displayed
+        // profile, but keep the edit form's unsaved values until save or cancel.
+        if (!_isEditing) {
+          _nameCtrl.text = d['name'] ?? '';
+          _emailCtrl.text = d['email'] ?? '';
+          final prefs = d['sport_preferences'];
+          _sports = prefs is List
+              ? prefs.map((e) => e.toString()).where((s) => _allowedSports.contains(s)).toList()
+              : [];
+        }
         _loading = false;
       });
       context.read<ConnectivityProvider>().markReachable();

@@ -8,6 +8,7 @@ import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/data_sync_provider.dart';
 import '../../utils/num_util.dart';
+import '../../utils/deposit_policy.dart';
 import '../../utils/snackbar_util.dart';
 import '../../widgets/offline_banner.dart';
 
@@ -51,9 +52,10 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   String? _quoteError;
 
   /// Policy (server is the source of truth — these constants are display only):
-  /// the full slot price is escrowed at booking; 20% of it is the at-risk
-  /// deposit and the free-cancellation window is 24h before slot start.
-  static const int _depositPercent = 20;
+  /// the full slot price is escrowed at booking; the venue's chosen percentage
+  /// is at risk and the free-cancellation window is 24h before slot start.
+  double get _depositPercent => venueDepositPercent(widget.venue);
+  String get _depositLabel => formatPercent(_depositPercent);
   static const int _cancellationWindowHours = 24;
 
   /// The slots being booked, in playing order. One element is the ordinary case.
@@ -297,7 +299,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   @override
   Widget build(BuildContext context) {
     final price = _listTotal;
-    // Full slot price is escrowed at booking; 20% of it is the at-risk deposit.
+    // Full slot price is escrowed; the venue policy sets the at-risk deposit.
     final amountToPay = double.parse(_payable.toStringAsFixed(2));
     final depositAtRisk = double.parse(
       (amountToPay * (_depositPercent / 100)).toStringAsFixed(2),
@@ -517,7 +519,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
               ),
               const SizedBox(height: 8),
               _moneyRow(
-                'At-risk deposit ($_depositPercent%)',
+                'At-risk deposit ($_depositLabel%)',
                 priceUnknown ? '—' : 'PKR ${depositAtRisk.toStringAsFixed(0)}',
               ),
               const SizedBox(height: 12),
@@ -746,7 +748,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                     child: Text(
                       'Cancel at least $_cancellationWindowHours hours before your slot for a full '
                       'refund. Cancelling later (or not showing up) forfeits the '
-                      '$_depositPercent% deposit and lowers your trust score.',
+                      '$_depositLabel% deposit and lowers your trust score.',
                       style: GoogleFonts.poppins(
                         fontSize: 11,
                         color: const Color(0xFF92400E),

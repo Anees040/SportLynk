@@ -625,12 +625,15 @@ Future<RouteLog> pumpScreen(
   double textScale = 1.0,
   Size size = const Size(430, 915),
   GlobalKey<NavigatorState>? navigatorKey,
+  bool resetPreferences = true,
 }) async {
   GoogleFonts.config.allowRuntimeFetching = false;
   // Screens that host a ChatController hydrate a per-channel cache from
   // shared_preferences during init; without a mocked store the platform channel
   // never answers and the controller's _init hangs before its first fetch.
-  SharedPreferences.setMockInitialValues(const <String, Object>{});
+  if (resetPreferences) {
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
+  }
   _mockGeolocator();
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;

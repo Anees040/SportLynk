@@ -41,11 +41,12 @@ Future<RouteLog> pumpDetail(
   WidgetTester tester,
   FakeApi api, {
   double textScale = 1.0,
+  String role = 'player',
 }) {
   return pumpScreen(
     tester,
     const TournamentDetailScreen(tournamentId: 't-1'),
-    auth: FakeAuth(token: 'tournament-token'),
+    auth: FakeAuth(token: 'tournament-token', role: role),
     textScale: textScale,
   );
 }
@@ -87,17 +88,36 @@ void main() {
     });
 
     testWidgets(
-      'a failed detail load shows the server message and retry-free state',
+      'a missing tournament shows the server message',
       (tester) async {
-        api.fail(kDetail, 'This tournament was removed.');
+        api.fail(kDetail, 'This tournament was removed.', status: 404);
         await pumpDetail(tester, api);
         await settleData(tester);
 
         expect(find.text('Tournament not found'), findsOneWidget);
         expect(find.text('This tournament was removed.'), findsOneWidget);
+        expect(find.text('Retry'), findsNothing);
       },
     );
   });
+
+  for (final role in ['owner', 'player']) {
+    testWidgets('$role can retry a server error and open the tournament', (tester) async {
+      api.fail(kDetail, 'Internal server error');
+      await pumpDetail(tester, api, role: role);
+      await settleData(tester);
+
+      expect(find.text('Could not load tournament'), findsOneWidget);
+      expect(find.text('Tournament not found'), findsNothing);
+      api.ok(kDetail, detail(viewer: {'isOwner': role == 'owner'}));
+      await tester.tap(find.text('Retry'));
+      await settleData(tester);
+
+      expect(find.text('Lahore Sunday Cup'), findsOneWidget);
+      expect(find.text('Internal server error'), findsNothing);
+      expect(api.countTo(kDetail), 2);
+    });
+  }
 
   testWidgets('a captain who can register receives the server-gated action', (
     tester,

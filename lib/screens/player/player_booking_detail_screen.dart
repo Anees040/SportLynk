@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,7 @@ import '../../providers/connectivity_provider.dart';
 import '../../providers/data_sync_provider.dart';
 import '../../services/chat_service.dart';
 import '../../utils/cancellation_message.dart';
+import '../../utils/deposit_policy.dart';
 import '../../widgets/network_error_view.dart';
 import '../shared/chat_thread_screen.dart';
 import 'rate_experience_screen.dart';
@@ -210,9 +212,11 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
           group
               ? 'All $count slots in this booking will be cancelled together. Each slot '
                   'is refunded by its own window — at least 24 hours before the slot is a '
-                  'full refund; within 24 hours the venue keeps that slot\'s 20% deposit.'
+                  'full refund; within 24 hours the venue keeps that slot\'s agreed deposit '
+                  '(${formatPercent(_depositPercent)}% across this booking).'
               : 'Cancel at least 24 hours before slot time for a full refund. Within 24 hours '
-                  'you get 80% back and the 20% deposit goes to the venue.',
+                  'you get ${formatPercent(100 - _depositPercent)}% back and the '
+                  '${formatPercent(_depositPercent)}% deposit goes to the venue.',
           style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
         ),
         actions: [
@@ -420,6 +424,40 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
             const SizedBox(height: 20),
 
             // QR code (confirmed/checked_in)
+            if (isConfirmed || isCheckedIn) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(children: [
+                  Text('Manual Booking ID', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  SelectableText(widget.bookingId, textAlign: TextAlign.center),
+                  TextButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: widget.bookingId));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Booking ID copied')),
+                      );
+                    },
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy booking ID'),
+                  ),
+                  Text(
+                    'If scanning fails, the owner can enter this ID manually. '
+                    'The owner still needs a connection to verify check-in.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 16),
+            ],
             if ((isConfirmed || isCheckedIn) && qrCode != null) ...[
               Container(
                 padding: const EdgeInsets.all(20),
@@ -635,6 +673,16 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
     return double.tryParse(val.toString()) ?? fallback;
   }
 
+  double get _depositPercent {
+    final rows = _isGroup ? _group! : [_booking!];
+    final escrow = rows.fold<double>(0, (total, row) => total +
+        _parseNum(row['security_deposit'], _parseNum(row['total_amount'])));
+    final deposit = rows.fold<double>(0, (total, row) => total +
+        _parseNum(row['deposit_amount'], _parseNum(row['security_deposit'],
+            _parseNum(row['total_amount'])) * 0.2));
+    return escrow > 0 ? double.parse((deposit / escrow * 100).toStringAsFixed(2)) : 20;
+  }
+
   Color _statusColor(String s) => switch (s) {
         'confirmed' => AppColors.accent,
         'checked_in' => AppColors.success,
@@ -671,7 +719,8 @@ class _PlayerBookingDetailScreenState extends State<PlayerBookingDetailScreen> {
         'pending' => 'Owner will approve within 2 hours',
         'cancelled' => 'Refund has been added to your wallet',
         'rejected' => 'Full amount refunded to your wallet',
-        'no_show' => '20% deposit forfeited, 80% refunded',
+        'no_show' => '${formatPercent(_depositPercent)}% deposit forfeited, '
+            '${formatPercent(100 - _depositPercent)}% refunded',
         _ => '',
       };
 }

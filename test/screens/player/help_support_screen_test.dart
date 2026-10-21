@@ -3,7 +3,7 @@
 //
 // Two things make it worth testing. The first is that the FAQ text is the only place
 // in the product where the escrow rules are stated to a player in words: the full price
-// frozen on booking, released on check-in, and a 20% at-risk deposit lost to a late
+// frozen on booking, released on check-in, and the agreed deposit lost to a late
 // cancellation. Those numbers are duplicated from the backend's refund arithmetic
 // rather than derived from it, so a change to the policy silently leaves this screen
 // stating the old one. The tests below quote the figures, which is the only mechanism
@@ -203,7 +203,7 @@ void main() {
 
       expect(
         find.textContaining(
-            '20% of the price is the at-risk deposit you can lose on a late cancellation or a no-show.'),
+            'The venue sets the deposit percentage, shown on its listing and at checkout.'),
         findsOneWidget,
       );
     });
@@ -220,7 +220,7 @@ void main() {
 
       expect(
         find.textContaining(
-            'released to the venue owner only when you check in with your QR code'),
+            'released when the owner verifies your check-in using the QR code or booking ID'),
         findsOneWidget,
       );
     });
@@ -237,7 +237,7 @@ void main() {
 
       expect(
         find.textContaining(
-            'If you cancel more than 24 hours before the start time, the full amount is refunded.'),
+            'Cancel at least 24 hours before the start time for a full refund.'),
         findsOneWidget,
       );
     });
@@ -252,7 +252,7 @@ void main() {
 
       expect(
         find.textContaining(
-            'you get 80% back and the 20% deposit goes to the venue owner'),
+            'the venue keeps the deposit agreed when you booked and the rest is refunded'),
         findsOneWidget,
       );
     });
@@ -299,7 +299,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.textContaining('the full slot price is frozen'), findsOneWidget);
-      expect(find.textContaining('the full amount is refunded'), findsOneWidget);
+      expect(find.textContaining('for a full refund'), findsOneWidget);
     });
 
     testWidgets('a question is a large enough target', (tester) async {

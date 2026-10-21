@@ -348,7 +348,7 @@ void main() {
       await pumpScreen(tester, const TrustScoreScreen(userId: 'u-1'));
       await settleGauge(tester);
 
-      expect(find.text('90%'), findsOneWidget);
+      expect(find.text('90% reliability'), findsOneWidget);
       expect(find.text('+27 of 30 pts'), findsOneWidget);
     });
 
@@ -382,7 +382,7 @@ void main() {
       await pumpScreen(tester, const TrustScoreScreen(userId: 'u-1'));
       await settleGauge(tester);
 
-      expect(find.text('90%'), findsOneWidget);
+      expect(find.text('90% reliability'), findsOneWidget);
       expect(find.text('No data yet'), findsNothing);
     });
   });
