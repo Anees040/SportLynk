@@ -23,7 +23,7 @@ Future<void> openBookings(WidgetTester tester, FakeApi api, {String? playerId}) 
   // Older cached responses can lack player_id. The booking still resolves its player.
   api.ok('/owner/bookings', [{
     'id': 'booking-1', 'player_name': 'Sara Ali', 'trust_score': '88',
-    if (playerId != null) 'player_id': playerId,
+    'player_id': ?playerId,
     'sport_preferences': ['Football'], 'slot_date': '2026-10-21',
     'start_time': '18:00:00', 'end_time': '19:00:00', 'total_amount': 2000,
   }]);
