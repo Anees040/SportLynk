@@ -4,7 +4,7 @@ const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const checkRole = require('../middleware/roleMiddleware');
 const { requirePermission } = require('../middleware/permissionMiddleware');
-const { recomputeTrust } = require('../utils/trustScore');
+const { recomputeTrust, emitTrustUpdate } = require('../utils/trustScore');
 const slotService = require('../services/slotService');
 
 // All admin routes require authentication + admin role
@@ -18,6 +18,7 @@ router.use(auth, checkRole('admin'));
 // further with `requirePermission(...)` (super admin passes everything); adminAdmins
 // is super-admin-only on its own.
 router.use(require('./adminUsers'));
+router.use(require('./adminOverview'));
 router.use(require('./adminDisputes'));
 router.use(require('./adminSettings'));
 router.use(require('./adminAdmins'));
@@ -411,6 +412,9 @@ router.patch('/reviews/:id', requirePermission('review_moderation'), async (req,
 
     await client.query('COMMIT');
     res.json({ success: true, message });
+    if (review.reviewed_user_id && (action === 'hide' || action === 'restore')) {
+      emitTrustUpdate(review.reviewed_user_id);
+    }
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     next(e);

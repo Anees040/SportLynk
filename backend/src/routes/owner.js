@@ -15,7 +15,7 @@ const {
   checkinWindow,
 } = require("../utils/escrow");
 const { notify } = require("../utils/notify");
-const { recomputeTrust } = require("../utils/trustScore");
+const { recomputeTrust, emitTrustUpdate } = require("../utils/trustScore");
 const chat = require("../utils/chatCore");
 const bookingService = require("../services/bookingService");
 const mlClient = require("../services/mlClient");
@@ -460,7 +460,7 @@ router.get("/dashboard", async (req, res, next) => {
   try {
     const ownerId = req.user.id;
     await autoGenerateVenueIfMissing(ownerId);
-    const today = new Date().toLocaleDateString("en-CA");
+    const today = pktToday();
 
     // Run all queries in parallel — reduces latency from ~5x to ~1x round-trip
     const [venueRes, statsRes, upcomingRes, walletRes, escrowRes] = await Promise.all([
@@ -483,7 +483,11 @@ router.get("/dashboard", async (req, res, next) => {
          JOIN users u ON b.player_id=u.id
          LEFT JOIN player_profiles pp ON pp.user_id=u.id
          JOIN venues v ON b.venue_id=v.id
-         WHERE v.owner_id=$1 AND b.slot_date>=$2::DATE AND b.status IN ('confirmed','checked_in')
+         WHERE v.owner_id=$1 AND b.status IN ('confirmed','checked_in')
+           AND b.slot_date >= $2::DATE - 1
+           AND (b.slot_date + b.end_time
+                + CASE WHEN b.end_time < b.start_time THEN INTERVAL '1 day' ELSE INTERVAL '0 days' END)
+               AT TIME ZONE 'Asia/Karachi' > NOW()
          ORDER BY b.slot_date ASC, b.start_time ASC LIMIT 10`,
         [ownerId, today],
       ),
@@ -521,7 +525,7 @@ router.get("/venues", async (req, res, next) => {
   try {
     await autoGenerateVenueIfMissing(req.user.id);
     const result = await pool.query(
-      `SELECT v.id, v.name, v.sport_type, v.city, v.address,
+      `SELECT v.id, v.name, v.description, v.sport_type, v.city, v.address,
               v.price_per_hour, v.rating, v.total_reviews,
               v.venue_photos, v.operating_hours_from, v.operating_hours_to,
               v.is_active, v.created_at,
@@ -790,7 +794,7 @@ router.patch("/venues/:id", async (req, res, next) => {
       // skipped as though the owner had sent nothing.
       const pct = deposit_pct === null || deposit_pct === ''
         ? null
-        : Math.round(Number(deposit_pct));
+        : Number(deposit_pct);
       updates.push(`deposit_pct=$${i++}`);
       values.push(pct);
     }
@@ -1270,12 +1274,14 @@ router.patch("/slots/:id/unblock", async (req, res, next) => {
 router.post("/scan-qr", async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { qrCode } = req.body;
-    if (!qrCode) {
-      client.release();
+    const { qrCode, bookingId } = req.body;
+    const manual = bookingId !== undefined;
+    const identifier = manual ? bookingId : qrCode;
+    if (typeof identifier !== 'string' || !identifier.trim()
+        || (manual && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier.trim()))) {
       return res
         .status(400)
-        .json({ success: false, message: "qrCode required" });
+        .json({ success: false, message: "Enter a valid booking ID or scan a QR code." });
     }
 
     await client.query("BEGIN");
@@ -1291,9 +1297,9 @@ router.post("/scan-qr", async (req, res, next) => {
              to_char((NOW() AT TIME ZONE $2), 'YYYY-MM-DD"T"HH24:MI:SS') AS pkt_now
       FROM bookings b
       JOIN venues v ON b.venue_id=v.id
-      WHERE b.qr_code=$1 FOR UPDATE OF b
+      WHERE ${manual ? 'b.id=$1::uuid' : 'b.qr_code=$1'} FOR UPDATE OF b
     `,
-      [qrCode, POLICY.TIMEZONE],
+      [identifier.trim(), POLICY.TIMEZONE],
     );
 
     if (!scanRes.rows.length) {
@@ -1302,7 +1308,7 @@ router.post("/scan-qr", async (req, res, next) => {
         .status(404)
         .json({
           success: false,
-          message: "Invalid QR code. No booking found.",
+          message: "No booking found for this ID or QR code.",
         });
     }
     const scanned = scanRes.rows[0];
@@ -1494,7 +1500,9 @@ router.post("/scan-qr", async (req, res, next) => {
       totalCommission = round2(totalCommission + split.commission);
     }
 
+    await recomputeTrust(client, playerId);
     await client.query("COMMIT");
+    emitTrustUpdate(playerId);
 
     const first = targets[0];
     const last = targets[targets.length - 1];
@@ -1639,6 +1647,7 @@ router.post("/no-show/:id", async (req, res, next) => {
     const nsPill = await chat.announceInRoom(client, nsRoom, "booking_no_show", {});
 
     await client.query("COMMIT");
+    emitTrustUpdate(b.player_id);
     await chat.emitPills(pool, nsPill);
     res.json({
       success: true,

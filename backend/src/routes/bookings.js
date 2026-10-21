@@ -21,7 +21,7 @@ const {
   listGroup,
 } = require("../services/bookingService");
 const { notify } = require("../utils/notify");
-const { recomputeTrust } = require("../utils/trustScore");
+const { recomputeTrust, emitTrustUpdate } = require("../utils/trustScore");
 const bookingDisputes = require("../services/bookingDisputeService");
 
 // POST /api/bookings — create booking (player only)
@@ -419,14 +419,11 @@ router.post(
       );
 
       // Trust Score 2.0: recompute now that the booking's final status is set,
-      // so attendance_rate reflects this outcome (utils/trustScore.js). Only a
-      // no-show moves trust here; a checked_in settlement lets it accrue via
-      // reviews instead.
-      if (isNoShow) {
-        await recomputeTrust(client, booking.player_id);
-      }
+      // so attendance reflects either outcome, including recovery after check-in.
+      await recomputeTrust(client, booking.player_id);
 
       await client.query("COMMIT");
+      emitTrustUpdate(booking.player_id);
       res.json({
         success: true,
         message: isNoShow

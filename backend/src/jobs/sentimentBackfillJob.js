@@ -29,6 +29,7 @@
 
 const pool = require('../db/pool');
 const ml = require('../services/mlClient');
+const { recomputeTrust, emitTrustUpdate } = require('../utils/trustScore');
 
 // The ml-service batch endpoint caps at 200 items; take exactly that.
 const BATCH = 200;
@@ -47,14 +48,28 @@ let _running = false;
  * the model must not undo a human's manual flag.
  */
 async function applyScored(id, r) {
-  await pool.query(
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const updated = await client.query(
     `UPDATE reviews
         SET sentiment_label = $2,
             sentiment_score = $3,
             flagged = flagged OR $4
-      WHERE id = $1 AND sentiment_label IS NULL`,
+      WHERE id = $1 AND sentiment_label IS NULL
+      RETURNING reviewed_user_id`,
     [id, r.label, r.score, r.flagged === true],
   );
+    const userId = updated.rows[0]?.reviewed_user_id;
+    if (userId) await recomputeTrust(client, userId);
+    await client.query('COMMIT');
+    if (userId) emitTrustUpdate(userId);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**

@@ -4,11 +4,13 @@ const bcrypt = require('bcrypt');
 const pool = require('../db/pool');
 const authMiddleware = require('../middleware/authMiddleware');
 const userService = require('../services/userService');
+const { recomputeTrust } = require('../utils/trustScore');
 
 // GET /api/users/me/player — get full player profile with defaults
 router.get('/me/player', authMiddleware, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    await recomputeTrust(pool, userId);
     const result = await pool.query(`
       SELECT
         u.id, u.name, u.email, u.phone, u.avatar_url, u.created_at,

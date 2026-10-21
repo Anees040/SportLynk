@@ -70,7 +70,7 @@ const {
   logTxn,
 } = require('../utils/escrow');
 const { notify } = require('../utils/notify');
-const { recomputeTrust } = require('../utils/trustScore');
+const { recomputeTrust, emitTrustUpdate } = require('../utils/trustScore');
 const settings = require('../utils/globalSettings');
 const chat = require('../utils/chatCore');
 const group = require('../utils/slotGroup');
@@ -735,6 +735,7 @@ async function cancelBooking(client, { userId, bookingId }) {
   // then emit it get the live pill; callers that ignore it lose nothing but the
   // socket frame, because the row is already written.
   result.chatPill = chatPill;
+  result.trustUserId = playerId;
   return result;
 }
 
@@ -822,6 +823,7 @@ async function cancelBookingGroup(client, { userId, groupId }) {
   // An array of pills, one per booking room that had one. runInTx emits them after
   // commit, the same discipline the single cancel's chatPill follows.
   result.chatPills = pills;
+  result.trustUserId = userId;
   return result;
 }
 
@@ -919,6 +921,7 @@ async function runInTx(fn) {
     const result = await fn(client);
     if (result && result.ok) await client.query('COMMIT');
     else await client.query('ROLLBACK');
+    if (result?.ok && result.trustUserId) emitTrustUpdate(result.trustUserId);
     // After the commit, never before: a socket frame that arrives mid-transaction
     // makes the app re-read a row it still cannot see. Only emitted on the commit
     // branch -- a rolled-back cancellation has no pill to announce.

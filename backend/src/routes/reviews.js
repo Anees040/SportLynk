@@ -49,7 +49,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const auth = require('../middleware/authMiddleware');
 const ml = require('../services/mlClient');
-const { recomputeTrust, representativeCaptain } = require('../utils/trustScore');
+const { recomputeTrust, representativeCaptain, emitTrustUpdate } = require('../utils/trustScore');
 
 const router = express.Router();
 
@@ -336,6 +336,7 @@ router.post('/reviews', auth, async (req, res, next) => {
 
     await client.query('COMMIT');
 
+    if (ctx.reviewedUserId) emitTrustUpdate(ctx.reviewedUserId);
     return res.status(201).json({
       success: true,
       message: 'Review posted.',
@@ -462,6 +463,7 @@ router.get('/users/:id/reviews', auth, async (req, res, next) => {
 
     const { page, limit, offset } = pageParams(req.query);
 
+    const reliability = await recomputeTrust(pool, userId);
     const aggRes = await pool.query(
       `SELECT COUNT(*) AS total, ROUND(AVG(rating)::numeric, 2) AS avg_stars
          FROM reviews
@@ -498,6 +500,11 @@ router.get('/users/:id/reviews', auth, async (req, res, next) => {
       total: num(agg.total) || 0,
       avgStars: agg.avg_stars === null ? null : num(agg.avg_stars),
       trust: {
+        attendanceRate: reliability.attendanceRate,
+        checkedIn: reliability.checkedIn,
+        noShows: reliability.noShows,
+        repeatedNoShowPenalty: reliability.repeatedNoShowPenalty,
+        cancellationPenalty: reliability.cancellationPenalty,
         score: t.trust_score ?? null,
         rating: num(t.trust_rating),
         attendance: num(t.trust_attendance),

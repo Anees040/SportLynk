@@ -23,7 +23,7 @@ const {
   logTxn,
 } = require('../utils/escrow');
 const { notify } = require('../utils/notify');
-const { recomputeTrust } = require('../utils/trustScore');
+const { recomputeTrust, emitTrustUpdate } = require('../utils/trustScore');
 const chat = require('../utils/chatCore');
 
 const SWEEP_INTERVAL_MS = POLICY.SWEEP_INTERVAL_MS;
@@ -183,6 +183,7 @@ async function settleNoShow(bookingId) {
     );
 
     await client.query('COMMIT');
+    emitTrustUpdate(b.player_id);
     await chat.emitPills(pool, nsPill);
     console.log(
       `[NoShowJob] ✓ ${b.id} (${b.player_name} @ ${b.venue_name}) → no_show. Player +${refund}, owner +${penalty}.`,

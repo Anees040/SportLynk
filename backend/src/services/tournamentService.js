@@ -2262,7 +2262,7 @@ async function viewerContext(client, { tournament, userId, registrations }) {
   const teams = await client.query(
     `SELECT t.id, t.name, t.logo_url, t.elo, t.sport
        FROM teams t
-      WHERE t.captain_id = $1 AND LOWER(t.sport) = LOWER($2)
+      WHERE t.captain_id = $1 AND LOWER(t.sport::text) = LOWER($2::text)
         AND NOT EXISTS (
               SELECT 1 FROM tournament_teams tt
                WHERE tt.tournament_id = $3 AND tt.team_id = t.id

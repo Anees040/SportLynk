@@ -208,6 +208,9 @@ async function venueDetail(client, { venueId, userId, date = null } = {}) {
   return { ok: true, status: 200, code: 'ok', message: null,
     data: {
       ...venue.rows[0],
+      effective_deposit_pct: require('./bookingService').venueDepositPct(
+        venue.rows[0].deposit_pct, await require('../utils/globalSettings').deposit({ client: runner }),
+      ),
       slots: slots.rows,
       discount_tiers: tiers,
       discount_summary: discounts.describeTiers(tiers),
