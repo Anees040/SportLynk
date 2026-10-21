@@ -3,6 +3,7 @@
 *.log
 *.pyc
 *.swp
+*.tmp
 .DS_Store
 .atom/
 .build/
@@ -160,3 +161,5 @@ ml-service/data/assistant/*
 .pt/
 **/.doctmp_*
 **/.m020*
+
+~$*
