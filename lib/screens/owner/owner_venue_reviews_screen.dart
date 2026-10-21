@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -125,7 +126,7 @@ class _OwnerVenueReviewsScreenState extends State<OwnerVenueReviewsScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-          : RefreshIndicator(
+          : StableRefreshIndicator(
               color: AppColors.accent,
               onRefresh: _load,
               child: _reviews.isEmpty && _agg.total == 0
@@ -135,7 +136,7 @@ class _OwnerVenueReviewsScreenState extends State<OwnerVenueReviewsScreen> {
                     )
                   : ListView.builder(
                       controller: _scroll,
-                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
                       padding: const EdgeInsets.all(16),
                       itemCount: _reviews.length + 2,
                       itemBuilder: (context, i) {

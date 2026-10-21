@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sportlynk/screens/owner/owner_home_screen.dart';
+import 'package:sportlynk/widgets/ai_price_suggestion_banner.dart';
 
 import '../screen_harness.dart';
 
@@ -56,6 +57,8 @@ Future<RouteLog> pumpHome(
   WidgetTester tester,
   FakeApi api, {
   double textScale = 1.0,
+  Size size = const Size(430, 915),
+  bool resetPreferences = true,
 }) {
   return pumpScreen(
     tester,
@@ -67,7 +70,24 @@ Future<RouteLog> pumpHome(
       token: 'owner-token',
     ),
     textScale: textScale,
+    size: size,
+    resetPreferences: resetPreferences,
   );
+}
+
+Future<void> revealHomeItem(WidgetTester tester, Finder item) async {
+  await tester.scrollUntilVisible(
+    item,
+    150,
+    scrollable: find
+        .byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.down,
+        )
+        .first,
+  );
+  await tester.pump();
 }
 
 void main() {
@@ -89,6 +109,131 @@ void main() {
   });
 
   group('the dashboard', () {
+    testWidgets(
+      'pull to refresh leaves the header and dashboard content fixed',
+      (tester) async {
+        await pumpHome(tester, api);
+        await settleHome(tester);
+        final header = tester.getTopLeft(find.text('Dashboard'));
+        final revenue = tester.getTopLeft(find.text('REVENUE TODAY'));
+        final requests = api.countTo(kDashboard);
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.text('REVENUE TODAY')),
+        );
+        await gesture.moveBy(const Offset(0, 24));
+        await tester.pump();
+        await gesture.moveBy(const Offset(0, 360));
+        await tester.pump();
+
+        expect(tester.getTopLeft(find.text('Dashboard')), header);
+        expect(tester.getTopLeft(find.text('REVENUE TODAY')), revenue);
+        expect(find.byType(StretchingOverscrollIndicator), findsNothing);
+
+        await gesture.up();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await settleHome(tester);
+        expect(api.countTo(kDashboard), requests + 1);
+        expectNoOverflow(tester);
+      },
+    );
+
+    testWidgets('expired bookings are removed while future bookings remain', (
+      tester,
+    ) async {
+      final data = dashboard();
+      data['upcomingBookings'] = [
+        {
+          ...(data['upcomingBookings'] as List).first as Map,
+          'player_name': 'Past Player',
+          'slot_date': '2020-01-01',
+        },
+        {
+          ...(data['upcomingBookings'] as List).first as Map,
+          'player_name': 'Future Player',
+          'slot_date': DateTime.now()
+              .add(const Duration(days: 1))
+              .toIso8601String()
+              .substring(0, 10),
+        },
+      ];
+      api.ok(kDashboard, data);
+      await pumpHome(tester, api);
+      await settleHome(tester);
+      await revealHomeItem(tester, find.text('Future Player'));
+
+      expect(find.text('Past Player'), findsNothing);
+      expect(find.text('Future Player'), findsOneWidget);
+    });
+
+    testWidgets('details open the full price explanation without applying it', (
+      tester,
+    ) async {
+      await pumpHome(tester, api);
+      await settleHome(tester);
+      await revealHomeItem(tester, find.byType(AiPriceSuggestionBanner));
+      expect(find.text('Peak hour.'), findsNothing);
+      await tester.tap(find.text('Details'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Peak hour.'), findsOneWidget);
+      expect(find.text('RULE-BASED'), findsOneWidget);
+      expect(api.countTo('/owner/venues/v-1/slots/price'), 0);
+    });
+
+    testWidgets(
+      'closing a suggestion snoozes it across reopening the dashboard',
+      (tester) async {
+        await pumpHome(tester, api);
+        await settleHome(tester);
+        await revealHomeItem(tester, find.byType(AiPriceSuggestionBanner));
+        await tester.tap(
+          find.byTooltip('Dismiss price suggestion for 6 hours'),
+        );
+        await tester.pump();
+        await settleHome(tester);
+        expect(find.byType(AiPriceSuggestionBanner), findsNothing);
+        final prefs = await SharedPreferences.getInstance();
+        final until = prefs.getInt('owner_price_snooze_v1:o-1:v-1');
+        expect(until, greaterThan(DateTime.now().millisecondsSinceEpoch));
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await pumpHome(tester, api, resetPreferences: false);
+        await settleHome(tester);
+        expect(find.byType(AiPriceSuggestionBanner), findsNothing);
+      },
+    );
+
+    testWidgets('swiping a suggestion dismisses it without changing prices', (
+      tester,
+    ) async {
+      await pumpHome(tester, api);
+      await settleHome(tester);
+      await revealHomeItem(tester, find.byType(AiPriceSuggestionBanner));
+      await tester.drag(
+        find.byType(AiPriceSuggestionBanner),
+        const Offset(-700, 0),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AiPriceSuggestionBanner), findsNothing);
+      expect(api.countTo('/owner/venues/v-1/slots/price'), 0);
+    });
+
+    testWidgets('an expired snooze allows suggestions to return', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'owner_price_snooze_v1:o-1:v-1': DateTime.now()
+            .subtract(const Duration(minutes: 1))
+            .millisecondsSinceEpoch,
+      });
+      await pumpHome(tester, api, resetPreferences: false);
+      await settleHome(tester);
+      await revealHomeItem(tester, find.byType(AiPriceSuggestionBanner));
+      expect(find.byType(AiPriceSuggestionBanner), findsOneWidget);
+    });
+
     testWidgets('shows a spinner while dashboard data is in flight', (
       tester,
     ) async {
@@ -112,8 +257,6 @@ void main() {
       expect(find.text('PKR 12500'), findsOneWidget);
       // The stat card and the kept-alive bottom tab both carry this label.
       expect(find.text('BOOKINGS'), findsNWidgets(2));
-      expect(find.text('WALLET BALANCE'), findsOneWidget);
-      expect(find.text('PKR 5000'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('Ali Raza'),
         500,
@@ -127,23 +270,28 @@ void main() {
             .first,
       );
       expect(find.text('Ali Raza'), findsOneWidget);
+      await revealHomeItem(tester, find.text('WALLET BALANCE'));
+      expect(find.text('WALLET BALANCE'), findsOneWidget);
+      expect(find.text('PKR 5000'), findsOneWidget);
+      await revealHomeItem(tester, find.byType(AiPriceSuggestionBanner));
       expect(find.text('AI Suggested Price'), findsOneWidget);
     });
 
-    testWidgets('a dashboard load that fails with no cache shows an error, not zeros', (
-      tester,
-    ) async {
-      // Fixed: `_load` now records the failure and, with nothing cached, the
-      // dashboard shows an error with a retry instead of rendering "PKR 0" across
-      // the stat and wallet cards as though the figures were real.
-      api.fail(kDashboard, 'dashboard unavailable');
-      await pumpHome(tester, api);
-      await settleHome(tester);
+    testWidgets(
+      'a dashboard load that fails with no cache shows an error, not zeros',
+      (tester) async {
+        // Fixed: `_load` now records the failure and, with nothing cached, the
+        // dashboard shows an error with a retry instead of rendering "PKR 0" across
+        // the stat and wallet cards as though the figures were real.
+        api.fail(kDashboard, 'dashboard unavailable');
+        await pumpHome(tester, api);
+        await settleHome(tester);
 
-      expect(find.text('PKR 0'), findsNothing);
-      expect(find.text('dashboard unavailable'), findsOneWidget);
-      expect(find.text('Retry'), findsOneWidget);
-    });
+        expect(find.text('PKR 0'), findsNothing);
+        expect(find.text('dashboard unavailable'), findsOneWidget);
+        expect(find.text('Retry'), findsOneWidget);
+      },
+    );
   });
 
   group('navigation and scale', () {
@@ -151,21 +299,51 @@ void main() {
       final log = await pumpHome(tester, api);
       await settleHome(tester);
 
+      await revealHomeItem(tester, find.text('Tournaments'));
       await tester.tap(find.text('Tournaments'));
       await tester.pumpAndSettle();
       expect(log.sawRoute('/owner-tournaments'), isTrue);
     });
 
-    testWidgets('a doubled text scale keeps the dashboard actions present', (
-      tester,
-    ) async {
-      ignoreOverflow();
-      await pumpHome(tester, api, textScale: 2.0);
-      await settleHome(tester);
+    for (final layout in [
+      (const Size(320, 568), 1.0),
+      (const Size(360, 800), 1.0),
+      (const Size(390, 844), 1.0),
+      (const Size(844, 390), 1.0),
+      (const Size(768, 1024), 1.0),
+      (const Size(320, 568), 2.0),
+      (const Size(430, 915), 2.0),
+    ]) {
+      testWidgets('quick actions fit ${layout.$1} at ${layout.$2} text scale', (
+        tester,
+      ) async {
+        await pumpHome(tester, api, size: layout.$1, textScale: layout.$2);
+        await settleHome(tester);
 
-      expect(find.text('Quick Actions'), findsOneWidget);
-      expect(find.text('My Venue'), findsOneWidget);
-      expect(find.text('Earnings Report'), findsOneWidget);
-    });
+        await revealHomeItem(tester, find.text('Quick Actions'));
+        expect(find.text('Quick Actions'), findsOneWidget);
+        if (layout.$2 == 1.0) {
+          final scan = tester.getCenter(
+            find.descendant(
+              of: find.widgetWithText(InkWell, 'Scan QR'),
+              matching: find.byIcon(Icons.qr_code_scanner_rounded),
+            ),
+          );
+          final requests = tester.getCenter(
+            find.byIcon(Icons.pending_actions_rounded),
+          );
+          final venue = tester.getCenter(find.byIcon(Icons.stadium_rounded));
+          expect(scan.dy, requests.dy);
+          expect(requests.dy, venue.dy);
+          expect(scan.dx, lessThan(requests.dx));
+          expect(requests.dx, lessThan(venue.dx));
+        }
+        await revealHomeItem(tester, find.text('My Venue'));
+        expect(find.text('My Venue'), findsOneWidget);
+        await revealHomeItem(tester, find.text('Earnings Report'));
+        expect(find.text('Earnings Report'), findsOneWidget);
+        expectNoOverflow(tester);
+      });
+    }
   });
 }

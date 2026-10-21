@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -80,7 +81,7 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
   /// At-risk deposit as a percentage of the slot price, or null to inherit the
   /// platform setting (the admin's global). The four presets are the business
   /// policies the requirement names; "Platform default" is null.
-  int? _depositPct;
+  num? _depositPct;
   static const List<int> _depositPresets = [20, 40, 50, 100];
 
   /// The ground's photo library, edited in place. Seeded from the venue's
@@ -108,7 +109,7 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
     _aiPricing = widget.venue['ai_pricing_enabled'] != false;
     final rawDeposit = widget.venue['deposit_pct'];
     if (rawDeposit != null) {
-      final parsed = _parseNum(rawDeposit).round();
+      final parsed = _parseNum(rawDeposit);
       if (parsed >= 0 && parsed <= 100) _depositPct = parsed;
     }
     final rawPhotos = widget.venue['venue_photos'];
@@ -293,7 +294,24 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
   }
 
   Future<void> _saveChanges() async {
-    if (!_formKey.currentState!.validate()) return;
+    final invalidFields = _formKey.currentState!.validateGranularly();
+    if (invalidFields.isNotEmpty) {
+      final firstInvalid = invalidFields.first;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(firstInvalid.errorText ?? 'Please correct the highlighted field.'),
+        backgroundColor: AppColors.error,
+      ));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !firstInvalid.mounted) return;
+        Scrollable.ensureVisible(
+          firstInvalid.context,
+          alignment: 0.1,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeInOut,
+        );
+      });
+      return;
+    }
 
     // Changing the window retires unsold slots outside it. That is not something to
     // do on a mis-tap, so it is confirmed first and the consequence is named —
@@ -404,7 +422,17 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
               borderSide: BorderSide.none,
             ),
           ),
-          validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+          validator: (value) {
+            final text = value?.trim() ?? '';
+            if (text.isEmpty) return '$label is required.';
+            if (isNumber) {
+              final price = double.tryParse(text);
+              if (price == null || !price.isFinite || price <= 0) {
+                return 'Enter a valid price greater than zero.';
+              }
+            }
+            return null;
+          },
         ),
         const SizedBox(height: 16),
       ],
@@ -683,7 +711,10 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
           ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: ScrollConfiguration(
+        behavior: stableScrollBehavior(context),
+        child: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
@@ -745,6 +776,7 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
               ),
             ],
           ),
+        ),
         ),
       ),
     );
@@ -909,7 +941,7 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
   /// mechanics are explained because they are platform policy the owner cannot
   /// change — only the percentage is theirs.
   Widget _buildDepositSection() {
-    Widget chip(String label, int? value) {
+    Widget chip(String label, num? value) {
       final on = _depositPct == value;
       return ChoiceChip(
         label: Text(label,
@@ -945,6 +977,18 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
           children: [
             chip('Platform default', null),
             for (final p in _depositPresets) chip('$p%', p),
+            ChoiceChip(
+              label: Text(_depositPct != null && !_depositPresets.contains(_depositPct)
+                  ? 'Custom: $_depositPct%' : 'Custom'),
+              selected: _depositPct != null && !_depositPresets.contains(_depositPct),
+              onSelected: _isSaving ? null : (_) async {
+                final percent = await showDialog<num>(
+                  context: context,
+                  builder: (_) => _CustomDepositDialog(initial: _depositPct),
+                );
+                if (mounted && percent != null) setState(() => _depositPct = percent);
+              },
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -970,4 +1014,59 @@ class _OwnerVenueManagementScreenState extends State<OwnerVenueManagementScreen>
       ],
     );
   }
+}
+
+class _CustomDepositDialog extends StatefulWidget {
+  final num? initial;
+  const _CustomDepositDialog({this.initial});
+
+  @override
+  State<_CustomDepositDialog> createState() => _CustomDepositDialogState();
+}
+
+class _CustomDepositDialogState extends State<_CustomDepositDialog> {
+  final _form = GlobalKey<FormState>();
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initial?.toString() ?? '');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Custom upfront deposit'),
+    content: Form(
+      key: _form,
+      child: TextFormField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: const InputDecoration(labelText: 'Deposit percentage', suffixText: '%'),
+        validator: (text) {
+          final percent = num.tryParse(text?.trim() ?? '');
+          return percent == null || !percent.isFinite || percent < 0 || percent > 100
+              ? 'Enter a percentage between 0 and 100' : null;
+        },
+      ),
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+      TextButton(
+        onPressed: () {
+          if (_form.currentState!.validate()) {
+            Navigator.pop(context, num.parse(_controller.text.trim()));
+          }
+        },
+        child: const Text('Apply'),
+      ),
+    ],
+  );
 }

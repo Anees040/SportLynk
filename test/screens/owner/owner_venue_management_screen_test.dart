@@ -113,6 +113,67 @@ void main() {
   });
 
   group('saving and navigation', () {
+    testWidgets('a price-only save preserves the loaded description', (tester) async {
+      api.ok(kUpdate, venue());
+      await pumpManagement(tester, api);
+      await settleManagement(tester);
+      final descriptionField = tester.widget<TextFormField>(field('Venue Description'));
+      expect(descriptionField.controller!.text, venue()['description']);
+      await tester.enterText(field('Price Per Hour'), '2800');
+      final save = find.widgetWithText(ElevatedButton, 'Save Changes');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.ensureVisible(save);
+      await tester.pump();
+      await tester.tap(save);
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final body = jsonDecode(api.to(kUpdate).single.body!) as Map;
+      expect(body['description'], venue()['description']);
+      expect(body['price_per_hour'], 2800);
+      expect(body.containsKey('operating_hours_from'), isFalse);
+      expect(body.containsKey('slot_duration_minutes'), isFalse);
+    });
+
+    testWidgets('saving reveals a required field hidden above the save button', (tester) async {
+      await pumpManagement(tester, api);
+      await settleManagement(tester);
+      await tester.enterText(field('Venue Description'), '   ');
+      final save = find.widgetWithText(ElevatedButton, 'Save Changes');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.ensureVisible(save);
+      await tester.pump();
+      expect(tester.getRect(field('Venue Description')).bottom, lessThan(0));
+      await tester.tap(save);
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(api.countTo(kUpdate), 0);
+      expect(find.text('Venue Description is required.'), findsWidgets);
+      expect(tester.getRect(field('Venue Description')).top, greaterThanOrEqualTo(0));
+      expect(tester.getRect(field('Venue Description')).bottom,
+        lessThan(tester.view.physicalSize.height / tester.view.devicePixelRatio));
+    });
+
+    testWidgets('invalid prices are explained before any save request', (tester) async {
+      await pumpManagement(tester, api);
+      await settleManagement(tester);
+      await tester.enterText(field('Price Per Hour'), 'not a price');
+      final save = find.widgetWithText(ElevatedButton, 'Save Changes');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.ensureVisible(save);
+      await tester.pump();
+      await tester.tap(save);
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(api.countTo(kUpdate), 0);
+      expect(find.text('Enter a valid price greater than zero.'), findsWidgets);
+      expect(tester.getRect(field('Price Per Hour')).top, greaterThanOrEqualTo(0));
+    });
+
     testWidgets('saving sends the editable fields to the venue PATCH', (
       tester,
     ) async {
@@ -134,6 +195,8 @@ void main() {
       // The form scrolls, and Save sits at its foot below the fold on this surface;
       // reveal it before tapping or the tap lands on nothing and the PATCH never fires.
       final save = find.widgetWithText(ElevatedButton, 'Save Changes');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump(const Duration(milliseconds: 200));
       await tester.ensureVisible(save);
       await tester.pump();
       await tester.tap(save);

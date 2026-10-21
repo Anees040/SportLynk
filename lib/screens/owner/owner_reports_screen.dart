@@ -25,6 +25,7 @@
 // they hand a file to their accountant — and a 0-row range is caught before a
 // download that would contain only a header.
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -236,10 +237,11 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
+      body: StableRefreshIndicator(
         color: AppColors.accent,
         onRefresh: _run,
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
           children: [
             _rangeCard(),

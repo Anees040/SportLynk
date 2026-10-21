@@ -16,7 +16,11 @@ import 'package:sportlynk/screens/owner/owner_profile_screen.dart';
 
 import '../screen_harness.dart';
 
-Future<RouteLog> pumpProfile(WidgetTester tester, {double textScale = 1.0}) {
+Future<RouteLog> pumpProfile(
+  WidgetTester tester, {
+  double textScale = 1.0,
+  Size size = const Size(430, 915),
+}) {
   return pumpScreen(
     tester,
     const OwnerProfileScreen(),
@@ -27,6 +31,7 @@ Future<RouteLog> pumpProfile(WidgetTester tester, {double textScale = 1.0}) {
       token: 'owner-token',
     ),
     textScale: textScale,
+    size: size,
   );
 }
 
@@ -45,6 +50,7 @@ void main() {
       expect(find.text('Owner'), findsOneWidget);
       expect(find.text('bilal@example.com'), findsOneWidget);
       expect(find.text('VENUE OWNER'), findsOneWidget);
+      expect(find.byTooltip('Edit your profile'), findsNothing);
     });
 
     testWidgets('shows the phone, verified status and role info cards', (
@@ -74,7 +80,7 @@ void main() {
       await pumpProfile(tester);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Log Out'));
+      await tapVisible(tester, find.text('Log Out'));
       await tester.pumpAndSettle();
 
       expect(find.text('Log Out?'), findsOneWidget);
@@ -87,7 +93,7 @@ void main() {
       final log = await pumpProfile(tester);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Log Out'));
+      await tapVisible(tester, find.text('Log Out'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(TextButton, 'Stay'));
       await tester.pumpAndSettle();
@@ -102,7 +108,7 @@ void main() {
       await pumpProfile(tester);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Change Password'));
+      await tapVisible(tester, find.text('Change Password'));
       await tester.pumpAndSettle();
 
       // The sheet's submit button is unique to it, unlike its title which repeats
@@ -119,7 +125,7 @@ void main() {
       await pumpProfile(tester);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Edit Profile'));
+      await tapVisible(tester, find.text('Edit Profile'));
       await tester.pumpAndSettle();
 
       expect(
@@ -132,14 +138,46 @@ void main() {
   });
 
   group('reach and scale', () {
-    testWidgets('a doubled text scale keeps the identity present', (
+    testWidgets('dragging down does not move the profile under the header', (
       tester,
     ) async {
-      ignoreOverflow();
-      await pumpProfile(tester, textScale: 2.0);
+      await pumpProfile(tester);
+      await tester.pumpAndSettle();
+      final identity = tester.getTopLeft(find.text('Owner'));
+      final header = tester.getTopLeft(find.text('Profile'));
+      await tester.drag(find.text('Owner'), const Offset(0, 280));
       await tester.pumpAndSettle();
 
-      expect(find.text('Owner'), findsOneWidget);
+      expect(tester.getTopLeft(find.text('Owner')), identity);
+      expect(tester.getTopLeft(find.text('Profile')), header);
+      expect(find.byType(StretchingOverscrollIndicator), findsNothing);
+      expectNoOverflow(tester);
     });
+
+    for (final layout in [
+      (const Size(320, 568), 1.0),
+      (const Size(390, 844), 1.0),
+      (const Size(844, 390), 1.0),
+      (const Size(768, 1024), 1.0),
+      (const Size(320, 568), 2.0),
+      (const Size(430, 915), 2.0),
+    ]) {
+      testWidgets(
+        'identity and editing fit ${layout.$1} at ${layout.$2} text scale',
+        (tester) async {
+          await pumpProfile(tester, size: layout.$1, textScale: layout.$2);
+          await tester.pumpAndSettle();
+
+          expect(find.text('Owner'), findsOneWidget);
+          await tapVisible(tester, find.text('Edit Profile'));
+          await tester.pumpAndSettle();
+          expect(
+            find.widgetWithText(ElevatedButton, 'Save Changes'),
+            findsOneWidget,
+          );
+          expectNoOverflow(tester);
+        },
+      );
+    }
   });
 }

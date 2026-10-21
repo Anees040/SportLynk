@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/num_util.dart';
 
 class OwnerQrScannerScreen extends StatefulWidget {
   const OwnerQrScannerScreen({super.key});
@@ -43,7 +44,7 @@ class _OwnerQrScannerScreenState extends State<OwnerQrScannerScreen> {
     super.dispose();
   }
 
-  Future<void> _processQr(String qrCode) async {
+  Future<void> _processQr(String qrCode, {bool manual = false}) async {
     if (_processing) return;
     setState(() => _processing = true);
     _ctrl.stop();
@@ -52,7 +53,7 @@ class _OwnerQrScannerScreenState extends State<OwnerQrScannerScreen> {
       final resp = await http.post(
         Uri.parse('$_base/owner/scan-qr'),
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({'qrCode': qrCode}),
+        body: jsonEncode({manual ? 'bookingId' : 'qrCode': qrCode}),
       );
       final data = jsonDecode(resp.body);
       if (mounted) {
@@ -103,17 +104,17 @@ class _OwnerQrScannerScreenState extends State<OwnerQrScannerScreen> {
               ),
               // A grouped booking checks in as one scan; say how many slots it
               // settled so the owner knows the single tap covered the whole run.
-              if ((d['slotCount'] as num? ?? 1).toInt() > 1)
-                _detailRow('Slots', '${(d['slotCount'] as num).toInt()} slots'),
+              if (asInt(d['slotCount'], fallback: 1) > 1)
+                _detailRow('Slots', '${asInt(d['slotCount'])} slots'),
               const Divider(color: AppColors.border),
               _detailRow(
                 'Payment Received',
-                'PKR ${(d['amount'] as num?)?.toStringAsFixed(0) ?? '0'}',
+                'PKR ${asNum(d['netToOwner'] ?? d['amount']).toStringAsFixed(0)}',
                 valueColor: AppColors.success,
               ),
               _detailRow(
                 'Your New Balance',
-                'PKR ${(d['newOwnerBalance'] as num?)?.toStringAsFixed(0) ?? '0'}',
+                'PKR ${asNum(d['newOwnerBalance']).toStringAsFixed(0)}',
                 valueColor: AppColors.accent,
               ),
             ]),
@@ -274,7 +275,7 @@ class _OwnerQrScannerScreenState extends State<OwnerQrScannerScreen> {
                     controller: _manualCtrl,
                     style: GoogleFonts.poppins(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Paste or type the booking QR code',
+                      hintText: 'Paste or type the booking ID',
                       hintStyle: GoogleFonts.poppins(color: Colors.white54),
                       filled: true,
                       fillColor: Colors.white12,
@@ -301,8 +302,10 @@ class _OwnerQrScannerScreenState extends State<OwnerQrScannerScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () {
-                          if (_manualCtrl.text.isNotEmpty) _processQr(_manualCtrl.text.trim());
+                        onPressed: _processing ? null : () {
+                          if (_manualCtrl.text.trim().isNotEmpty) {
+                            _processQr(_manualCtrl.text.trim(), manual: true);
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.accent,

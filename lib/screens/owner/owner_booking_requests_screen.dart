@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -12,6 +13,9 @@ import '../../utils/reconnect_refresh.dart';
 import '../../widgets/network_error_view.dart';
 import '../../widgets/offline_banner.dart';
 import '../shared/chat_thread_screen.dart';
+import '../shared/public_profile_screen.dart';
+import '../../utils/num_util.dart';
+import '../../widgets/trust_widgets.dart';
 
 class OwnerBookingRequestsScreen extends StatefulWidget {
   const OwnerBookingRequestsScreen({super.key});
@@ -286,26 +290,37 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
   Widget _buildList(String status) {
     final items = _lists[status] ?? [];
     if (items.isEmpty) {
-      return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(
-            status == 'pending' ? Icons.inbox_outlined : Icons.event_busy_outlined,
-            size: 64,
-            color: AppColors.disabled,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'No $status bookings',
-            style: GoogleFonts.poppins(fontSize: 15, color: AppColors.textSecondary),
-          ),
-        ]),
+      return StableRefreshIndicator(
+        onRefresh: _loadAll,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+          slivers: [
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(
+                    status == 'pending' ? Icons.inbox_outlined : Icons.event_busy_outlined,
+                    size: 64,
+                    color: AppColors.disabled,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No $status bookings',
+                    style: GoogleFonts.poppins(fontSize: 15, color: AppColors.textSecondary),
+                  ),
+                ]),
+              ),
+            ),
+          ],
+        ),
       );
     }
-    return RefreshIndicator(
+    return StableRefreshIndicator(
       color: AppColors.accent,
       onRefresh: _loadAll,
       child: ListView.builder(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
         padding: const EdgeInsets.all(16),
         itemCount: items.length,
         itemBuilder: (_, i) => _bookingCard(items[i], status),
@@ -337,11 +352,12 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
   }
 
   Widget _bookingCard(Map<String, dynamic> b, String status) {
-    final trust = (b['trust_score'] as num?)?.toInt() ?? 100;
+    final trust = asInt(b['trust_score'], fallback: 100);
     final isPending = status == 'pending';
     final isConfirmed = status == 'confirmed';
-    final trustLabel = trust >= 80 ? 'HIGH TRUST' : trust >= 50 ? 'NEW USER' : 'LOW TRUST';
-    final trustColor = trust >= 80 ? AppColors.accent : trust >= 50 ? AppColors.warning : AppColors.error;
+    final tone = TrustTone.of(trust);
+    final trustLabel = '${tone.label.toUpperCase()} · $trust';
+    final trustColor = tone.color;
     final sports = (b['sport_preferences'] as List?)?.take(2).join(', ') ?? 'Football';
     final name = b['player_name'] ?? 'Player';
 
@@ -362,7 +378,7 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
               radius: 26,
               backgroundColor: AppColors.accentLight,
               child: Text(
-                name[0].toUpperCase(),
+                name.isEmpty ? 'P' : name[0].toUpperCase(),
                 style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.accent),
               ),
             ),
@@ -399,6 +415,20 @@ class _OwnerBookingRequestsScreenState extends State<OwnerBookingRequestsScreen>
         ),
 
         // Auto-approve notice (pending only)
+        if (b['player_id'] != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => PublicProfileScreen(
+                  userId: b['player_id'].toString(),
+                  name: name.toString(),
+                ),
+              )),
+              icon: const Icon(Icons.person_outline, size: 18),
+              label: const Text('View player profile'),
+            ),
+          ),
         if (isPending)
           Container(
             margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),

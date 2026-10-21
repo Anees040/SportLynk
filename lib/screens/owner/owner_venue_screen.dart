@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -80,11 +81,11 @@ class _OwnerVenueScreenState extends State<OwnerVenueScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
+      body: StableRefreshIndicator(
         color: AppColors.accent,
         onRefresh: _load,
         child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // Analytics

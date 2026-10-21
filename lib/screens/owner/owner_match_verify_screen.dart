@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -132,7 +133,7 @@ class _OwnerMatchVerifyScreenState extends State<OwnerMatchVerifyScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+          : StableRefreshIndicator(
               onRefresh: _load,
               child: _items.isEmpty
                   ? const MatchEmptyState(

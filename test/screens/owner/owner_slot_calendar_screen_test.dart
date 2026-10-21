@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sportlynk/screens/owner/owner_slot_calendar_screen.dart';
+import 'package:sportlynk/widgets/assistant/scout_bits.dart';
 
 import '../screen_harness.dart';
 
@@ -66,6 +67,27 @@ void main() {
   });
 
   group('the calendar as it loads', () {
+    testWidgets('past booked slots retain their booking history', (tester) async {
+      api.ok(kSlots, [{...slot(status: 'booked'), 'slot_date': '2020-01-01'}]);
+      await pumpCalendar(tester, api);
+      await settleCalendar(tester);
+
+      expect(find.text('PAST'), findsOneWidget);
+      expect(find.text('WAS BOOKED'), findsOneWidget);
+      expect(find.text('BOOKED'), findsNothing);
+      expect(find.byIcon(Icons.lock_outline), findsNothing);
+    });
+
+    testWidgets('future booked slots remain booked rather than past', (tester) async {
+      api.ok(kSlots, [slot(status: 'booked')]);
+      await pumpCalendar(tester, api);
+      await settleCalendar(tester);
+
+      expect(find.text('BOOKED'), findsOneWidget);
+      expect(find.text('PAST'), findsNothing);
+      expect(find.text('WAS BOOKED'), findsNothing);
+    });
+
     testWidgets('shows a spinner while venues and slots are chained', (
       tester,
     ) async {
@@ -133,7 +155,7 @@ void main() {
       expect(api.countTo('/owner/slots/s-1/block'), 1);
     });
 
-    testWidgets('the generate action posts to the generation endpoint', (
+    testWidgets('generation animates Scout, prevents duplicate taps and shows completion', (
       tester,
     ) async {
       api.on(
@@ -141,6 +163,7 @@ void main() {
         FakeResponse(
           200,
           jsonEncode({'success': true, 'message': 'Generated.', 'data': {}}),
+          delay: const Duration(seconds: 2),
         ),
       );
       await pumpCalendar(tester, api);
@@ -150,7 +173,35 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
+      expect(find.text('Building...'), findsOneWidget);
+      expect(tester.widget<ScoutAvatar>(find.byType(ScoutAvatar)).thinking, isTrue);
+      expect(find.text('AVAILABLE'), findsOneWidget);
+      await tester.tap(find.byTooltip('Generate Slots for 7 Days'));
       expect(api.countTo('/owner/slots/generate'), 1);
+      expect(jsonDecode(api.to('/owner/slots/generate').single.body!)['venueId'], 'v-1');
+
+      await tester.pump(const Duration(seconds: 2));
+      await settleCalendar(tester);
+      expect(find.text('Ready'), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Auto-fill'), findsOneWidget);
+    });
+
+    testWidgets('failed generation keeps the schedule visible and allows retry', (tester) async {
+      api.fail('/owner/slots/generate', 'Please try again');
+      await pumpCalendar(tester, api);
+      await settleCalendar(tester);
+
+      await tester.tap(find.text('Auto-fill'));
+      await settleCalendar(tester);
+      expect(find.text('Please try again'), findsOneWidget);
+      expect(find.text('AVAILABLE'), findsOneWidget);
+      expect(find.text('Ready'), findsNothing);
+      await tester.tap(find.text('Auto-fill'));
+      await settleCalendar(tester);
+      expect(api.countTo('/owner/slots/generate'), 2);
     });
   });
 

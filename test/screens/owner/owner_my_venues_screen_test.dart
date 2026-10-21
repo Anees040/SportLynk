@@ -10,6 +10,8 @@
 // fixtures so the card renders its sport placeholder instead of reaching the network
 // for an Image.
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sportlynk/screens/owner/owner_my_venues_screen.dart';
@@ -136,6 +138,62 @@ void main() {
   });
 
   group('actions and reach', () {
+    testWidgets('a saved description survives reopening and a price-only edit', (
+      tester,
+    ) async {
+      const updatePath = '/owner/venues/v-1';
+      const savedDescription = 'New floodlights and changing rooms';
+      final row = {
+        ...venue(),
+        'id': 'v-1',
+        'description': 'Original description',
+      };
+      api.ok(kVenues, [row]);
+      api.fail('$updatePath/discounts', 'Discounts unavailable');
+      api.fail('$updatePath/forecast', 'Forecast unavailable');
+      api.ok(updatePath, null);
+      await pumpVenues(tester, api);
+      await settleData(tester);
+
+      Future<void> openManagement() async {
+        await tester.tap(find.text('Green Turf Arena'));
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> saveChanges() async {
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump(const Duration(milliseconds: 200));
+        final save = find.widgetWithText(ElevatedButton, 'Save Changes');
+        await tester.ensureVisible(save);
+        await tester.pumpAndSettle();
+        await tester.tap(save);
+        await tester.pumpAndSettle();
+        // Let the success snackbar close before the next edit.
+        await tester.pump(const Duration(seconds: 7));
+        await tester.pumpAndSettle();
+      }
+
+      await openManagement();
+      await tester.enterText(find.byType(TextFormField).first, savedDescription);
+      // The subsequent list fetch supplies the server's saved venue.
+      api.ok(kVenues, [{...row, 'description': savedDescription}]);
+      await saveChanges();
+      expect(jsonDecode(api.to(updatePath).single.body!)['description'],
+        savedDescription);
+      expect(api.countTo(kVenues), 2);
+
+      await openManagement();
+      expect(tester.widget<TextFormField>(find.byType(TextFormField).first)
+        .controller!.text, savedDescription);
+      await tester.enterText(find.byType(TextFormField).at(1), '2800');
+      await saveChanges();
+      final secondSave = jsonDecode(api.to(updatePath).last.body!) as Map;
+      expect(secondSave['description'], savedDescription);
+      expect(secondSave['price_per_hour'], 2800);
+      expect(api.to(updatePath), hasLength(2));
+      expect(api.countTo(kVenues), 3);
+    });
+
     testWidgets('the refresh control reloads the list', (tester) async {
       await pumpVenues(tester, api);
       await settleData(tester);

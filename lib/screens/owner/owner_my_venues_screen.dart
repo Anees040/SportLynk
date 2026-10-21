@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -164,7 +165,7 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen>
                 // fall back on, so an outage with saved rows keeps showing them.
                 : _error != null
                     ? NetworkErrorView(message: _error!, onRetry: _load)
-                    : RefreshIndicator(
+                    : StableRefreshIndicator(
                         color: AppColors.accent,
                         onRefresh: _load,
                         child: _venues.isEmpty ? _buildEmpty() : _buildList(),
@@ -183,8 +184,15 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen>
   }
 
   Widget _buildEmpty() {
-    return Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
           padding: const EdgeInsets.all(28),
           decoration: const BoxDecoration(color: AppColors.accentLight, shape: BoxShape.circle),
@@ -208,7 +216,11 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen>
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
         ),
-      ]),
+        ]),
+      ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -216,7 +228,7 @@ class _OwnerMyVenuesScreenState extends State<OwnerMyVenuesScreen>
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       itemCount: _venues.length,
-      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+      physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
       itemBuilder: (_, i) => _venueCard(_venues[i]),
     );
   }

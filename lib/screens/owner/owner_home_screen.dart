@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/colors.dart';
 import '../../constants/api_constants.dart';
 import '../../models/match.dart';
@@ -16,6 +18,8 @@ import '../../services/offline_cache.dart';
 import '../../services/pricing_service.dart';
 import '../../services/realtime_service.dart';
 import '../../utils/reconnect_refresh.dart';
+import '../../utils/slot_time.dart';
+import '../../widgets/ai_price_suggestion_banner.dart';
 import '../../widgets/apply_price_sheet.dart';
 import '../../widgets/header_actions.dart';
 import '../../widgets/network_error_view.dart';
@@ -23,13 +27,13 @@ import '../../widgets/notification_bell.dart';
 import '../../widgets/offline_banner.dart';
 import '../../widgets/pricing_widgets.dart';
 import '../../widgets/swipe_page_view.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import '../shared/chats_screen.dart';
 import 'owner_booking_requests_screen.dart';
 import 'owner_match_verify_screen.dart';
 import 'owner_slot_calendar_screen.dart';
 import 'owner_my_venues_screen.dart';
 import 'owner_profile_screen.dart';
-
 
 class OwnerHomeScreen extends StatefulWidget {
   const OwnerHomeScreen({super.key});
@@ -84,6 +88,19 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
   PriceSuggestion? _price;
   bool _priceLoading = false;
   String? _priceVenueId;
+  DateTime? _priceDismissedUntil;
+  Timer? _clockTimer;
+
+  String? get _priceDismissalKey {
+    final ownerId = context.read<AuthProvider>().currentUser?.id;
+    if (ownerId == null || _priceVenueId == null) return null;
+    return 'owner_price_snooze_v1:$ownerId:$_priceVenueId';
+  }
+
+  bool get _priceSuggestionVisible =>
+      _priceVenueId != null &&
+      (_priceDismissedUntil == null ||
+          !DateTime.now().isBefore(_priceDismissedUntil!));
 
   // Chat
   // An owner's inbox is mostly booking rooms — the player asking whether the floodlights
@@ -98,6 +115,9 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
   void initState() {
     super.initState();
     _pageController = PageController();
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
     // Both started together, deliberately NOT chained. Reading the cache is disk
     // I/O, and awaiting it before the request would delay every online load by
     // however long shared_preferences takes to answer — paying an offline cost on
@@ -117,6 +137,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
 
   @override
   void dispose() {
+    _clockTimer?.cancel();
     _matchSub?.cancel();
     _badgeDebounce?.cancel();
     _msgSub?.cancel();
@@ -174,16 +195,79 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
   Future<void> _loadPricing(String venueId) async {
     final token = Provider.of<AuthProvider>(context, listen: false).token;
     if (token == null || token.isEmpty) return;
+    final venueChanged = _priceVenueId != venueId;
     setState(() {
       _priceLoading = true;
       _priceVenueId = venueId;
+      if (venueChanged) {
+        _price = null;
+        _priceDismissedUntil = null;
+      }
     });
+    if (venueChanged) {
+      final key = _priceDismissalKey;
+      if (key != null) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final savedUntil = prefs.getInt(key);
+          if (!mounted || _priceVenueId != venueId) return;
+          if (savedUntil != null && _priceDismissedUntil == null) {
+            setState(
+              () => _priceDismissedUntil = DateTime.fromMillisecondsSinceEpoch(
+                savedUntil,
+              ),
+            );
+          }
+        } catch (_) {}
+      }
+    }
     final s = await _pricingService.suggestion(token, venueId);
-    if (!mounted) return;
+    if (!mounted || _priceVenueId != venueId) return;
     setState(() {
       _price = s;
       _priceLoading = false;
     });
+  }
+
+  Future<void> _dismissPriceSuggestion() async {
+    final until = DateTime.now().add(const Duration(hours: 6));
+    final key = _priceDismissalKey;
+    setState(() => _priceDismissedUntil = until);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Price suggestion hidden for 6 hours. Your prices are unchanged.',
+        ),
+      ),
+    );
+    if (key == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(key, until.millisecondsSinceEpoch);
+    } catch (_) {}
+  }
+
+  void _showPriceDetails() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          child: AiPriceCard(
+            suggestion: _price,
+            loading: _priceLoading,
+            onApply: (_price != null && _price!.isModel && _price!.isActionable)
+                ? () async {
+                    Navigator.pop(sheetContext);
+                    await _openApply();
+                  }
+                : null,
+          ),
+        ),
+      ),
+    );
   }
 
   /// Opens the slot picker. Returns only after the sheet closes, so the card and the
@@ -194,7 +278,11 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
     final s = _price;
     final venueId = _priceVenueId;
     if (s == null || venueId == null) return;
-    final applied = await showApplyPriceSheet(context, venueId: venueId, suggestion: s);
+    final applied = await showApplyPriceSheet(
+      context,
+      venueId: venueId,
+      suggestion: s,
+    );
     if (applied == true && mounted) {
       await _load();
       if (mounted) await _loadPricing(venueId);
@@ -247,10 +335,12 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
       return;
     }
     try {
-      final resp = await http.get(
-        Uri.parse('$_base/owner/dashboard'),
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 10));
+      final resp = await http
+          .get(
+            Uri.parse('$_base/owner/dashboard'),
+            headers: {'Authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 10));
       if (!mounted) return;
       final json = jsonDecode(resp.body);
       if (json['success'] == true) {
@@ -258,7 +348,8 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
         _networkAnswered = true;
         setState(() {
           _data = data is Map ? Map<String, dynamic>.from(data) : null;
-          _cachedAt = null;  // on screen is now this session's data, not a saved copy
+          _cachedAt =
+              null; // on screen is now this session's data, not a saved copy
           _error = null;
           _loading = false;
         });
@@ -331,7 +422,7 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
             _dashboardTab(),
             const OwnerBookingRequestsScreen(),
             const OwnerSlotCalendarScreen(),
-            const OwnerMyVenuesScreen(),   // multi-venue list
+            const OwnerMyVenuesScreen(), // multi-venue list
             const OwnerProfileScreen(),
           ],
         ),
@@ -357,412 +448,317 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, -3))],
+        border: const Border(top: BorderSide(color: AppColors.border)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: SafeArea(
         top: false,
-        child: AnimatedBuilder(
-          animation: _pageController,
-          builder: (context, _) {
-            final page = swipePage(_pageController, _tab);
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(items.length, (i) {
-                // 1 on the current page, 0 a whole tab away, a fraction mid-drag.
-                final t = (1.0 - (page - i).abs()).clamp(0.0, 1.0);
-                final color = Color.lerp(AppColors.textSecondary, AppColors.accent, t)!;
-                return GestureDetector(
-                  onTap: () => _goToTab(i),
-                  child: Container(
-                    color: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      // The active icon lifts onto a round accent halo; both track
-                      // the drag so mid-swipe they hand across between tabs.
-                      Transform.translate(
-                        offset: Offset(0, -5 * t),
-                        child: Container(
-                          width: 30,
-                          height: 30,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: AppColors.accent.withValues(alpha: 0.18 * t),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            t > 0.5 ? items[i].$2 : items[i].$3,
-                            color: color,
-                            size: 22,
-                          ),
-                        ),
+        child: Material(
+          color: Colors.transparent,
+          child: AnimatedBuilder(
+            animation: _pageController,
+            builder: (context, _) {
+              final page = swipePage(_pageController, _tab);
+              return Row(
+                children: [
+                  for (var index = 0; index < items.length; index++)
+                    Expanded(
+                      child: Builder(
+                        builder: (context) {
+                          final progress = (1.0 - (page - index).abs()).clamp(
+                            0.0,
+                            1.0,
+                          );
+                          final color = Color.lerp(
+                            AppColors.textSecondary,
+                            AppColors.primary,
+                            progress,
+                          )!;
+                          return Semantics(
+                            selected: _tab == index,
+                            button: true,
+                            child: InkWell(
+                              onTap: () => _goToTab(index),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 9,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 50,
+                                      height: 30,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.accent.withValues(
+                                          alpha: 0.14 * progress,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        progress > 0.5
+                                            ? items[index].$2
+                                            : items[index].$3,
+                                        color: color,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        items[index].$1,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 9,
+                                          color: color,
+                                          fontWeight: FontWeight.lerp(
+                                            FontWeight.w500,
+                                            FontWeight.w700,
+                                            progress,
+                                          ),
+                                          letterSpacing: 0.2,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                      const SizedBox(height: 1),
-                      Text(
-                        items[i].$1,
-                        style: GoogleFonts.poppins(
-                          fontSize: 9,
-                          color: color,
-                          fontWeight: FontWeight.lerp(
-                              FontWeight.w400, FontWeight.w700, t),
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ]),
-                  ),
-                );
-              }),
-            );
-          },
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
   Widget _dashboardTab() {
-    final auth = Provider.of<AuthProvider>(context);
+    final auth = context.watch<AuthProvider>();
     final name = auth.currentUser?.name ?? 'Owner';
     final hour = DateTime.now().hour;
-    final greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
-
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.accent));
-    }
-
-    // A first load that failed with nothing cached must say so. Falling through to
-    // the body below would draw every figure through its `?? 0` default, and a
-    // dashboard reading "PKR 0 / 0 bookings" is a number the owner would act on
-    // rather than a state they can recognise as a failure.
-    if (_error != null && _data == null) {
-      return NetworkErrorView(message: _error!, onRetry: _refreshAll);
-    }
-
+    final greeting = hour < 12
+        ? 'Good Morning'
+        : hour < 17
+        ? 'Good Afternoon'
+        : 'Good Evening';
     final stats = _data?['stats'] as Map<String, dynamic>? ?? {};
-    final upcoming = (_data?['upcomingBookings'] as List?) ?? [];
+    final upcoming = ((_data?['upcomingBookings'] as List?) ?? [])
+        .whereType<Map>()
+        .map((booking) => Map<String, dynamic>.from(booking))
+        .where((booking) => !isSlotPast(booking))
+        .toList();
     final wallet = _data?['wallet'] as Map<String, dynamic>? ?? {};
     final venue = _data?['venue'] as Map<String, dynamic>?;
     final pendingEscrow = _parseNum(_data?['pendingEscrow']);
+    final pendingCount = _parseNum(stats['pendingCount']).toInt();
 
-    return RefreshIndicator(
-      color: AppColors.accent,
-      onRefresh: _refreshAll,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-        slivers: [
-          // App bar
-          SliverAppBar(
-            pinned: true,
-            backgroundColor: AppColors.primary,
-            automaticallyImplyLeading: false,
-            elevation: 0,
-            title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
-                '$greeting, ${name.split(' ').first}!',
-                style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              Text(
-                venue?['name'] ?? 'Your Venue',
-                style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11),
-              ),
-            ]),
-            // The avatar that used to sit here was a second route to a tab that is
-            // already in the bottom bar. The two icons that replace it are the only
-            // things on this screen that are unreachable any other way.
-            actions: [
-              HeaderIconButton(
-                icon: Icons.chat_bubble_outline,
-                tooltip: 'Chats',
-                badge: _chatUnread,
-                onTap: _openChats,
-              ),
-              const SizedBox(width: 10),
-              // Live. Same widget as the player and admin headers, and
-              // the one place the notification stack is started for a session.
-              const NotificationBell(),
-              const SizedBox(width: 14),
-            ],
-          ),
-
-          // Directly under the app bar, so the explanation sits above the figures it
-          // applies to rather than below them.
-          SliverToBoxAdapter(child: OfflineBanner(cachedAt: _cachedAt)),
-
-          // STATS row
-          SliverToBoxAdapter(
-            child: Container(
-              color: AppColors.primary,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                child: Row(children: [
-                  _statCard(
-                    'REVENUE TODAY',
-                    'PKR ${_parseNum(stats['revenueToday']).toStringAsFixed(0)}',
-                    Icons.payments_outlined,
-                    AppColors.accent,
-                  ),
-                  const SizedBox(width: 10),
-                  _statCard(
-                    'BOOKINGS',
-                    '${stats['bookingsToday'] ?? 0}',
-                    Icons.calendar_month,
-                    const Color(0xFF3B82F6),
-                  ),
-                  const SizedBox(width: 10),
-                  _statCard(
-                    'PENDING',
-                    '${stats['pendingCount'] ?? 0}',
-                    Icons.pending_actions,
-                    AppColors.warning,
-                    onTap: () => _goToTab(1),
-                  ),
-                ]),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        automaticallyImplyLeading: false,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: false,
+        toolbarHeight: 68,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Dashboard',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          ),
-
-          // MATCH results to verify (ER2.2)
-          // Only rendered when the queue is non-empty: it is a task, not a
-          // statistic, so an empty version of it would be noise every other day.
-          if (_toVerify.isNotEmpty)
-            SliverToBoxAdapter(child: _verifyCard()),
-
-          // Quick ACTIONS
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Quick Actions',
-                  style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                const SizedBox(height: 12),
-                Row(children: [
-                  _quickActionTile(
-                    Icons.qr_code_scanner_rounded, 'Scan QR',
-                    const Color(0xFFEDE9FE), const Color(0xFF7C3AED),
-                    () => Navigator.pushNamed(context, '/owner-scan-qr'),
-                  ),
-                  const SizedBox(width: 12),
-                  _quickActionTile(
-                    Icons.pending_actions_rounded, 'Requests',
-                    const Color(0xFFFEF3C7), const Color(0xFFD97706),
-                    () => _goToTab(1),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  _quickActionTile(
-                    Icons.stadium_rounded, 'My Venue',
-                    const Color(0xFFD1FAE5), AppColors.accent,
-                    () => _goToTab(3),
-                  ),
-                  const SizedBox(width: 12),
-                  _quickActionTile(
-                    Icons.calendar_month_rounded, 'Schedule',
-                    const Color(0xFFDBEAFE), const Color(0xFF2563EB),
-                    () => _goToTab(2),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  // Only owners run tournaments (SRS Module 6), so this is the only
-                  // door into creating one — and it fills hours that are hard to sell
-                  // one booking at a time.
-                  _quickActionTile(
-                    Icons.emoji_events_rounded, 'Tournaments',
-                    const Color(0xFFFEF9C3), const Color(0xFFB45309),
-                    () => Navigator.pushNamed(context, '/owner-tournaments'),
-                  ),
-                  const SizedBox(width: 12),
-                  _quickActionTile(
-                    Icons.rule_rounded, 'Verify Results',
-                    const Color(0xFFE0E7FF), const Color(0xFF4338CA),
-                    () => Navigator.pushNamed(context, '/owner-verify-matches'),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                // FR4.16. Full width on purpose: the wallet card above
-                // says what the balance is, and this is the only place that says where
-                // it came from -- every booking, its commission and its refunds, for a
-                // date range, as a CSV that opens in Excel.
-                Row(children: [
-                  _quickActionTile(
-                    Icons.summarize_outlined, 'Earnings Report',
-                    const Color(0xFFF1F5F9), const Color(0xFF334155),
-                    () => Navigator.pushNamed(context, '/owner-reports'),
-                  ),
-                ]),
-              ]),
+            Text(
+              venue?['name'] ?? 'Your Venue',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12),
             ),
+          ],
+        ),
+        actions: [
+          HeaderIconButton(
+            icon: Icons.chat_bubble_outline,
+            tooltip: 'Chats',
+            badge: _chatUnread,
+            onTap: _openChats,
           ),
-
-          // AI PRICE suggestion (FR4.17)
-          // Real model output, not `base × 1.12`. The card decides for itself what it
-          // is allowed to claim from the payload's `source`, and Apply is the only
-          // path from a suggestion to a price a player will be charged.
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: AiPriceCard(
-                suggestion: _price,
-                loading: _priceLoading,
-                onRetry: _priceVenueId == null ? null : () => _loadPricing(_priceVenueId!),
-                // Nullable on purpose: no button at all unless there is a real,
-                // actionable model suggestion to apply. A rule-of-thumb price is
-                // shown for information; it is not something to write to slots.
-                onApply: (_price != null && _price!.isModel && _price!.isActionable)
-                    ? _openApply
-                    : null,
-              ),
-            ),
-          ),
-
-          // WALLET card
-          SliverToBoxAdapter(
-            child: GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/owner-wallet'),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0A1F13), Color(0xFF166534)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(children: [
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(
-                          'WALLET BALANCE',
-                          style: GoogleFonts.poppins(color: Colors.white60, fontSize: 10, letterSpacing: 0.5),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'PKR ${_parseNum(wallet['balance']).toStringAsFixed(0)}',
-                          style: GoogleFonts.poppins(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          'From ${upcoming.where((b) => b['status'] == 'checked_in').length} check-ins',
-                          style: GoogleFonts.poppins(color: Colors.white60, fontSize: 11),
-                        ),
-                      ]),
-                    ),
-                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                      if (pendingEscrow > 0)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 6),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppColors.warning.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
-                          ),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            const Icon(Icons.hourglass_top, color: AppColors.warning, size: 13),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Escrow: PKR ${pendingEscrow.toStringAsFixed(0)}',
-                              style: GoogleFonts.poppins(color: AppColors.warning, fontSize: 11, fontWeight: FontWeight.w600),
-                            ),
-                          ]),
-                        ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Icon(Icons.lock_outline, color: Colors.white60, size: 13),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Frozen: PKR ${_parseNum(wallet['frozen_balance']).toStringAsFixed(0)}',
-                            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11),
-                          ),
-                        ]),
-                      ),
-                      const SizedBox(height: 8),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pushNamed(context, '/owner-wallet'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        ),
-                        child: Text(
-                          'Withdraw',
-                          style: GoogleFonts.poppins(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ]),
-                  ]),
-                ),
-              ),
-            ),
-          ),
-
-          // Next bookings HEADER
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text(
-                  'Next Bookings',
-                  style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                ),
-                TextButton(
-                  onPressed: () => _goToTab(2),
-                  child: Text(
-                    'VIEW SCHEDULE',
-                    style: GoogleFonts.poppins(fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w700, letterSpacing: 0.3),
-                  ),
-                ),
-              ]),
-            ),
-          ),
-
-          // Bookings list
-          upcoming.isEmpty
-              ? SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: AppColors.inputFill,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'No upcoming bookings today',
-                          style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textSecondary),
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-              : SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (_, i) {
-                      final b = upcoming[i] as Map<String, dynamic>;
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                        child: _bookingRow(b),
-                      );
-                    },
-                    childCount: upcoming.length,
-                  ),
-                ),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          const SizedBox(width: 8),
+          const NotificationBell(),
+          const SizedBox(width: 14),
         ],
       ),
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.accent),
+            )
+          : _error != null && _data == null
+          ? NetworkErrorView(message: _error!, onRetry: _refreshAll)
+          : StableRefreshIndicator(
+              onRefresh: _refreshAll,
+              child: CustomScrollView(
+                key: const PageStorageKey('owner-dashboard'),
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
+                ),
+                slivers: [
+                  SliverToBoxAdapter(child: OfflineBanner(cachedAt: _cachedAt)),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$greeting, ${name.split(' ').first}!',
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${DateFormat('EEEE, d MMMM').format(DateTime.now())} · Your venue at a glance',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _revenueCard(stats),
+                          const SizedBox(height: 12),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _statCard(
+                                'BOOKINGS',
+                                '${stats['bookingsToday'] ?? 0}',
+                                Icons.calendar_month_outlined,
+                                const Color(0xFF2563EB),
+                                subtitle: 'Today’s schedule',
+                                onTap: () => _goToTab(2),
+                              ),
+                              const SizedBox(width: 12),
+                              _statCard(
+                                'PENDING',
+                                '${stats['pendingCount'] ?? 0}',
+                                Icons.pending_actions_outlined,
+                                AppColors.warningText,
+                                subtitle: 'Awaiting approval',
+                                onTap: () => _goToTab(1),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (pendingCount > 0)
+                    SliverToBoxAdapter(child: _pendingCard(pendingCount)),
+                  if (_toVerify.isNotEmpty)
+                    SliverToBoxAdapter(child: _verifyCard()),
+                  SliverToBoxAdapter(
+                    child: _sectionHeader(
+                      'Next Bookings',
+                      action: 'VIEW SCHEDULE',
+                      onTap: () => _goToTab(2),
+                    ),
+                  ),
+                  if (upcoming.isEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Container(
+                          padding: const EdgeInsets.all(22),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.event_available_outlined,
+                                size: 30,
+                                color: AppColors.primary,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No upcoming bookings today',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (_, index) => Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                          child: _bookingRow(upcoming[index]),
+                        ),
+                        childCount: upcoming.length,
+                      ),
+                    ),
+                  SliverToBoxAdapter(child: _sectionHeader('Wallet & Payouts')),
+                  SliverToBoxAdapter(
+                    child: _walletCard(wallet, upcoming, pendingEscrow),
+                  ),
+                  SliverToBoxAdapter(child: _sectionHeader('Quick Actions')),
+                  SliverToBoxAdapter(child: _buildQuickActions()),
+                  if (_priceSuggestionVisible)
+                    SliverToBoxAdapter(
+                      child: _sectionHeader('Pricing Insights'),
+                    ),
+                  if (_priceSuggestionVisible)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Dismissible(
+                          key: ValueKey('owner-price-$_priceVenueId'),
+                          direction: DismissDirection.horizontal,
+                          onDismissed: (_) => _dismissPriceSuggestion(),
+                          child: AiPriceSuggestionBanner(
+                            suggestion: _price,
+                            loading: _priceLoading,
+                            onDismiss: _dismissPriceSuggestion,
+                            onDetails: _showPriceDetails,
+                            onRetry: _priceVenueId == null
+                                ? null
+                                : () => _loadPricing(_priceVenueId!),
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 28)),
+                ],
+              ),
+            ),
     );
   }
 
@@ -785,184 +781,756 @@ class _OwnerHomeScreenState extends State<OwnerHomeScreen>
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.warning.withValues(alpha: 0.45)),
+              border: Border.all(
+                color: AppColors.warning.withValues(alpha: 0.45),
+              ),
               color: AppColors.warning.withValues(alpha: 0.06),
             ),
-            child: Row(children: [
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.fact_check_outlined,
+                    color: Color(0xFFB45309),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        n == 1
+                            ? 'Match result to verify'
+                            : '$n match results to verify',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        n == 1
+                            ? '${first.challenger.name} vs ${first.opponent.name} — both captains agreed on the score.'
+                            : 'Both captains have agreed on the score. Ratings move once you confirm.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          height: 1.35,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$n',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionHeader(String title, {String? action, VoidCallback? onTap}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          if (action != null)
+            TextButton(
+              onPressed: onTap,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              child: Text(
+                action,
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _revenueCard(Map<String, dynamic> stats) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [AppColors.primaryDark, AppColors.primary],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: InkWell(
+          onTap: () => Navigator.pushNamed(context, '/owner-reports'),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.payments_outlined,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'REVENUE TODAY',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_outward_rounded,
+                      color: Colors.white70,
+                      size: 19,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'PKR ${_parseNum(stats['revenueToday']).toStringAsFixed(0)}',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'View earnings & reports',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white70,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pendingCard(int count) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: Material(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _goToTab(1),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: AppColors.warning.withValues(alpha: 0.3),
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.pending_actions_outlined,
+                  color: AppColors.warningText,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        count == 1
+                            ? '1 booking needs your approval'
+                            : '$count bookings need your approval',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.warningText,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Review requests to keep your schedule moving',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.warningText,
+                  size: 22,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _walletCard(
+    Map<String, dynamic> wallet,
+    List<dynamic> upcoming,
+    double pendingEscrow,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => Navigator.pushNamed(context, '/owner-wallet'),
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentLight,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.account_balance_wallet_outlined,
+                        color: AppColors.primary,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'WALLET BALANCE',
+                            style: GoogleFonts.poppins(
+                              color: AppColors.textSecondary,
+                              fontSize: 10,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'PKR ${_parseNum(wallet['balance']).toStringAsFixed(0)}',
+                            style: GoogleFonts.poppins(
+                              color: AppColors.textPrimary,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'From ${upcoming.where((booking) => booking['status'] == 'checked_in').length} check-ins',
+                  style: GoogleFonts.poppins(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (pendingEscrow > 0)
+                      _balanceChip(
+                        Icons.hourglass_top_rounded,
+                        'Escrow: PKR ${pendingEscrow.toStringAsFixed(0)}',
+                        AppColors.warningText,
+                        const Color(0xFFFEF3C7),
+                      ),
+                    _balanceChip(
+                      Icons.lock_outline_rounded,
+                      'Frozen: PKR ${_parseNum(wallet['frozen_balance']).toStringAsFixed(0)}',
+                      AppColors.textSecondary,
+                      AppColors.inputFill,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    onPressed: () =>
+                        Navigator.pushNamed(context, '/owner-wallet'),
+                    icon: const Icon(Icons.south_west_rounded, size: 16),
+                    label: Text(
+                      'Withdraw',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: AppColors.primary,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _balanceChip(
+    IconData icon,
+    String label,
+    Color color,
+    Color background,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              style: GoogleFonts.poppins(color: color, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color, {
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(icon, color: color, size: 21),
+                    const Spacer(),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.textSecondary,
+                      size: 18,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  value,
+                  style: GoogleFonts.poppins(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    final actions = [
+      (
+        Icons.qr_code_scanner_rounded,
+        'Scan QR',
+        const Color(0xFF7C3AED),
+        () => Navigator.pushNamed(context, '/owner-scan-qr'),
+      ),
+      (
+        Icons.pending_actions_rounded,
+        'Requests',
+        AppColors.warningText,
+        () => _goToTab(1),
+      ),
+      (Icons.stadium_rounded, 'My Venue', AppColors.primary, () => _goToTab(3)),
+      (
+        Icons.calendar_month_rounded,
+        'Schedule',
+        const Color(0xFF2563EB),
+        () => _goToTab(2),
+      ),
+      (
+        Icons.emoji_events_rounded,
+        'Tournaments',
+        const Color(0xFFB45309),
+        () => Navigator.pushNamed(context, '/owner-tournaments'),
+      ),
+      (
+        Icons.rule_rounded,
+        'Verify Results',
+        const Color(0xFF4338CA),
+        () => Navigator.pushNamed(context, '/owner-verify-matches'),
+      ),
+      (
+        Icons.summarize_outlined,
+        'Earnings Report',
+        const Color(0xFF334155),
+        () => Navigator.pushNamed(context, '/owner-reports'),
+      ),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const spacing = 8.0;
+          final textScale = MediaQuery.textScalerOf(context).scale(11.5) / 11.5;
+          final minTileWidth = 88.0 * (textScale < 1 ? 1 : textScale);
+          final columns =
+              ((constraints.maxWidth + spacing) / (minTileWidth + spacing))
+                  .floor()
+                  .clamp(1, 3);
+          // Equal-width tiles stay compact on phones. Content sets each row's
+          // height, so larger accessibility text can wrap without clipping.
+          return Column(
+            children: [
+              for (var start = 0; start < actions.length; start += columns)
+                Padding(
+                  padding: EdgeInsets.only(top: start == 0 ? 0 : spacing),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var column = 0; column < columns; column++) ...[
+                          if (column > 0) const SizedBox(width: spacing),
+                          Expanded(
+                            child: start + column < actions.length
+                                ? _quickActionTile(
+                                    actions[start + column].$1,
+                                    actions[start + column].$2,
+                                    actions[start + column].$3,
+                                    actions[start + column].$4,
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _quickActionTile(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 108),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.15),
+                  color: color.withValues(alpha: 0.09),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.fact_check_outlined,
-                    color: Color(0xFFB45309), size: 22),
+                child: Icon(icon, color: color, size: 22),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(
-                    n == 1 ? 'Match result to verify' : '$n match results to verify',
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 32),
+                child: Center(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary),
+                      fontSize: 11.5,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    n == 1
-                        ? '${first.challenger.name} vs ${first.opponent.name} — both captains agreed on the score.'
-                        : 'Both captains have agreed on the score. Ratings move once you confirm.',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(
-                        fontSize: 11, height: 1.35, color: AppColors.textSecondary),
-                  ),
-                ]),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.warning,
-                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text('$n',
-                    style: GoogleFonts.poppins(
-                        color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 20),
-            ]),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _statCard(String label, String value, IconData icon, Color color, {VoidCallback? onTap}) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6, offset: const Offset(0, 2))],
-          ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-            ),
-            Text(
-              label,
-              style: GoogleFonts.poppins(fontSize: 9, color: AppColors.textSecondary, letterSpacing: 0.3),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _quickActionTile(IconData icon, String label, Color bg, Color iconColor, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: iconColor.withValues(alpha: 0.15)),
-          ),
-          child: Row(children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: iconColor, size: 20),
-            ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(label, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(
-                fontSize: 13, fontWeight: FontWeight.w600, color: iconColor)),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _bookingRow(Map<String, dynamic> b) {
-    final trust = (b['trust_score'] as num?)?.toInt() ?? 100;
-    final trustLabel = trust >= 80 ? 'HIGH TRUST' : trust >= 60 ? 'FAIR' : 'LOW TRUST';
-    final trustColor = trust >= 80 ? AppColors.accent : trust >= 60 ? AppColors.warning : AppColors.error;
-    final isPending = b['status'] == 'pending';
-    final startTime = (b['start_time'] ?? '00:00').toString();
-    final endTime = (b['end_time'] ?? '00:00').toString();
+  Widget _bookingRow(Map<String, dynamic> booking) {
+    final trust = num.tryParse('${booking['trust_score']}')?.toInt() ?? 100;
+    final trustLabel = trust >= 80
+        ? 'HIGH TRUST'
+        : trust >= 60
+        ? 'FAIR'
+        : 'LOW TRUST';
+    final trustColor = trust >= 80
+        ? AppColors.primary
+        : trust >= 60
+        ? AppColors.warningText
+        : AppColors.error;
+    final isPending = booking['status'] == 'pending';
+    final startTime = (booking['start_time'] ?? '00:00').toString();
+    final endTime = (booking['end_time'] ?? '00:00').toString();
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isPending ? AppColors.warning.withValues(alpha: 0.4) : AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isPending
+              ? AppColors.warning.withValues(alpha: 0.4)
+              : AppColors.border,
+        ),
       ),
-      child: Row(children: [
-        Container(
-          width: 4,
-          height: 44,
-          decoration: BoxDecoration(
-            color: isPending ? AppColors.warning : AppColors.accent,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(
-              b['player_name'] ?? 'Player',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            Row(children: [
-              const Icon(Icons.access_time_outlined, size: 12, color: AppColors.textSecondary),
-              const SizedBox(width: 4),
-              Text(
-                '${startTime.length >= 5 ? startTime.substring(0, 5) : startTime} – ${endTime.length >= 5 ? endTime.substring(0, 5) : endTime}',
-                style: GoogleFonts.poppins(fontSize: 11, color: AppColors.textSecondary),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final identity = Row(
+            children: [
+              Container(
+                width: 4,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: isPending ? AppColors.warning : AppColors.accent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ]),
-          ]),
-        ),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      booking['player_name'] ?? 'Player',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.access_time_outlined,
+                          size: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            '${startTime.length >= 5 ? startTime.substring(0, 5) : startTime} – ${endTime.length >= 5 ? endTime.substring(0, 5) : endTime}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+          final trustBadge = Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
             decoration: BoxDecoration(
-              color: trustColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
+              color: trustColor.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(7),
             ),
             child: Text(
               trustLabel,
-              style: GoogleFonts.poppins(fontSize: 9, color: trustColor, fontWeight: FontWeight.bold),
+              style: GoogleFonts.poppins(
+                fontSize: 9,
+                color: trustColor,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          GestureDetector(
-            onTap: () => Navigator.pushNamed(context, '/owner-scan-qr'),
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: AppColors.accentLight, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.qr_code_scanner, color: AppColors.accent, size: 18),
+          );
+          final scan = IconButton(
+            tooltip: 'Scan booking QR',
+            onPressed: () => Navigator.pushNamed(context, '/owner-scan-qr'),
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.accentLight,
+              foregroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-          ),
-        ]),
-      ]),
+            icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+          );
+          if (constraints.maxWidth < 320 ||
+              MediaQuery.textScalerOf(context).scale(11) > 16) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                identity,
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Flexible(child: trustBadge),
+                    const Spacer(),
+                    scan,
+                  ],
+                ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: identity),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [trustBadge, const SizedBox(height: 6), scan],
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 

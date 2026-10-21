@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -157,7 +158,7 @@ class _OwnerTournamentsScreenState extends State<OwnerTournamentsScreen> {
                         ),
                       ),
                     )
-                  : RefreshIndicator(
+                  : StableRefreshIndicator(
                       onRefresh: () => _load(silent: true),
                       color: AppColors.accent,
                       child: ListView(

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -8,7 +10,10 @@ import '../../constants/api_constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../utils/reconnect_refresh.dart';
+import '../../utils/slot_time.dart';
+import '../../widgets/assistant/scout_bits.dart';
 import '../../widgets/network_error_view.dart';
+import 'owner_venue_management_screen.dart';
 
 class OwnerSlotCalendarScreen extends StatefulWidget {
   const OwnerSlotCalendarScreen({super.key});
@@ -23,6 +28,10 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
   List<Map<String, dynamic>> _venues = [];
   String? _selectedVenueId;
   bool _loading = false;
+  Timer? _clockTimer;
+  bool _generating = false;
+  bool _generated = false;
+  Timer? _generationFeedbackTimer;
 
   /// The failure sentence for a slot load that could not reach the server.
   ///
@@ -38,6 +47,16 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
   void initState() {
     super.initState();
     _loadVenues();
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    _generationFeedbackTimer?.cancel();
+    super.dispose();
   }
 
   // The calendar re-reads venues and slots once the socket returns, so a screen
@@ -115,23 +134,36 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
   }
 
   Future<void> _generateSlots() async {
-    if (_selectedVenueId == null) return;
-    if (mounted) setState(() => _loading = true);
+    if (_selectedVenueId == null || _loading || _generating) return;
+    _generationFeedbackTimer?.cancel();
+    setState(() {
+      _generating = true;
+      _generated = false;
+    });
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token!;
       final resp = await http.post(
         Uri.parse('$_base/owner/slots/generate'),
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
         body: jsonEncode({'venueId': _selectedVenueId}),
-      );
+      ).timeout(const Duration(seconds: 30));
       final data = jsonDecode(resp.body);
-      if (mounted) {
-        _snack(data['message'] ?? 'Action completed', data['success'] == true ? AppColors.accent : AppColors.error);
-        _loadSlots();
+      if (!mounted) return;
+      final success = data['success'] == true;
+      setState(() => _generated = success);
+      _snack(data['message'] ?? (success ? 'Schedule updated' : 'Could not generate slots'),
+          success ? AppColors.accent : AppColors.error);
+      if (success) {
+        await _loadSlots();
+        if (!mounted) return;
+        _generationFeedbackTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) setState(() => _generated = false);
+        });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
-      _snack('Network error', AppColors.error);
+      if (mounted) _snack('Could not generate slots. Please try again.', AppColors.error);
+    } finally {
+      if (mounted) setState(() => _generating = false);
     }
   }
 
@@ -176,10 +208,21 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
         automaticallyImplyLeading: false,
         elevation: 0,
         actions: [
-          IconButton(
-            tooltip: 'Generate Slots for 7 Days',
-            icon: const Icon(Icons.auto_awesome, color: Colors.white),
-            onPressed: _generateSlots,
+          if (_selectedVenueId != null)
+            IconButton(
+              tooltip: 'Upfront deposit settings',
+              icon: const Icon(Icons.shield_outlined, color: Colors.white),
+              onPressed: () async {
+                final venue = _venues.firstWhere((row) => row['id'].toString() == _selectedVenueId);
+                await Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => OwnerVenueManagementScreen(venue: venue),
+                ));
+                if (mounted) _loadVenues();
+              },
+            ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(child: _generationButton()),
           ),
         ],
       ),
@@ -305,14 +348,63 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
                         ),
                       ]),
                     )
-                  : ListView.builder(
-                      physics: const BouncingScrollPhysics(),
+                  : ScrollConfiguration(
+                      behavior: stableScrollBehavior(context),
+                      child: ListView.builder(
+                      physics: const ClampingScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
                       itemCount: _slots.length,
                       itemBuilder: (_, i) => _slotRow(_slots[i]),
+                      ),
                     ),
         ),
       ]),
+    );
+  }
+
+  Widget _generationButton() {
+    final enabled = _selectedVenueId != null && !_loading && !_generating;
+    final label = _generating ? 'Building...' : _generated ? 'Ready' : 'Auto-fill';
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Tooltip(
+      message: 'Generate Slots for 7 Days',
+      child: Semantics(
+        label: _generating
+            ? 'Generating slots for 7 days'
+            : _generated ? 'Schedule updated' : 'Auto-fill slots for 7 days',
+        liveRegion: true,
+        child: TextButton(
+          onPressed: enabled ? _generateSlots : null,
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            disabledForegroundColor: Colors.white70,
+            backgroundColor: Colors.white.withValues(alpha: _generating ? 0.22 : 0.12),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            minimumSize: const Size(48, 44),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedSwitcher(
+                duration: Duration(milliseconds: reduceMotion ? 0 : 200),
+                child: _generated && !_generating
+                    ? const Icon(Icons.check_circle_outline, key: ValueKey('ready'), size: 24)
+                    : ScoutAvatar(
+                        key: const ValueKey('scout'),
+                        size: 24,
+                        thinking: _generating && !reduceMotion,
+                      ),
+              ),
+              const SizedBox(width: 8),
+              Text(label, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -375,13 +467,13 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
     final isBooked = status == 'booked';
     final isBlocked = status == 'blocked';
     final isHeld = status == 'locked';
-    final isPast = _isSlotPast(slot);
+    final isPast = isSlotPast(slot);
 
     final Color statusColor;
     final String statusLabel;
 
     // SRS colour code: Green free · Amber booked · Red blocked · Blue held.
-    if (isPast && !isBooked) {
+    if (isPast) {
       statusColor = AppColors.disabled;
       statusLabel = 'PAST';
     } else if (isAvailable) {
@@ -429,7 +521,7 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
               style: GoogleFonts.poppins(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
-                color: (isPast && !isBooked) ? AppColors.textSecondary : AppColors.textPrimary,
+                color: isPast ? AppColors.textSecondary : AppColors.textPrimary,
               ),
             ),
           ]),
@@ -447,6 +539,19 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
               style: GoogleFonts.poppins(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
             ),
           ),
+          if (isPast && isBooked) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text('WAS BOOKED',
+                style: GoogleFonts.poppins(
+                  color: AppColors.warning, fontSize: 9, fontWeight: FontWeight.bold)),
+            ),
+          ],
           // Block/unblock for available or blocked, non-past. A held slot has a
           // player mid-checkout on it, so it is deliberately not blockable until
           // the hold expires or they finish.
@@ -471,17 +576,6 @@ class _OwnerSlotCalendarScreenState extends State<OwnerSlotCalendarScreen>
         ]),
       ]),
     );
-  }
-
-  bool _isSlotPast(Map<String, dynamic> slot) {
-    try {
-      final date = DateTime.parse(slot['slot_date'].toString());
-      final timeParts = (slot['end_time'] as String).split(':');
-      final slotEnd = DateTime(date.year, date.month, date.day, int.parse(timeParts[0]), int.parse(timeParts[1]));
-      return slotEnd.isBefore(DateTime.now());
-    } catch (_) {
-      return false;
-    }
   }
 
   void _showAddSlotSheet() {

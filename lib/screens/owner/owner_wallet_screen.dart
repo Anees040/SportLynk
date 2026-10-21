@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/stable_refresh_indicator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
@@ -99,7 +100,7 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
       ),
       body: _loading
         ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-        : RefreshIndicator(color: AppColors.accent, onRefresh: _load,
+        : StableRefreshIndicator(color: AppColors.accent, onRefresh: _load,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
@@ -291,4 +292,3 @@ class _OwnerWalletScreenState extends State<OwnerWalletScreen> {
     );
   }
 }
-
